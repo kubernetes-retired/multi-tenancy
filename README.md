@@ -11,6 +11,10 @@ You can reach the maintainers of this project at:
 - [Slack channel](https://kubernetes.slack.com/messages/wg-multitenancy)
 - [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
 
+### PoC directory
+
+The `poc` directory contains all _proof-of-concept_ code which is not supported.
+
 ### Code of conduct
 
 Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).
