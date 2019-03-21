@@ -27,27 +27,30 @@ devtk setup
 ## Development Toolkit
 
 A single entry for most of development work is `devtk` command.
-To add new commandlet, create `cmd-COMMAND.sh` in `tools/lib/devkit/`.
+To add new commandlet, create `cmd-COMMAND.sh` in `tools/lib/devtk/`.
+
+Note: `devtk` is just a convinient script written from scratch for hooking up
+all bash scripts that perform common development work. 
 
 The current commands:
 
 #### One-time Setup
 
 ```
-devkit setup
+devtk setup
 ```
 
 #### Generate Code
 
 ```
-devkit codegen                   # generate code for all poc projects
-devkit codegen tenant-controller # generate code for tenant-controller project only
+devtk codegen                   # generate code for all poc projects
+devtk codegen tenant-controller # generate code for tenant-controller project only
 ```
 
 #### Build Binaries
 
 ```
-devkit build                               # build all binaries from all projects
-devkit build tenants-ctl                   # build the specified binary
-devkit build tenant-controller/tenants-ctl # build the specified binary within project explicitly specified
+devtk build                               # build all binaries from all projects
+devtk build tenants-ctl                   # build the specified binary
+devtk build tenant-controller/tenants-ctl # build the specified binary within project explicitly specified
 ```
