@@ -97,9 +97,9 @@ const (
 
 type TenantList struct {
 	metav1.TypeMeta `json:",inline"`
-	// ObjectMeta is standard object metadata
+	// ListMeta is standard list metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
 
 	// Items are list of Tenant objects.
 	Items []Tenant `json:"items" protobuf:"bytes,2,rep,name=items`

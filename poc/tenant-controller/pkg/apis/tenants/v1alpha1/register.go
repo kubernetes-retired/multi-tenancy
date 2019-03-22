@@ -42,6 +42,7 @@ var (
 func addKnownTypes(scheme *k8srt.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Tenant{},
+		&TenantList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

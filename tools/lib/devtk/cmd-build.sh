@@ -41,7 +41,7 @@ function find_pkg_and_build() {
             test -z "$project" || fatal "ambiguous name $cmd: $project/$cmd or $p/$cmd"
             project="$p"
         done
-        test -n "$project" || fatal "known name $cmd, please use format of PROJECT/CMD"
+        test -n "$project" || fatal "unknown name $cmd, please use format of PROJECT/CMD"
         build_cmd "$project" "$cmd"
     fi
 }
