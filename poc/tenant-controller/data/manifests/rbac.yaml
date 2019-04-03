@@ -18,6 +18,9 @@ rules:
 - apiGroups: ["tenants.k8s.io"]
   resources: ["tenants"]
   verbs: ['*']
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
