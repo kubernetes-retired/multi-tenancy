@@ -26,7 +26,7 @@ import (
 	tenantsclient "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/clientset/v1alpha1"
 	tenantsinformers "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/informers/externalversions"
 	tenants "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/controllers/tenants"
-
+	k8sclient "k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
@@ -57,11 +57,16 @@ func main() {
 		glog.Fatalf("create tenants client: %v", err)
 	}
 
+	k8sClient, err := k8sclient.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("create std k8s client: %v", err)
+	}
+
 	tenantsInformerFactory := tenantsinformers.NewSharedInformerFactory(tenantsClient, defaultResyncInterval)
 
 	tenantsv1alpha.AddToScheme(scheme.Scheme)
 
-	tenantsCtl := tenants.NewController(tenantsClient, tenantsInformerFactory)
+	tenantsCtl := tenants.NewController(k8sClient, tenantsClient, tenantsInformerFactory)
 
 	daemonCtx, cancelFn := context.WithCancel(context.TODO())
 	sigCh, errCh := make(chan os.Signal, 1), make(chan error, 1)

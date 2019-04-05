@@ -1,0 +1,13 @@
+---
+apiVersion: tenants.k8s.io/v1alpha1
+kind: Tenant
+metadata:
+  name: sample-tenant-a 
+spec:
+  namespaces:
+      - name: sample-tenant-a-ns-1
+        template: dummy
+      - name: sample-tenant-a-ns-2
+        template: dummy
+
+
