@@ -20,21 +20,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8srt "k8s.io/apimachinery/pkg/runtime"
 	utilrt "k8s.io/apimachinery/pkg/util/runtime"
+	k8sclient "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	tenantsapi "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/apis/tenants/v1alpha1"
 	tenantsclient "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/clientset/v1alpha1"
 	tenantsinformers "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/informers/externalversions"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Controller is k8s controller managing Tenant CRDs.
 type Controller struct {
-	informer cache.SharedIndexInformer
+	informer      cache.SharedIndexInformer
+	tenantsclient tenantsclient.Interface
+	k8sclient     k8sclient.Interface
 }
 
 // NewController creates the controller.
-func NewController(client tenantsclient.Interface, informerFactory tenantsinformers.SharedInformerFactory) *Controller {
+func NewController(k8sclient k8sclient.Interface, tenantsclient tenantsclient.Interface, informerFactory tenantsinformers.SharedInformerFactory) *Controller {
 	c := &Controller{
-		informer: informerFactory.Tenants().V1alpha1().Tenants().Informer(),
+		informer:      informerFactory.Tenants().V1alpha1().Tenants().Informer(),
+		tenantsclient: tenantsclient,
+		k8sclient:     k8sclient,
 	}
 	c.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(o interface{}) { c.createTenant(o.(*tenantsapi.Tenant)) },
@@ -63,7 +69,20 @@ func (c *Controller) Run(ctx context.Context) error {
 func (c *Controller) createTenant(obj *tenantsapi.Tenant) {
 	glog.Info("createTenant: %#v", obj)
 	syncRBACForTenantCRD(obj)
-	// TODO create namespace
+
+	// TODO Add later ... sanity checks to ensure namespaces being requested are valid and not already assigned to another tenant
+
+	namespace := corev1.Namespace{}
+
+	for n := range obj.Spec.Namespaces {
+		namespace.ObjectMeta.Name = obj.Spec.Namespaces[n].Name
+		//Create namespace
+		c.k8sclient.CoreV1().Namespaces().Create(&namespace)
+
+		glog.Info("Created namespace: %s", obj.Spec.Namespaces[n].Name)
+	}
+
+	glog.Info("createTenant completed: %#v", obj)
 	// TODO create RBAC inside namespace
 }
 
@@ -77,7 +96,15 @@ func (c *Controller) updateTenant(old, obj *tenantsapi.Tenant) {
 func (c *Controller) deleteTenant(obj *tenantsapi.Tenant) {
 	glog.Info("deleteTenant: %#v", obj)
 	deleteRBACForTenantCRD(obj)
-	// TODO delete namespace
+	// TODO add a full set of sanity checks in future before deleting
+
+	for n := range obj.Spec.Namespaces {
+		glog.Info("Deleting namespace: %s", obj.Spec.Namespaces[n].Name)
+		// Delete namespace
+		c.k8sclient.CoreV1().Namespaces().Delete(obj.Spec.Namespaces[n].Name, nil)
+	}
+
+	glog.Info("deleteTenant completed: %#v", obj)
 }
 
 func rbacForTenantCRD(obj *tenantsapi.Tenant) []k8srt.Object {

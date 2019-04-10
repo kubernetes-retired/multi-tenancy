@@ -22,6 +22,7 @@ function cmd_run() {
     go get k8s.io/api/core/v1
     go get k8s.io/api/rbac/v1
     # install code-generator
+    go get k8s.io/code-generator/cmd/...
     go install k8s.io/code-generator/cmd/...
     # recreate the symbolic link
     rm -f "$GOPATH/src/sigs.k8s.io/multi-tenancy"
