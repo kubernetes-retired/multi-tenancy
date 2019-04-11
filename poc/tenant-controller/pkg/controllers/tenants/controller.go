@@ -14,8 +14,11 @@ package tenants
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/golang/glog"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8srt "k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +28,6 @@ import (
 	tenantsapi "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/apis/tenants/v1alpha1"
 	tenantsclient "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/clientset/v1alpha1"
 	tenantsinformers "sigs.k8s.io/multi-tenancy/poc/tenant-controller/pkg/clients/tenants/informers/externalversions"
-	corev1 "k8s.io/api/core/v1"
 )
 
 // Controller is k8s controller managing Tenant CRDs.
@@ -34,6 +36,11 @@ type Controller struct {
 	tenantsclient tenantsclient.Interface
 	k8sclient     k8sclient.Interface
 }
+
+const (
+	defaultAdminRoleBindingName = "admins"
+	defaultAdminClusterRole     = "admin"
+)
 
 // NewController creates the controller.
 func NewController(k8sclient k8sclient.Interface, tenantsclient tenantsclient.Interface, informerFactory tenantsinformers.SharedInformerFactory) *Controller {
@@ -67,48 +74,158 @@ func (c *Controller) Run(ctx context.Context) error {
 }
 
 func (c *Controller) createTenant(obj *tenantsapi.Tenant) {
-	glog.Info("createTenant: %#v", obj)
-	syncRBACForTenantCRD(obj)
-
-	// TODO Add later ... sanity checks to ensure namespaces being requested are valid and not already assigned to another tenant
-
-	namespace := corev1.Namespace{}
-
-	for n := range obj.Spec.Namespaces {
-		namespace.ObjectMeta.Name = obj.Spec.Namespaces[n].Name
-		//Create namespace
-		c.k8sclient.CoreV1().Namespaces().Create(&namespace)
-
-		glog.Info("Created namespace: %s", obj.Spec.Namespaces[n].Name)
+	glog.V(2).Infof("createTenant: %#v", obj)
+	c.syncRBACForTenant(obj)
+	for _, nsReq := range obj.Spec.Namespaces {
+		c.createNamespaceForTenant(obj, &nsReq)
 	}
-
-	glog.Info("createTenant completed: %#v", obj)
-	// TODO create RBAC inside namespace
+	glog.V(2).Infof("createTenant completed: %#v", obj)
 }
 
 func (c *Controller) updateTenant(old, obj *tenantsapi.Tenant) {
-	glog.Info("updateTenant: %#v", obj)
-	syncRBACForTenantCRD(obj)
-	// TODO sync namespace
-	// TODO sync RBAC inside namespace
+	glog.V(2).Infof("updateTenant: %#v", obj)
+	c.syncRBACForTenant(obj)
+	// sort namespaces in old and new tenants to find out which ones
+	// to be created and which ones to be deleted.
+	oldNsList := make([]string, len(old.Spec.Namespaces))
+	for i, ns := range old.Spec.Namespaces {
+		oldNsList[i] = ns.Name
+	}
+	sort.Strings(oldNsList)
+	nsList := make([]*tenantsapi.TenantNamespace, len(obj.Spec.Namespaces))
+	for i := range obj.Spec.Namespaces {
+		nsList[i] = &obj.Spec.Namespaces[i]
+	}
+	sort.Slice(nsList, func(i, j int) bool {
+		return strings.Compare(nsList[i].Name, nsList[j].Name) < 0
+	})
+	var i, j int
+	for i < len(oldNsList) && j < len(nsList) {
+		if res := strings.Compare(oldNsList[i], nsList[j].Name); res == 0 {
+			c.syncNamespaceForTenant(obj, nsList[j])
+			i++
+			j++
+		} else if res < 0 {
+			c.deleteNamespaceForTenant(obj, oldNsList[i])
+			i++
+		} else {
+			c.createNamespaceForTenant(obj, nsList[j])
+			j++
+		}
+	}
+
+	for ; j < len(nsList); j++ {
+		c.createNamespaceForTenant(obj, nsList[j])
+	}
+	for ; i < len(oldNsList); i++ {
+		c.deleteNamespaceForTenant(obj, oldNsList[i])
+	}
 }
 
 func (c *Controller) deleteTenant(obj *tenantsapi.Tenant) {
-	glog.Info("deleteTenant: %#v", obj)
-	deleteRBACForTenantCRD(obj)
-	// TODO add a full set of sanity checks in future before deleting
+	glog.V(2).Infof("deleteTenant: %#v", obj)
 
-	for n := range obj.Spec.Namespaces {
-		glog.Info("Deleting namespace: %s", obj.Spec.Namespaces[n].Name)
-		// Delete namespace
-		c.k8sclient.CoreV1().Namespaces().Delete(obj.Spec.Namespaces[n].Name, nil)
+	// TODO with OwnerReferences, no extra work is needed in deletion,
+	// remove the following code later.
+
+	c.deleteRBACForTenant(obj)
+	for _, nsReq := range obj.Spec.Namespaces {
+		c.deleteNamespaceForTenant(obj, nsReq.Name)
 	}
-
-	glog.Info("deleteTenant completed: %#v", obj)
+	glog.Infof("deleteTenant completed: %#v", obj)
 }
 
-func rbacForTenantCRD(obj *tenantsapi.Tenant) []k8srt.Object {
-	name := fmt.Sprintf("tenant-admins-%s", obj.Name)
+func (c *Controller) createNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *tenantsapi.TenantNamespace) error {
+	if err := c.ensureNamespaceExists(tenant, nsReq.Name); err != nil {
+		return err
+	}
+	if err := c.syncNamespaceForTenant(tenant, nsReq); err != nil {
+		return err
+	}
+	glog.Infof("Tenant %q namespace %q created", tenant.Name, nsReq.Name)
+	return nil
+}
+
+func (c *Controller) deleteNamespaceForTenant(tenant *tenantsapi.Tenant, nsName string) error {
+	// TODO add a full set of sanity checks in future before deleting
+	if err := c.k8sclient.CoreV1().Namespaces().Delete(nsName, nil); err != nil {
+		glog.Errorf("Tenant %q delete namespace %q error: %v", tenant.Name, nsName, err)
+		return err
+	}
+	glog.Infof("Tenant %q namespace %q deleted", tenant.Name, nsName)
+	return nil
+}
+
+func (c *Controller) ensureNamespaceExists(tenant *tenantsapi.Tenant, nsName string) error {
+	// TODO Add later ... sanity checks to ensure namespaces being requested are valid and not already assigned to another tenant
+	if err := newKubeCtl().addObjects(&corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            nsName,
+			OwnerReferences: ownerRefsForTenant(tenant),
+		},
+	}).apply(); err != nil {
+		// TODO add error condition in Tenant object and emit event.
+		glog.Errorf("Tenant %q create namespace %q error: %v", tenant.Name, nsName, err)
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) syncNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *tenantsapi.TenantNamespace) error {
+	if err := newKubeCtl().withNamespace(nsReq.Name).addObjects(&rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: rbacv1.SchemeGroupVersion.String(),
+			Kind:       "RoleBinding",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: defaultAdminRoleBindingName,
+		},
+		Subjects: tenant.Spec.Admins,
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
+			Name:     defaultAdminClusterRole,
+		},
+	}).apply(); err != nil {
+		glog.Errorf("Tenant %q namespace %q sync error: %v", tenant.Name, nsReq.Name, err)
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) syncRBACForTenant(tenant *tenantsapi.Tenant) error {
+	if err := newKubeCtl().addObjects(rbacForTenant(tenant)...).apply(); err != nil {
+		glog.Errorf("Tenant %q syncRBAC error: %v", tenant.Name, err)
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) deleteRBACForTenant(tenant *tenantsapi.Tenant) error {
+	if err := newKubeCtl().addObjects(rbacForTenant(tenant)...).delete(); err != nil {
+		glog.Errorf("Tenant %q deleteRBAC error: %v", tenant.Name, err)
+		return err
+	}
+	return nil
+}
+
+func ownerRefsForTenant(tenant *tenantsapi.Tenant) []metav1.OwnerReference {
+	return []metav1.OwnerReference{
+		{
+			APIVersion: tenantsapi.SchemeGroupVersion.String(),
+			Kind:       "Tenant",
+			Name:       tenant.Name,
+			UID:        tenant.UID,
+		},
+	}
+}
+
+func rbacForTenant(tenant *tenantsapi.Tenant) []k8srt.Object {
+	name := fmt.Sprintf("tenant-admins-%s", tenant.Name)
 	return []k8srt.Object{
 		&rbacv1.ClusterRole{
 			TypeMeta: metav1.TypeMeta{
@@ -116,14 +233,15 @@ func rbacForTenantCRD(obj *tenantsapi.Tenant) []k8srt.Object {
 				Kind:       "ClusterRole",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name:            name,
+				OwnerReferences: ownerRefsForTenant(tenant),
 			},
 			Rules: []rbacv1.PolicyRule{
 				{
 					Verbs:         []string{"get", "update", "patch", "delete"},
 					APIGroups:     []string{tenantsapi.SchemeGroupVersion.Group},
 					Resources:     []string{"tenants"},
-					ResourceNames: []string{obj.Name},
+					ResourceNames: []string{tenant.Name},
 				},
 			},
 		}, &rbacv1.ClusterRoleBinding{
@@ -132,28 +250,15 @@ func rbacForTenantCRD(obj *tenantsapi.Tenant) []k8srt.Object {
 				Kind:       "ClusterRoleBinding",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
+				Name:            name,
+				OwnerReferences: ownerRefsForTenant(tenant),
 			},
-			Subjects: obj.Spec.Admins,
+			Subjects: tenant.Spec.Admins,
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: rbacv1.GroupName,
 				Kind:     "ClusterRole",
 				Name:     name,
 			},
 		},
-	}
-}
-
-func syncRBACForTenantCRD(obj *tenantsapi.Tenant) {
-	if err := newKubeCtl().addObjects(rbacForTenantCRD(obj)...).apply(); err != nil {
-		glog.Errorf("syncRBACForTenantCRD error: %v", err)
-		// TODO retry logic.
-	}
-}
-
-func deleteRBACForTenantCRD(obj *tenantsapi.Tenant) {
-	if err := newKubeCtl().addObjects(rbacForTenantCRD(obj)...).delete(); err != nil {
-		glog.Errorf("deleteRBACForTenantCRD error: %v", err)
-		// TODO retry logic.
 	}
 }
