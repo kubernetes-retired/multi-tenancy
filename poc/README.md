@@ -54,3 +54,11 @@ devtk build                               # build all binaries from all projects
 devtk build tenants-ctl                   # build the specified binary
 devtk build tenant-controller/tenants-ctl # build the specified binary within project explicitly specified
 ```
+
+#### Pack Container Image
+
+```
+devtk pack                              # pack all container images from all projects
+devtk pack tenants                      # pack the specified container image
+devtk pack tenant-controller/tenants    # pack the specified container image within project explicitly specified
+```
