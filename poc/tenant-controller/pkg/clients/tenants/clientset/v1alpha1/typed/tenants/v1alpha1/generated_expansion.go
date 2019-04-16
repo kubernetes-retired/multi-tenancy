@@ -13,4 +13,6 @@
 
 package v1alpha1
 
+type NamespaceTemplateExpansion interface{}
+
 type TenantExpansion interface{}

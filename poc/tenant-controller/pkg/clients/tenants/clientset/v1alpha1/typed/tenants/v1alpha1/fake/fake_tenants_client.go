@@ -23,6 +23,10 @@ type FakeTenantsV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeTenantsV1alpha1) NamespaceTemplates() v1alpha1.NamespaceTemplateInterface {
+	return &FakeNamespaceTemplates{c}
+}
+
 func (c *FakeTenantsV1alpha1) Tenants() v1alpha1.TenantInterface {
 	return &FakeTenants{c}
 }

@@ -1,0 +1,28 @@
+---
+apiVersion: tenants.k8s.io/v1alpha1
+kind: NamespaceTemplate
+metadata:
+  name: sample1
+spec:
+  templates:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: 'multitenancy:podsecuritypolicy'
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: 'multitenancy:use-psp:restricted'
+    subjects:
+    - kind: Group
+      apiGroup: rbac.authorization.k8s.io
+      name: system:serviceaccounts
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: multitenancy-default
+    spec:
+      podSelector: {}
+      policyTypes:
+      - Ingress
+      - Egress

@@ -32,9 +32,10 @@ import (
 
 // Controller is k8s controller managing Tenant CRDs.
 type Controller struct {
-	informer      cache.SharedIndexInformer
-	tenantsclient tenantsclient.Interface
-	k8sclient     k8sclient.Interface
+	tenantsInformer     cache.SharedIndexInformer
+	nsTemplatesInformer cache.SharedIndexInformer
+	tenantsclient       tenantsclient.Interface
+	k8sclient           k8sclient.Interface
 }
 
 const (
@@ -45,14 +46,22 @@ const (
 // NewController creates the controller.
 func NewController(k8sclient k8sclient.Interface, tenantsclient tenantsclient.Interface, informerFactory tenantsinformers.SharedInformerFactory) *Controller {
 	c := &Controller{
-		informer:      informerFactory.Tenants().V1alpha1().Tenants().Informer(),
-		tenantsclient: tenantsclient,
-		k8sclient:     k8sclient,
+		tenantsInformer:     informerFactory.Tenants().V1alpha1().Tenants().Informer(),
+		nsTemplatesInformer: informerFactory.Tenants().V1alpha1().NamespaceTemplates().Informer(),
+		tenantsclient:       tenantsclient,
+		k8sclient:           k8sclient,
 	}
-	c.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	c.tenantsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(o interface{}) { c.createTenant(o.(*tenantsapi.Tenant)) },
 		UpdateFunc: func(o, n interface{}) { c.updateTenant(o.(*tenantsapi.Tenant), n.(*tenantsapi.Tenant)) },
 		DeleteFunc: func(o interface{}) { c.deleteTenant(o.(*tenantsapi.Tenant)) },
+	})
+	c.nsTemplatesInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(o interface{}) { c.addNsTemplate(o.(*tenantsapi.NamespaceTemplate)) },
+		UpdateFunc: func(o, n interface{}) {
+			c.updateNsTemplate(o.(*tenantsapi.NamespaceTemplate), n.(*tenantsapi.NamespaceTemplate))
+		},
+		DeleteFunc: func(o interface{}) { c.deleteNsTemplate(o.(*tenantsapi.NamespaceTemplate)) },
 	})
 	return c
 }
@@ -62,7 +71,9 @@ func (c *Controller) Run(ctx context.Context) error {
 	defer utilrt.HandleCrash()
 
 	glog.Info("waiting for cache sync")
-	if !cache.WaitForCacheSync(ctx.Done(), c.informer.HasSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(),
+		c.tenantsInformer.HasSynced,
+		c.nsTemplatesInformer.HasSynced) {
 		return fmt.Errorf("cache sync failed")
 	}
 
@@ -133,6 +144,24 @@ func (c *Controller) deleteTenant(obj *tenantsapi.Tenant) {
 		c.deleteNamespaceForTenant(obj, nsReq.Name)
 	}
 	glog.Infof("deleteTenant completed: %#v", obj)
+}
+
+func (c *Controller) addNsTemplate(obj *tenantsapi.NamespaceTemplate) {
+	// TODO
+	var objects string
+	for _, tpl := range obj.Spec.Templates {
+		encoded, _ := tpl.MarshalJSON()
+		objects += "\n" + string(encoded)
+	}
+	glog.Infof("addNsTemplate: Objects: %s", objects)
+}
+
+func (c *Controller) updateNsTemplate(old, obj *tenantsapi.NamespaceTemplate) {
+	// TODO
+}
+
+func (c *Controller) deleteNsTemplate(obj *tenantsapi.NamespaceTemplate) {
+	// TODO
 }
 
 func (c *Controller) createNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *tenantsapi.TenantNamespace) error {
