@@ -13,6 +13,10 @@
 
 package v1alpha1
 
+// NamespaceTemplateListerExpansion allows custom methods to be added to
+// NamespaceTemplateLister.
+type NamespaceTemplateListerExpansion interface{}
+
 // TenantListerExpansion allows custom methods to be added to
 // TenantLister.
 type TenantListerExpansion interface{}

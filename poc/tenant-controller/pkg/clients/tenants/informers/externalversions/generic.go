@@ -48,6 +48,8 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=tenants.k8s.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("namespacetemplates"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Tenants().V1alpha1().NamespaceTemplates().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("tenants"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Tenants().V1alpha1().Tenants().Informer()}, nil
 

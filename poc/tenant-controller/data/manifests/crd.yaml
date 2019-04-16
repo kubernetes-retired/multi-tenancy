@@ -14,3 +14,21 @@ spec:
     plural: tenants
     singular: tenant
     kind: Tenant
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: namespacetemplates.tenants.k8s.io
+spec:
+  group: tenants.k8s.io
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+  scope: Cluster
+  names:
+    plural: namespacetemplates
+    singular: namespacetemplate
+    kind: NamespaceTemplate
+    shortNames:
+    - nstpl

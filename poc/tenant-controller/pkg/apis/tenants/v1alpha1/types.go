@@ -14,6 +14,7 @@ package v1alpha1
 import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apirt "k8s.io/apimachinery/pkg/runtime"
 )
 
 // +genclient
@@ -103,4 +104,65 @@ type TenantList struct {
 
 	// Items are list of Tenant objects.
 	Items []Tenant `json:"items" protobuf:"bytes,2,rep,name=items`
+}
+
+// +genclient
+// +genclient:nonNamespaced
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// NamespaceTemplate defines a template of resources to be created inside a namespace.
+type NamespaceTemplate struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec NamespaceTemplateSpec `json:"spec"`
+}
+
+// NamespaceTemplateSpec defines the details in a NamespaceTemplate resource.
+// The list of Templates is used for generating a manifest file containing all resources
+// and shell-out to "kubectl apply" (let kubelet to handle the resource diff and merge,
+// and don't re-implement this black-magic in client code) to be applied in a namespace.
+// An example of a NamespaceTemplate will be something like:
+//
+// apiVersion: tenants.k8s.io/v1alpha1
+// kind: NamespaceTemplate
+// metadata:
+//   name: restricted
+// spec:
+//   templates:
+//   - apiVersion: rbac.authorization.k8s.io/v1
+//     kind: RoleBinding
+//     metadata:
+//       name: 'multitenancy:podsecuritypolicy'
+//     roleRef:
+//       apiGroup: rbac.authorization.k8s.io
+//       kind: ClusterRole
+//       name: 'multitenancy:use-psp:restricted'
+//     subjects:
+//     - kind: Group
+//       apiGroup: rbac.authorization.k8s.io
+//       name: system:serviceaccounts
+//   - apiVersion: networking.k8s.io/v1
+//     kind: NetworkPolicy
+//     metadata:
+//       name: multitenancy-default
+//     spec:
+//       podSelector: {}
+//       policyTypes:
+//       - Ingress
+//       - Egress
+type NamespaceTemplateSpec struct {
+	Templates []apirt.RawExtension `json:"templates"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type NamespaceTemplateList struct {
+	metav1.TypeMeta `json:",inline"`
+	// ListMeta is standard list metadata
+	// +optional
+	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
+
+	// Items are list of NamespaceTemplate objects.
+	Items []NamespaceTemplate `json:"items" protobuf:"bytes,2,rep,name=items`
 }

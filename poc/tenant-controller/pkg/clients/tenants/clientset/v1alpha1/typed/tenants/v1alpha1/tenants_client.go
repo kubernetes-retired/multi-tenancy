@@ -22,12 +22,17 @@ import (
 
 type TenantsV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	NamespaceTemplatesGetter
 	TenantsGetter
 }
 
 // TenantsV1alpha1Client is used to interact with features provided by the tenants.k8s.io group.
 type TenantsV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *TenantsV1alpha1Client) NamespaceTemplates() NamespaceTemplateInterface {
+	return newNamespaceTemplates(c)
 }
 
 func (c *TenantsV1alpha1Client) Tenants() TenantInterface {

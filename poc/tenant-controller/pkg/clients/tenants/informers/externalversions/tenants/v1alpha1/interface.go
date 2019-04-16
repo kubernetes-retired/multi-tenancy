@@ -19,6 +19,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// NamespaceTemplates returns a NamespaceTemplateInformer.
+	NamespaceTemplates() NamespaceTemplateInformer
 	// Tenants returns a TenantInformer.
 	Tenants() TenantInformer
 }
@@ -32,6 +34,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// NamespaceTemplates returns a NamespaceTemplateInformer.
+func (v *version) NamespaceTemplates() NamespaceTemplateInformer {
+	return &namespaceTemplateInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Tenants returns a TenantInformer.
