@@ -17,7 +17,6 @@ import (
 	"os/exec"
 
 	"github.com/golang/glog"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8srt "k8s.io/apimachinery/pkg/runtime"
 	json "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -40,10 +39,7 @@ func newKubeCtl() *kubectlHelper {
 func (k *kubectlHelper) addObjects(objs ...k8srt.Object) *kubectlHelper {
 	s := json.NewSerializer(json.DefaultMetaFactory, scheme.Scheme, scheme.Scheme, true)
 	for _, obj := range objs {
-		copied := obj.DeepCopyObject()
-		// clear namespace as it will be set on kubectl command line.
-		copied.(metav1.Object).SetNamespace("")
-		if err := s.Encode(copied, &k.buf); err != nil {
+		if err := s.Encode(obj, &k.buf); err != nil {
 			panic(err)
 		}
 	}
