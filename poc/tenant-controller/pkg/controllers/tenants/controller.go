@@ -16,11 +16,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8srt "k8s.io/apimachinery/pkg/runtime"
 	utilrt "k8s.io/apimachinery/pkg/util/runtime"
 	k8sclient "k8s.io/client-go/kubernetes"
@@ -36,6 +38,16 @@ type Controller struct {
 	nsTemplatesInformer cache.SharedIndexInformer
 	tenantsclient       tenantsclient.Interface
 	k8sclient           k8sclient.Interface
+	nsTemplates         map[string]*namespaceTemplate
+	nsTemplatesLock     sync.RWMutex
+}
+
+// namespaceTemplate wraps the original tenantsapi.NamespaceTemplate and
+// converts template items from RawExtension to runtime.Object and makes sure
+// metadata/namespace is not set for all the objects.
+type namespaceTemplate struct {
+	template *tenantsapi.NamespaceTemplate
+	objects  []k8srt.Object
 }
 
 const (
@@ -50,6 +62,7 @@ func NewController(k8sclient k8sclient.Interface, tenantsclient tenantsclient.In
 		nsTemplatesInformer: informerFactory.Tenants().V1alpha1().NamespaceTemplates().Informer(),
 		tenantsclient:       tenantsclient,
 		k8sclient:           k8sclient,
+		nsTemplates:         make(map[string]*namespaceTemplate),
 	}
 	c.tenantsInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(o interface{}) { c.createTenant(o.(*tenantsapi.Tenant)) },
@@ -86,16 +99,23 @@ func (c *Controller) Run(ctx context.Context) error {
 
 func (c *Controller) createTenant(obj *tenantsapi.Tenant) {
 	glog.V(2).Infof("createTenant: %#v", obj)
-	c.syncRBACForTenant(obj)
-	for _, nsReq := range obj.Spec.Namespaces {
-		c.createNamespaceForTenant(obj, &nsReq)
+	if err := c.syncRBACForTenant(obj); err != nil {
+		glog.Error(err)
+		return
 	}
-	glog.V(2).Infof("createTenant completed: %#v", obj)
+	for _, nsReq := range obj.Spec.Namespaces {
+		if err := c.createNamespaceForTenant(obj, &nsReq); err != nil {
+			glog.Error(err)
+		}
+	}
 }
 
 func (c *Controller) updateTenant(old, obj *tenantsapi.Tenant) {
 	glog.V(2).Infof("updateTenant: %#v", obj)
-	c.syncRBACForTenant(obj)
+	if err := c.syncRBACForTenant(obj); err != nil {
+		glog.Error(err)
+		return
+	}
 	// sort namespaces in old and new tenants to find out which ones
 	// to be created and which ones to be deleted.
 	oldNsList := make([]string, len(old.Spec.Namespaces))
@@ -113,23 +133,33 @@ func (c *Controller) updateTenant(old, obj *tenantsapi.Tenant) {
 	var i, j int
 	for i < len(oldNsList) && j < len(nsList) {
 		if res := strings.Compare(oldNsList[i], nsList[j].Name); res == 0 {
-			c.syncNamespaceForTenant(obj, nsList[j])
+			if err := c.syncNamespaceForTenant(obj, nsList[j]); err != nil {
+				glog.Error(err)
+			}
 			i++
 			j++
 		} else if res < 0 {
-			c.deleteNamespaceForTenant(obj, oldNsList[i])
+			if err := c.deleteNamespaceForTenant(obj, oldNsList[i]); err != nil {
+				glog.Error(err)
+			}
 			i++
 		} else {
-			c.createNamespaceForTenant(obj, nsList[j])
+			if err := c.createNamespaceForTenant(obj, nsList[j]); err != nil {
+				glog.Error(err)
+			}
 			j++
 		}
 	}
 
 	for ; j < len(nsList); j++ {
-		c.createNamespaceForTenant(obj, nsList[j])
+		if err := c.createNamespaceForTenant(obj, nsList[j]); err != nil {
+			glog.Error(err)
+		}
 	}
 	for ; i < len(oldNsList); i++ {
-		c.deleteNamespaceForTenant(obj, oldNsList[i])
+		if err := c.deleteNamespaceForTenant(obj, oldNsList[i]); err != nil {
+			glog.Error(err)
+		}
 	}
 }
 
@@ -143,45 +173,65 @@ func (c *Controller) deleteTenant(obj *tenantsapi.Tenant) {
 	for _, nsReq := range obj.Spec.Namespaces {
 		c.deleteNamespaceForTenant(obj, nsReq.Name)
 	}
-	glog.Infof("deleteTenant completed: %#v", obj)
 }
 
 func (c *Controller) addNsTemplate(obj *tenantsapi.NamespaceTemplate) {
-	// TODO
-	var objects string
-	for _, tpl := range obj.Spec.Templates {
-		encoded, _ := tpl.MarshalJSON()
-		objects += "\n" + string(encoded)
-	}
-	glog.Infof("addNsTemplate: Objects: %s", objects)
+	c.updateNsTemplate(nil, obj)
 }
 
 func (c *Controller) updateNsTemplate(old, obj *tenantsapi.NamespaceTemplate) {
-	// TODO
+	tpl, err := decodeNsTemplate(obj)
+	if err != nil {
+		glog.Error(err)
+		// TODO report error.
+		return
+	}
+	c.nsTemplatesLock.Lock()
+	c.nsTemplates[obj.Name] = tpl
+	c.nsTemplatesLock.Unlock()
+	glog.V(2).Infof("updated NamespaceTemplate: %s", obj.Name)
 }
 
 func (c *Controller) deleteNsTemplate(obj *tenantsapi.NamespaceTemplate) {
-	// TODO
+	c.nsTemplatesLock.Lock()
+	delete(c.nsTemplates, obj.Name)
+	c.nsTemplatesLock.Unlock()
+	glog.V(2).Infof("deleted NamespaceTemplate: %s", obj.Name)
+}
+
+func (c *Controller) getNsTemplate(name string) (*namespaceTemplate, error) {
+	c.nsTemplatesLock.RLock()
+	tpl := c.nsTemplates[name]
+	c.nsTemplatesLock.RUnlock()
+	if tpl != nil {
+		return tpl, nil
+	}
+	// if not found, possibly it's still being synced.
+	// use API to get the object.
+	obj, err := c.tenantsclient.TenantsV1alpha1().NamespaceTemplates().Get(name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get NamespaceTemplate %q error: %v", name, err)
+	}
+	return decodeNsTemplate(obj)
 }
 
 func (c *Controller) createNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *tenantsapi.TenantNamespace) error {
 	if err := c.ensureNamespaceExists(tenant, nsReq.Name); err != nil {
+		// TODO update status.
 		return err
 	}
 	if err := c.syncNamespaceForTenant(tenant, nsReq); err != nil {
+		// TODO update status.
 		return err
 	}
-	glog.Infof("Tenant %q namespace %q created", tenant.Name, nsReq.Name)
 	return nil
 }
 
 func (c *Controller) deleteNamespaceForTenant(tenant *tenantsapi.Tenant, nsName string) error {
 	// TODO add a full set of sanity checks in future before deleting
-	if err := c.k8sclient.CoreV1().Namespaces().Delete(nsName, nil); err != nil {
-		glog.Errorf("Tenant %q delete namespace %q error: %v", tenant.Name, nsName, err)
-		return err
+	if err := c.k8sclient.CoreV1().Namespaces().Delete(namespaceNameByTenant(tenant, nsName), nil); err != nil {
+		return fmt.Errorf("Tenant %q delete namespace %q error: %v", tenant.Name, nsName, err)
 	}
-	glog.Infof("Tenant %q namespace %q deleted", tenant.Name, nsName)
 	return nil
 }
 
@@ -193,19 +243,25 @@ func (c *Controller) ensureNamespaceExists(tenant *tenantsapi.Tenant, nsName str
 			Kind:       "Namespace",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName,
+			Name:            namespaceNameByTenant(tenant, nsName),
 			OwnerReferences: ownerRefsForTenant(tenant),
 		},
 	}).apply(); err != nil {
-		// TODO add error condition in Tenant object and emit event.
-		glog.Errorf("Tenant %q create namespace %q error: %v", tenant.Name, nsName, err)
-		return err
+		return fmt.Errorf("Tenant %q create namespace %q error: %v", tenant.Name, nsName, err)
 	}
 	return nil
 }
 
 func (c *Controller) syncNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *tenantsapi.TenantNamespace) error {
-	if err := newKubeCtl().withNamespace(nsReq.Name).addObjects(&rbacv1.RoleBinding{
+	kubectl := newKubeCtl().withNamespace(namespaceNameByTenant(tenant, nsReq.Name))
+	if nsReq.Template != "" {
+		tpl, err := c.getNsTemplate(nsReq.Template)
+		if err != nil {
+			return fmt.Errorf("get NamespaceTemplate %q error: %v", nsReq.Template, err)
+		}
+		kubectl.addObjects(tpl.objects...)
+	}
+	kubectl.addObjects(&rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: rbacv1.SchemeGroupVersion.String(),
 			Kind:       "RoleBinding",
@@ -219,27 +275,46 @@ func (c *Controller) syncNamespaceForTenant(tenant *tenantsapi.Tenant, nsReq *te
 			Kind:     "ClusterRole",
 			Name:     defaultAdminClusterRole,
 		},
-	}).apply(); err != nil {
-		glog.Errorf("Tenant %q namespace %q sync error: %v", tenant.Name, nsReq.Name, err)
-		return err
+	})
+	if err := kubectl.apply(); err != nil {
+		return fmt.Errorf("Tenant %q namespace %q sync error: %v", tenant.Name, nsReq.Name, err)
 	}
 	return nil
 }
 
 func (c *Controller) syncRBACForTenant(tenant *tenantsapi.Tenant) error {
 	if err := newKubeCtl().addObjects(rbacForTenant(tenant)...).apply(); err != nil {
-		glog.Errorf("Tenant %q syncRBAC error: %v", tenant.Name, err)
-		return err
+		return fmt.Errorf("Tenant %q syncRBAC error: %v", tenant.Name, err)
 	}
 	return nil
 }
 
 func (c *Controller) deleteRBACForTenant(tenant *tenantsapi.Tenant) error {
 	if err := newKubeCtl().addObjects(rbacForTenant(tenant)...).delete(); err != nil {
-		glog.Errorf("Tenant %q deleteRBAC error: %v", tenant.Name, err)
-		return err
+		return fmt.Errorf("Tenant %q deleteRBAC error: %v", tenant.Name, err)
 	}
 	return nil
+}
+
+func decodeNsTemplate(nstpl *tenantsapi.NamespaceTemplate) (*namespaceTemplate, error) {
+	tpl := &namespaceTemplate{
+		template: nstpl,
+		objects:  make([]k8srt.Object, len(nstpl.Spec.Templates)),
+	}
+	for n, item := range nstpl.Spec.Templates {
+		obj, _, err := unstructured.UnstructuredJSONScheme.Decode(item.Raw, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("decode NamespaceTemplate %q Templates[%d] error: %v", nstpl.Name, n, err)
+		}
+		// clear metadata.namespace.
+		obj.(metav1.Object).SetNamespace("")
+		tpl.objects[n] = obj
+	}
+	return tpl, nil
+}
+
+func namespaceNameByTenant(tenant *tenantsapi.Tenant, nsName string) string {
+	return tenant.Name + "-" + nsName
 }
 
 func ownerRefsForTenant(tenant *tenantsapi.Tenant) []metav1.OwnerReference {
