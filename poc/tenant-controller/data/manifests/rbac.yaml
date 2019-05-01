@@ -16,7 +16,7 @@ rules:
   resources: ["events"]
   verbs: ["create"]
 - apiGroups: ["tenants.k8s.io"]
-  resources: ["tenants"]
+  resources: ["tenants", "namespacetemplates"]
   verbs: ['*']
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
