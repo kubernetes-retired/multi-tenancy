@@ -9,6 +9,7 @@ Many of them are drafts in Google docs for better collaboration experience.
 - [Tenant Concept in Kubernetes](https://drive.google.com/open?id=1ddx7UAEPKFPldBh_diksYO4WZXSHDUhm-e6hyNNGYVU)
 - [Kubernetes Tenant CRD](https://drive.google.com/open?id=1hpJX5O_siMmNGMvIHvz8Pm7XOjJLz5g57XWrgwWarFw)
 - [K8s Multi-tenancy WG Plan](https://docs.google.com/presentation/d/1dsAsVm8kCA9Dx9_gMEYeJL7pduAbnfnxT9lhbyCvHDg/edit#slide=id.p19)
+- A Virtual Cluster Based Multi-tenancy Solution (https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
 
 ## References
 
