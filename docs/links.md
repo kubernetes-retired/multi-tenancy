@@ -3,13 +3,21 @@
 This file contains links to files not stored in this repository.
 Many of them are drafts in Google docs for better collaboration experience.
 
+## Access to the docs
+
+Some documents listed are shared within limited google groups, 
+please at least join one of the following groups to access the docs:
+
+- [kubernetes-dev](https://groups.google.com/forum/#!forum/kubernetes-dev)
+- [kubernetes-wg-multitenancy](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+
 ## Draft Proposals
 
 - [Kubernetes Multi-Tenancy Draft Proposal](https://docs.google.com/document/d/1U8RQQmTUjxgMZY05HG2f7b3KsB94BhK4Ko6aWbLNXcc)
 - [Tenant Concept in Kubernetes](https://drive.google.com/open?id=1ddx7UAEPKFPldBh_diksYO4WZXSHDUhm-e6hyNNGYVU)
 - [Kubernetes Tenant CRD](https://drive.google.com/open?id=1hpJX5O_siMmNGMvIHvz8Pm7XOjJLz5g57XWrgwWarFw)
 - [K8s Multi-tenancy WG Plan](https://docs.google.com/presentation/d/1dsAsVm8kCA9Dx9_gMEYeJL7pduAbnfnxT9lhbyCvHDg/edit#slide=id.p19)
-- A Virtual Cluster Based Multi-tenancy Solution (https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
+- [A Virtual Cluster Based Multi-tenancy Solution](https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
 
 ## References
 
