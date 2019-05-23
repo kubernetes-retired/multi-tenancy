@@ -21,6 +21,7 @@ please at least join one of the following groups to access the docs:
 
 ## References
 
+- [Kubernetes Multitenancy WG Deep Dive KubeCon EU 2019](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
 - [Kubernetes Tenant Controller](https://docs.google.com/document/d/1auNOT2Hpguaxcqg8dX6JLLw5-RYQ0Abp6_-OcUP4pbI)
 - [Kubernetes Multi-Tenancy Design Scratch Space](https://docs.google.com/document/d/1PjlsBmZw6Jb3XZeVyZ0781m6PV7-nSUvQrwObkvz7jg/edit)
 - [Multi-tenancy Models for Kubernetes](https://docs.google.com/document/d/15w1_fesSUZHv-vwjiYa9vN_uyc--PySRoLKTuDhimjc/edit)
