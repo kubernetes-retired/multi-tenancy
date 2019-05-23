@@ -11,13 +11,16 @@ please at least join one of the following groups to access the docs:
 - [kubernetes-dev](https://groups.google.com/forum/#!forum/kubernetes-dev)
 - [kubernetes-wg-multitenancy](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
 
-## Draft Proposals
+## WG Architecture Summaries & Presentations
 
-- [Kubernetes Multi-Tenancy Draft Proposal](https://docs.google.com/document/d/1U8RQQmTUjxgMZY05HG2f7b3KsB94BhK4Ko6aWbLNXcc)
-- [Kubernetes Multitenancy WG Deep Dive KubeCon EU 2019](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
+- [Kubernetes Multi-Tenancy Draft Proposal (last updated 3/15/2019)](https://docs.google.com/document/d/1U8RQQmTUjxgMZY05HG2f7b3KsB94BhK4Ko6aWbLNXcc)
+- [Kubernetes Multitenancy WG Deep Dive KubeCon EU 2019 (last updated 5/22/2019)](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
+- [K8s Multi-tenancy WG Plan (last updated 3/1/2019)](https://docs.google.com/presentation/d/1dsAsVm8kCA9Dx9_gMEYeJL7pduAbnfnxT9lhbyCvHDg/edit#slide=id.p19)
+
+## Draft feature proposals  
+
 - [Tenant Concept in Kubernetes](https://drive.google.com/open?id=1ddx7UAEPKFPldBh_diksYO4WZXSHDUhm-e6hyNNGYVU)
 - [Kubernetes Tenant CRD](https://drive.google.com/open?id=1hpJX5O_siMmNGMvIHvz8Pm7XOjJLz5g57XWrgwWarFw)
-- [K8s Multi-tenancy WG Plan](https://docs.google.com/presentation/d/1dsAsVm8kCA9Dx9_gMEYeJL7pduAbnfnxT9lhbyCvHDg/edit#slide=id.p19)
 - [A Virtual Cluster Based Multi-tenancy Solution](https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
 
 ## References
