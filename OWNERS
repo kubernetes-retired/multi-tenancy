@@ -4,12 +4,10 @@ approvers:
 - srampal
 - tashimi
 - rjbez17
-
 reviewers:
 - srampal
 - tashimi
 - rjbez17
-
-emeritus-approvers:
+emeritus_approvers:
 - davidopp
 - easeway
