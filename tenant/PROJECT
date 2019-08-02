@@ -1,0 +1,3 @@
+version: "1"
+domain: x-k8s.io
+repo: github.com/multi-tenancy/tenant
