@@ -1,15 +1,15 @@
 # See the OWNERS docs: https://git.k8s.io/community/contributors/guide/owners.md
 
 approvers:
+- Fei-Guo
+- rjbez17
 - srampal
 - tashimi
-- rjbez17
-- Fei-Guo
 reviewers:
+- Fei-Guo
+- rjbez17
 - srampal
 - tashimi
-- rjbez17
-- Fei-Guo
 emeritus_approvers:
 - davidopp
 - easeway
