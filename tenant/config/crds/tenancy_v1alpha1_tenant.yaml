@@ -27,6 +27,11 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            tenantAdminNamespaceName:
+              description: The name of tenant administration namespace, which is used
+                to create all tenant related policy objects and custom resources.
+              type: string
           type: object
         status:
           type: object
