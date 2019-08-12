@@ -25,8 +25,10 @@ import (
 
 // TenantSpec defines the desired state of Tenant
 type TenantSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// The name of tenant administration namespace, which is used to create
+	// all tenant related policy objects and custom resources.
+	// +optional
+	TenantAdminNamespaceName string `json:"tenantAdminNamespaceName,omitempty"`
 }
 
 // TenantStatus defines the observed state of Tenant
