@@ -80,6 +80,10 @@ func TestReconcile(t *testing.T) {
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, adminNs) }, timeout).
 		Should(gomega.Succeed())
 
+	// Delete the namespace and expect reconcile to be called to create the namespace again
 	g.Expect(c.Delete(context.TODO(), adminNs)).NotTo(gomega.HaveOccurred())
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, adminNs) }, timeout).
+		Should(gomega.Succeed())
 
 }
