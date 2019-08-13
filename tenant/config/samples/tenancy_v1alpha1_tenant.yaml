@@ -6,4 +6,4 @@ metadata:
   name: tenant-sample
 spec:
   # Add fields here
-  foo: bar
+  tenantAdminNamespaceName: "tenant1admin"
