@@ -65,6 +65,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
+
+	// Watch for changes to namespaces
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForOwner{
+		OwnerType: &tenancyv1alpha1.Tenant{},
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
