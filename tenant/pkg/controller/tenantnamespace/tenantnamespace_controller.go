@@ -18,9 +18,12 @@ package tenantnamespace
 
 import (
 	"context"
+	"fmt"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -58,6 +61,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	// Watch for changes to namespaces
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForOwner{
+		OwnerType: &tenancyv1alpha1.TenantNamespace{},
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -72,6 +82,7 @@ type ReconcileTenantNamespace struct {
 // Reconcile reads that state of the cluster for a TenantNamespace object and makes changes based on the state read
 // and what is in the TenantNamespace.Spec
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=tenantnamespaces,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=tenantnamespaces/status,verbs=get;update;patch
 func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -88,5 +99,50 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	nsList := &corev1.NamespaceList{}
+	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	expectedOwnerRef := metav1.OwnerReference{
+		APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
+		Kind:       "TenantNamespace",
+		Name:       instance.Name,
+		UID:        instance.UID,
+	}
+	for _, each := range nsList.Items {
+		if each.Name == instance.Spec.Name {
+			// Check OwnerReference
+			found := false
+			for _, ownerRef := range each.OwnerReferences {
+				if ownerRef == expectedOwnerRef {
+					found = true
+					break
+				} else if ownerRef.APIVersion == expectedOwnerRef.APIVersion && ownerRef.Kind == expectedOwnerRef.Kind {
+					// The namespace is owned by another TenantNamespace CR, fail the reconcile
+					err = fmt.Errorf("Namespace %v is owned by another %v TenantNamespace CR", each.Name, ownerRef)
+					return reconcile.Result{}, err
+				}
+			}
+			if !found {
+				log.Info("Namespace has been created without TenantNamespace owner", "namespace", each.Name)
+				// TODO: grab the namespace ownership
+			}
+			return reconcile.Result{}, nil
+		}
+	}
+	tenantNs := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            instance.Spec.Name,
+			OwnerReferences: []metav1.OwnerReference{expectedOwnerRef},
+		},
+	}
+	if err = r.Client.Create(context.TODO(), tenantNs); err != nil {
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }

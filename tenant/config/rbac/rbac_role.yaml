@@ -34,6 +34,15 @@ rules:
   - update
   - patch
 - apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
   - tenancy.x-k8s.io
   resources:
   - tenantnamespaces

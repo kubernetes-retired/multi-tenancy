@@ -23,6 +23,7 @@ import (
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,13 +34,23 @@ import (
 
 var c client.Client
 
+// TODO: the expected namespace will be a tenantAdmin namespace
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
+var expectedRequestNoNs = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo"}}
 
 const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &tenancyv1alpha1.TenantNamespace{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
+	instance := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo",
+			Namespace: "default",
+		},
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "t1",
+		},
+	}
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -57,7 +68,7 @@ func TestReconcile(t *testing.T) {
 		mgrStopped.Wait()
 	}()
 
-	// Create the TenantNamespace object and expect the Reconcile and Deployment to be created
+	// Create the TenantNamespace object and expect the Reconcile and the namespace to be created
 	err = c.Create(context.TODO(), instance)
 	// The instance object may not be a valid object because it might be missing some required fields.
 	// Please modify the instance object by adding required fields and then remove the following if statement.
@@ -68,4 +79,15 @@ func TestReconcile(t *testing.T) {
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), instance)
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+	nskey := types.NamespacedName{Name: "t1"}
+	tenantNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
+		Should(gomega.Succeed())
+
+	// Delete the namespace and expect reconcile to be called to create the namespace again
+	g.Expect(c.Delete(context.TODO(), tenantNs)).NotTo(gomega.HaveOccurred())
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestNoNs)))
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
+		Should(gomega.Succeed())
 }
