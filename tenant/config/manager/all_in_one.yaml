@@ -6,6 +6,37 @@ metadata:
     controller-tools.k8s.io: "1.0"
   name: tenant-system
 ---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    alpha.admissionwebhook.cert-manager.io: "true"
+  creationTimestamp: null
+  name: tenant-validating-webhook-cfg
+webhooks:
+- clientConfig:
+    caBundle: XG4=
+    service:
+      name: webhook-server-service
+      namespace: tenant-system
+      path: /validating-create-update-tenantnamespace
+  failurePolicy: Fail
+  name: validating-create-update-tenantnamespace.x-k8s.io
+  namespaceSelector:
+    matchExpressions:
+    - key: control-plane
+      operator: DoesNotExist
+  rules:
+  - apiGroups:
+    - tenancy
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - tenantnamespaces
+---
 apiVersion: v1
 kind: Service
 metadata:
