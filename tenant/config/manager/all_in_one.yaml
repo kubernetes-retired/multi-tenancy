@@ -81,7 +81,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: vrgf2003/tenant:latest
+        image: tenant-controller:latest
         imagePullPolicy: Always
         name: manager
         env:
