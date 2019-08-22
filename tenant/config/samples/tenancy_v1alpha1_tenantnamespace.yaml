@@ -6,4 +6,4 @@ metadata:
   name: tenantnamespace-sample
 spec:
   # Add fields here
-  foo: bar
+  name: t1-ns1

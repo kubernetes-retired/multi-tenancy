@@ -53,6 +53,11 @@ type TenantNamespaceList struct {
 	Items           []TenantNamespace `json:"items"`
 }
 
+// +kubebuilder:webhook:groups=tenancy,versions=v1alpha1,resources=tenantnamespaces,verbs=create;update
+// +kubebuilder:webhook:name=validating-create-update-tenantnamespace.x-k8s.io
+// +kubebuilder:webhook:path=/validating-create-update-tenantnamespace
+// +kubebuilder:webhook:type=validating,failure-policy=fail
+
 func init() {
 	SchemeBuilder.Register(&TenantNamespace{}, &TenantNamespaceList{})
 }
