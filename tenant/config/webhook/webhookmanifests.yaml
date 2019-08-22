@@ -28,3 +28,20 @@ webhooks:
     - UPDATE
     resources:
     - tenantnamespaces
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    alpha.service.cert-manager.io/serving-cert-secret-name: webhook-server-secret
+  creationTimestamp: null
+  name: webhook-service
+  namespace: tenant-system
+spec:
+  ports:
+  - port: 443
+    targetPort: 9876
+  selector:
+    control-plane: controller-manager
+status:
+  loadBalancer: {}
