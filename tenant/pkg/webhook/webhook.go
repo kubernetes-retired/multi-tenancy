@@ -35,3 +35,9 @@ func AddToManager(m manager.Manager) error {
 	}
 	return nil
 }
+
+// +kubebuilder:webhook:port=9876,cert-dir=/tmp/cert
+// +kubebuilder:webhook:service=tenant-system:webhook-service,selector=control-plane:controller-manager
+// +kubebuilder:webhook:secret=tenant-system:webhook-server-secret
+// +kubebuilder:webhook:mutating-webhook-config-name=tenant-mutating-webhook-cfg
+// +kubebuilder:webhook:validating-webhook-config-name=tenant-validating-webhook-cfg

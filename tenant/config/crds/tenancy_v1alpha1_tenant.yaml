@@ -28,6 +28,11 @@ spec:
           type: object
         spec:
           properties:
+            requireNamespacePrefix:
+              description: If set to True, all the namespaces belong to the tenant
+                are requried to have TenantAdminNamespaceName as name prefix. By default,
+                namespace prefix is not required.
+              type: boolean
             tenantAdminNamespaceName:
               description: The name of tenant administration namespace, which is used
                 to create all tenant related policy objects and custom resources.
