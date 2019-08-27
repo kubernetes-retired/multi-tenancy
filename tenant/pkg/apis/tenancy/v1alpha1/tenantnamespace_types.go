@@ -22,7 +22,10 @@ import (
 
 // TenantNamespaceSpec defines the desired state of TenantNamespace
 type TenantNamespaceSpec struct {
-	Name string `json:"name"`
+	// Name of the tenant namespace. If not specified, TenantNamespace CR
+	// name will be used.
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 // TenantNamespaceStatus defines the observed state of TenantNamespace

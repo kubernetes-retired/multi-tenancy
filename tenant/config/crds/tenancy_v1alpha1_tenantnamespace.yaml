@@ -29,9 +29,9 @@ spec:
         spec:
           properties:
             name:
+              description: Name of the tenant namespace. If not specified, TenantNamespace
+                CR name will be used.
               type: string
-          required:
-          - name
           type: object
         status:
           type: object

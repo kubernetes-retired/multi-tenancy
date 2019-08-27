@@ -82,6 +82,9 @@ type ReconcileTenantNamespace struct {
 // Find the tenant namespace name based on prefix requirement
 func (r *ReconcileTenantNamespace) getNamespaceName(prefix bool, instance *tenancyv1alpha1.TenantNamespace) string {
 	name := instance.Spec.Name
+	if name == "" {
+		name = instance.Name
+	}
 	if prefix {
 		name = instance.Namespace + "-" + name
 	}
