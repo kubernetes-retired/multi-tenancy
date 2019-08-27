@@ -79,6 +79,15 @@ type ReconcileTenantNamespace struct {
 	scheme *runtime.Scheme
 }
 
+// Find the tenant namespace name based on prefix requirement
+func (r *ReconcileTenantNamespace) getNamespaceName(prefix bool, instance *tenancyv1alpha1.TenantNamespace) string {
+	name := instance.Spec.Name
+	if prefix {
+		name = instance.Namespace + "-" + name
+	}
+	return name
+}
+
 // Reconcile reads that state of the cluster for a TenantNamespace object and makes changes based on the state read
 // and what is in the TenantNamespace.Spec
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
@@ -99,11 +108,37 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
+	// Fetch namespace list
 	nsList := &corev1.NamespaceList{}
 	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	// Fetch the tenant list
+	tenantList := &tenancyv1alpha1.TenantList{}
+	err = r.List(context.TODO(), &client.ListOptions{}, tenantList)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Find the tenant of this instance
+	requireNamespacePrefix := false
+	foundTenant := false
+	for _, each := range tenantList.Items {
+		if each.Spec.TenantAdminNamespaceName == instance.Namespace {
+			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
+			foundTenant = true
+			break
+		}
+	}
+	if !foundTenant {
+		err = fmt.Errorf("TenantNamespace CR %v does not belong to any tenant", instance)
+		return reconcile.Result{}, err
+	}
+
+	// In case namespace already exists
+	tenantNsName := r.getNamespaceName(requireNamespacePrefix, instance)
 	expectedOwnerRef := metav1.OwnerReference{
 		APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
 		Kind:       "TenantNamespace",
@@ -111,7 +146,7 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		UID:        instance.UID,
 	}
 	for _, each := range nsList.Items {
-		if each.Name == instance.Spec.Name {
+		if each.Name == tenantNsName {
 			// Check OwnerReference
 			found := false
 			for _, ownerRef := range each.OwnerReferences {
@@ -131,13 +166,15 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			return reconcile.Result{}, nil
 		}
 	}
+
+	// In case a new namespace needs to be created
 	tenantNs := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: corev1.SchemeGroupVersion.String(),
 			Kind:       "Namespace",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            instance.Spec.Name,
+			Name:            tenantNsName,
 			OwnerReferences: []metav1.OwnerReference{expectedOwnerRef},
 		},
 	}

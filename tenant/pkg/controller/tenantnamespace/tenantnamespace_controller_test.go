@@ -35,17 +35,25 @@ import (
 var c client.Client
 
 // TODO: the expected namespace will be a tenantAdmin namespace
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
+var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "ta-admin"}}
 var expectedRequestNoNs = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo"}}
 
 const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "ta-admin",
+		},
+	}
 	instance := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
-			Namespace: "default",
+			Namespace: "ta-admin",
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
 			Name: "t1",
@@ -68,10 +76,27 @@ func TestReconcile(t *testing.T) {
 		mgrStopped.Wait()
 	}()
 
+	// Create tenant object
+	err = c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), tenant)
+	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
+	adminNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ta-admin",
+		},
+	}
+	err = c.Create(context.TODO(), adminNs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create namespace object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), adminNs)
 	// Create the TenantNamespace object and expect the Reconcile and the namespace to be created
 	err = c.Create(context.TODO(), instance)
-	// The instance object may not be a valid object because it might be missing some required fields.
-	// Please modify the instance object by adding required fields and then remove the following if statement.
 	if apierrors.IsInvalid(err) {
 		t.Logf("failed to create object, got an invalid object error: %v", err)
 		return
