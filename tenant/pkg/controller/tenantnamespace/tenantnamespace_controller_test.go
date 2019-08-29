@@ -204,6 +204,86 @@ func testCreateTenantNamespaceWithPrefixNoSpec(c client.Client, g *gomega.Gomega
 		Should(gomega.Succeed())
 }
 
+func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "ta-admin",
+		},
+	}
+	instance := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo",
+			Namespace: "ta-admin",
+		},
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "t2",
+		},
+	}
+	// Create tenant object
+	err := c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), tenant)
+	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
+	adminNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ta-admin",
+		},
+	}
+	err = c.Create(context.TODO(), adminNs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create namespace object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), adminNs)
+	// Create t2, make it available before creating tenant namespace object
+	t2Ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "t2",
+		},
+	}
+	err = c.Create(context.TODO(), t2Ns)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create namespace object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), t2Ns)
+	// Create the TenantNamespace object and expect 1) the Reconcile and 2) ownerReference is added to t2
+	err = c.Create(context.TODO(), instance)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	defer c.Delete(context.TODO(), instance)
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+	// Refresh instance
+	err = c.Get(context.TODO(), expectedRequest.NamespacedName, instance)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to get tenant namespace object, got an invalid object error: %v", err)
+		return
+	}
+	// Refresh t2
+	nskey := types.NamespacedName{Name: "t2"}
+	err = c.Get(context.TODO(), nskey, t2Ns)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to get namespace object, got an invalid object error: %v", err)
+		return
+	}
+	expectedOwnerRef := metav1.OwnerReference{
+		APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
+		Kind:       "TenantNamespace",
+		Name:       instance.Name,
+		UID:        instance.UID,
+	}
+	g.Expect(len(t2Ns.OwnerReferences) == 1 && expectedOwnerRef == t2Ns.OwnerReferences[0]).To(gomega.BeTrue())
+}
+
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
@@ -225,4 +305,5 @@ func TestReconcile(t *testing.T) {
 	testCreateTenantNamespaceNoPrefix(c, g, t, requests)
 	testCreateTenantNamespaceWithPrefix(c, g, t, requests)
 	testCreateTenantNamespaceWithPrefixNoSpec(c, g, t, requests)
+	testImportExistingNamespace(c, g, t, requests)
 }
