@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      # The following value is overwritten by the last call to `make manifests`
+      # based on the current value of the IMG envvar. Please try not to check
+      # in changes; leave the default value (currently "controller:latest"
+      # unless/until we choose something better).
+      - image: controller:latest
+        name: manager

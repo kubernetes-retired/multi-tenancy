@@ -1,0 +1,4 @@
+#!/bin/bash
+pod=`kubectl get pods -n hnc-system -ojsonpath='{.items[0].metadata.name}'`
+echo "Following logs for ${pod}"
+kubectl logs -n hnc-system --follow $pod manager

@@ -1,0 +1,6 @@
+#!/bin/bash
+kubectl patch hierarchy hier -n $1 -p "{\"spec\":{\"parent\": \"$2\"}}" --type merge
+echo
+./hier-show $1
+echo
+./hier-show $2
