@@ -40,8 +40,7 @@ var expectedRequestNoNs = reconcile.Request{NamespacedName: types.NamespacedName
 
 const timeout = time.Second * 5
 
-func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
+func testCreateTenantNamespaceNoPrefix(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tenant-a",
@@ -59,25 +58,8 @@ func TestReconcile(t *testing.T) {
 			Name: "t1",
 		},
 	}
-
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
-	// channel when it is finished.
-	mgr, err := manager.New(cfg, manager.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c = mgr.GetClient()
-
-	recFn, requests := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
-
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
 	// Create tenant object
-	err = c.Create(context.TODO(), tenant)
+	err := c.Create(context.TODO(), tenant)
 	if apierrors.IsInvalid(err) {
 		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
 		return
@@ -115,4 +97,132 @@ func TestReconcile(t *testing.T) {
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestNoNs)))
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 		Should(gomega.Succeed())
+}
+
+func testCreateTenantNamespaceWithPrefix(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "ta-admin",
+			RequireNamespacePrefix:   true,
+		},
+	}
+	instance := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo",
+			Namespace: "ta-admin",
+		},
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "t1",
+		},
+	}
+	// Create tenant object
+	err := c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), tenant)
+	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
+	adminNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ta-admin",
+		},
+	}
+	err = c.Create(context.TODO(), adminNs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create namespace object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), adminNs)
+	// Create the TenantNamespace object and expect the Reconcile and the namespace to be created
+	err = c.Create(context.TODO(), instance)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	defer c.Delete(context.TODO(), instance)
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+	nskey := types.NamespacedName{Name: "ta-admin-t1"}
+	tenantNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
+		Should(gomega.Succeed())
+}
+
+func testCreateTenantNamespaceWithPrefixNoSpec(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "ta-admin",
+			RequireNamespacePrefix:   true,
+		},
+	}
+	instance := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo",
+			Namespace: "ta-admin",
+		},
+	}
+	// Create tenant object
+	err := c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), tenant)
+	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
+	adminNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "ta-admin",
+		},
+	}
+	err = c.Create(context.TODO(), adminNs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create namespace object, got an invalid object error: %v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), adminNs)
+	// Create the TenantNamespace object and expect the Reconcile and the namespace to be created
+	err = c.Create(context.TODO(), instance)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	defer c.Delete(context.TODO(), instance)
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+	nskey := types.NamespacedName{Name: "ta-admin-foo"}
+	tenantNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
+		Should(gomega.Succeed())
+}
+
+func TestReconcile(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// channel when it is finished.
+	mgr, err := manager.New(cfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	c = mgr.GetClient()
+
+	recFn, requests := SetupTestReconcile(newReconciler(mgr))
+	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
+
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	testCreateTenantNamespaceNoPrefix(c, g, t, requests)
+	testCreateTenantNamespaceWithPrefix(c, g, t, requests)
+	testCreateTenantNamespaceWithPrefixNoSpec(c, g, t, requests)
 }
