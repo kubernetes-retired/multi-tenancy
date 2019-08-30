@@ -67,7 +67,10 @@ Too many to count, but at a very high level:
 
 * Write webhooks to prevent bad input (eg cycles) and implement RBAC rules
 * Add configuration (eg ability to disable Secrets propagation)
-* Reliability and scalability are fully untested
+* Reliability and scalability are fully untested, ie:
+  * Setting the resync period
+  * Testing for crashes at various points
+  * Parallelizing concurrent operations
 * Upgrade paths
 * Auditing, events, etc
 
@@ -94,7 +97,8 @@ itself (see below).
 
 ### Testing on KIND (Kubernetes IN Docker)
 
-* Run `source ./scripts/kind-env` to setup your `KUBECONFIG` env var correctly.
+* Run `. ./scripts/kind-env` to setup your `KUBECONFIG` env var correctly.
+  * NB: This sets env vars, hence the need to source (and not run) it.
 * Run `./scripts/kind-reset` to stop any existing KIND cluster and setup a new
 one, including the cert manager required to run the webhooks.
 * Run `make test` to run the controller (excluding the validating webhook)
