@@ -1,0 +1,7 @@
+version: "2"
+domain: x-k8s.io
+repo: github.com/kubernetes-sigs/multi-tenancy
+resources:
+- group: hnc
+  version: v1alpha1
+  kind: Hierarchy

@@ -1,0 +1,6 @@
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: Hierarchy
+metadata:
+  name: hierarchy-sample
+spec:
+  # Add fields here
