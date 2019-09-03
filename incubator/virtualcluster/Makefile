@@ -1,3 +1,5 @@
+# Explicitly opt into go modules, even though we're inside a GOPATH directory
+export GO111MODULE=on
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
@@ -26,8 +28,8 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+manifests: controller-gen
+	$(CONTROLLER_GEN) all
 
 # Run go fmt against code
 fmt:
@@ -53,3 +55,13 @@ docker-build: test
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+# find or download controller-gen
+# download controller-gen if necessary
+controller-gen:
+ifeq (, $(shell which controller-gen))
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.1.12
+CONTROLLER_GEN=$(GOBIN)/controller-gen
+else
+CONTROLLER_GEN=$(shell which controller-gen)
+endif
