@@ -4,7 +4,7 @@ export GO111MODULE=on
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
-all: test manager
+all: test manager vn-agent
 
 # Run tests
 test: generate fmt vet manifests
@@ -13,6 +13,10 @@ test: generate fmt vet manifests
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager github.com/multi-tenancy/incubator/virtualcluster/cmd/manager
+
+# Build vn-agent binary
+vn-agent: fmt vet
+	go build -o bin/vn-agent github.com/multi-tenancy/incubator/virtualcluster/cmd/vn-agent
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
