@@ -18,6 +18,8 @@ set -e
 
 # gencerts.sh generates the certificates for the generic TLS test.
 
+TENANT_NAME=tenantA
+
 cat > server.conf << EOF
 [req]
 req_extensions = v3_req
@@ -50,7 +52,7 @@ openssl x509 -req -in VnAgent.csr -CA CACert.pem -CAkey CAKey.pem -CAcreateseria
 
 # Create a tenant certiticate
 openssl genrsa -out TenantKey.pem 2048
-openssl req -new -key TenantKey.pem -out Tenant.csr -subj "/CN=tenantA" -config server.conf
+openssl req -new -key TenantKey.pem -out Tenant.csr -subj "/CN=${TENANT_NAME}" -config server.conf
 openssl x509 -req -in Tenant.csr -CA CACert.pem -CAkey CAKey.pem -CAcreateserial -out TenantCert.pem -days 100000 -extensions v3_req -extfile server.conf
 
 outfile=certs.go
@@ -76,7 +78,11 @@ limitations under the License.
 // and holds raw certificates for the webhook tests.
 
 package testcerts
+
 EOF
+
+echo "// TenantName is the CommonName in the tenant cert."
+echo "const TenantName = \"${TENANT_NAME}\"" >> $outfile
 
 for file in CA KubeletServer KubeletClient VnAgent Tenant; do
   for type in Key Cert; do

@@ -19,6 +19,9 @@ limitations under the License.
 
 package testcerts
 
+// TenantName is the CommonName in the tenant cert.
+const TenantName = "tenantA"
+
 var CAKey = []byte(`-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAydNRB53gcDny6zamciMd9hhmjQURrfZI3rXuewVoVDU5IGrX
 GGeHCj3h3bmZfHAZJJwNJGq9iTlA5ejRL9+yD6wQxzbUyLe0Snu6CDnhqJ2W5a3n
