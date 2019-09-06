@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -91,6 +93,26 @@ func (r *ReconcileTenantNamespace) getNamespaceName(prefix bool, instance *tenan
 	return name
 }
 
+// Add a ownerReference to input namespace
+func (r *ReconcileTenantNamespace) addNamespaceOwnerReference(ns *corev1.Namespace, ownerRef *metav1.OwnerReference) error {
+	nsClone := ns.DeepCopy()
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		nsClone.OwnerReferences = append(nsClone.OwnerReferences, *ownerRef)
+		updateErr := r.Update(context.TODO(), nsClone)
+		if updateErr == nil {
+			return nil
+		}
+		key := types.NamespacedName{
+			Name: nsClone.Name,
+		}
+		if err := r.Get(context.TODO(), key, nsClone); err != nil {
+			log.Info("Fail to fetch namespace on update failure", "namespace", nsClone.Name)
+		}
+		return updateErr
+	})
+	return err
+}
+
 // Reconcile reads that state of the cluster for a TenantNamespace object and makes changes based on the state read
 // and what is in the TenantNamespace.Spec
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
@@ -118,7 +140,7 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Fetch the tenant list
+	// Fetch tenant list
 	tenantList := &tenancyv1alpha1.TenantList{}
 	err = r.List(context.TODO(), &client.ListOptions{}, tenantList)
 	if err != nil {
@@ -148,6 +170,7 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		Name:       instance.Name,
 		UID:        instance.UID,
 	}
+
 	for _, each := range nsList.Items {
 		if each.Name == tenantNsName {
 			// Check OwnerReference
@@ -164,9 +187,10 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			}
 			if !found {
 				log.Info("Namespace has been created without TenantNamespace owner", "namespace", each.Name)
-				// TODO: grab the namespace ownership
+				// Obtain namespace ownership by setting ownerReference
+				err = r.addNamespaceOwnerReference(&each, &expectedOwnerRef)
 			}
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, err
 		}
 	}
 
