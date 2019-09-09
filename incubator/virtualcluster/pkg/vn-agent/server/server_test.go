@@ -21,10 +21,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +51,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/server/stats"
 	"k8s.io/kubernetes/pkg/kubelet/server/streaming"
 	"k8s.io/kubernetes/pkg/volume"
+	"k8s.io/utils/pointer"
 
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/testcerts"
@@ -80,6 +83,11 @@ type serverTestFramework struct {
 	serverUnderTest *Server
 	kubeletServer   *kubletServerTestFramework
 	testHTTPServer  *httptest.Server
+}
+
+func (s *serverTestFramework) Close() {
+	s.testHTTPServer.Close()
+	s.kubeletServer.testHTTPServer.Close()
 }
 
 func newServerTest() *serverTestFramework {
@@ -239,7 +247,6 @@ func newTestStreamingServer(streamIdleTimeout time.Duration) (s *testStreamingSe
 	if err != nil {
 		return nil, err
 	}
-
 	s.fakeRuntime = &fakeRuntime{}
 	config := streaming.DefaultConfig
 	config.BaseURL = testURL
@@ -413,9 +420,14 @@ func getPodName(name, namespace string) string {
 	return name + "_" + namespace
 }
 
+// getEffectiveNamespace translate the tenant namespace name to super master namespace name.
+func getEffectiveNamespace(tenantName, namespace string) string {
+	return tenantName + "-" + namespace
+}
+
 func TestServeLogs(t *testing.T) {
 	fv := newServerTest()
-	defer fv.testHTTPServer.Close()
+	defer fv.Close()
 
 	content := string(`<pre><a href="kubelet.log">kubelet.log</a><a href="google.log">google.log</a></pre>`)
 
@@ -442,5 +454,167 @@ func TestServeLogs(t *testing.T) {
 	result := string(body)
 	if !strings.Contains(result, "kubelet.log") || !strings.Contains(result, "google.log") {
 		t.Errorf("Received wrong data: %s", result)
+	}
+}
+
+func TestServeRunInContainer(t *testing.T) {
+	fv := newServerTest()
+	defer fv.Close()
+	output := "foo bar"
+	podNamespace := "other"
+	podName := "foo"
+	expectedPodNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
+	expectedPodName := getPodName(podName, expectedPodNamespace)
+	expectedContainerName := "baz"
+	expectedCommand := "ls -a"
+	fv.kubeletServer.fakeKubelet.runFunc = func(podFullName string, uid types.UID, containerName string, cmd []string) ([]byte, error) {
+		if podFullName != expectedPodName {
+			t.Errorf("expected %s, got %s", expectedPodName, podFullName)
+		}
+		if containerName != expectedContainerName {
+			t.Errorf("expected %s, got %s", expectedContainerName, containerName)
+		}
+		if strings.Join(cmd, " ") != expectedCommand {
+			t.Errorf("expected: %s, got %v", expectedCommand, cmd)
+		}
+
+		return []byte(output), nil
+	}
+
+	tenantClient, err := newTenantClient()
+	if err != nil {
+		t.Fatalf("Got tenant client: %v", err)
+	}
+
+	resp, err := tenantClient.Post(fv.testHTTPServer.URL+"/run/"+podNamespace+"/"+podName+"/"+expectedContainerName+"?cmd=ls%20-a", "", nil)
+	if err != nil {
+		t.Fatalf("Got error POSTing: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		// copying the response body did not work
+		t.Errorf("Cannot copy resp: %#v", err)
+	}
+	result := string(body)
+	if result != output {
+		t.Errorf("expected %s, got %s", output, result)
+	}
+}
+
+func TestServeRunInContainerWithUID(t *testing.T) {
+	// TODO: support UID naming translate
+}
+
+func setPodByNameFunc(fv *serverTestFramework, namespace, pod, container string) {
+	fv.kubeletServer.fakeKubelet.podByNameFunc = func(namespace, name string) (*v1.Pod, bool) {
+		return &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      pod,
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name: container,
+					},
+				},
+			},
+		}, true
+	}
+}
+
+func setGetContainerLogsFunc(fv *serverTestFramework, t *testing.T, expectedPodName, expectedContainerName string, expectedLogOptions *v1.PodLogOptions, output string) {
+	fv.kubeletServer.fakeKubelet.containerLogsFunc = func(_ context.Context, podFullName, containerName string, logOptions *v1.PodLogOptions, stdout, stderr io.Writer) error {
+		if podFullName != expectedPodName {
+			t.Errorf("expected %s, got %s", expectedPodName, podFullName)
+		}
+		if containerName != expectedContainerName {
+			t.Errorf("expected %s, got %s", expectedContainerName, containerName)
+		}
+		if !reflect.DeepEqual(expectedLogOptions, logOptions) {
+			t.Errorf("expected %#v, got %#v", expectedLogOptions, logOptions)
+		}
+
+		io.WriteString(stdout, output)
+		return nil
+	}
+}
+
+func TestContainerLogs(t *testing.T) {
+	fw := newServerTest()
+	defer fw.Close()
+
+	tenantClient, err := newTenantClient()
+	if err != nil {
+		t.Fatalf("Got tenant client: %v", err)
+	}
+
+	tests := map[string]struct {
+		query        string
+		podLogOption *v1.PodLogOptions
+	}{
+		"without tail":     {"", &v1.PodLogOptions{}},
+		"with tail":        {"?tailLines=5", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
+		"with legacy tail": {"?tail=5", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
+		"with tail all":    {"?tail=all", &v1.PodLogOptions{}},
+		"with follow":      {"?follow=1", &v1.PodLogOptions{Follow: true}},
+	}
+
+	for desc, test := range tests {
+		t.Run(desc, func(t *testing.T) {
+			output := "foo bar"
+			podNamespace := "other"
+			podName := "foo"
+			expectedPodNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
+			expectedPodName := getPodName(podName, expectedPodNamespace)
+			expectedContainerName := "baz"
+			setPodByNameFunc(fw, expectedPodNamespace, podName, expectedContainerName)
+			setGetContainerLogsFunc(fw, t, expectedPodName, expectedContainerName, test.podLogOption, output)
+
+			resp, err := tenantClient.Get(fw.testHTTPServer.URL + "/containerLogs/" + podNamespace + "/" + podName + "/" + expectedContainerName + test.query)
+			if err != nil {
+				t.Fatalf("Got error GETing: %v", err)
+			}
+			defer resp.Body.Close()
+
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("Error reading container logs: %v", err)
+			}
+			result := string(body)
+			if result != output {
+				t.Fatalf("Expected: '%v', got: '%v'", output, result)
+			}
+		})
+	}
+}
+
+func TestContainerLogsWithInvalidTail(t *testing.T) {
+	fw := newServerTest()
+	defer fw.Close()
+
+	output := "foo bar"
+	podNamespace := "other"
+	podName := "foo"
+	expectedPodNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
+	expectedPodName := getPodName(podName, expectedPodNamespace)
+	expectedContainerName := "baz"
+	setPodByNameFunc(fw, expectedPodNamespace, podName, expectedContainerName)
+	setGetContainerLogsFunc(fw, t, expectedPodName, expectedContainerName, &v1.PodLogOptions{}, output)
+
+	tenantClient, err := newTenantClient()
+	if err != nil {
+		t.Fatalf("Got tenant client: %v", err)
+	}
+
+	resp, err := tenantClient.Get(fw.testHTTPServer.URL + "/containerLogs/" + podNamespace + "/" + podName + "/" + expectedContainerName + "?tail=-1")
+	if err != nil {
+		t.Errorf("Got error GETing: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("Unexpected non-error reading container logs: %#v", resp)
 	}
 }
