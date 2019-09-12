@@ -5,7 +5,6 @@ export GO111MODULE=on
 IMG ?= controller:latest
 
 all: test manager vn-agent
-	go mod tidy
 
 # Run tests
 test: generate fmt vet manifests
