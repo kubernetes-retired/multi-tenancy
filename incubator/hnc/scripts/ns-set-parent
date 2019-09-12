@@ -1,2 +1,0 @@
-#!/bin/bash -x
-kubectl patch namespace $1 -p"{\"metadata\": {\"labels\": {\"hnc.x-k8s.io/parent\": \"$2\"}}}"

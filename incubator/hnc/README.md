@@ -27,31 +27,13 @@ or just join a MTWG meeting.
 Install the operator as you would any other kubebuilder controller (eg `make
 install`, `make deploy`). No prebuilt images exist yet.
 
-### Labels or singletons?
-
-The design doc proposes two different ways to define the hierarchy:
-
-1. Through a "singleton" object called `hier` that exists in every namespace -
-   specifically, via `.spec.parent`.
-1. Through well-known labels on the namespaces, `hnc.x-k8s.io/parent`.
-
-The two methods are mutually exclusive; to enable the second, pass the
-`--labels-only` flag to the controller when starting it. For now, the second is
-actually set as the default, both in `make run` and also in
-`/config/manager/manager.yaml`.
-
-Once we make a permanent decision on which UX to offer, we'll delete the other.
-
 ## Development/code
 
 Most of the interesting code is in `/controllers`, with a bit in `/pkg` as well.
 There are four controllers, all of which are mutually exclusive except the
 Object controller:
 
-* **Hierarchy controller:** manages the hierarchy based on the `Hierarchy` singleton
-  (only used when `--labels-only` is not set).
-* **Label controller:** manages the hierarchy based on the namespace labels (only
-  used when `--labels-only` _is_ set).
+* **Hierarchy controller:** manages the hierarchy via the `Hierarchy` singleton.
 * **Namespace controller:** Creates the hierarchy singleton when applicable.
 * **Object controller:** Propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
@@ -81,16 +63,13 @@ I do most of my testing in [KIND](https://kind.sigs.k8s.io).
 ### Helpful scripts
 
 There are a bunch of utilities in `/scripts` which are essentially wrapped
-`kubectl` commands. For example, `/scripts/ns-set-parent foo bar` will set the
-`parent` label on the `foo` namespace to point to the `bar` namespace using the
-following tricky-to-remember command:
+`kubectl` commands. For example, `/scripts/hier-set-parent foo bar` will set the
+`parent` field on the `hier` object in the `foo` namespace to point to the `bar`
+namespace using the following tricky-to-remember command:
 
 ```
-kubectl patch namespace $1 -p"{\"metadata\": {\"labels\": {\"hnc.x-k8s.io/parent\": \"$2\"}}}"
+kubectl patch hierarchy hier -n $1 -p "{\"spec\":{\"parent\": \"$2\"}}" --type merge
 ```
-
-_NB: this command only works when --labels-only was set; otherwise, use
-`hier-set-parent` instead._
 
 Other commands are typically simpler, apart from those used to control KIND
 itself (see below).
