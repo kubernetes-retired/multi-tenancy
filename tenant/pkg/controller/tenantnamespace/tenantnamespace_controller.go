@@ -38,6 +38,11 @@ import (
 
 var log = logf.Log.WithName("controller")
 
+const (
+	// TenantAdminNamespaceAnnotation is the key for tenantAdminNamespace annotation
+	TenantAdminNamespaceAnnotation = "x-k8s.io/tenantAdminNamespace"
+)
+
 // Add creates a new TenantNamespace Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -64,9 +69,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to namespaces
-	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestForOwner{
-		OwnerType: &tenancyv1alpha1.TenantNamespace{},
-	})
+	err = c.Watch(&source.Kind{Type: &corev1.Namespace{}}, &enqueueTenantNamespace{})
 	if err != nil {
 		return err
 	}
@@ -93,11 +96,15 @@ func (r *ReconcileTenantNamespace) getNamespaceName(prefix bool, instance *tenan
 	return name
 }
 
-// Add a ownerReference to input namespace
-func (r *ReconcileTenantNamespace) addNamespaceOwnerReference(ns *corev1.Namespace, ownerRef *metav1.OwnerReference) error {
+// Add a ownerReference and tenant admin namespace annotation to input namespace
+func (r *ReconcileTenantNamespace) updateNamespace(ns *corev1.Namespace, tenantAdminNamespaceName *string, ownerRef *metav1.OwnerReference) error {
 	nsClone := ns.DeepCopy()
 	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		nsClone.OwnerReferences = append(nsClone.OwnerReferences, *ownerRef)
+		if nsClone.Annotations == nil {
+			nsClone.Annotations = make(map[string]string)
+			nsClone.Annotations[TenantAdminNamespaceAnnotation] = *tenantAdminNamespaceName
+		}
 		updateErr := r.Update(context.TODO(), nsClone)
 		if updateErr == nil {
 			return nil
@@ -187,8 +194,8 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			}
 			if !found {
 				log.Info("Namespace has been created without TenantNamespace owner", "namespace", each.Name)
-				// Obtain namespace ownership by setting ownerReference
-				err = r.addNamespaceOwnerReference(&each, &expectedOwnerRef)
+				// Obtain namespace ownership by setting ownerReference, and add annotation
+				err = r.updateNamespace(&each, &instance.Namespace, &expectedOwnerRef)
 			}
 			return reconcile.Result{}, err
 		}
@@ -201,7 +208,10 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			Kind:       "Namespace",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            tenantNsName,
+			Name: tenantNsName,
+			Annotations: map[string]string{
+				TenantAdminNamespaceAnnotation: instance.Namespace,
+			},
 			OwnerReferences: []metav1.OwnerReference{expectedOwnerRef},
 		},
 	}
