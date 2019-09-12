@@ -423,6 +423,7 @@ golang.org/x/tools v0.0.0-20180221164845-07fd8470d635/go.mod h1:n7NCudcB/nEzxVGm
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 golang.org/x/tools v0.0.0-20190206041539-40960b6deb8e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 golang.org/x/tools v0.0.0-20190312151545-0bb0c0a6e846/go.mod h1:LCzVGOaR6xXOjkQ3onu1FJEFr0SW1gC7cKk1uF8kGRs=
+golang.org/x/tools v0.0.0-20190328211700-ab21143f2384 h1:TFlARGu6Czu1z7q93HTxcP1P+/ZFC/IKythI5RzrnRg=
 golang.org/x/tools v0.0.0-20190328211700-ab21143f2384/go.mod h1:LCzVGOaR6xXOjkQ3onu1FJEFr0SW1gC7cKk1uF8kGRs=
 gomodules.xyz/jsonpatch/v2 v2.0.1 h1:xyiBuvkD2g5n7cYzx6u2sxQvsAy4QJsZFCzGVdzOXZ0=
 gomodules.xyz/jsonpatch/v2 v2.0.1/go.mod h1:IhYNNY4jnS53ZnfE4PAmpKtDpTCj1JFXc+3mwe7XcUU=
@@ -475,12 +476,14 @@ k8s.io/client-go v0.0.0-20190819141724-e14f31a72a77/go.mod h1:DmkJD5UDP87MVqUQ5V
 k8s.io/cloud-provider v0.0.0-20190819145148-d91c85d212d5 h1:WwHDS59SEe565zE0HkQesV2iCQVXmCPeTLUIZpjb+tk=
 k8s.io/cloud-provider v0.0.0-20190819145148-d91c85d212d5/go.mod h1:QA5op/z7plbkib4HCBQiIgukeGT6nlgCm5eVxlp5Yw8=
 k8s.io/cluster-bootstrap v0.0.0-20190819145008-029dd04813af/go.mod h1:qLX6uJLmcJW//+paTJYkND4gjTK/v1CjUZCZfJJkaTQ=
+k8s.io/code-generator v0.0.0-20190612205613-18da4a14b22b h1:p+PRuwXWwk5e+UYvicGiavEupapqM5NOxUl3y1GkD6c=
 k8s.io/code-generator v0.0.0-20190612205613-18da4a14b22b/go.mod h1:G8bQwmHm2eafm5bgtX67XDZQ8CWKSGu9DekI+yN4Y5I=
 k8s.io/component-base v0.0.0-20190819141909-f0f7c184477d h1:4C6bgyEgzfGDQEkyq/swmBelfEIH494iHGdZPUF0KO8=
 k8s.io/component-base v0.0.0-20190819141909-f0f7c184477d/go.mod h1:DFWQCXgXVLiWtzFaS17KxHdlUeUymP7FLxZSkmL9/jU=
 k8s.io/cri-api v0.0.0-20190817025403-3ae76f584e79 h1:Rprpnr/1lhYXggjj5gngjWtPqahsh3LP7wmkKu4QF3I=
 k8s.io/cri-api v0.0.0-20190817025403-3ae76f584e79/go.mod h1:MQf3sTYxPlSVy4QhUrDFfHWFxHtwhdpvGBECKGhZULk=
 k8s.io/csi-translation-lib v0.0.0-20190819145328-4831a4ced492/go.mod h1:8EWIx04nstfGUJ1PJyGegey8boDz9980RkmMqxPBuN0=
+k8s.io/gengo v0.0.0-20190116091435-f8a0810f38af h1:SwjZbO0u5ZuaV6TRMWOGB40iaycX8sbdMQHtjNZ19dk=
 k8s.io/gengo v0.0.0-20190116091435-f8a0810f38af/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
 k8s.io/heapster v1.2.0-beta.1/go.mod h1:h1uhptVXMwC8xtZBYsPXKVi8fpdlYkTs6k949KozGrM=
 k8s.io/klog v0.3.0 h1:0VPpR+sizsiivjIfIAQH/rl8tan6jvWkS7lU+0di3lE=

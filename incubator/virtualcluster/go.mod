@@ -24,7 +24,7 @@ require (
 	k8s.io/cri-api v0.0.0
 	k8s.io/klog v0.3.1
 	k8s.io/kubernetes v1.15.3
-	k8s.io/utils v0.0.0-20190829053155-3a4a5477acf8 // indirect
+	k8s.io/utils v0.0.0-20190829053155-3a4a5477acf8
 	sigs.k8s.io/controller-runtime v0.2.0
 )
 
