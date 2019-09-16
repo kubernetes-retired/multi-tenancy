@@ -14,7 +14,7 @@ import (
 // configuration object.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager, labelOnly bool) error {
+func Create(mgr ctrl.Manager) error {
 	f := forest.NewForest()
 
 	// Create all object reconcillers
@@ -37,34 +37,22 @@ func Create(mgr ctrl.Manager, labelOnly bool) error {
 		objReconcilers = append(objReconcilers, or)
 	}
 
-	if !labelOnly {
-		// Create the HierarchyReconciler, passing it the object reconcillers so it can call them.
-		if err := (&HierarchyReconciler{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName("Hierarchy"),
-			Forest: f,
-			Types:  objReconcilers,
-		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
-		}
+	// Create the HierarchyReconciler, passing it the object reconcillers so it can call them.
+	if err := (&HierarchyReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Hierarchy"),
+		Forest: f,
+		Types:  objReconcilers,
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
+	}
 
-		// The NamespaceReconciler can be created in any order.
-		if err := (&NamespaceReconciler{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName("Namespace"),
-		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("cannot create Namespace controller: %s", err.Error())
-		}
-	} else {
-		// Create the namespace label reconciler
-		if err := (&LabelReconciler{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName("Namespace"),
-			Forest: f,
-			Types:  objReconcilers,
-		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("cannot create label controller: %s", err.Error())
-		}
+	// The NamespaceReconciler can be created in any order.
+	if err := (&NamespaceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Namespace"),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create Namespace controller: %s", err.Error())
 	}
 
 	return nil

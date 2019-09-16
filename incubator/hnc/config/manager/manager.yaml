@@ -27,7 +27,6 @@ spec:
         - /manager
         args:
         - --enable-leader-election
-        - --labels-only
         image: controller:latest
         name: manager
         resources:

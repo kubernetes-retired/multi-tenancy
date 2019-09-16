@@ -1,4 +1,4 @@
-package test_hier
+package controllers_test
 
 import (
 	"context"

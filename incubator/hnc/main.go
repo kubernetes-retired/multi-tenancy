@@ -51,15 +51,12 @@ func main() {
 	var (
 		metricsAddr          string
 		enableLeaderElection bool
-		labelsOnly           bool
 		novalidation         bool
 		debugLogs            bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&labelsOnly, "labels-only", false,
-		"Ignore the hier singleton and just use namespace labels instead.")
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
 	flag.Parse()
@@ -77,7 +74,7 @@ func main() {
 	}
 
 	// Create all reconciling controllers
-	if err := controllers.Create(mgr, labelsOnly); err != nil {
+	if err := controllers.Create(mgr); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
