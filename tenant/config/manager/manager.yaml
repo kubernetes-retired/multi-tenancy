@@ -50,7 +50,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: tenant-controller:latest
+        image: multitenancy/tenant:latest
         imagePullPolicy: Always
         name: manager
         env:

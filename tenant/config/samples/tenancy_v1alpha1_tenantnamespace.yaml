@@ -4,6 +4,7 @@ metadata:
   labels:
     controller-tools.k8s.io: "1.0"
   name: tenantnamespace-sample
+  namespace: tenant1admin
 spec:
   # Add fields here
   name: t1-ns1
