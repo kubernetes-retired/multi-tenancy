@@ -25,9 +25,16 @@ The `docs` directory contains any documents written in markdown.
 Some draft docs which need collaboration are Google docs for better collaboration experience.
 The [Links](docs/links.md) file contains links to all relevant draft Google docs.
 
-### PoC directory
+### Incubator directory 
 
-The `poc` directory contains all _proof-of-concept_ code which is not supported.
+The `incubator` directory includes several projects that are actively being incubated within the multi-tenancy working group. This includes the "Hierarchical Namespace" project and the "Virtual Cluster" Project. Additional projects may be added.
+
+- ["Hierarchical Namespace" project design doc](https://docs.google.com/document/d/10MZfFfbQMm33CBboMq2bfrEtXkJQQT4-UH4DDXZRrKY/edit)
+- ["Virtual Cluster" project design doc](https://docs.google.com/document/d/1QAWtYdRZGseSar_KgyfiIisL7JTGMHCfqB_Legfa39w/edit#)
+
+### [Deprecated] PoC directory
+
+The `poc` directory contains *deprecated* _proof-of-concept_ code which is not supported.
 
 ### Code of conduct
 
