@@ -23,7 +23,7 @@ func Create(mgr ctrl.Manager) error {
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
 	}
-	objReconcilers := []TypeReconciler{}
+	objReconcilers := []NamespaceSyncer{}
 	for _, gvk := range gvks {
 		or := &ObjectReconciler{
 			Client: mgr.GetClient(),
@@ -38,19 +38,22 @@ func Create(mgr ctrl.Manager) error {
 	}
 
 	// Create the HierarchyReconciler, passing it the object reconcillers so it can call them.
-	if err := (&HierarchyReconciler{
+	hr := &HierarchyReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Hierarchy"),
 		Forest: f,
 		Types:  objReconcilers,
-	}).SetupWithManager(mgr); err != nil {
+	}
+	if err := hr.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
 	}
 
-	// The NamespaceReconciler can be created in any order.
+	// Finally, create the Namespace Reconciler, passing it the Hierarchy Reconciler so it can be
+	// called when namespaces are created or deleted.
 	if err := (&NamespaceReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Namespace"),
+		Syncer: hr,
 	}).SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Namespace controller: %s", err.Error())
 	}

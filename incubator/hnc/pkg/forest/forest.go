@@ -38,8 +38,9 @@ func (f *Forest) Unlock() {
 // reasonable name, etc), so this method does very little checking.
 func (f *Forest) AddOrGet(nm string) *Namespace {
 	if nm == "" {
-		// Basically impossible, K8s doesn't allow unnamed objects
-		return nil
+		// Impossible in normal circumstances, K8s doesn't allow unnamed objects. No-one will be
+		// checking for nil namespaces so panic now rather than get a nil dereference later.
+		panic("unnamed namespace")
 	}
 	ns, ok := f.namespaces[nm]
 	if ok {

@@ -57,7 +57,7 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("trigger", req.NamespacedName)
 
 	// Read the object; if it's missing, assume it's been deleted. If we miss a deletion,
-	// hopefully ReconcileNamespace will pick up on it.
+	// hopefully SyncNamespace will pick up on it.
 	inst := &unstructured.Unstructured{}
 	inst.SetGroupVersionKind(r.GVK)
 	if err := r.Get(ctx, req.NamespacedName, inst); err != nil {
@@ -79,10 +79,10 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return resp, r.update(ctx, log, inst)
 }
 
-// ReconcileNamespace can be called manually by the HierarchyReconciler when the hierarchy changes
+// SyncNamespace can be called manually by the HierarchyReconciler when the hierarchy changes
 // to force a full refresh of all objects (of the given GVK) in this namespace. It's probably wildly
 // slow and inefficient.
-func (r *ObjectReconciler) ReconcileNamespace(ctx context.Context, log logr.Logger, ns string) error {
+func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {
 	log = log.WithValues("gvk", r.GVK)
 	ul := &unstructured.UnstructuredList{}
 	ul.SetGroupVersionKind(r.GVK)
