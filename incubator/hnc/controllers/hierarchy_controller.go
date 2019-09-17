@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"sort"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -134,20 +133,13 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 	affected := []string{}
 	conds := []tenancy.Condition{}
 
-	// Sync our data structures with the current parent. If there's a problem, set .spec.parent
-	// to an invalid value so that we don't accidentally pick up a new parent that gets created
-	// in the future (and also get access to its Secrets, etc).
+	// Sync our data structures with the current parent. The current parent might not exist (if, for
+	// example, the hierarchy is being created as a result of `kubectl apply -f` on a directory); in
+	// this case, just set a condition on the child, which will be removed once the parent exists.
 	curParent := r.Forest.Get(inst.Spec.Parent)
 	if inst.Spec.Parent != "" && curParent == nil {
-		// This WILL FAIL if you restart the controller while namespaces have parents set.
-		// TODO: do a full sync at least once if we ever get here, or (better yet)
-		// completely rethink how we handle missing parents.
 		log.Info("Missing", "parent", curParent.Name())
-		conds = append(conds, tenancy.Condition{Msg: "bad parent"})
-		const prefix = "missing parent "
-		if !strings.HasPrefix(inst.Spec.Parent, prefix) {
-			inst.Spec.Parent = prefix + inst.Spec.Parent
-		}
+		conds = append(conds, tenancy.Condition{Msg: "missing parent"})
 	}
 
 	// Update the in-memory hierarchy if it's changed
@@ -158,9 +150,8 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 			log.Info("Couldn't set parent", "condition", err)
 			conds = append(conds, tenancy.Condition{Msg: err.Error()})
 		} else {
-			// Only call other parts of the hierarchy recursively if this one was
-			// successfully updated; otherwise, if you get a cycle, this could get into
-			// an infinite loop.
+			// Only call other parts of the hierarchy recursively if this one was successfully updated;
+			// otherwise, if you get a cycle, this could get into an infinite loop.
 			if oldParent != nil {
 				affected = append(affected, oldParent.Name())
 			}

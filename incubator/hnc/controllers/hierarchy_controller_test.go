@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
@@ -39,31 +38,20 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{fooName}))
 	})
 
-	It("should set the parent to a bad value if the parent is deleted", func() {
+	It("should set a condition if the parent is missing", func() {
 		// Set up the parent-child relationship
 		barHier := getHierarchy(ctx, barName)
-		barHier.Spec.Parent = fooName
+		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(func() []string {
-			defHier := getHierarchy(ctx, fooName)
-			return defHier.Status.Children
-		}).Should(Equal([]string{barName}))
-
-		// Delete the parent. We can't actually delete the namespace because the test env
-		// doesn't run the builting Namespace controller, but we *can* mark it as deleted
-		// and also delete the singleton, which should be enough to prevent it from being
-		// recreated as well as force the reconciler to believe that the namespace is gone.
-		fooHier := getHierarchy(ctx, fooName)
-		fooNS := &corev1.Namespace{}
-		fooNS.Name = fooName
-		Expect(k8sClient.Delete(ctx, fooNS)).Should(Succeed())
-		Expect(k8sClient.Delete(ctx, fooHier)).Should(Succeed())
-
-		// Verify that the parent pointer is now set to a bad value
-		Eventually(func() string {
+		Eventually(func() bool {
 			barHier = getHierarchy(ctx, barName)
-			return barHier.Spec.Parent
-		}).Should(Equal("missing parent " + fooName))
+			for _, cond := range barHier.Status.Conditions {
+				if cond.Msg == "missing parent" {
+					return true
+				}
+			}
+			return false
+		}).Should(Equal(true))
 	})
 
 	It("should set a condition if a self-cycle is detected", func() {
