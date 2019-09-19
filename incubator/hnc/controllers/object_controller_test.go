@@ -7,7 +7,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+
+	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var _ = Describe("Secret", func() {
@@ -24,6 +27,8 @@ var _ = Describe("Secret", func() {
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
 
+		time.Sleep(startupDelay)
+
 		// Start with the tree foo -> bar -> baz
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -32,10 +37,6 @@ var _ = Describe("Secret", func() {
 		makeSecret(ctx, fooName, "foo-sec")
 		makeSecret(ctx, barName, "bar-sec")
 		makeSecret(ctx, bazName, "baz-sec")
-
-		// Add a quick delay so that the controller is idle
-		// TODO: look into why the controller is missing events.
-		time.Sleep(100 * time.Millisecond)
 	})
 
 	It("should be copied to descendents", func() {
@@ -74,7 +75,7 @@ func hasSecret(ctx context.Context, nsName, secretName string) func() bool {
 }
 
 func setParent(ctx context.Context, nm string, pnm string) {
-	hier := getHierarchy(ctx, nm)
+	hier := newOrGetHierarchy(ctx, nm)
 	oldPNM := hier.Spec.Parent
 	hier.Spec.Parent = pnm
 	updateHierarchy(ctx, hier)
@@ -90,4 +91,15 @@ func setParent(ctx context.Context, nm string, pnm string) {
 			return pHier.Status.Children
 		}).Should(ContainElement(nm))
 	}
+}
+
+func newOrGetHierarchy(ctx context.Context, nm string) *tenancy.Hierarchy {
+	hier := &tenancy.Hierarchy{}
+	hier.ObjectMeta.Namespace = nm
+	hier.ObjectMeta.Name = tenancy.Singleton
+	snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
+	if err := k8sClient.Get(ctx, snm, hier); err != nil {
+		ExpectWithOffset(2, errors.IsNotFound(err)).Should(BeTrue())
+	}
+	return hier
 }
