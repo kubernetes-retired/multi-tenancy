@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
@@ -39,23 +40,14 @@ func Create(mgr ctrl.Manager) error {
 
 	// Create the HierarchyReconciler, passing it the object reconcillers so it can call them.
 	hr := &HierarchyReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Hierarchy"),
-		Forest: f,
-		Types:  objReconcilers,
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Hierarchy"),
+		Forest:   f,
+		Types:    objReconcilers,
+		Affected: make(chan event.GenericEvent),
 	}
 	if err := hr.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
-	}
-
-	// Finally, create the Namespace Reconciler, passing it the Hierarchy Reconciler so it can be
-	// called when namespaces are created or deleted.
-	if err := (&NamespaceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Namespace"),
-		Syncer: hr,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("cannot create Namespace controller: %s", err.Error())
 	}
 
 	return nil
