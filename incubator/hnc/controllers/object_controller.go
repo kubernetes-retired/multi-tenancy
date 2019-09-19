@@ -18,6 +18,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +35,7 @@ import (
 const (
 	metaGroup          = "hnc.x-k8s.io"
 	labelInheritedFrom = metaGroup + "/inheritedFrom"
+	annotationModified = metaGroup + "/modified"
 )
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
@@ -102,9 +104,10 @@ func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, n
 // update deletes this object if it's an obsolete copy, and otherwise ensures it's been propagated
 // to any child namespaces.
 func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
-	// Make sure this object is actually supposed to exist. If not, delete it. This should
-	// trigger one more reconciliation cycle and we'll get the children then.
-	if deleted, err := r.deleteObsolete(ctx, log, inst); deleted || err != nil {
+	// Make sure this object is correct and supposed to propagate. If not, delete it or mark it as
+	// modified. This should trigger one more reconciliation cycle and we'll get the children then.
+	if correct, err := r.ensureCorrectAncestry(ctx, log, inst); !correct || err != nil {
+		log.Info("Incorrect will not propagate")
 		return err
 	}
 
@@ -112,53 +115,100 @@ func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *un
 	return r.propagate(ctx, log, inst)
 }
 
-// deleteObsolete checks to see if the given object should not exist any more. It returns true if
-// it deleted the object and false otherwise.
-func (r *ObjectReconciler) deleteObsolete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, error) {
-	// Find what we expect the source to be. If there's no source, *this*
-	// is the source and there's nothing to do.
-	labels := inst.GetLabels()
-	if labels == nil {
-		// this cannot be a copy
-		return false, nil
-	}
-	inheritedFrom, _ := labels[labelInheritedFrom]
-	if inheritedFrom == "" {
-		// this isn't a copy
-		return false, nil
+// ensureCorrectAncestry checks to see if the given object is correct. It returns true if
+// it's correct and ready to be propagated. The incorrect object will be deleted
+// if it's obsolete; or marked as modified if it's changed.
+func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, error) {
+	log.Info("Ensure correctness")
+	// Find what we expect the source to be.
+	missing, src, err := r.getSourceInst(ctx, log, inst)
+	if err != nil {
+		return false, err
 	}
 
-	// Read the source. If we find it, and the namespace is still an ancestor, no problem.
-	srcNm := types.NamespacedName{Namespace: inheritedFrom, Name: inst.GetName()}
+	// The source instance no longer exists in the source namespace.
+	if missing {
+		log.Info("Will delete because the source object no longer exists in ancestor namespace(s)", "inheritedFrom", inst.GetLabels()[labelInheritedFrom])
+		return false, r.Delete(ctx, inst)
+	}
+
+	// If there's no source, *this* is the source
+	if src == nil {
+		return true, nil
+	}
+
+	// We found the object in an ancestor namespace. Is this object the same as the source?
+	log.Info("Compare with the source", "inheritedFrom", src.GetNamespace())
+	instCopied := copyObject(inst)
+	// The only difference could be namespace and labelInheritedFrom label.
+	// Make the namespaces and inheritedFrom labels the same before comparison.
+	instCopied.SetNamespace(src.GetNamespace())
+	setLabel(instCopied, labelInheritedFrom, "")
+	srcCopied := copyObject(src)
+	setLabel(srcCopied, labelInheritedFrom, "")
+	equal := reflect.DeepEqual(instCopied, srcCopied)
+	if !equal {
+		log.Info("Mark as modified from the source", "inheritedFrom", src.GetNamespace())
+		// Mark as modified if the copied fields don't match.
+		setAnnotation(inst, annotationModified, "true")
+		err := r.Update(ctx, inst)
+		if err != nil {
+			log.Error(err, "Couldn't add modified annotation")
+			return false, err
+		}
+	}
+	return equal, nil
+}
+
+// getSourceInst gets source instance of this one. It returns nil if this instance isn't a copy.
+// It returns true if the source instance is missing. It could be that the source instance no
+// longer exists or the source namespace is no longer an ancestor.
+func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, *unstructured.Unstructured, error) {
+	srcNS := getSourceNS(inst)
+	if srcNS == "" {
+		// this cannot be a copy
+		return false, nil, nil
+	}
+
+	// Get the source instance from source namespace
+	srcNm := types.NamespacedName{Namespace: srcNS, Name: inst.GetName()}
 	src := &unstructured.Unstructured{}
 	src.SetGroupVersionKind(inst.GroupVersionKind())
 	err := r.Get(ctx, srcNm, src)
-	if err == nil {
-		// The object exists. Is it still in an ancestor namespace?
-		if yes, err := r.isAncestor(inst.GetNamespace(), inheritedFrom); err != nil {
-			// This can fail if the names are bad. For now, take no action (ie don't
-			// delete). TODO: revisit this.
-			log.Error(err, "deleteObsolete")
-			return false, err
-		} else if yes {
-			// We found the object in an ancestor namespace; no need to delete it.
-			return false, nil
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("The source object no longer exists", "inheritedFrom", srcNS)
+			return true, nil, nil
+		} else {
+			log.Info("Couldn't read", "source", srcNm)
+			return false, nil, err
 		}
-		log.Info("Will delete because the source namespace is no longer an ancestor", "inheritedFrom", inheritedFrom)
-	} else if errors.IsNotFound(err) {
-		log.Info("Will delete because the source object no longer exists", "inheritedFrom", inheritedFrom)
-	} else {
-		log.Info("Couldn't read", "source", srcNm)
-		return false, err
 	}
 
-	// Delete this instance.
-	if err := r.Delete(ctx, inst); err != nil {
-		log.Error(err, "Couldn't delete after source was missing")
-		return false, err
+	// The source exists. Is it still in an ancestor namespace?
+	if yes, err := r.isAncestor(inst.GetNamespace(), srcNS); err != nil {
+		// This can fail if the names are bad. For now, take no action (ie don't
+		// delete). TODO: revisit this.
+		log.Error(err, "deleteObsolete")
+		return false, nil, err
+	} else if !yes {
+		log.Info("The source namespace is no longer an ancestor", "inheritedFrom", srcNS)
+		return true, nil, nil
 	}
 
-	return true, nil
+	return false, src, nil
+}
+
+// getSourceNS gets source namespace if it's set in "labelInheritedFrom" label.
+// It returns an empty string if this instance is the source
+func getSourceNS(inst *unstructured.Unstructured) string {
+	labels := inst.GetLabels()
+	if labels == nil {
+		// this cannot be a copy
+		return ""
+	}
+	inheritedFrom, _ := labels[labelInheritedFrom]
+	return inheritedFrom
 }
 
 // propagate copies the object to the child namespaces. No need to do this recursively as the
@@ -172,7 +222,8 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	parent := inst.GetNamespace()
 	for _, child := range r.getChildNamespaces(inst.GetNamespace()) {
 		// Create an in-memory copy with the appropriate namespace.
-		copied := copyObject(inst, child)
+		copied := copyObject(inst)
+		copied.SetNamespace(child)
 
 		// If the label to the source namespace is missing, then the object we're copying
 		// must be the original, so point the label to this namespace.
@@ -235,7 +286,7 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 	return nil
 }
 
-func copyObject(inst *unstructured.Unstructured, ns string) *unstructured.Unstructured {
+func copyObject(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	copied := inst.DeepCopy()
 
 	// Clear all irrelevant fields. cf https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#objectmeta-v1-meta
@@ -252,7 +303,6 @@ func copyObject(inst *unstructured.Unstructured, ns string) *unstructured.Unstru
 	copied.SetSelfLink("")
 	copied.SetUID("")
 
-	copied.SetNamespace(ns)
 	return copied
 }
 
@@ -307,4 +357,22 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	target := &unstructured.Unstructured{}
 	target.SetGroupVersionKind(r.GVK)
 	return ctrl.NewControllerManagedBy(mgr).For(target).Complete(r)
+}
+
+func setAnnotation(inst *unstructured.Unstructured, annotation string, value string) {
+	annotations := inst.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[annotation] = value
+	inst.SetAnnotations(annotations)
+}
+
+func setLabel(inst *unstructured.Unstructured, label string, value string) {
+	labels := inst.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[label] = value
+	inst.SetLabels(labels)
 }
