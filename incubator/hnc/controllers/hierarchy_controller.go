@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"reflect"
-	"sort"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -95,7 +94,6 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 		}
 
 		// It doesn't exist - initialize it to a sane initial value.
-		log.V(1).Info("Missing singleton")
 		missing = true
 		inst.ObjectMeta.Name = tenancy.Singleton
 		inst.ObjectMeta.Namespace = nm
@@ -121,9 +119,9 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 				return err
 			}
 
-			// The namespace is gone. Remove all traces of the namespace from  our data structures.
-			log.Info("Namespace was deleted")
-			return r.onDelete(ctx, log, nm)
+			// The namespace is gone, update things accordingly.
+			log.Info("Namespace does not exist")
+			return r.removeNamespace(ctx, log, nm)
 		}
 
 		// If the namespace is being deleted, we should still sync any changes that we might have missed
@@ -161,27 +159,35 @@ func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, i
 	orig := inst.DeepCopy()
 	affected := r.syncWithForest(ctx, log, inst)
 
-	// If appropriate, write back. We only write if there's been a *change* in the data structure, and
-	// if the caller wants us to update it (ie, if the namespace isn't being deleted).
-	if update && !reflect.DeepEqual(orig, inst) {
-		if inst.CreationTimestamp.IsZero() {
-			log.Info("Creating singleton on apiserver")
-			if err := r.Create(ctx, inst); err != nil {
-				log.Error(err, "while creating on apiserver")
-				return err
-			}
-		} else {
-			log.Info("Updating singleton on apiserver")
-			if err := r.Update(ctx, inst); err != nil {
-				log.Error(err, "while updating apiserver")
-				return err
-			}
-		}
+	var updateErr error
+	if update {
+		updateErr = r.updateAPIServer(ctx, log, orig, inst)
 	}
 
-	// Update any other namespaces that we believe may have been affected
-	if err := r.updateAffected(ctx, log, affected); err != nil {
-		return err
+	// Enqueue any affected namespaces even if we failed to write back to the apiserver; we know
+	// they may have changed somehow and the controller will ensure they eventually get reconciled.
+	r.enqueueAffected(log, affected)
+
+	return updateErr
+}
+
+func (r *HierarchyReconciler) updateAPIServer(ctx context.Context, log logr.Logger, orig, inst *tenancy.Hierarchy) error {
+	if reflect.DeepEqual(orig, inst) {
+		return nil
+	}
+
+	if inst.CreationTimestamp.IsZero() {
+		log.Info("Creating singleton on apiserver")
+		if err := r.Create(ctx, inst); err != nil {
+			log.Error(err, "while creating on apiserver")
+			return err
+		}
+	} else {
+		log.Info("Updating singleton on apiserver")
+		if err := r.Update(ctx, inst); err != nil {
+			log.Error(err, "while updating apiserver")
+			return err
+		}
 	}
 
 	return nil
@@ -203,20 +209,26 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *tenancy.Hierarchy) []string {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
-
-	ns := r.Forest.AddOrGet(inst.ObjectMeta.Namespace)
 	affected := []string{}
 	conds := []tenancy.Condition{}
 
-	// Sync our data structures with the current parent. The current parent might not exist (if, for
-	// example, the hierarchy is being created as a result of `kubectl apply -f` on a directory); in
-	// this case, just set a condition on the child, which will be removed once the parent exists.
-	//
-	// TODO: detect when a missing parent gets added so we can remove this condition.
-	curParent := r.Forest.Get(inst.Spec.Parent)
-	if inst.Spec.Parent != "" && curParent == nil {
-		log.Info("Couldn't set parent", "reason", "missing", "parent", inst.Spec.Parent)
-		conds = append(conds, tenancy.Condition{Msg: "missing parent"})
+	// Get the in-memory namespace and mark it as existing. If this is the first time we're
+	// reconciling this namespace, mark its relatives as being affected since they may have been
+	// waiting for this parent.
+	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
+	if ns.SetExists() {
+		log.Info("Found new namespace")
+		affected = append(affected, ns.RelativesNames()...)
+	}
+
+	// Sync this namespace with its current parent.
+	var curParent *forest.Namespace
+	if inst.Spec.Parent != "" {
+		curParent = r.Forest.Get(inst.Spec.Parent)
+		if !curParent.Exists() {
+			log.Info("Missing parent", "parent", inst.Spec.Parent)
+			conds = append(conds, tenancy.Condition{Msg: "missing parent"})
+		}
 	}
 
 	// Update the in-memory hierarchy if it's changed
@@ -238,15 +250,9 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 		}
 	}
 
-	// Update all other changed fields. If they're empty, set them to nil so that they compare
+	// Update all other changed fields. If they're empty, ensure they're nil so that they compare
 	// properly.
-	children := ns.ChildNames()
-	if len(children) > 0 {
-		sort.Strings(children)
-		inst.Status.Children = children
-	} else {
-		inst.Status.Children = nil
-	}
+	inst.Status.Children = ns.ChildNames()
 	if len(conds) > 0 {
 		inst.Status.Conditions = conds
 	} else {
@@ -256,34 +262,34 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 	return affected
 }
 
-// onDelete removes this namespace from the in-memory forest. Since this might have been a parent or
-// child, we also update the parent or children as well.
-func (r *HierarchyReconciler) onDelete(ctx context.Context, log logr.Logger, nm string) error {
+// removeNamespace marks this namespace as not existing. Since this might have been a parent or
+// child, we enqueue its relatives for reconcilation too.
+func (r *HierarchyReconciler) removeNamespace(ctx context.Context, log logr.Logger, nm string) error {
 	r.Forest.Lock()
-	affected := r.Forest.Remove(nm)
+	ns := r.Forest.Get(nm)
+	var affected []string
+	if ns.UnsetExists() {
+		log.Info("Removed namespace")
+		affected = ns.RelativesNames()
+	}
 	r.Forest.Unlock()
-	log.Info("Removing from forest", "affected", affected)
 
 	// Update any other namespaces that we believe may have been affected
-	if err := r.updateAffected(ctx, log, affected); err != nil {
-		return err
-	}
+	r.enqueueAffected(log, affected)
 
 	return nil
 }
 
-// updateAffected simply calls `SyncNamespace` on a list of namespaces we believe were affected by
-// the current reconciliation.
-func (r *HierarchyReconciler) updateAffected(ctx context.Context, log logr.Logger, affected []string) error {
-	// TODO: parallelize updates
+// enqueueAffected enqueues all affected namespaces for later reconciliation.
+func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, affected []string) {
 	for _, nm := range affected {
+		log.Info("Enqueuing for reconcilation", "affected", nm)
 		// The watch handler doesn't care about anything except the metadata.
 		inst := &tenancy.Hierarchy{}
 		inst.ObjectMeta.Name = tenancy.Singleton
 		inst.ObjectMeta.Namespace = nm
 		r.Affected <- event.GenericEvent{Meta: inst}
 	}
-	return nil
 }
 
 func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager) error {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -13,10 +12,6 @@ import (
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
-
-// Add a quick delay so that the namespaces have been fully created by the controller. Last increased from 100ms.
-// TODO: remove when we can handle parents being created out-of-order.
-var startupDelay = 200 * time.Millisecond
 
 var _ = Describe("Hierarchy", func() {
 	ctx := context.Background()
@@ -29,8 +24,6 @@ var _ = Describe("Hierarchy", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
-
-		time.Sleep(startupDelay)
 	})
 
 	It("should set a child on the parent", func() {
@@ -59,6 +52,38 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal(true))
 	})
 
+	It("should resolve the condition if the parent is later created", func() {
+		// Set up the parent-child relationship with the missing name
+		brumpfName := createNSName("brumpf")
+		barHier := newHierarchy(barName)
+		barHier.Spec.Parent = brumpfName
+		updateHierarchy(ctx, barHier)
+		isMissing := func() bool {
+			barHier = getHierarchy(ctx, barName)
+			for _, cond := range barHier.Status.Conditions {
+				if cond.Msg == "missing parent" {
+					return true
+				}
+			}
+			return false
+		}
+		Eventually(isMissing).Should(Equal(true))
+
+		// Create the missing parent
+		brumpfNS := &corev1.Namespace{}
+		brumpfNS.Name = brumpfName
+		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
+
+		// Ensure the condition is resolved on the child
+		Eventually(isMissing).Should(Equal(false))
+
+		// Ensure the child is listed on the parent
+		Eventually(func() []string {
+			brumpfHier := getHierarchy(ctx, brumpfName)
+			return brumpfHier.Status.Children
+		}).Should(Equal([]string{barName}))
+	})
+
 	It("should set a condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
@@ -76,9 +101,6 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(func() []string {
 			return getHierarchy(ctx, fooName).Status.Children
 		}).Should(Equal([]string{barName}))
-
-		// Wait for the controller to become idle
-		time.Sleep(0 * time.Second)
 
 		// Break it
 		fooHier := getHierarchy(ctx, fooName)
@@ -138,14 +160,5 @@ func createNS(ctx context.Context, prefix string) string {
 	ns := &corev1.Namespace{}
 	ns.Name = nm
 	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
-	/*
-		// Wait for the Hierarchy singleton to be created
-		snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
-		hier := &tenancy.Hierarchy{}
-		Eventually(func() error {
-			return k8sClient.Get(ctx, snm, hier)
-		}).Should(Succeed())
-
-	*/
 	return nm
 }

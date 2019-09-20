@@ -260,11 +260,11 @@ func (r *ObjectReconciler) isAncestor(nsNm, otherNm string) (bool, error) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(nsNm)
-	if ns == nil {
+	if !ns.Exists() {
 		return false, fmt.Errorf("unknown namespace %q", nsNm)
 	}
 	nsSrc := r.Forest.Get(otherNm)
-	if nsSrc == nil {
+	if !nsSrc.Exists() {
 		return false, fmt.Errorf("unknown namespace %q", otherNm)
 	}
 	return ns.IsAncestor(nsSrc), nil

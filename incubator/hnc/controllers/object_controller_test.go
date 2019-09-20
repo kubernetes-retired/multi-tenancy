@@ -2,7 +2,6 @@ package controllers_test
 
 import (
 	"context"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -26,8 +25,6 @@ var _ = Describe("Secret", func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
-
-		time.Sleep(startupDelay)
 
 		// Start with the tree foo -> bar -> baz
 		setParent(ctx, barName, fooName)
