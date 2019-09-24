@@ -11,22 +11,22 @@ The most common tenant objects are tenant namespace CRs which encapsulate the co
 
 ### Install CRDs
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/config/crds/tenancy_v1alpha1_tenantnamespace.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenantnamespace.yaml
 ```
 ### Install tenant-controller-managers
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/config/manager/all_in_one.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/manager/all_in_one.yaml
 ```
 
 ## Basic Usage
 
 Use the following cmd to create a tenant CR. A tenant admin namespace `tenant1admin` will be created.
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
 ```
 
 Use the following cmd to create a tenantnamespace CR. A tenant namespace `t1-ns1` will be created.
 ```
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
 ```
