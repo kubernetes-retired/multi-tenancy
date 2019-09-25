@@ -3,3 +3,13 @@
 /out
 /bin
 .local
+
+# IDEA project files
+.idea/
+*.iml
+**/*.iml
+**/**/*.iml
+*.eml
+**/*.eml
+*.ipr
+*.iws
