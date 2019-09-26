@@ -21,6 +21,10 @@ test: generate fmt vet manifests
 manager: generate fmt vet
 	go build -o bin/manager ./cmd/manager/main.go
 
+# Build kubectl plugin
+kubectl: generate fmt vet
+	go build -o bin/kubectl-hnc ./cmd/kubectl/main.go
+
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
 	go run ./cmd/manager/main.go --novalidation
