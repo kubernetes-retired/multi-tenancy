@@ -31,6 +31,7 @@ import (
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
 )
 
@@ -74,7 +75,8 @@ func main() {
 	}
 
 	// Create all reconciling controllers
-	if err := controllers.Create(mgr); err != nil {
+	f := forest.NewForest()
+	if err := controllers.Create(mgr, f); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
@@ -83,7 +85,8 @@ func main() {
 	if !novalidation {
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
 		mgr.GetWebhookServer().Register(validators.HierarchyServingPath, &webhook.Admission{Handler: &validators.Hierarchy{
-			Log: ctrl.Log.WithName("validators").WithName("Hierarchy"),
+			Log:    ctrl.Log.WithName("validators").WithName("Hierarchy"),
+			Forest: f,
 		}})
 	}
 
