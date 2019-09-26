@@ -34,6 +34,7 @@ import (
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -82,7 +83,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = controllers.Create(k8sManager)
+	err = controllers.Create(k8sManager, forest.NewForest())
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()

@@ -1,6 +1,6 @@
 #!/bin/bash
-set -e
 kubectl -n hnc-system delete deployment hnc-controller-manager
+set -e
 # The tag is `kind-local`, not `latest`, since KIND always attempts to re-pull an
 # image with the `latest` tag and this won't work when we're testing locally.
 export IMG=controller:kind-local

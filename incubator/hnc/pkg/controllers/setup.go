@@ -15,9 +15,7 @@ import (
 // configuration object.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager) error {
-	f := forest.NewForest()
-
+func Create(mgr ctrl.Manager, f *forest.Forest) error {
 	// Create all object reconcillers
 	gvks := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Secret"},

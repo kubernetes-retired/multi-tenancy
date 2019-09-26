@@ -2,6 +2,7 @@
 package forest
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -100,16 +101,8 @@ func (ns *Namespace) clean() {
 // children of its own parent, if necessary. It may return an error if the parent is illegal, i.e.
 // if it causes a cycle. It cannot cause an error if the parent is being set to nil.
 func (ns *Namespace) SetParent(p *Namespace) error {
-	// Check for cycles
-	if p != nil {
-		// Simple case
-		if p == ns {
-			return fmt.Errorf("%q cannot be set as its own parent", p.name)
-		}
-		if chain := p.AncestoryNames(ns); chain != nil {
-			return fmt.Errorf("cycle when making %q the parent of %q: current ancestry is %q",
-				p.name, ns.name, strings.Join(chain, " <- "))
-		}
+	if reason := ns.CanSetParent(p); reason != "" {
+		return errors.New(reason)
 	}
 
 	// Remove old parent and cleans it up.
@@ -126,6 +119,24 @@ func (ns *Namespace) SetParent(p *Namespace) error {
 		p.children[ns.name] = ns
 	}
 	return nil
+}
+
+// CanSetParent returns the empty string if the assignment is currently legal, or a non-empty string
+// indicating the reason if it cannot be done.
+func (ns *Namespace) CanSetParent(p *Namespace) string {
+	// Check for cycles
+	if p != nil {
+		// Simple case
+		if p == ns {
+			return fmt.Sprintf("%q cannot be set as its own parent", p.name)
+		}
+		if chain := p.AncestoryNames(ns); chain != nil {
+			return fmt.Sprintf("cycle when making %q the parent of %q: current ancestry is %q",
+				p.name, ns.name, strings.Join(chain, " <- "))
+		}
+	}
+
+	return ""
 }
 
 func (ns *Namespace) Name() string {
