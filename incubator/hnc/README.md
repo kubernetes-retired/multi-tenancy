@@ -60,30 +60,15 @@ Too many to count, but at a very high level:
 
 I do most of my testing in [KIND](https://kind.sigs.k8s.io).
 
-### Helpful scripts
-
-There are a bunch of utilities in `/scripts` which are essentially wrapped
-`kubectl` commands. For example, `/scripts/hier-set-parent foo bar` will set the
-`parent` field on the `hier` object in the `foo` namespace to point to the `bar`
-namespace using the following tricky-to-remember command:
-
-```
-kubectl patch hierarchy hier -n $1 -p "{\"spec\":{\"parent\": \"$2\"}}" --type merge
-```
-
-Other commands are typically simpler, apart from those used to control KIND
-itself (see below).
-
 ### Testing on KIND (Kubernetes IN Docker)
 
-* Run `. ./scripts/kind-env` to setup your `KUBECONFIG` env var correctly.
-  * NB: This sets env vars, hence the need to source (and not run) it.
-* Run `./scripts/kind-reset` to stop any existing KIND cluster and setup a new
-one, including the cert manager required to run the webhooks.
+* Run `. devenv` to setup your `KUBECONFIG` and `PATH` env vars correctly.
+* Run `./kind-reset` to stop any existing KIND cluster and setup a new one,
+  including the cert manager required to run the webhooks.
 * Run `make test` to run the controller (excluding the validating webhook)
   locally.
-* Run `./scripts/kind-deploy` to build the image, load it into KIND, and deploy
-  to KIND, then `./scripts/kind-watch` to watch the logs from the HNC container.
+* Run `./kind-deploy` to build the image, load it into KIND, and deploy to KIND,
+  then `./kind-watch` to watch the logs from the HNC container.
 
 KIND doesn't integrate with any identity providers - that is, you can't add
 "sara@foo.com" as a "regular user." So you'll have to use service accounts and
