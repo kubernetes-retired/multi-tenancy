@@ -15,15 +15,15 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./api/... ./controllers/... ./pkg/... ./validators/... -coverprofile cover.out
+	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager main.go
+	go build -o bin/manager ./cmd/manager/main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
-	go run ./main.go --novalidation
+	go run ./cmd/manager/main.go --novalidation
 
 # Install CRDs into a cluster
 install: manifests
