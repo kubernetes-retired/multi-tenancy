@@ -33,7 +33,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/controllers"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -60,7 +60,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
 	}
 
 	var err error
