@@ -18,6 +18,8 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"sync"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -58,6 +60,16 @@ type HierarchyReconciler struct {
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional namespaces that need updating.
 	Affected chan event.GenericEvent
+
+	// These locks prevent more than one goroutine from attempting to reconcile any one namespace a a
+	// time. Without this, the forest may stay in sync, but the changes to the apiserver could be
+	// committed out of order with no guarantee that the reconciler will be called again.
+	namespaceLocks sync.Map
+
+	// reconcileID is used purely to set the "rid" field in the log, so we can tell which log messages
+	// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
+	// simply hard to tell when one ends and another begins).
+	reconcileID int32
 }
 
 // NamespaceSyncer syncs various aspects of a namespace. The HierarchyReconciler both implements
@@ -76,7 +88,11 @@ type NamespaceSyncer interface {
 func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
-	log := r.Log.WithValues("ns", ns)
+
+	id := r.lockNamespace(ns)
+	defer r.unlockNamespace(ns)
+
+	log := r.Log.WithValues("ns", ns, "rid", id)
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 
@@ -125,20 +141,21 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 // TODO: store the conditions in the in-memory forest so that object propagation can be disabled if
 // there's a problem on the namespace.
 func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy, update bool) error {
-	// Update the in-memory data structures
+	// Update the in-memory data structures.
 	orig := inst.DeepCopy()
-	affected := r.syncWithForest(ctx, log, nsInst, inst)
+	r.syncWithForest(log, nsInst, inst)
 
-	var updateErr error
-	if update {
-		updateErr = r.updateAPIServer(ctx, log, orig, inst)
+	// Early exit if we don't need to write anything back.
+	if !update {
+		return nil
 	}
 
-	// Enqueue any affected namespaces even if we failed to write back to the apiserver; we know
-	// they may have changed somehow and the controller will ensure they eventually get reconciled.
-	r.enqueueAffected(log, affected)
+	// Write back if anything's changed.
+	if err := r.updateAPIServer(ctx, log, orig, inst); err != nil {
+		return err
+	}
 
-	return updateErr
+	return nil
 }
 
 func (r *HierarchyReconciler) updateAPIServer(ctx context.Context, log logr.Logger, orig, inst *tenancy.Hierarchy) error {
@@ -175,8 +192,12 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 }
 
 // syncWithForest synchronizes the in-memory forest with the (in-memory) Hierarchy instance. If any
-// *other* namespaces have changed, it returns the list of affected namespaces.
-func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy) []string {
+// *other* namespaces have changed, it enqueues them for later reconciliation. This method is
+// guarded by the forest mutex, which means that none of the other namespaces being reconciled will
+// be able to proceed until this one is finished. While the results of the reconiliation may not be
+// fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
+// the in-memory forest) so this is fine.
+func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -185,17 +206,17 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 	if nsInst.Name == "" {
 		if ns.UnsetExists() {
 			log.Info("Removed namespace")
-			return ns.RelativesNames()
+			r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
+			return
 		}
 	}
 
 	// Mark the namespace as existing. If this is the first time we're reconciling this namespace,
 	// mark its relatives as being affected since they may have been waiting for this parent.
-	affected := []string{}
 	conds := []tenancy.Condition{}
 	if ns.SetExists() {
 		log.Info("Found new namespace")
-		affected = append(affected, ns.RelativesNames()...)
+		r.enqueueAffected(log, "relative of newly created namespace", ns.RelativesNames()...)
 	}
 
 	// Sync this namespace with its current parent.
@@ -219,10 +240,10 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 			// Only call other parts of the hierarchy recursively if this one was successfully updated;
 			// otherwise, if you get a cycle, this could get into an infinite loop.
 			if oldParent != nil {
-				affected = append(affected, oldParent.Name())
+				r.enqueueAffected(log, "prior parent", oldParent.Name())
 			}
 			if curParent != nil {
-				affected = append(affected, curParent.Name())
+				r.enqueueAffected(log, "new parent", curParent.Name())
 			}
 		}
 	}
@@ -235,20 +256,41 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 	} else {
 		inst.Status.Conditions = nil
 	}
-
-	return affected
 }
 
-// enqueueAffected enqueues all affected namespaces for later reconciliation.
-func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, affected []string) {
-	for _, nm := range affected {
-		log.Info("Enqueuing for reconcilation", "affected", nm)
-		// The watch handler doesn't care about anything except the metadata.
-		inst := &tenancy.Hierarchy{}
-		inst.ObjectMeta.Name = tenancy.Singleton
-		inst.ObjectMeta.Namespace = nm
-		r.Affected <- event.GenericEvent{Meta: inst}
-	}
+// enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
+// goroutine so the caller doesn't block; since the reconciler is never garbage-collected, this is
+// safe.
+func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, affected ...string) {
+	go func() {
+		for _, nm := range affected {
+			log.Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
+			// The watch handler doesn't care about anything except the metadata.
+			inst := &tenancy.Hierarchy{}
+			inst.ObjectMeta.Name = tenancy.Singleton
+			inst.ObjectMeta.Namespace = nm
+			r.Affected <- event.GenericEvent{Meta: inst}
+		}
+	}()
+}
+
+// lockNamespace ensures that the controller cannot attempt to reconcile the same namespace more
+// than once at a time. When it is finished, a per-namespace lock will be held, which _must_ be
+// released by unlockNamespace.
+//
+// It also return an integral reconciliation ID, which is unsed in logs to disambiguate which
+// messages came from which attempt.
+func (r *HierarchyReconciler) lockNamespace(nm string) int {
+	m, _ := r.namespaceLocks.LoadOrStore(nm, &sync.Mutex{})
+	m.(*sync.Mutex).Lock()
+
+	return (int)(atomic.AddInt32(&r.reconcileID, 1))
+}
+
+// unlockNamespace releases the per-namespace lock.
+func (r *HierarchyReconciler) unlockNamespace(nm string) {
+	m, _ := r.namespaceLocks.Load(nm)
+	m.(*sync.Mutex).Unlock()
 }
 
 // getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
