@@ -81,60 +81,30 @@ func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 }
 
 func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
-	update := true
-	missing := false
-
-	// Get the hierarchy itself.
-	nnm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
-	inst := &tenancy.Hierarchy{}
-	if err := r.Get(ctx, nnm, inst); err != nil {
-		if !errors.IsNotFound(err) {
-			log.Error(err, "Couldn't read singleton")
-			return err
-		}
-
-		// It doesn't exist - initialize it to a sane initial value.
-		missing = true
-		inst.ObjectMeta.Name = tenancy.Singleton
-		inst.ObjectMeta.Namespace = nm
+	// Get the singleton and namespace
+	inst, err := r.getSingleton(ctx, nm)
+	if err != nil {
+		log.Error(err, "Couldn't read singleton")
+		return err
+	}
+	ns, err := r.getNamespace(ctx, nm)
+	if err != nil {
+		log.Error(err, "Couldn't read namespace")
+		return err
 	}
 
-	// If the hierarchy object exists but is being deleted, we won't update it when we're finished
-	// syncing (we should sync our internal data structure anyway just in case something's changed).
-	// I'm not sure if this is the right thing to do but the kubebuilder boilerplate included this
-	// case explicitly.
-	if !inst.GetDeletionTimestamp().IsZero() {
-		log.Info("Singleton is being deleted")
+	// If either object exists but is being deleted, we won't update them when we're finished syncing
+	// (we should sync our internal data structure anyway just in case something's changed).  I'm not
+	// sure if this is the right thing to do but the kubebuilder boilerplate included this case
+	// explicitly.
+	update := true
+	if !inst.GetDeletionTimestamp().IsZero() || !ns.GetDeletionTimestamp().IsZero() {
+		log.Info("Singleton or namespace are being deleted; will not update")
 		update = false
 	}
 
-	// If it's missing, check to see if the namespace is missing as well. If so, we need to remove
-	// this namespace from the forest.
-	if missing {
-		ns := &corev1.Namespace{}
-		nsnnm := types.NamespacedName{Name: nm}
-		if err := r.Get(ctx, nsnnm, ns); err != nil {
-			if !errors.IsNotFound(err) {
-				log.Error(err, "Couldn't read namespace")
-				return err
-			}
-
-			// The namespace is gone, update things accordingly.
-			log.Info("Namespace does not exist")
-			return r.removeNamespace(ctx, log, nm)
-		}
-
-		// If the namespace is being deleted, we should still sync any changes that we might have missed
-		// (ie, maybe the parent used to be set?) but then don't update anything. I'm not sure if this
-		// is the right thing to do but the kubebuilder boilerplate included this case explicitly.
-		if !ns.GetDeletionTimestamp().IsZero() {
-			log.Info("Namespace is being deleted")
-			update = false
-		}
-	}
-
 	// Sync the tree.
-	if err := r.updateTree(ctx, log, inst, update); err != nil {
+	if err := r.updateTree(ctx, log, ns, inst, update); err != nil {
 		return err
 	}
 
@@ -154,10 +124,10 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 //
 // TODO: store the conditions in the in-memory forest so that object propagation can be disabled if
 // there's a problem on the namespace.
-func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, inst *tenancy.Hierarchy, update bool) error {
+func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy, update bool) error {
 	// Update the in-memory data structures
 	orig := inst.DeepCopy()
-	affected := r.syncWithForest(ctx, log, inst)
+	affected := r.syncWithForest(ctx, log, nsInst, inst)
 
 	var updateErr error
 	if update {
@@ -206,16 +176,23 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 
 // syncWithForest synchronizes the in-memory forest with the (in-memory) Hierarchy instance. If any
 // *other* namespaces have changed, it returns the list of affected namespaces.
-func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *tenancy.Hierarchy) []string {
+func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy) []string {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
+	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
+
+	// If the namespace has been deleted, just update that fact.
+	if nsInst.Name == "" {
+		if ns.UnsetExists() {
+			log.Info("Removed namespace")
+			return ns.RelativesNames()
+		}
+	}
+
+	// Mark the namespace as existing. If this is the first time we're reconciling this namespace,
+	// mark its relatives as being affected since they may have been waiting for this parent.
 	affected := []string{}
 	conds := []tenancy.Condition{}
-
-	// Get the in-memory namespace and mark it as existing. If this is the first time we're
-	// reconciling this namespace, mark its relatives as being affected since they may have been
-	// waiting for this parent.
-	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 	if ns.SetExists() {
 		log.Info("Found new namespace")
 		affected = append(affected, ns.RelativesNames()...)
@@ -262,24 +239,6 @@ func (r *HierarchyReconciler) syncWithForest(ctx context.Context, log logr.Logge
 	return affected
 }
 
-// removeNamespace marks this namespace as not existing. Since this might have been a parent or
-// child, we enqueue its relatives for reconcilation too.
-func (r *HierarchyReconciler) removeNamespace(ctx context.Context, log logr.Logger, nm string) error {
-	r.Forest.Lock()
-	ns := r.Forest.Get(nm)
-	var affected []string
-	if ns.UnsetExists() {
-		log.Info("Removed namespace")
-		affected = ns.RelativesNames()
-	}
-	r.Forest.Unlock()
-
-	// Update any other namespaces that we believe may have been affected
-	r.enqueueAffected(log, affected)
-
-	return nil
-}
-
 // enqueueAffected enqueues all affected namespaces for later reconciliation.
 func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, affected []string) {
 	for _, nm := range affected {
@@ -290,6 +249,38 @@ func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, affected []string
 		inst.ObjectMeta.Namespace = nm
 		r.Affected <- event.GenericEvent{Meta: inst}
 	}
+}
+
+// getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
+func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*tenancy.Hierarchy, error) {
+	nnm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
+	inst := &tenancy.Hierarchy{}
+	if err := r.Get(ctx, nnm, inst); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+
+		// It doesn't exist - initialize it to a sane initial value.
+		inst.ObjectMeta.Name = tenancy.Singleton
+		inst.ObjectMeta.Namespace = nm
+	}
+
+	return inst, nil
+}
+
+// getNamespace returns the namespace if it exists, or returns an invalid, blank, unnamed one if it
+// doesn't. This allows it to be trivially identified as a namespace that doesn't exist, and also
+// allows us to easily modify it if we want to create it.
+func (r *HierarchyReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
+	ns := &corev1.Namespace{}
+	nnm := types.NamespacedName{Name: nm}
+	if err := r.Get(ctx, nnm, ns); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		return &corev1.Namespace{}, nil
+	}
+	return ns, nil
 }
 
 func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager) error {
