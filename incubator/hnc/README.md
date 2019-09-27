@@ -17,9 +17,11 @@ common policies applied to them.
 Status: pre-alpha, no guarantees of compatability or feature support until
 further notice.
 
-Design doc: http://bit.ly/k8s-hnc-design
+* Design doc: http://bit.ly/k8s-hnc-design
+* Demonstration: https://youtu.be/XFZhApTlJ88?t=171 (MTWG meeting; Sep 24 '19)
+  * Script for said demo: https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
 
-Developers: adrianludwin@ (Google). Please contact me if you want to help out,
+Developers: @adrianludwin (Google). Please contact me if you want to help out,
 or just join a MTWG meeting.
 
 ## Usage
@@ -29,19 +31,24 @@ install`, `make deploy`). No prebuilt images exist yet.
 
 ## Development/code
 
-Most of the interesting code is in `/controllers`, with a bit in `/pkg` as well.
-There are four controllers, all of which are mutually exclusive except the
-Object controller:
+The directory structure is fairly standard for a Kubebuilder v1 controller
+(the HNC actually uses Kubebuilder v2, but the default directory structure was
+too limiting). The most interesting directories are probably:
 
-* **Hierarchy controller:** manages the hierarchy via the `Hierarchy` singleton.
-* **Namespace controller:** Creates the hierarchy singleton when applicable.
+* `/api`: the API definition.
+* `/cmd`: top-level executables. Currently the manager and the kubectl plugin.
+* `/pkg/controllers`: the reconcilers and their tests
+* `/pkg/validators`: validating admission controllers
+* `/pkg/forest`: the in-memory data structure, shared between the controllers
+  and validators.
+
+Within the `controllers` directory, there are two controller:
+
+* **Hierarchy controller:** manages the hierarchy via the `Hierarchy` singleton
+  as well as the namespace in which it lives.
 * **Object controller:** Propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
-  (group/version/kind) - currently, `Role`, `RoleBinding`, `Secret` and
-  `ConfigMap`.
-
-In addition, the in-memory version of the hierarchy forest is located in
-`pkg/forest`.
+  (group/version/kind) - currently, `Role`, `RoleBinding` and `Secret`.
 
 ## Open issues
 
