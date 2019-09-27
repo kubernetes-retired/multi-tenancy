@@ -103,8 +103,8 @@ func (r *ReconcileTenantNamespace) updateNamespace(ns *corev1.Namespace, tenantA
 		nsClone.OwnerReferences = append(nsClone.OwnerReferences, *ownerRef)
 		if nsClone.Annotations == nil {
 			nsClone.Annotations = make(map[string]string)
-			nsClone.Annotations[TenantAdminNamespaceAnnotation] = *tenantAdminNamespaceName
 		}
+		nsClone.Annotations[TenantAdminNamespaceAnnotation] = *tenantAdminNamespaceName
 		updateErr := r.Update(context.TODO(), nsClone)
 		if updateErr == nil {
 			return nil
