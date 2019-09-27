@@ -17,10 +17,18 @@ package kubectl
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+)
+
+var (
+	footnotesByMsg map[string]int
+	footnotes      []string
 )
 
 var treeCmd = &cobra.Command{
@@ -29,22 +37,57 @@ var treeCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
+		footnotesByMsg = map[string]int{}
+		footnotes = []string{}
 		hier := getHierarchy(nnm)
-		fmt.Println(nnm)
+		fmt.Println(nameAndFootnotes(hier))
 		printSubtree("", hier)
+
+		if len(footnotes) > 0 {
+			fmt.Printf("\nConditions:\n")
+			for i, n := range footnotes {
+				fmt.Printf("%d) %s\n", i+1, n)
+			}
+		}
 	},
 }
 
 func printSubtree(prefix string, hier *tenancy.Hierarchy) {
-	for i, c := range hier.Status.Children {
+	for i, cn := range hier.Status.Children {
+		ch := getHierarchy(cn)
+		tx := nameAndFootnotes(ch)
 		if i < len(hier.Status.Children)-1 {
-			fmt.Printf("%s├── %s\n", prefix, c)
-			printSubtree(prefix+"|   ", getHierarchy(c))
+			fmt.Printf("%s├── %s\n", prefix, tx)
+			printSubtree(prefix+"|   ", ch)
 		} else {
-			fmt.Printf("%s└── %s\n", prefix, c)
-			printSubtree(prefix+"    ", getHierarchy(c))
+			fmt.Printf("%s└── %s\n", prefix, tx)
+			printSubtree(prefix+"    ", ch)
 		}
 	}
+}
+
+func nameAndFootnotes(hier *tenancy.Hierarchy) string {
+	notes := []int{}
+	for _, cond := range hier.Status.Conditions {
+		txt := cond.Msg
+		if idx, ok := footnotesByMsg[txt]; ok {
+			notes = append(notes, idx)
+		} else {
+			footnotes = append(footnotes, txt)
+			footnotesByMsg[cond.Msg] = len(footnotes)
+			notes = append(notes, len(footnotes))
+		}
+	}
+
+	if len(notes) == 0 {
+		return hier.Namespace
+	}
+	sort.Ints(notes)
+	ns := []string{}
+	for _, n := range notes {
+		ns = append(ns, strconv.Itoa(n))
+	}
+	return fmt.Sprintf("%s (%s)", hier.Namespace, strings.Join(ns, ","))
 }
 
 func init() {
