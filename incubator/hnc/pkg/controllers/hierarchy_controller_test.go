@@ -110,6 +110,61 @@ var _ = Describe("Hierarchy", func() {
 			return getHierarchy(ctx, fooName).Status.Conditions
 		}).ShouldNot(BeNil())
 	})
+
+	It("should create a child namespace if requested", func() {
+		// Create a namespace with a required child
+		fooHier := newHierarchy(fooName)
+		fooHier.Spec.RequiredChildren = []string{barName}
+		updateHierarchy(ctx, fooHier)
+
+		// Verify that it exists
+		Eventually(func() string {
+			return getHierarchy(ctx, barName).Spec.Parent
+		}).Should(Equal(fooName))
+		Eventually(func() []string {
+			return getHierarchy(ctx, fooName).Status.Children
+		}).Should(Equal([]string{barName}))
+	})
+
+	It("should report a condition if a required child belongs elsewhere", func() {
+		bazName := createNS(ctx, "baz")
+
+		// Make baz a child of foo
+		bazHier := newHierarchy(bazName)
+		bazHier.Spec.Parent = fooName
+		updateHierarchy(ctx, bazHier)
+		Eventually(func() []string {
+			return getHierarchy(ctx, fooName).Status.Children
+		}).Should(Equal([]string{bazName}))
+
+		// Try to also make baz a required child of bar
+		barHier := newHierarchy(barName)
+		barHier.Spec.RequiredChildren = []string{bazName}
+		updateHierarchy(ctx, barHier)
+
+		// Verify that all three namespaces have at least one condition
+		Eventually(func() bool {
+			conds := getHierarchy(ctx, fooName).Status.Conditions
+			if len(conds) > 0 {
+				fmt.Printf("Conditions for foo: %+v\n", conds)
+			}
+			return len(conds) > 0
+		}).Should(BeTrue())
+		Eventually(func() bool {
+			conds := getHierarchy(ctx, barName).Status.Conditions
+			if len(conds) > 0 {
+				fmt.Printf("Conditions for bar: %+v\n", conds)
+			}
+			return len(conds) > 0
+		}).Should(BeTrue())
+		Eventually(func() bool {
+			conds := getHierarchy(ctx, bazName).Status.Conditions
+			if len(conds) > 0 {
+				fmt.Printf("Conditions for baz: %+v\n", conds)
+			}
+			return len(conds) > 0
+		}).Should(BeTrue())
+	})
 })
 
 func newHierarchy(nm string) *tenancy.Hierarchy {
