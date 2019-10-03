@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	"github.com/multi-tenancy/tenant/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,18 +83,6 @@ var _ reconcile.Reconciler = &ReconcileTenantNamespace{}
 type ReconcileTenantNamespace struct {
 	client.Client
 	scheme *runtime.Scheme
-}
-
-// Find the tenant namespace name based on prefix requirement
-func (r *ReconcileTenantNamespace) getNamespaceName(prefix bool, instance *tenancyv1alpha1.TenantNamespace) string {
-	name := instance.Spec.Name
-	if name == "" {
-		name = instance.Name
-	}
-	if prefix {
-		name = instance.Namespace + "-" + name
-	}
-	return name
 }
 
 // Add a ownerReference and tenant admin namespace annotation to input namespace
@@ -170,7 +159,7 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	}
 
 	// In case namespace already exists
-	tenantNsName := r.getNamespaceName(requireNamespacePrefix, instance)
+	tenantNsName := util.GetTenantNamespaceName(requireNamespacePrefix, instance)
 	expectedOwnerRef := metav1.OwnerReference{
 		APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
 		Kind:       "TenantNamespace",

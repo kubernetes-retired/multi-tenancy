@@ -18,10 +18,12 @@ package validating
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	"github.com/multi-tenancy/tenant/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -64,15 +66,21 @@ func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceCreate(tList
 	path := field.NewPath("metadata")
 	allErrs := apivalidation.ValidateObjectMeta(&obj.ObjectMeta, true, validateTenantNamespaceName, path)
 
+	requireNamespacePrefix := false
 	foundTenant := false
 	for _, each := range (*tList).Items {
 		if each.Spec.TenantAdminNamespaceName == obj.Namespace {
+			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
 			foundTenant = true
 			break
 		}
 	}
 	if !foundTenant {
-		allErrs = append(allErrs, field.Invalid(path.Child("Namespace"), obj.Namespace, "namespace of tenantnamespace CR has to be a tenant admin namespace"))
+		allErrs = append(allErrs, field.Invalid(path.Child("namespace"), obj.Namespace, "namespace of tenantnamespace CR has to be a tenant admin namespace"))
+	}
+	name := util.GetTenantNamespaceName(requireNamespacePrefix, obj)
+	for _, msg := range apivalidation.ValidateNamespaceName(name, false) {
+		allErrs = append(allErrs, field.Invalid(path.Child("namespace"), name, msg))
 	}
 	return allErrs
 }
@@ -93,7 +101,7 @@ func (h *TenantNamespaceCreateUpdateHandler) Handle(ctx context.Context, req typ
 		tenantList := &tenancyv1alpha1.TenantList{}
 		err := h.Client.List(ctx, &client.ListOptions{}, tenantList)
 		if err != nil {
-			return admission.ErrorResponse(http.StatusInternalServerError, fmt.Errorf("cannot validate tenantnamespace CR because client cannot get tenant list"))
+			return admission.ErrorResponse(http.StatusInternalServerError, errors.New("cannot validate tenantnamespace CR because client cannot get tenant list"))
 		}
 		if createErrorList := h.validateTenantNamespaceCreate(tenantList, obj); len(createErrorList) > 0 {
 			return admission.ErrorResponse(http.StatusUnprocessableEntity, createErrorList.ToAggregate())
