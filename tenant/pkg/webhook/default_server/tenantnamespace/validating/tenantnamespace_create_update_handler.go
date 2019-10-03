@@ -48,7 +48,7 @@ type TenantNamespaceCreateUpdateHandler struct {
 }
 
 func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceUpdate(obj *tenancyv1alpha1.TenantNamespace, oldobj *tenancyv1alpha1.TenantNamespace) field.ErrorList {
-	allErrs := apivalidation.ValidateObjectMetaUpdate(&obj.ObjectMeta, &oldobj.ObjectMeta, field.NewPath("metadata"))
+	allErrs := field.ErrorList{}
 	if obj.Spec.Name != oldobj.Spec.Name {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("name"), fmt.Sprintf("cannot modify the name field in spec after initial creation (attempting to change from %s to %s)", oldobj.Spec.Name, obj.Spec.Name)))
 	}
