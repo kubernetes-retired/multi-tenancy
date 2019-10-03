@@ -19,6 +19,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Any changes here need to also be reflected in the kubebuilder:validation:Enum comment, below.
+// The meanings of all these constants are defined in the comment to Condition.Code, below.
+const (
+	CritParentMissing         Code = "CRIT_PARENT_MISSING"
+	CritParentInvalid         Code = "CRIT_PARENT_INVALID"
+	CritRequiredChildConflict Code = "CRIT_REQUIRED_CHILD_CONFLICT"
+	CritAncestor              Code = "CRIT_ANCESTOR"
+	ObjectOverridden          Code = "OBJECT_OVERRIDDEN"
+	ObjectDescendantOverriden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
+)
+
 var (
 	Singleton = "hierarchy"
 )
@@ -57,7 +68,9 @@ type HierarchyConfigurationStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Children indicates the direct children of this namespace, if any.
-	Children   []string    `json:"children,omitempty"`
+	Children []string `json:"children,omitempty"`
+
+	// Conditions describes the errors and the affected objects, if any.
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 
@@ -70,8 +83,41 @@ type HierarchyConfigurationList struct {
 	Items           []HierarchyConfiguration `json:"items"`
 }
 
+// Code is a machine-readable string value summarizing the condition.
+// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR;OBJECT_OVERRIDDEN;OBJECT_DESCENDANT_OVERRIDDEN
+type Code string
+
+// Condition specifies the condition and the affected objects.
 type Condition struct {
-	Msg string `json:"msg"`
+	// Defines the conditions in a machine-readable string value.
+	// Valid values are:
+	//
+	// - "CRIT_PARENT_MISSING": the specified parent is missing
+	//
+	// - "CRIT_PARENT_INVALID": the specified parent is invalid (ie would cause a cycle)
+	//
+	// - "CRIT_REQUIRED_CHILD_CONFLICT": there's a conflict (ie in between parent's RequiredChildren spec and child's Parent spec)
+	//
+	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no longer being updated
+	//
+	// - "OBJECT_OVERRIDDEN": an object in this namespace has been overridden from its parent and will no longer be updated
+	//
+	// - "OBJECT_DESCENDANT_OVERRIDDEN": an object in this namespace is no longer being propagated because a propagated copy has been modified
+	Code Code   `json:"code,omitempty"`
+	Msg  string `json:"msg,omitempty"`
+
+	// Affects is a list of group-version-kind-namespace-name that uniquely identifies
+	// the object(s) affected by the condition.
+	Affects []AffectedObject `json:"affects,omitempty"`
+}
+
+// AffectedObject defines uniquely identifiable objects.
+type AffectedObject struct {
+	Group     string `json:"group,omitempty"`
+	Version   string `json:"version,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
 }
 
 func init() {
