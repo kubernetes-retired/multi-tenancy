@@ -18,6 +18,7 @@ package validating
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
@@ -49,7 +50,7 @@ type TenantNamespaceCreateUpdateHandler struct {
 func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceUpdate(obj *tenancyv1alpha1.TenantNamespace, oldobj *tenancyv1alpha1.TenantNamespace) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&obj.ObjectMeta, &oldobj.ObjectMeta, field.NewPath("metadata"))
 	if obj.Spec.Name != oldobj.Spec.Name {
-		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("name"), "update to name field in spec is forbiddern"))
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("name"), fmt.Sprintf("cannot modify the name field in spec after initial creation (attempting to change from %s to %s)", oldobj.Spec.Name, obj.Spec.Name)))
 	}
 	return allErrs
 }
@@ -58,25 +59,20 @@ func validateTenantNamespaceName(name string, prefix bool) []string {
 	// We don't have name requirement for now
 	return nil
 }
-func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceCreate(obj *tenancyv1alpha1.TenantNamespace) field.ErrorList {
+
+func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceCreate(tList *tenancyv1alpha1.TenantList, obj *tenancyv1alpha1.TenantNamespace) field.ErrorList {
 	path := field.NewPath("metadata")
 	allErrs := apivalidation.ValidateObjectMeta(&obj.ObjectMeta, true, validateTenantNamespaceName, path)
 
-	// Fetch tenant list
-	tenantList := &tenancyv1alpha1.TenantList{}
-	err := h.Client.List(context.TODO(), &client.ListOptions{}, tenantList)
-	if err != nil {
-		allErrs = append(allErrs, field.Invalid(path.Child("Namespace"), obj.Namespace, "cannot validate namespace because cannot get tenant list"))
-	}
 	foundTenant := false
-	for _, each := range tenantList.Items {
+	for _, each := range (*tList).Items {
 		if each.Spec.TenantAdminNamespaceName == obj.Namespace {
 			foundTenant = true
 			break
 		}
 	}
 	if !foundTenant {
-		allErrs = append(allErrs, field.Invalid(path.Child("Namespace"), obj.Namespace, "namespace has to be a tenant admin namespace"))
+		allErrs = append(allErrs, field.Invalid(path.Child("Namespace"), obj.Namespace, "namespace of tenantnamespace CR has to be a tenant admin namespace"))
 	}
 	return allErrs
 }
@@ -93,7 +89,13 @@ func (h *TenantNamespaceCreateUpdateHandler) Handle(ctx context.Context, req typ
 	}
 	switch req.AdmissionRequest.Operation {
 	case admissionv1beta1.Create:
-		if createErrorList := h.validateTenantNamespaceCreate(obj); len(createErrorList) > 0 {
+		// Fetch tenant list
+		tenantList := &tenancyv1alpha1.TenantList{}
+		err := h.Client.List(ctx, &client.ListOptions{}, tenantList)
+		if err != nil {
+			return admission.ErrorResponse(http.StatusInternalServerError, fmt.Errorf("cannot validate tenantnamespace CR because client cannot get tenant list"))
+		}
+		if createErrorList := h.validateTenantNamespaceCreate(tenantList, obj); len(createErrorList) > 0 {
 			return admission.ErrorResponse(http.StatusUnprocessableEntity, createErrorList.ToAggregate())
 		}
 	case admissionv1beta1.Update:
