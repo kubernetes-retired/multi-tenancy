@@ -23,7 +23,7 @@ import (
 	"net/http"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
-	"github.com/multi-tenancy/tenant/pkg/util"
+	tenantutil "github.com/multi-tenancy/tenant/pkg/util"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -78,7 +78,7 @@ func (h *TenantNamespaceCreateUpdateHandler) validateTenantNamespaceCreate(tList
 	if !foundTenant {
 		allErrs = append(allErrs, field.Invalid(path.Child("namespace"), obj.Namespace, "namespace of tenantnamespace CR has to be a tenant admin namespace"))
 	}
-	name := util.GetTenantNamespaceName(requireNamespacePrefix, obj)
+	name := tenantutil.GetTenantNamespaceName(requireNamespacePrefix, obj)
 	for _, msg := range apivalidation.ValidateNamespaceName(name, false) {
 		allErrs = append(allErrs, field.Invalid(path.Child("namespace"), name, msg))
 	}

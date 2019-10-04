@@ -14,13 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package tenantnamespace
 
 import (
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 )
 
-// Determine the tenant namespace name based on prefix requirement
+// GetTenantNamespaceName returns the tenant namespace name based on following conditions:
+// If the tenant requires all tenant namespaces to have tenant admin namespace name as
+// prefix (i.e., prefix is true), the namespace of the tenantnamespace instance is used
+// to prefix the name in the spec. If the name in the spec is empty, the name of the
+// tenantnamespace instance is used.
 func GetTenantNamespaceName(prefix bool, instance *tenancyv1alpha1.TenantNamespace) string {
 	name := instance.Spec.Name
 	if name == "" {
