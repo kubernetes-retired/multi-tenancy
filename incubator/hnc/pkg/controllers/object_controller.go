@@ -119,7 +119,6 @@ func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *un
 // it's correct and ready to be propagated. The incorrect object will be deleted
 // if it's obsolete; or marked as modified if it's changed.
 func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, error) {
-	log.Info("Ensure correctness")
 	// Find what we expect the source to be.
 	missing, src, err := r.getSourceInst(ctx, log, inst)
 	if err != nil {
@@ -138,7 +137,6 @@ func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.L
 	}
 
 	// We found the object in an ancestor namespace. Is this object the same as the source?
-	log.Info("Compare with the source", "inheritedFrom", src.GetNamespace())
 	instCopied := copyObject(inst)
 	// The only difference could be namespace and labelInheritedFrom label.
 	// Make the namespaces and inheritedFrom labels the same before comparison.
@@ -148,7 +146,7 @@ func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.L
 	setLabel(srcCopied, labelInheritedFrom, "")
 	equal := reflect.DeepEqual(instCopied, srcCopied)
 	if !equal {
-		log.Info("Mark as modified from the source", "inheritedFrom", src.GetNamespace())
+		log.Info("Marking as modified from the source", "inheritedFrom", src.GetNamespace())
 		// Mark as modified if the copied fields don't match.
 		setAnnotation(inst, annotationModified, "true")
 		err := r.Update(ctx, inst)
