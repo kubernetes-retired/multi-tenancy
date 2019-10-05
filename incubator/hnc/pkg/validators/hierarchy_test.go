@@ -38,7 +38,7 @@ func TestHierarchy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
-			hier := &api.Hierarchy{Spec: api.HierarchySpec{Parent: tc.pnm}}
+			hier := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
 			hier.ObjectMeta.Name = api.Singleton
 			hier.ObjectMeta.Namespace = tc.nnm
 

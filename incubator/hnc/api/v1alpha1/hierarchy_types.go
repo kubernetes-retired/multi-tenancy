@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	Singleton = "hier"
+	Singleton = "hierarchy"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -29,16 +29,16 @@ var (
 // +kubebuilder:object:root=true
 
 // Hierarchy is the Schema for the hierarchies API
-type Hierarchy struct {
+type HierarchyConfiguration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   HierarchySpec   `json:"spec,omitempty"`
-	Status HierarchyStatus `json:"status,omitempty"`
+	Spec   HierarchyConfigurationSpec   `json:"spec,omitempty"`
+	Status HierarchyConfigurationStatus `json:"status,omitempty"`
 }
 
 // HierarchySpec defines the desired state of Hierarchy
-type HierarchySpec struct {
+type HierarchyConfigurationSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -52,7 +52,7 @@ type HierarchySpec struct {
 }
 
 // HierarchyStatus defines the observed state of Hierarchy
-type HierarchyStatus struct {
+type HierarchyConfigurationStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -64,10 +64,10 @@ type HierarchyStatus struct {
 // +kubebuilder:object:root=true
 
 // HierarchyList contains a list of Hierarchy
-type HierarchyList struct {
+type HierarchyConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Hierarchy `json:"items"`
+	Items           []HierarchyConfiguration `json:"items"`
 }
 
 type Condition struct {
@@ -75,5 +75,5 @@ type Condition struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Hierarchy{}, &HierarchyList{})
+	SchemeBuilder.Register(&HierarchyConfiguration{}, &HierarchyConfigurationList{})
 }

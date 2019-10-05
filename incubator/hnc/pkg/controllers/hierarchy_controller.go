@@ -141,7 +141,7 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 //
 // TODO: store the conditions in the in-memory forest so that object propagation can be disabled if
 // there's a problem on the namespace.
-func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy, update bool) error {
+func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.HierarchyConfiguration, update bool) error {
 	// Update the in-memory data structures
 	origHier := inst.DeepCopy()
 	origNS := nsInst.DeepCopy()
@@ -163,7 +163,7 @@ func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, n
 	return nil
 }
 
-func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *tenancy.Hierarchy) error {
+func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *tenancy.HierarchyConfiguration) error {
 	if reflect.DeepEqual(orig, inst) {
 		return nil
 	}
@@ -224,7 +224,7 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy) {
+func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.HierarchyConfiguration) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -330,7 +330,7 @@ func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, af
 		for _, nm := range affected {
 			log.Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
 			// The watch handler doesn't care about anything except the metadata.
-			inst := &tenancy.Hierarchy{}
+			inst := &tenancy.HierarchyConfiguration{}
 			inst.ObjectMeta.Name = tenancy.Singleton
 			inst.ObjectMeta.Namespace = nm
 			r.Affected <- event.GenericEvent{Meta: inst}
@@ -341,7 +341,7 @@ func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, af
 // syncRequiredChildren looks at the current list of children and compares it to the children that
 // have been marked as required. If any required children are missing, we add them to the in-memory
 // forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
-func (r *HierarchyReconciler) syncRequiredChildren(log logr.Logger, inst *tenancy.Hierarchy, ns *forest.Namespace) []tenancy.Condition {
+func (r *HierarchyReconciler) syncRequiredChildren(log logr.Logger, inst *tenancy.HierarchyConfiguration, ns *forest.Namespace) []tenancy.Condition {
 	conds := []tenancy.Condition{}
 
 	// Make a set to make it easy to look up if a child is required or not
@@ -426,9 +426,9 @@ func (r *HierarchyReconciler) unlockNamespace(nm string) {
 }
 
 // getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
-func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*tenancy.Hierarchy, error) {
+func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*tenancy.HierarchyConfiguration, error) {
 	nnm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
-	inst := &tenancy.Hierarchy{}
+	inst := &tenancy.HierarchyConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
@@ -469,7 +469,7 @@ func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}
 		})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&tenancy.Hierarchy{}).
+		For(&tenancy.HierarchyConfiguration{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
 		Complete(r)
