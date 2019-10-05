@@ -26,6 +26,17 @@ var (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// +kubebuilder:object:root=true
+
+// Hierarchy is the Schema for the hierarchies API
+type Hierarchy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   HierarchySpec   `json:"spec,omitempty"`
+	Status HierarchyStatus `json:"status,omitempty"`
+}
+
 // HierarchySpec defines the desired state of Hierarchy
 type HierarchySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -33,6 +44,11 @@ type HierarchySpec struct {
 
 	// Parent indicates the parent of this namespace, if any.
 	Parent string `json:"parent,omitempty"`
+
+	// RequiredChildren indicates the required subnamespaces of this namespace. If they do not exist,
+	// the HNC will create them, allowing users without privileges to create namespaces to get child
+	// namespaces anyway.
+	RequiredChildren []string `json:"requiredChildren,omitempty"`
 }
 
 // HierarchyStatus defines the observed state of Hierarchy
@@ -43,17 +59,6 @@ type HierarchyStatus struct {
 	// Children indicates the direct children of this namespace, if any.
 	Children   []string    `json:"children,omitempty"`
 	Conditions []Condition `json:"conditions,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// Hierarchy is the Schema for the hierarchies API
-type Hierarchy struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   HierarchySpec   `json:"spec,omitempty"`
-	Status HierarchyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

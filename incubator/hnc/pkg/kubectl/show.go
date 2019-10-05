@@ -17,6 +17,7 @@ package kubectl
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -35,8 +36,29 @@ var showCmd = &cobra.Command{
 		} else {
 			fmt.Printf("  No parent\n")
 		}
-		if len(hier.Status.Children) > 0 {
-			fmt.Printf("  Children:\n  - %s\n", strings.Join(hier.Status.Children, "\n  - "))
+
+		childrenAndStatus := map[string]string{}
+		for _, cn := range hier.Status.Children {
+			childrenAndStatus[cn] = ""
+		}
+		for _, cn := range hier.Spec.RequiredChildren {
+			if _, ok := childrenAndStatus[cn]; ok {
+				childrenAndStatus[cn] = "required"
+			} else {
+				childrenAndStatus[cn] = "MISSING"
+			}
+		}
+		if len(childrenAndStatus) > 0 {
+			children := []string{}
+			for cn, status := range childrenAndStatus {
+				if status == "" {
+					children = append(children, cn)
+				} else {
+					children = append(children, fmt.Sprintf("%s (%s)", cn, status))
+				}
+			}
+			sort.Strings(children)
+			fmt.Printf("  Children:\n  - %s\n", strings.Join(children, "\n  - "))
 		} else {
 			fmt.Printf("  No children\n")
 		}

@@ -21,7 +21,6 @@ type Forest struct {
 
 func NewForest() *Forest {
 	return &Forest{
-		lock:       sync.Mutex{},
 		namespaces: namedNamespaces{},
 	}
 }
@@ -62,6 +61,10 @@ type Namespace struct {
 	parent   *Namespace
 	children namedNamespaces
 	exists   bool
+
+	// RequiredChildOf indicates that this namespace is being or was created solely to live as a
+	// subnamespace of the specified parent.
+	RequiredChildOf string
 }
 
 // Exists returns true if the namespace exists.

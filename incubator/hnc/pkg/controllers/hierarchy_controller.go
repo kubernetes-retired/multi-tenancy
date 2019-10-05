@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -141,8 +142,9 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 // TODO: store the conditions in the in-memory forest so that object propagation can be disabled if
 // there's a problem on the namespace.
 func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, nsInst *corev1.Namespace, inst *tenancy.Hierarchy, update bool) error {
-	// Update the in-memory data structures.
-	orig := inst.DeepCopy()
+	// Update the in-memory data structures
+	origHier := inst.DeepCopy()
+	origNS := nsInst.DeepCopy()
 	r.syncWithForest(log, nsInst, inst)
 
 	// Early exit if we don't need to write anything back.
@@ -151,14 +153,17 @@ func (r *HierarchyReconciler) updateTree(ctx context.Context, log logr.Logger, n
 	}
 
 	// Write back if anything's changed.
-	if err := r.updateAPIServer(ctx, log, orig, inst); err != nil {
+	if err := r.writeHierarchy(ctx, log, origHier, inst); err != nil {
+		return err
+	}
+	if err := r.writeNamespace(ctx, log, origNS, nsInst); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *HierarchyReconciler) updateAPIServer(ctx context.Context, log logr.Logger, orig, inst *tenancy.Hierarchy) error {
+func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *tenancy.Hierarchy) error {
 	if reflect.DeepEqual(orig, inst) {
 		return nil
 	}
@@ -171,6 +176,28 @@ func (r *HierarchyReconciler) updateAPIServer(ctx context.Context, log logr.Logg
 		}
 	} else {
 		log.Info("Updating singleton on apiserver")
+		if err := r.Update(ctx, inst); err != nil {
+			log.Error(err, "while updating apiserver")
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) error {
+	if reflect.DeepEqual(orig, inst) {
+		return nil
+	}
+
+	if inst.CreationTimestamp.IsZero() {
+		log.Info("Creating namespace on apiserver")
+		if err := r.Create(ctx, inst); err != nil {
+			log.Error(err, "while creating on apiserver")
+			return err
+		}
+	} else {
+		log.Info("Updating namespace on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
 			return err
@@ -202,21 +229,38 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 
-	// If the namespace has been deleted, just update that fact.
+	// Handle missing namespaces. It could be created if it's been requested as a subnamespace.
 	if nsInst.Name == "" {
-		if ns.UnsetExists() {
-			log.Info("Removed namespace")
-			r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
-			return
-		}
+		r.onMissingNamespace(log, ns, nsInst)
+		return
 	}
 
 	// Mark the namespace as existing. If this is the first time we're reconciling this namespace,
-	// mark its relatives as being affected since they may have been waiting for this parent.
+	// mark all possible relatives as being affected since they may have been waiting for this
+	// namespace.
 	conds := []tenancy.Condition{}
 	if ns.SetExists() {
-		log.Info("Found new namespace")
+		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly created namespace", ns.RelativesNames()...)
+		if ns.RequiredChildOf != "" {
+			r.enqueueAffected(log, "parent of newly created required subnamespace", ns.RequiredChildOf)
+		}
+	}
+
+	// If this namespace is a required child, update its status accordingly.
+	if ns.RequiredChildOf != "" {
+		switch {
+		case inst.Spec.Parent == "":
+			log.Info("Required subnamespace: initializing", "parent", ns.RequiredChildOf)
+			inst.Spec.Parent = ns.RequiredChildOf
+		case inst.Spec.Parent == ns.RequiredChildOf:
+			// ok
+		default:
+			log.Info("Required subnamespace: assigned to wrong parent", "intended", ns.RequiredChildOf, "actual", inst.Spec.Parent)
+			r.enqueueAffected(log, "incorrect parent of the subnamespace", inst.Spec.Parent)
+			msg := fmt.Sprintf("required child of %s but parent is set to %s", ns.RequiredChildOf, inst.Spec.Parent)
+			conds = append(conds, tenancy.Condition{Msg: msg})
+		}
 	}
 
 	// Sync this namespace with its current parent.
@@ -232,30 +276,50 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	// Update the in-memory hierarchy if it's changed
 	oldParent := ns.Parent()
 	if oldParent != curParent {
-		log.Info("Parent has changed", "old", oldParent.Name(), "new", curParent.Name())
+		log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
 		if err := ns.SetParent(curParent); err != nil {
-			log.Info("Couldn't set parent", "reason", err, "parent", inst.Spec.Parent)
+			log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
 			conds = append(conds, tenancy.Condition{Msg: err.Error()})
 		} else {
 			// Only call other parts of the hierarchy recursively if this one was successfully updated;
 			// otherwise, if you get a cycle, this could get into an infinite loop.
 			if oldParent != nil {
-				r.enqueueAffected(log, "prior parent", oldParent.Name())
+				r.enqueueAffected(log, "removed as parent", oldParent.Name())
 			}
 			if curParent != nil {
-				r.enqueueAffected(log, "new parent", curParent.Name())
+				r.enqueueAffected(log, "set as parent", curParent.Name())
 			}
 		}
 	}
 
+	// Update the list of actual children, then resolve it versus the list of required children.
+	inst.Status.Children = ns.ChildNames()
+	conds = append(conds, r.syncRequiredChildren(log, inst, ns)...)
+
 	// Update all other changed fields. If they're empty, ensure they're nil so that they compare
 	// properly.
-	inst.Status.Children = ns.ChildNames()
 	if len(conds) > 0 {
 		inst.Status.Conditions = conds
 	} else {
 		inst.Status.Conditions = nil
 	}
+}
+
+func (r *HierarchyReconciler) onMissingNamespace(log logr.Logger, ns *forest.Namespace, nsInst *corev1.Namespace) {
+	if !ns.Exists() {
+		// The namespace doesn't exist on the server, but it's been requested for a parent. Initialize
+		// it so it gets created; once it is, it will be reconciled again.
+		if ns.RequiredChildOf != "" {
+			log.Info("Will create missing namespace", "forParent", ns.RequiredChildOf)
+			nsInst.Name = ns.Name()
+		}
+		return
+	}
+
+	// Remove it from the forest and notify its relatives
+	r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
+	ns.UnsetExists()
+	log.Info("Removed namespace")
 }
 
 // enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
@@ -272,6 +336,74 @@ func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, af
 			r.Affected <- event.GenericEvent{Meta: inst}
 		}
 	}()
+}
+
+// syncRequiredChildren looks at the current list of children and compares it to the children that
+// have been marked as required. If any required children are missing, we add them to the in-memory
+// forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
+func (r *HierarchyReconciler) syncRequiredChildren(log logr.Logger, inst *tenancy.Hierarchy, ns *forest.Namespace) []tenancy.Condition {
+	conds := []tenancy.Condition{}
+
+	// Make a set to make it easy to look up if a child is required or not
+	reqSet := map[string]bool{}
+	for _, r := range inst.Spec.RequiredChildren {
+		reqSet[r] = true
+	}
+
+	// Check the list of actual children against the required children
+	for _, cn := range inst.Status.Children {
+		cns := r.Forest.Get(cn)
+		if _, isRequired := reqSet[cn]; isRequired {
+			// This is a required child of this namespace
+			cns.RequiredChildOf = ns.Name()         // mark in in the forest
+			delete(reqSet, cn)                      // remove so we know we found it
+			if cns.Exists() && cns.Parent() != ns { // condition if it's assigned elsewhere
+				msg := fmt.Sprintf("required subnamespace %s exists but has parent %s", cn, cns.Parent().Name())
+				conds = append(conds, tenancy.Condition{Msg: msg})
+			}
+		} else if cns.RequiredChildOf == ns.Name() {
+			// This isn't a required child, but it looks like it *used* to be a required child of this
+			// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
+			// what's on the apiserver.
+			cns.RequiredChildOf = ""
+		} else if cns.RequiredChildOf != "" {
+			// This appears to be the required child of *another* namespace, and yet it's currently our
+			// child! Oops. Add a condition to this namespace so we know we have a child that we
+			// shouldn't.
+			msg := fmt.Sprintf("child namespace %s should be a child of %s", cn, cns.RequiredChildOf)
+			conds = append(conds, tenancy.Condition{Msg: msg})
+		}
+	}
+
+	// Anything that's still in reqSet at this point is a required child, but it doesn't exist as a
+	// child of this namespace. There could be one of two reasons: either the namespace hasn't been
+	// created (yet), in which case we just need to enqueue it for reconciliation, or else it *also*
+	// is claimed by another namespace.
+	for cn, _ := range reqSet {
+		log.Info("Required child is missing", "child", cn)
+		cns := r.Forest.Get(cn)
+		// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
+		// (which is when it will be created).
+		if cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name() {
+			cns.RequiredChildOf = ns.Name()
+			r.enqueueAffected(log, "required child is missing", cn)
+			// We expect this to be resolved shortly, but set a condition just in case it's not.
+			var msg string
+			if !cns.Exists() {
+				msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
+			} else {
+				msg = fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
+			}
+			conds = append(conds, tenancy.Condition{Msg: msg})
+		} else {
+			// Someone else got it first. This should never happen if the validator is working correctly.
+			log.Info("Required child is claimed by another parent", "child", cn, "otherParent", cns.RequiredChildOf)
+			msg := fmt.Sprintf("required child namespace %s is already a child namespace of %s", cn, cns.RequiredChildOf)
+			conds = append(conds, tenancy.Condition{Msg: msg})
+		}
+	}
+
+	return conds
 }
 
 // lockNamespace ensures that the controller cannot attempt to reconcile the same namespace more
