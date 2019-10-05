@@ -26,6 +26,11 @@ or just join a MTWG meeting.
 
 ## Usage
 
+Make sure you have downloaded the following libraries/packages:
+  - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+  - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
+  - [kubebuilder](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) (_Github issue_). You will most likely encounter this issue when running the tests or any other command.
+
 Install the operator as you would any other kubebuilder controller (eg `make
 install`, `make deploy`). No prebuilt images exist yet.
 
@@ -69,7 +74,7 @@ I do most of my testing in [KIND](https://kind.sigs.k8s.io).
 
 ### Testing on KIND (Kubernetes IN Docker)
 
-* Run `. devenv` to setup your `KUBECONFIG` and `PATH` env vars correctly.
+* Run `. devenv` (or `source devenv`) to setup your `KUBECONFIG` and `PATH` env vars correctly.
 * Run `./kind-reset` to stop any existing KIND cluster and setup a new one,
   including the cert manager required to run the webhooks.
 * Run `make test` to run the controller (excluding the validating webhook)
