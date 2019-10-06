@@ -52,7 +52,7 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-func printSubtree(prefix string, hier *tenancy.Hierarchy) {
+func printSubtree(prefix string, hier *tenancy.HierarchyConfiguration) {
 	for i, cn := range hier.Status.Children {
 		ch := getHierarchy(cn)
 		tx := nameAndFootnotes(ch)
@@ -66,7 +66,7 @@ func printSubtree(prefix string, hier *tenancy.Hierarchy) {
 	}
 }
 
-func nameAndFootnotes(hier *tenancy.Hierarchy) string {
+func nameAndFootnotes(hier *tenancy.HierarchyConfiguration) string {
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
 		txt := cond.Msg

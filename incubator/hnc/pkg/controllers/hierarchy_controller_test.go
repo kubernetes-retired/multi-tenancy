@@ -167,27 +167,27 @@ var _ = Describe("Hierarchy", func() {
 	})
 })
 
-func newHierarchy(nm string) *tenancy.Hierarchy {
-	hier := &tenancy.Hierarchy{}
+func newHierarchy(nm string) *tenancy.HierarchyConfiguration {
+	hier := &tenancy.HierarchyConfiguration{}
 	hier.ObjectMeta.Namespace = nm
 	hier.ObjectMeta.Name = tenancy.Singleton
 	return hier
 }
 
-func getHierarchy(ctx context.Context, nm string) *tenancy.Hierarchy {
+func getHierarchy(ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
 	return getHierarchyWithOffset(1, ctx, nm)
 }
 
-func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *tenancy.Hierarchy {
+func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
 	snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
-	hier := &tenancy.Hierarchy{}
+	hier := &tenancy.HierarchyConfiguration{}
 	EventuallyWithOffset(offset+1, func() error {
 		return k8sClient.Get(ctx, snm, hier)
 	}).Should(Succeed())
 	return hier
 }
 
-func updateHierarchy(ctx context.Context, h *tenancy.Hierarchy) {
+func updateHierarchy(ctx context.Context, h *tenancy.HierarchyConfiguration) {
 	if h.CreationTimestamp.IsZero() {
 		Expect(k8sClient.Create(ctx, h)).Should(Succeed())
 	} else {

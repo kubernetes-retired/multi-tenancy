@@ -42,7 +42,7 @@ func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission
 		return admission.Allowed("Change by HNC SA")
 	}
 
-	inst := &tenancy.Hierarchy{}
+	inst := &tenancy.HierarchyConfiguration{}
 	err := v.decoder.Decode(req, inst)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
@@ -54,7 +54,7 @@ func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
-func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, inst *tenancy.Hierarchy) admission.Response {
+func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, inst *tenancy.HierarchyConfiguration) admission.Response {
 	nnm := inst.ObjectMeta.Namespace
 	pnm := inst.Spec.Parent
 	if pnm == "" {

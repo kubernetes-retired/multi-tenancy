@@ -148,8 +148,8 @@ func setParent(ctx context.Context, nm string, pnm string) {
 	}
 }
 
-func newOrGetHierarchy(ctx context.Context, nm string) *tenancy.Hierarchy {
-	hier := &tenancy.Hierarchy{}
+func newOrGetHierarchy(ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
+	hier := &tenancy.HierarchyConfiguration{}
 	hier.ObjectMeta.Namespace = nm
 	hier.ObjectMeta.Name = tenancy.Singleton
 	snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}

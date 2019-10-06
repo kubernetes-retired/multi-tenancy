@@ -91,12 +91,12 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE") // windows
 }
 
-func getHierarchy(nnm string) *tenancy.Hierarchy {
+func getHierarchy(nnm string) *tenancy.HierarchyConfiguration {
 	if _, err := k8sClient.CoreV1().Namespaces().Get(nnm, metav1.GetOptions{}); err != nil {
 		fmt.Printf("Error reading namespace %s: %s\n", nnm, err)
 		os.Exit(1)
 	}
-	hier := &tenancy.Hierarchy{}
+	hier := &tenancy.HierarchyConfiguration{}
 	hier.Name = tenancy.Singleton
 	hier.Namespace = nnm
 	err := hncClient.Get().Resource("hierarchies").Namespace(nnm).Name(tenancy.Singleton).Do().Into(hier)
@@ -107,7 +107,7 @@ func getHierarchy(nnm string) *tenancy.Hierarchy {
 	return hier
 }
 
-func updateHierarchy(hier *tenancy.Hierarchy, reason string) {
+func updateHierarchy(hier *tenancy.HierarchyConfiguration, reason string) {
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {
