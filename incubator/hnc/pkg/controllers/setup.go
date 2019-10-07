@@ -21,6 +21,11 @@ func Create(mgr ctrl.Manager, f *forest.Forest) error {
 		{Group: "", Version: "v1", Kind: "Secret"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
 		{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+		{Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+		{Group: "policy", Version: "v1beta1", Kind: "PodSecurityPolicy"},
+		{Group: "", Version: "v1", Kind: "ResourceQuota"},
+		{Group: "", Version: "v1", Kind: "LimitRange"},
+		{Group: "", Version: "v1", Kind: "ConfigMap"},
 	}
 	objReconcilers := []NamespaceSyncer{}
 	for _, gvk := range gvks {
