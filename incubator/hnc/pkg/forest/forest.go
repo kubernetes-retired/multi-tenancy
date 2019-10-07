@@ -7,6 +7,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/go-logr/logr"
+
+	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -46,12 +50,21 @@ func (f *Forest) Get(nm string) *Namespace {
 	if ok {
 		return ns
 	}
-	ns = &Namespace{forest: f, name: nm, children: namedNamespaces{}}
+	ns = &Namespace{
+		forest:     f,
+		name:       nm,
+		children:   namedNamespaces{},
+		conditions: conditions{},
+	}
 	f.namespaces[nm] = ns
 	return ns
 }
 
 type namedNamespaces map[string]*Namespace
+type conditions map[string][]condition
+
+// Local represents conditions that originated from this namespace
+const Local = ""
 
 // Namespace represents a namespace in a forest. Other than its structure, it contains some
 // properties useful to the reconcilers.
@@ -62,9 +75,18 @@ type Namespace struct {
 	children namedNamespaces
 	exists   bool
 
+	// conditions store conditions so that object propagation can be disabled if there's a problem
+	// on this namespace.
+	conditions conditions
+
 	// RequiredChildOf indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
 	RequiredChildOf string
+}
+
+type condition struct {
+	code tenancy.Code
+	msg  string
 }
 
 // Exists returns true if the namespace exists.
@@ -204,4 +226,96 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 		return false
 	}
 	return ns.parent.IsAncestor(other)
+}
+
+// ClearConditions clears local conditions in the namespace.
+func (ns *Namespace) ClearConditions(key string) {
+	delete(ns.conditions, key)
+}
+
+// SetCondition adds a condition into the list of conditions for key string, returning
+// true if it does not exist previously.
+func (ns *Namespace) SetCondition(key string, code tenancy.Code, msg string) {
+	oldConditions := ns.conditions[key]
+	for _, condition := range oldConditions {
+		if condition.code == code && condition.msg == msg {
+			return
+		}
+	}
+
+	ns.conditions[key] = append(oldConditions, condition{code: code, msg: msg})
+}
+
+// Conditions returns a list of conditions in the namespace.
+// It converts map[string][]condition into []Condition.
+func (ns *Namespace) Conditions(log logr.Logger) []tenancy.Condition {
+	return flatten(ns.convertConditions(log))
+}
+
+// convertConditions converts string -> condition{code, msg} map into condition{code, msg} -> affected map.
+func (ns *Namespace) convertConditions(log logr.Logger) map[tenancy.Code]map[string][]tenancy.AffectedObject {
+	converted := map[tenancy.Code]map[string][]tenancy.AffectedObject{}
+	for key, conditions := range ns.conditions {
+		for _, condition := range conditions {
+			affectedObject := getAffectedObject(key, log)
+			if affected, ok := converted[condition.code][condition.msg]; !ok {
+				converted[condition.code] = map[string][]tenancy.AffectedObject{condition.msg: {affectedObject}}
+			} else {
+				converted[condition.code][condition.msg] = append(affected, affectedObject)
+			}
+		}
+	}
+	return converted
+}
+
+// flatten flattens condition{code, msg} -> affected map into a list of condition{code, msg, []affected}.
+func flatten(m map[tenancy.Code]map[string][]tenancy.AffectedObject) []tenancy.Condition {
+	flattened := []tenancy.Condition{}
+	for code, msgAffected := range m {
+		for msg, affected := range msgAffected {
+			// Local conditions do not need Affects.
+			if len(affected) == 1 && (tenancy.AffectedObject{}) == affected[0] {
+				flattened = append(flattened, tenancy.Condition{Code: code, Msg: msg})
+			} else {
+				flattened = append(flattened, tenancy.Condition{Code: code, Msg: msg, Affects: affected})
+			}
+		}
+	}
+	if len(flattened) > 0 {
+		return flattened
+	}
+	return nil
+}
+
+// getAffectedObject gets AffectedObject from a namespace or a string of form group/version/kind/namespace/name.
+func getAffectedObject(gvknn string, log logr.Logger) tenancy.AffectedObject {
+	if gvknn == Local {
+		return tenancy.AffectedObject{}
+	}
+
+	a := strings.Split(gvknn, "/")
+	// The affected is a namespace.
+	if len(a) == 1 {
+		return tenancy.AffectedObject{Namespace: a[0]}
+	}
+	// The affected is an object.
+	if len(a) == 5 {
+		return tenancy.AffectedObject{
+			Group:     a[0],
+			Version:   a[1],
+			Kind:      a[2],
+			Namespace: a[3],
+			Name:      a[4],
+		}
+	}
+
+	// Return an invalid object with key as name if the key is invalid.
+	log.Info("Invalid key for the affected object", "key", gvknn)
+	return tenancy.AffectedObject{
+		Group:     "",
+		Version:   "",
+		Kind:      "",
+		Namespace: "INVALID OBJECT",
+		Name:      gvknn,
+	}
 }

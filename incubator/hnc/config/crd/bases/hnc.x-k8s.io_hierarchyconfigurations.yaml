@@ -52,12 +52,52 @@ spec:
                 type: string
               type: array
             conditions:
+              description: Conditions describes the errors and the affected objects,
+                if any.
               items:
+                description: Condition specifies the condition and the affected objects.
                 properties:
+                  affects:
+                    description: Affects is a list of group-version-kind-namespace-name
+                      that uniquely identifies the object(s) affected by the condition.
+                    items:
+                      description: AffectedObject defines uniquely identifiable objects.
+                      properties:
+                        group:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        version:
+                          type: string
+                      type: object
+                    type: array
+                  code:
+                    description: "Defines the conditions in a machine-readable string
+                      value. Valid values are: \n - \"CRIT_PARENT_MISSING\": the specified
+                      parent is missing \n - \"CRIT_PARENT_INVALID\": the specified
+                      parent is invalid (ie would cause a cycle) \n - \"CRIT_REQUIRED_CHILD_CONFLICT\":
+                      there's a conflict (ie in between parent's RequiredChildren
+                      spec and child's Parent spec) \n - \"CRIT_ANCESTOR\": a critical
+                      error exists in an ancestor namespace, so this namespace is
+                      no longer being updated \n - \"OBJECT_OVERRIDDEN\": an object
+                      in this namespace has been overridden from its parent and will
+                      no longer be updated \n - \"OBJECT_DESCENDANT_OVERRIDDEN\":
+                      an object in this namespace is no longer being propagated because
+                      a propagated copy has been modified"
+                    enum:
+                    - CRIT_PARENT_MISSING
+                    - CRIT_PARENT_INVALID
+                    - CRIT_REQUIRED_CHILD_CONFLICT
+                    - CRIT_ANCESTOR
+                    - OBJECT_OVERRIDDEN
+                    - OBJECT_DESCENDANT_OVERRIDDEN
+                    type: string
                   msg:
                     type: string
-                required:
-                - msg
                 type: object
               type: array
           type: object

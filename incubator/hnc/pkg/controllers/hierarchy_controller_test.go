@@ -44,7 +44,7 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(func() bool {
 			barHier = getHierarchy(ctx, barName)
 			for _, cond := range barHier.Status.Conditions {
-				if cond.Msg == "missing parent" {
+				if cond.Code == tenancy.CritParentMissing {
 					return true
 				}
 			}
@@ -61,7 +61,7 @@ var _ = Describe("Hierarchy", func() {
 		isMissing := func() bool {
 			barHier = getHierarchy(ctx, barName)
 			for _, cond := range barHier.Status.Conditions {
-				if cond.Msg == "missing parent" {
+				if cond.Code == tenancy.CritParentMissing {
 					return true
 				}
 			}
