@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -293,6 +294,23 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 			if curParent != nil {
 				r.enqueueAffected(log, "set as parent", curParent.Name())
 			}
+		}
+	}
+
+	// Depth label only makes sense if there's no error condition.
+	if !ns.HasCondition() {
+		// AncestoryNames includes the namespace itself.
+		ancestors := ns.AncestoryNames(nil)
+		for i, ancestor := range ancestors {
+			labelDepthSuffix := ancestor + ".tree." + metaGroup + "/depth"
+			dist := strconv.Itoa(len(ancestors) - i - 1)
+			setLabel(nsInst, labelDepthSuffix, dist)
+			log.Info("Adding label", "label name",
+				labelDepthSuffix, "label value", dist)
+		}
+		// All namespaces in its subtree should update the labels as well.
+		if descendants := ns.DescendantNames(); descendants != nil {
+			r.enqueueAffected(log, "update depth label", descendants...)
 		}
 	}
 
