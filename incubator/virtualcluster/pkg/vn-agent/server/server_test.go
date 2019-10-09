@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -33,15 +34,20 @@ import (
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream/spdy"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/client-go/tools/remotecommand"
 	utiltesting "k8s.io/client-go/util/testing"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 	statsapi "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
 	"k8s.io/kubernetes/pkg/kubelet/cm"
@@ -91,8 +97,12 @@ func (s *serverTestFramework) Close() {
 }
 
 func newServerTest() *serverTestFramework {
+	return newServerTestWithDebug(true, false, nil)
+}
+
+func newServerTestWithDebug(enableDebugging, redirectContainerStreaming bool, streamingServer streaming.Server) *serverTestFramework {
 	fv := &serverTestFramework{}
-	fv.kubeletServer = newKubeletServerTest()
+	fv.kubeletServer = newKubeletServerTestWithDebug(enableDebugging, redirectContainerStreaming, streamingServer)
 
 	// install the kubelet server certificate and start server
 	kubeletServerCert, err := tls.X509KeyPair(testcerts.KubeletServerCert, testcerts.KubeletServerKey)
@@ -226,14 +236,14 @@ func (f *fakeRuntime) PortForward(podSandboxID string, port int32, stream io.Rea
 	return f.portForwardFunc(podSandboxID, port, stream)
 }
 
-type testStreamingServer struct {
+type kubeletTestStreamingServer struct {
 	streaming.Server
 	fakeRuntime    *fakeRuntime
 	testHTTPServer *httptest.Server
 }
 
-func newTestStreamingServer(streamIdleTimeout time.Duration) (s *testStreamingServer, err error) {
-	s = &testStreamingServer{}
+func newTestStreamingServer(streamIdleTimeout time.Duration) (s *kubeletTestStreamingServer, err error) {
+	s = &kubeletTestStreamingServer{}
 	s.testHTTPServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.ServeHTTP(w, r)
 	}))
@@ -360,10 +370,6 @@ type kubletServerTestFramework struct {
 	fakeRuntime             *fakeRuntime
 	testStreamingHTTPServer *httptest.Server
 	criHandler              *utiltesting.FakeHandler
-}
-
-func newKubeletServerTest() *kubletServerTestFramework {
-	return newKubeletServerTestWithDebug(true, false, nil)
 }
 
 func newKubeletServerTestWithDebug(enableDebugging, redirectContainerStreaming bool, streamingServer streaming.Server) *kubletServerTestFramework {
@@ -617,4 +623,244 @@ func TestContainerLogsWithInvalidTail(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Errorf("Unexpected non-error reading container logs: %#v", resp)
 	}
+}
+
+func testExecAttach(t *testing.T, verb string) {
+	tests := map[string]struct {
+		stdin              bool
+		stdout             bool
+		stderr             bool
+		tty                bool
+		responseStatusCode int
+		uid                bool
+		redirect           bool
+	}{
+		"no input or output":           {responseStatusCode: http.StatusBadRequest},
+		"stdin":                        {stdin: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stdout":                       {stdout: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stderr":                       {stderr: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stdout and stderr":            {stdout: true, stderr: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stdout stderr and tty":        {stdout: true, stderr: true, tty: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stdin stdout and stderr":      {stdin: true, stdout: true, stderr: true, responseStatusCode: http.StatusSwitchingProtocols},
+		"stdin stdout stderr with uid": {stdin: true, stdout: true, stderr: true, responseStatusCode: http.StatusSwitchingProtocols, uid: true},
+		"stdout with redirect":         {stdout: true, responseStatusCode: http.StatusFound, redirect: true},
+	}
+
+	podNamespace := "other"
+	podName := "foo"
+	expectedNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
+	expectedPodName := getPodName(podName, expectedNamespace)
+	expectedContainerName := "baz"
+	expectedCommand := "ls -a"
+	expectedStdin := "stdin"
+	expectedStdout := "stdout"
+	expectedStderr := "stderr"
+
+	for desc, test := range tests {
+		test := test
+		t.Run(desc, func(t *testing.T) {
+			ss, err := newTestStreamingServer(0)
+			require.NoError(t, err)
+			defer ss.testHTTPServer.Close()
+			fv := newServerTestWithDebug(true, test.redirect, ss)
+			defer fv.Close()
+
+			done := make(chan struct{})
+			clientStdoutReadDone := make(chan struct{})
+			clientStderrReadDone := make(chan struct{})
+			execInvoked := false
+			attachInvoked := false
+
+			checkStream := func(podFullName string, uid types.UID, containerName string, streamOpts remotecommandserver.Options) {
+				assert.Equal(t, expectedPodName, podFullName, "podFullName")
+				if test.uid {
+					assert.Equal(t, testUID, string(uid), "uid")
+				}
+				assert.Equal(t, expectedContainerName, containerName, "containerName")
+				assert.Equal(t, test.stdin, streamOpts.Stdin, "stdin")
+				assert.Equal(t, test.stdout, streamOpts.Stdout, "stdout")
+				assert.Equal(t, test.tty, streamOpts.TTY, "tty")
+				assert.Equal(t, !test.tty && test.stderr, streamOpts.Stderr, "stderr")
+			}
+
+			fv.kubeletServer.fakeKubelet.getExecCheck = func(podFullName string, uid types.UID, containerName string, cmd []string, streamOpts remotecommandserver.Options) {
+				execInvoked = true
+				assert.Equal(t, expectedCommand, strings.Join(cmd, " "), "cmd")
+				checkStream(podFullName, uid, containerName, streamOpts)
+			}
+
+			fv.kubeletServer.fakeKubelet.getAttachCheck = func(podFullName string, uid types.UID, containerName string, streamOpts remotecommandserver.Options) {
+				attachInvoked = true
+				checkStream(podFullName, uid, containerName, streamOpts)
+			}
+
+			testStream := func(containerID string, in io.Reader, out, stderr io.WriteCloser, tty bool, done chan struct{}) error {
+				close(done)
+				assert.Equal(t, testContainerID, containerID, "containerID")
+				assert.Equal(t, test.tty, tty, "tty")
+				require.Equal(t, test.stdin, in != nil, "in")
+				require.Equal(t, test.stdout, out != nil, "out")
+				require.Equal(t, !test.tty && test.stderr, stderr != nil, "err")
+
+				if test.stdin {
+					b := make([]byte, 10)
+					n, err := in.Read(b)
+					assert.NoError(t, err, "reading from stdin")
+					assert.Equal(t, expectedStdin, string(b[0:n]), "content from stdin")
+				}
+
+				if test.stdout {
+					_, err := out.Write([]byte(expectedStdout))
+					assert.NoError(t, err, "writing to stdout")
+					out.Close()
+					<-clientStdoutReadDone
+				}
+
+				if !test.tty && test.stderr {
+					_, err := stderr.Write([]byte(expectedStderr))
+					assert.NoError(t, err, "writing to stderr")
+					stderr.Close()
+					<-clientStderrReadDone
+				}
+				return nil
+			}
+
+			ss.fakeRuntime.execFunc = func(containerID string, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+				assert.Equal(t, expectedCommand, strings.Join(cmd, " "), "cmd")
+				return testStream(containerID, stdin, stdout, stderr, tty, done)
+			}
+
+			ss.fakeRuntime.attachFunc = func(containerID string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) error {
+				return testStream(containerID, stdin, stdout, stderr, tty, done)
+			}
+
+			var url string
+			if test.uid {
+				url = fv.testHTTPServer.URL + "/" + verb + "/" + podNamespace + "/" + podName + "/" + testUID + "/" + expectedContainerName + "?ignore=1"
+			} else {
+				url = fv.testHTTPServer.URL + "/" + verb + "/" + podNamespace + "/" + podName + "/" + expectedContainerName + "?ignore=1"
+			}
+			if verb == "exec" {
+				url += "&command=ls&command=-a"
+			}
+			if test.stdin {
+				url += "&" + api.ExecStdinParam + "=1"
+			}
+			if test.stdout {
+				url += "&" + api.ExecStdoutParam + "=1"
+			}
+			if test.stderr && !test.tty {
+				url += "&" + api.ExecStderrParam + "=1"
+			}
+			if test.tty {
+				url += "&" + api.ExecTTYParam + "=1"
+			}
+
+			fmt.Println(url)
+			var (
+				resp                *http.Response
+				upgradeRoundTripper httpstream.UpgradeRoundTripper
+				c                   *http.Client
+			)
+			tenantCert, err := tls.X509KeyPair(testcerts.TenantCert, testcerts.TenantKey)
+			require.NoError(t, err)
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       []tls.Certificate{tenantCert},
+			}
+
+			if test.redirect {
+				c = &http.Client{
+					Transport: &http.Transport{
+						TLSClientConfig: tlsConfig,
+					},
+					// Don't follow redirects, since we want to inspect the redirect response.
+					CheckRedirect: func(*http.Request, []*http.Request) error {
+						return http.ErrUseLastResponse
+					},
+				}
+			} else {
+				upgradeRoundTripper = spdy.NewRoundTripper(tlsConfig, true, true)
+				c = &http.Client{Transport: upgradeRoundTripper}
+			}
+
+			resp, err = c.Post(url, "", nil)
+			require.NoError(t, err, "POSTing")
+			defer resp.Body.Close()
+
+			_, err = ioutil.ReadAll(resp.Body)
+			assert.NoError(t, err, "reading response body")
+
+			require.Equal(t, test.responseStatusCode, resp.StatusCode, "response status")
+			if test.responseStatusCode != http.StatusSwitchingProtocols {
+				return
+			}
+
+			conn, err := upgradeRoundTripper.NewConnection(resp)
+			require.NoError(t, err, "creating streaming connection")
+			defer conn.Close()
+
+			h := http.Header{}
+			h.Set(api.StreamType, api.StreamTypeError)
+			_, err = conn.CreateStream(h)
+			require.NoError(t, err, "creating error stream")
+
+			if test.stdin {
+				h.Set(api.StreamType, api.StreamTypeStdin)
+				stream, err := conn.CreateStream(h)
+				require.NoError(t, err, "creating stdin stream")
+				_, err = stream.Write([]byte(expectedStdin))
+				require.NoError(t, err, "writing to stdin stream")
+			}
+
+			var stdoutStream httpstream.Stream
+			if test.stdout {
+				h.Set(api.StreamType, api.StreamTypeStdout)
+				stdoutStream, err = conn.CreateStream(h)
+				require.NoError(t, err, "creating stdout stream")
+			}
+
+			var stderrStream httpstream.Stream
+			if test.stderr && !test.tty {
+				h.Set(api.StreamType, api.StreamTypeStderr)
+				stderrStream, err = conn.CreateStream(h)
+				require.NoError(t, err, "creating stderr stream")
+			}
+
+			if test.stdout {
+				output := make([]byte, 10)
+				n, err := stdoutStream.Read(output)
+				close(clientStdoutReadDone)
+				assert.NoError(t, err, "reading from stdout stream")
+				assert.Equal(t, expectedStdout, string(output[0:n]), "stdout")
+			}
+
+			if test.stderr && !test.tty {
+				output := make([]byte, 10)
+				n, err := stderrStream.Read(output)
+				close(clientStderrReadDone)
+				assert.NoError(t, err, "reading from stderr stream")
+				assert.Equal(t, expectedStderr, string(output[0:n]), "stderr")
+			}
+
+			// wait for the server to finish before checking if the attach/exec funcs were invoked
+			<-done
+
+			if verb == "exec" {
+				assert.True(t, execInvoked, "exec should be invoked")
+				assert.False(t, attachInvoked, "attach should not be invoked")
+			} else {
+				assert.True(t, attachInvoked, "attach should be invoked")
+				assert.False(t, execInvoked, "exec should not be invoked")
+			}
+		})
+	}
+}
+
+func TestServeExecInContainer(t *testing.T) {
+	testExecAttach(t, "exec")
+}
+
+func TestServeAttachContainer(t *testing.T) {
+	testExecAttach(t, "attach")
 }
