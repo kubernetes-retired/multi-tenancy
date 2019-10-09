@@ -71,6 +71,87 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{barName}))
 	})
 
+	It("should set CritAncestor condition if any ancestor has critical condition", func() {
+		// Set up the parent-child relationship
+		barHier := newHierarchy(barName)
+		barHier.Spec.Parent = "brumpf"
+		updateHierarchy(ctx, barHier)
+		Eventually(func() bool {
+			barHier = getHierarchy(ctx, barName)
+			for _, cond := range barHier.Status.Conditions {
+				if cond.Code == tenancy.CritParentMissing {
+					return true
+				}
+			}
+			return false
+		}).Should(Equal(true))
+
+		// Set bar as foo's parent
+		fooHier := newHierarchy(fooName)
+		fooHier.Spec.Parent = barName
+		updateHierarchy(ctx, fooHier)
+		Eventually(func() bool {
+			conds := getHierarchy(ctx, fooName).Status.Conditions
+			for _, cond := range conds {
+				if cond.Code == tenancy.CritAncestor {
+					return true
+				}
+			}
+			return false
+		}).Should(Equal(true))
+	})
+
+	It("should unset CritAncestor condition if critical conditions in ancestors are gone", func() {
+		// Set up the parent-child relationship with the missing name
+		brumpfName := createNSName("brumpf")
+		barHier := newHierarchy(barName)
+		barHier.Spec.Parent = brumpfName
+		updateHierarchy(ctx, barHier)
+		isMissing := func() bool {
+			barHier = getHierarchy(ctx, barName)
+			for _, cond := range barHier.Status.Conditions {
+				if cond.Code == tenancy.CritParentMissing {
+					return true
+				}
+			}
+			return false
+		}
+		Eventually(isMissing).Should(Equal(true))
+
+		// Set bar as foo's parent
+		fooHier := newHierarchy(fooName)
+		fooHier.Spec.Parent = barName
+		updateHierarchy(ctx, fooHier)
+		hasCritAncestor := func() bool {
+			conds := getHierarchy(ctx, fooName).Status.Conditions
+			for _, cond := range conds {
+				if cond.Code == tenancy.CritAncestor {
+					return true
+				}
+			}
+			return false
+		}
+		Eventually(hasCritAncestor).Should(Equal(true))
+
+		// Create the missing parent
+		brumpfNS := &corev1.Namespace{}
+		brumpfNS.Name = brumpfName
+		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
+
+		// Ensure the condition is resolved on the child
+		Eventually(isMissing).Should(Equal(false))
+
+		// Ensure the child is listed on the parent
+		Eventually(func() []string {
+			brumpfHier := getHierarchy(ctx, brumpfName)
+			return brumpfHier.Status.Children
+		}).Should(Equal([]string{barName}))
+
+		// Ensure foo is enqueued and thus get CritAncestor condition updated after
+		// critical conditions are resolved in bar.
+		Eventually(hasCritAncestor).Should(Equal(false))
+	})
+
 	It("should set CritParentInvalid condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
