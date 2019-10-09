@@ -228,6 +228,11 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 	return ns.parent.IsAncestor(other)
 }
 
+// HasCondition returns if the namespace has any local condition.
+func (ns *Namespace) HasCondition() bool {
+	return len(ns.conditions) > 0
+}
+
 // ClearConditions clears local conditions in the namespace.
 func (ns *Namespace) ClearConditions(key string) {
 	delete(ns.conditions, key)
@@ -318,4 +323,17 @@ func getAffectedObject(gvknn string, log logr.Logger) tenancy.AffectedObject {
 		Namespace: "INVALID OBJECT",
 		Name:      gvknn,
 	}
+}
+
+// DescendantNames returns a slice of strings like ["child" ... "grandchildren" ...] of
+// names of all namespaces in its subtree. Nil is returned if the namespace has no descendant.
+func (ns *Namespace) DescendantNames() []string {
+	children := ns.ChildNames()
+	descendants := children
+	for _, child := range children {
+		child_ns := ns.forest.Get(child)
+		descendantsOfChild := child_ns.DescendantNames()
+		descendants = append(descendants, descendantsOfChild...)
+	}
+	return descendants
 }

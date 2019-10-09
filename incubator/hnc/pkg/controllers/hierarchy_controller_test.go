@@ -13,6 +13,10 @@ import (
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
+const (
+	metaGroup = "hnc.x-k8s.io"
+)
+
 var _ = Describe("Hierarchy", func() {
 	ctx := context.Background()
 
@@ -165,6 +169,54 @@ var _ = Describe("Hierarchy", func() {
 			return len(conds) > 0
 		}).Should(BeTrue())
 	})
+
+	It("should have a tree label", func() {
+		// Make bar a child of foo
+		barHier := newHierarchy(barName)
+		barHier.Spec.Parent = fooName
+		updateHierarchy(ctx, barHier)
+		// First, verify bar is a child of foo
+		Eventually(func() []string {
+			return getHierarchy(ctx, fooName).Status.Children
+		}).Should(Equal([]string{barName}))
+		// Verify that bar has a tree label related to foo
+		Eventually(func() bool {
+			barNS := getNamespace(ctx, barName)
+			_, ok := barNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			return ok
+		}).Should(BeTrue())
+		// Verify the label value
+		Eventually(func() string {
+			barNS := getNamespace(ctx, barName)
+			val, _ := barNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			return val
+		}).Should(Equal("1"))
+		// Verify that bar has a tree label related to bar itself
+		Eventually(func() bool {
+			barNS := getNamespace(ctx, barName)
+			_, ok := barNS.GetLabels()[barName+".tree."+metaGroup+"/depth"]
+			return ok
+		}).Should(BeTrue())
+		// Verify the label value
+		Eventually(func() string {
+			barNS := getNamespace(ctx, barName)
+			val, _ := barNS.GetLabels()[barName+".tree."+metaGroup+"/depth"]
+			return val
+		}).Should(Equal("0"))
+		// Verify that foo has a tree label related to foo itself
+		Eventually(func() bool {
+			fmt.Println(getHierarchy(ctx, fooName))
+			fooNS := getNamespace(ctx, fooName)
+			_, ok := fooNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			return ok
+		}).Should(BeTrue())
+		// Verify the label value
+		Eventually(func() string {
+			fooNS := getNamespace(ctx, fooName)
+			val, _ := fooNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			return val
+		}).Should(Equal("0"))
+	})
 })
 
 func newHierarchy(nm string) *tenancy.HierarchyConfiguration {
@@ -185,6 +237,19 @@ func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *tenancy
 		return k8sClient.Get(ctx, snm, hier)
 	}).Should(Succeed())
 	return hier
+}
+
+func getNamespace(ctx context.Context, nm string) *corev1.Namespace {
+	return getNamespaceWithOffset(1, ctx, nm)
+}
+
+func getNamespaceWithOffset(offset int, ctx context.Context, nm string) *corev1.Namespace {
+	nnm := types.NamespacedName{Name: nm}
+	ns := &corev1.Namespace{}
+	EventuallyWithOffset(offset+1, func() error {
+		return k8sClient.Get(ctx, nnm, ns)
+	}).Should(Succeed())
+	return ns
 }
 
 func updateHierarchy(ctx context.Context, h *tenancy.HierarchyConfiguration) {

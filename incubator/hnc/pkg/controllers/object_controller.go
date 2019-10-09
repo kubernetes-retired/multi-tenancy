@@ -366,7 +366,12 @@ func setAnnotation(inst *unstructured.Unstructured, annotation string, value str
 	inst.SetAnnotations(annotations)
 }
 
-func setLabel(inst *unstructured.Unstructured, label string, value string) {
+type apiInstances interface {
+	GetLabels() map[string]string
+	SetLabels(labels map[string]string)
+}
+
+func setLabel(inst apiInstances, label string, value string) {
 	labels := inst.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
