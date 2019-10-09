@@ -21,6 +21,7 @@ import (
 	"net/http"
 
 	"github.com/emicklei/go-restful"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/proxy"
 	"k8s.io/klog"
 )
@@ -62,10 +63,58 @@ func (s *Server) InstallHandlers() {
 		To(s.proxy).
 		Operation("getContainerLogs"))
 	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
+	ws.Path("/exec")
+	ws.Route(ws.GET("/{podNamespace}/{podID}/{containerName}").
+		To(s.proxy).
+		Operation("getExec"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{containerName}").
+		To(s.proxy).
+		Operation("getExec"))
+	ws.Route(ws.GET("/{podNamespace}/{podID}/{uid}/{containerName}").
+		To(s.proxy).
+		Operation("getExec"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{uid}/{containerName}").
+		To(s.proxy).
+		Operation("getExec"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
+	ws.Path("/attach")
+	ws.Route(ws.GET("/{podNamespace}/{podID}/{containerName}").
+		To(s.proxy).
+		Operation("getAttach"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{containerName}").
+		To(s.proxy).
+		Operation("getAttach"))
+	ws.Route(ws.GET("/{podNamespace}/{podID}/{uid}/{containerName}").
+		To(s.proxy).
+		Operation("getAttach"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{uid}/{containerName}").
+		To(s.proxy).
+		Operation("getAttach"))
+	s.restfulCont.Add(ws)
+
+	ws = new(restful.WebService)
+	ws.Path("/portForward")
+	ws.Route(ws.GET("/{podNamespace}/{podID}").
+		To(s.proxy).
+		Operation("getPortForward"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}").
+		To(s.proxy).
+		Operation("getPortForward"))
+	ws.Route(ws.GET("/{podNamespace}/{podID}/{uid}").
+		To(s.proxy).
+		Operation("getPortForward"))
+	ws.Route(ws.POST("/{podNamespace}/{podID}/{uid}").
+		To(s.proxy).
+		Operation("getPortForward"))
+	s.restfulCont.Add(ws)
 }
 
 func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
-	klog.V(4).Infof("request %+v", req)
+	klog.V(4).Infof("request %+v", req.Request.URL)
 
 	req.Request.URL.Host = s.config.KubeletServerHost
 	req.Request.URL.Scheme = "https"
@@ -87,7 +136,7 @@ func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 		},
 	}
 
-	handler := proxy.NewUpgradeAwareHandler(req.Request.URL, transport /*transport*/, false /*wrapTransport*/, false /*upgradeRequired*/, &responder{})
+	handler := proxy.NewUpgradeAwareHandler(req.Request.URL, transport /*transport*/, false /*wrapTransport*/, httpstream.IsUpgradeRequest(req.Request) /*upgradeRequired*/, &responder{})
 	handler.ServeHTTP(resp.ResponseWriter, req.Request)
 }
 

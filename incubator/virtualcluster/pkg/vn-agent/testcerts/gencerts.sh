@@ -81,7 +81,7 @@ package testcerts
 
 EOF
 
-echo "// TenantName is the CommonName in the tenant cert."
+echo "// TenantName is the CommonName in the tenant cert." >> $outfile
 echo "const TenantName = \"${TENANT_NAME}\"" >> $outfile
 
 for file in CA KubeletServer KubeletClient VnAgent Tenant; do
