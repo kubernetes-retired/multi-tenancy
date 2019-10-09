@@ -28,6 +28,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -863,4 +864,191 @@ func TestServeExecInContainer(t *testing.T) {
 
 func TestServeAttachContainer(t *testing.T) {
 	testExecAttach(t, "attach")
+}
+
+func TestServePortForwardIdleTimeout(t *testing.T) {
+	ss, err := newTestStreamingServer(100 * time.Millisecond)
+	require.NoError(t, err)
+	defer ss.testHTTPServer.Close()
+	fv := newServerTestWithDebug(true, false, ss)
+	defer fv.Close()
+
+	podNamespace := "other"
+	podName := "foo"
+
+	url := fv.testHTTPServer.URL + "/portForward/" + podNamespace + "/" + podName
+
+	tenantCert, err := tls.X509KeyPair(testcerts.TenantCert, testcerts.TenantKey)
+	require.NoError(t, err)
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{tenantCert},
+	}
+
+	upgradeRoundTripper := spdy.NewRoundTripper(tlsConfig, true, true)
+	c := &http.Client{Transport: upgradeRoundTripper}
+
+	resp, err := c.Post(url, "", nil)
+	if err != nil {
+		t.Fatalf("Got error POSTing: %v", err)
+	}
+	defer resp.Body.Close()
+
+	conn, err := upgradeRoundTripper.NewConnection(resp)
+	if err != nil {
+		t.Fatalf("Unexpected error creating streaming connection: %s", err)
+	}
+	if conn == nil {
+		t.Fatal("Unexpected nil connection")
+	}
+	defer conn.Close()
+
+	<-conn.CloseChan()
+}
+
+func TestServePortForward(t *testing.T) {
+	tests := map[string]struct {
+		port          string
+		uid           bool
+		clientData    string
+		containerData string
+		redirect      bool
+		shouldError   bool
+	}{
+		"no port":                       {port: "", shouldError: true},
+		"none number port":              {port: "abc", shouldError: true},
+		"negative port":                 {port: "-1", shouldError: true},
+		"too large port":                {port: "65536", shouldError: true},
+		"0 port":                        {port: "0", shouldError: true},
+		"min port":                      {port: "1", shouldError: false},
+		"normal port":                   {port: "8000", shouldError: false},
+		"normal port with data forward": {port: "8000", clientData: "client data", containerData: "container data", shouldError: false},
+		"max port":                      {port: "65535", shouldError: false},
+		"normal port with uid":          {port: "8000", uid: true, shouldError: false},
+		"normal port with redirect":     {port: "8000", redirect: true, shouldError: false},
+	}
+
+	podNamespace := "other"
+	podName := "foo"
+	expectedNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
+
+	for desc, test := range tests {
+		test := test
+		t.Run(desc, func(t *testing.T) {
+			ss, err := newTestStreamingServer(0)
+			require.NoError(t, err)
+			defer ss.testHTTPServer.Close()
+			fv := newServerTestWithDebug(true, test.redirect, ss)
+			defer fv.Close()
+
+			portForwardFuncDone := make(chan struct{})
+
+			fv.kubeletServer.fakeKubelet.getPortForwardCheck = func(name, namespace string, uid types.UID, opts portforward.V4Options) {
+				assert.Equal(t, podName, name, "pod name")
+				assert.Equal(t, expectedNamespace, namespace, "pod namespace")
+				if test.uid {
+					assert.Equal(t, testUID, string(uid), "uid")
+				}
+			}
+
+			ss.fakeRuntime.portForwardFunc = func(podSandboxID string, port int32, stream io.ReadWriteCloser) error {
+				defer close(portForwardFuncDone)
+				assert.Equal(t, testPodSandboxID, podSandboxID, "pod sandbox id")
+				// The port should be valid if it reaches here.
+				testPort, err := strconv.ParseInt(test.port, 10, 32)
+				require.NoError(t, err, "parse port")
+				assert.Equal(t, int32(testPort), port, "port")
+
+				if test.clientData != "" {
+					fromClient := make([]byte, 32)
+					n, err := stream.Read(fromClient)
+					assert.NoError(t, err, "reading client data")
+					assert.Equal(t, test.clientData, string(fromClient[0:n]), "client data")
+				}
+
+				if test.containerData != "" {
+					_, err := stream.Write([]byte(test.containerData))
+					assert.NoError(t, err, "writing container data")
+				}
+
+				return nil
+			}
+
+			var url string
+			if test.uid {
+				url = fmt.Sprintf("%s/portForward/%s/%s/%s", fv.testHTTPServer.URL, podNamespace, podName, testUID)
+			} else {
+				url = fmt.Sprintf("%s/portForward/%s/%s", fv.testHTTPServer.URL, podNamespace, podName)
+			}
+
+			var (
+				upgradeRoundTripper httpstream.UpgradeRoundTripper
+				c                   *http.Client
+			)
+			tenantCert, err := tls.X509KeyPair(testcerts.TenantCert, testcerts.TenantKey)
+			require.NoError(t, err)
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       []tls.Certificate{tenantCert},
+			}
+
+			if test.redirect {
+				c = &http.Client{
+					Transport: &http.Transport{
+						TLSClientConfig: tlsConfig,
+					},
+				}
+				// Don't follow redirects, since we want to inspect the redirect response.
+				c.CheckRedirect = func(*http.Request, []*http.Request) error {
+					return http.ErrUseLastResponse
+				}
+			} else {
+				upgradeRoundTripper = spdy.NewRoundTripper(tlsConfig, true, true)
+				c = &http.Client{Transport: upgradeRoundTripper}
+			}
+
+			resp, err := c.Post(url, "", nil)
+			require.NoError(t, err, "POSTing")
+			defer resp.Body.Close()
+
+			if test.redirect {
+				assert.Equal(t, http.StatusFound, resp.StatusCode, "status code")
+				return
+			}
+			assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode, "status code")
+
+			conn, err := upgradeRoundTripper.NewConnection(resp)
+			require.NoError(t, err, "creating streaming connection")
+			defer conn.Close()
+
+			headers := http.Header{}
+			headers.Set("streamType", "error")
+			headers.Set("port", test.port)
+			_, err = conn.CreateStream(headers)
+			assert.Equal(t, test.shouldError, err != nil, "expect error")
+
+			if test.shouldError {
+				return
+			}
+
+			headers.Set("streamType", "data")
+			headers.Set("port", test.port)
+			dataStream, err := conn.CreateStream(headers)
+			require.NoError(t, err, "create stream")
+
+			if test.clientData != "" {
+				_, err := dataStream.Write([]byte(test.clientData))
+				assert.NoError(t, err, "writing client data")
+			}
+
+			if test.containerData != "" {
+				fromContainer := make([]byte, 32)
+				n, err := dataStream.Read(fromContainer)
+				assert.NoError(t, err, "reading container data")
+				assert.Equal(t, test.containerData, string(fromContainer[0:n]), "container data")
+			}
+
+			<-portForwardFuncDone
+		})
+	}
 }
