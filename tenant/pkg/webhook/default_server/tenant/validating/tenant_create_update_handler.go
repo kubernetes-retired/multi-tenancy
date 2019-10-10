@@ -18,9 +18,13 @@ package validating
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	apivalidation "k8s.io/apimachinery/pkg/api/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
@@ -46,9 +50,23 @@ type TenantCreateUpdateHandler struct {
 	Decoder types.Decoder
 }
 
-func (h *TenantCreateUpdateHandler) validatingTenantFn(ctx context.Context, obj *tenancyv1alpha1.Tenant) (bool, string, error) {
-	// TODO(user): implement your admission logic
-	return true, "allowed to be admitted", nil
+func (h *TenantCreateUpdateHandler) validateTenantUpdate(obj *tenancyv1alpha1.Tenant, oldobj *tenancyv1alpha1.Tenant) field.ErrorList {
+	allErrs := field.ErrorList{}
+	if obj.Spec.TenantAdminNamespaceName != oldobj.Spec.TenantAdminNamespaceName {
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("tenantAdminNamespaceName"), fmt.Sprintf("cannot modify the tenantAdminNamespaceName field in spec after initial creation (attempting to change from %s to %s)", oldobj.Spec.TenantAdminNamespaceName, obj.Spec.TenantAdminNamespaceName)))
+	}
+	if obj.Spec.RequireNamespacePrefix != oldobj.Spec.RequireNamespacePrefix {
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec").Child("requireNamespacePrefix"), fmt.Sprintf("cannot modify the requireNamespacePrefix field in spec after initial creation (attempting to change from %v to %v)", oldobj.Spec.RequireNamespacePrefix, obj.Spec.RequireNamespacePrefix)))
+	}
+	return allErrs
+}
+
+func (h *TenantCreateUpdateHandler) validateTenantCreate(obj *tenancyv1alpha1.Tenant) field.ErrorList {
+	allErrs := field.ErrorList{}
+	for _, msg := range apivalidation.ValidateNamespaceName(obj.Spec.TenantAdminNamespaceName, false) {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("spec").Child("tenantAdminNamespaceName"), obj.Spec.TenantAdminNamespaceName, msg))
+	}
+	return allErrs
 }
 
 var _ admission.Handler = &TenantCreateUpdateHandler{}
@@ -62,11 +80,23 @@ func (h *TenantCreateUpdateHandler) Handle(ctx context.Context, req types.Reques
 		return admission.ErrorResponse(http.StatusBadRequest, err)
 	}
 
-	allowed, reason, err := h.validatingTenantFn(ctx, obj)
-	if err != nil {
-		return admission.ErrorResponse(http.StatusInternalServerError, err)
+	switch req.AdmissionRequest.Operation {
+	case admissionv1beta1.Create:
+		if createErrorList := h.validateTenantCreate(obj); len(createErrorList) > 0 {
+			return admission.ErrorResponse(http.StatusUnprocessableEntity, createErrorList.ToAggregate())
+		}
+	case admissionv1beta1.Update:
+		oldobj := &tenancyv1alpha1.Tenant{}
+		if err := h.Decoder.Decode(types.Request{
+			AdmissionRequest: &admissionv1beta1.AdmissionRequest{Object: req.AdmissionRequest.OldObject},
+		}, oldobj); err != nil {
+			return admission.ErrorResponse(http.StatusBadRequest, err)
+		}
+		if updateErrorList := h.validateTenantUpdate(obj, oldobj); len(updateErrorList) > 0 {
+			return admission.ErrorResponse(http.StatusInternalServerError, updateErrorList.ToAggregate())
+		}
 	}
-	return admission.ValidationResponse(allowed, reason)
+	return admission.ValidationResponse(true, "")
 }
 
 //var _ inject.Client = &TenantCreateUpdateHandler{}
