@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package virtualcluster
+package clusterversion
 
 import (
 	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -35,7 +35,7 @@ var log = logf.Log.WithName("controller")
 * business logic.  Delete these comments after modifying this file.*
  */
 
-// Add creates a new Virtualcluster Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
+// Add creates a new ClusterVersion Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -43,19 +43,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileVirtualcluster{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileClusterVersion{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("virtualcluster-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("clusterversion-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to Virtualcluster
-	err = c.Watch(&source.Kind{Type: &tenancyv1alpha1.Virtualcluster{}}, &handler.EnqueueRequestForObject{})
+	// Watch for changes to ClusterVersion
+	err = c.Watch(&source.Kind{Type: &tenancyv1alpha1.ClusterVersion{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -63,18 +63,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-var _ reconcile.Reconciler = &ReconcileVirtualcluster{}
+var _ reconcile.Reconciler = &ReconcileClusterVersion{}
 
-// ReconcileVirtualcluster reconciles a Virtualcluster object
-type ReconcileVirtualcluster struct {
+// ReconcileClusterVersion reconciles a ClusterVersion object
+type ReconcileClusterVersion struct {
 	client.Client
 	scheme *runtime.Scheme
 }
 
-// Reconcile reads that state of the cluster for a Virtualcluster object and makes changes based on the state read
-// and what is in the Virtualcluster.Spec
-// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
-func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+// Reconcile reads that state of the cluster for a ClusterVersion object and makes changes based on the state read
+// and what is in the ClusterVersion.Spec
+// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get;update;patch
+func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	return reconcile.Result{}, nil
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package virtualcluster
+package clusterversion
 
 import (
 	"testing"
@@ -33,13 +33,13 @@ import (
 
 var c client.Client
 
-var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "default"}}
+var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo"}}
 
 const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &tenancyv1alpha1.Virtualcluster{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
+	instance := &tenancyv1alpha1.ClusterVersion{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -57,7 +57,7 @@ func TestReconcile(t *testing.T) {
 		mgrStopped.Wait()
 	}()
 
-	// Create the Virtualcluster object and expect the Reconcile and Deployment to be created
+	// Create the ClusterVersion object and expect the Reconcile and Deployment to be created
 	err = c.Create(context.TODO(), instance)
 	// The instance object may not be a valid object because it might be missing some required fields.
 	// Please modify the instance object by adding required fields and then remove the following if statement.
