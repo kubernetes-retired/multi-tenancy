@@ -27,6 +27,46 @@ rules:
 - apiGroups:
   - tenancy.x-k8s.io
   resources:
+  - clusterversions
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - clusterversions/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apps
+  resources:
+  - deployments/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
   - virtualclusters
   verbs:
   - get
