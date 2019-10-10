@@ -19,8 +19,10 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
+	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -104,6 +106,12 @@ func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, n
 // update deletes this object if it's an obsolete copy, and otherwise ensures it's been propagated
 // to any child namespaces.
 func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
+	//Checks to see if the object is correct and should propagate
+	if !r.ensureCanPropagate(inst.GetNamespace(), inst) {
+		log.Info("Object cannot propagate")
+		return nil
+	}
+
 	// Make sure this object is correct and supposed to propagate. If not, delete it or mark it as
 	// modified. This should trigger one more reconciliation cycle and we'll get the children then.
 	if correct, err := r.ensureCorrectAncestry(ctx, log, inst); !correct || err != nil {
@@ -284,14 +292,38 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 	return nil
 }
 
+func (r *ObjectReconciler) ensureCanPropagate(nsNm string, inst *unstructured.Unstructured) bool {
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+	ns := r.Forest.Get(nsNm)
+	if !ns.Exists() {
+		return false
+	}
+	//TODO TAYLOR
+	var conditionString string
+	if len(strings.Split(r.GVK.String(), ".")) > 1 {
+		affected := strings.Split(r.GVK.String(), ".")
+		conditionString = fmt.Sprint(affected[0], "/", affected[1], "/", affected[2], "/", nsNm, "/", ns.Name())
+	}
+
+	if inst.GetDeletionGracePeriodSeconds() != nil {
+		ns.SetCondition(conditionString, tenancy.ObjectMetadata, "Deletion grace period set")
+		return false
+	}
+	if inst.GetDeletionTimestamp() != nil {
+		ns.SetCondition(conditionString, tenancy.ObjectMetadata, "deletion timestamp set")
+		return false
+	}
+	if inst.GetFinalizers() != nil {
+		ns.SetCondition(conditionString, tenancy.ObjectMetadata, "finalizer is set")
+		return false
+	}
+	return true
+}
+
 func copyObject(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	copied := inst.DeepCopy()
-
-	// Clear all irrelevant fields. cf https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#objectmeta-v1-meta
 	copied.SetCreationTimestamp(metav1.Time{})
-	copied.SetDeletionGracePeriodSeconds(nil)
-	copied.SetDeletionTimestamp(nil)
-	copied.SetFinalizers(nil) // TODO: double-check this is the right thing to do?
 	copied.SetGenerateName("")
 	copied.SetGeneration(0)
 	copied.SetInitializers(nil) // TODO: is this correct?

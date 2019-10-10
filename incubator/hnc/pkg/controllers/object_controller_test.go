@@ -4,13 +4,12 @@ import (
 	"context"
 	"time"
 
+	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var _ = Describe("Secret", func() {
@@ -100,6 +99,15 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
 	})
 
+	It("should not be propagated if it has a condition", func() {
+
+		setParent(ctx, barName, fooName)
+		setParent(ctx, quxName, barName)
+		if hasAnyCondition(ctx, barName) {
+			panic("CONDITION SET")
+		}
+	})
+
 	It("should be removed if the source no longer exists", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -111,6 +119,15 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
 	})
 })
+
+func hasAnyCondition(ctx context.Context, nm string) bool {
+	hier := newOrGetHierarchy(ctx, nm)
+	conds := hier.Status.Conditions
+	if len(conds) >= 1 {
+		return true
+	}
+	return false
+}
 
 func makeSecret(ctx context.Context, nsName, secretName string) {
 	sec := &corev1.Secret{}

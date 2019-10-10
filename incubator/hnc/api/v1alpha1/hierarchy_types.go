@@ -28,6 +28,7 @@ const (
 	CritAncestor              Code = "CRIT_ANCESTOR"
 	ObjectOverridden          Code = "OBJECT_OVERRIDDEN"
 	ObjectDescendantOverriden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
+	ObjectMetadata            Code = "OBJECT_METADATA"
 )
 
 var (
@@ -84,7 +85,7 @@ type HierarchyConfigurationList struct {
 }
 
 // Code is a machine-readable string value summarizing the condition.
-// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR;OBJECT_OVERRIDDEN;OBJECT_DESCENDANT_OVERRIDDEN
+// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR;OBJECT_OVERRIDDEN;OBJECT_DESCENDANT_OVERRIDDEN;OBJECT_METADATA
 type Code string
 
 // Condition specifies the condition and the affected objects.
@@ -103,6 +104,9 @@ type Condition struct {
 	// - "OBJECT_OVERRIDDEN": an object in this namespace has been overridden from its parent and will no longer be updated
 	//
 	// - "OBJECT_DESCENDANT_OVERRIDDEN": an object in this namespace is no longer being propagated because a propagated copy has been modified
+	//
+	// - "OBJECT_METADATA": The object has metadata set that prevents it from being propagated to desencendant namespaces
+
 	Code Code   `json:"code,omitempty"`
 	Msg  string `json:"msg,omitempty"`
 
