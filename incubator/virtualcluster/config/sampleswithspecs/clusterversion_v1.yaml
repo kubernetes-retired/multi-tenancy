@@ -1,0 +1,352 @@
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: ClusterVersion
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: clusterversion-v1-light
+spec:
+  # a statefulset and service bundle for etcd
+  etcd:
+    metadata:
+      name: etcd 
+      namespace: vc-test
+    statefulset:
+      metadata:
+        name: vc-test/statefulset/etcd
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 10
+        serviceName: vc-test/service/etcd
+        selector:
+          matchLabels:
+            vc-test/component-name: etcd
+        strategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 1
+          type: RollingUpdate
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: etcd
+          spec:
+            containers:
+              - name: etcd
+                image: chaozheng/etcd-amd64:v3.3.9
+                imagePullPolicy: Always
+                env:
+                - name: ETCD_NAME 
+                  value: vc-test-etcd
+                - name: ETCD_LISTEN_PEER_URLS 
+                  value: https://0.0.0.0:2380
+                - name: ETCD_LISTEN_CLIENT_URLS 
+                  value: https://0.0.0.0:2379
+                - name: ETCD_INITIAL_ADVERTISE_PEER_URLS 
+                  value: https://etcd.vc-test.svc.cluster.local:2380
+                - name: ETCD_ADVERTISE_CLIENT_URLS
+                  value: https://etcd.vc-test.svc.cluster.local:2379
+                - name: ETCD_INITIAL_CLUSTER_STATE
+                - value: ETCD_INITIAL_CLUSTER_TOKEN 
+                  value: vc-test-etcd
+                - name: ETCD_INITIAL_CLUSTER
+                  value: etcd=https://etcd.vc-test.svc.cluster.local:2380
+                - name: ETCD_AUTO_COMPACTION_RETENTION
+                  value: "1"
+                - name: ETCD_SNAPSHOT_COUNT
+                  value: "10000"
+                - name: ETCD_MAX_SNAPSHOTS
+                  value: "5"
+                - name: ETCD_MAX_WALS
+                  value: "5"
+                - name: ETCD_HEARTBEAT_INTERVAL
+                  value: "1000"
+                - name: ETCD_ELECTION_TIMEOUT
+                  value: "10000"
+                - name: ETCD_QUOTA_BACKEND_BYTES
+                  value: "8589934592"
+                - name: ETCD_CLIENT_CERT_AUTH
+                  value: "true"
+                - name: ETCD_TRUSTED_CA_FILE
+                  value: /etc/kubernetes/pki/etcd/ca.crt
+                - name: ETCD_CERT_FILE
+                  value: /etc/kubernetes/pki/etcd/server.crt 
+                - name: ETCD_KEY_FILE
+                  value: /etc/kubernetes/pki/etcd/server.key
+                - name: ETCD_PEER_CLIENT_CERT_AUTH
+                  value: "true"
+                - name: ETCD_PEER_TRUSTED_CA_FILE 
+                  value: /etc/kubernetes/pki/etcd/ca.crt
+                - name: ETCD_PEER_CERT_FILE
+                  value: /etc/kubernetes/pki/etcd/peer.crt
+                - name: ETCD_PEER_KEY_FILE
+                  value: /etc/kubernetes/pki/etcd/peer.key
+                - name: ETCD_DATA_DIR
+                  value: /var/lib/etcd/data
+                command: 
+                - etcd
+                livenessProbe:
+                  exec:
+                    command:
+                    - /bin/sh
+                    - -ec
+                    - ETCDCTL_API=3 etcdctl --endpoints=etcd.vc-test.svc.cluster.local --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key get foo 
+                  failureThreshold: 8
+                  initialDelaySeconds: 60
+                  timeoutSeconds: 15
+                volumeMounts:
+                - mountPath: /var/lib/etvd/data
+                  name: etcd-data 
+                - mountPath: /etc/kubernetes/pki/etcd
+                  name: etcd-pki
+            volumes: 
+            - name: etcd-pki
+              secret:
+                defaultMode: 420
+                secretName: pkiSecret 
+    service:
+      metadata:
+        name: etcd
+        namespace: vc-test
+        annotations:
+          service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+      spec:
+        clusterIP: None
+        selector:
+          vc-test/component-name: etcd
+          vc-test/app-name: etcd 
+        ports:
+        - name: server
+          protocol: TCP
+          port: 2379
+          targetPort: 2379
+        - name: peer
+          protocol: TCP
+          port: 2380
+          targetPort: 2380
+  # a statefulset and service bundle for apiserver
+  apiServer:
+    metadata:
+      name: apiserver
+      namespace: vc-test
+    statefulset:
+      metadata:
+        name: vc-test/statefulset/apiserver
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 10
+        serviceName: apiserver
+        selector:
+          matchLabels:
+            vc-test/component-name: apiserver
+        strategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 1
+          type: RollingUpdate
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: apiserver
+          spec:
+            containers:
+              - name: apiserver
+                image: chaozheng/kok-apiserver
+                imagePullPolicy: Always
+                command:
+                  - kube-apiserver
+                args:
+                  - --secure-port=6443
+                  - --insecure-port=8080
+                  - --kubelet-https=false
+                  - --client-ca-file=/etc/kubernetes/pki/ca.crt
+                  - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+                  - --tls-private-key-file=/etc/kubernetes/pki/apiserver.key
+                  - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt
+                  - --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key
+                  - --enable-bootstrap-token-auth=true
+                  - --authorization-mode=Node,RBAC
+                  - --feature-gates=RotateKubeletServerCertificate=true
+                  - --feature-gates=VolumeSnapshotDataSource=true,KubeletPluginsWatcher=true,CSINodeInfo=true,CSIDriverRegistry=true
+                  - --feature-gates=RuntimeClass=true
+                  - --runtime-config=admissionregistration.k8s.io/v1alpha1
+                  - --etcd-servers=http://etcd.vc-test.svc.cluster.local
+                  - --etcd-servers=etcd.vc-test.svc.cluster.local
+                  - --etcd-cafile=/etc/kubernetes/pki/etcd-ca.crt
+                  - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+                  - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+                  - --allow-privileged=true
+                  - --apiserver-count=1
+                  - --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+                  - --requestheader-username-headers=X-Remote-User
+                  - --requestheader-group-headers=X-Remote-Group
+                  - --requestheader-extra-headers-prefix=X-Remote-Extra-
+                  - --requestheader-allowed-names=front-proxy-client
+                  - --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+                  - --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+                  - --service-account-key-file=/etc/kubernetes/pki/sa.pub
+                  - --enable-admission-plugins="NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,ResourceQuota,Initializers,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ContainerState,NetworkStatus,ReadinessGate,WebhookCAInjector"
+                  - --log-dir=/logs
+                  - --logtostderr=false
+                  - --alsologtostderr=false
+                  - --v=4
+                  - --anonymous-auth=true
+                  - --service-cluster-ip-range=172.16.0.0/16
+                  - --guaranteed-pod-oom-score-adj=-1
+                ports:
+                - containerPort: 6443
+                  name: api
+                livenessProbe:
+                  failureThreshold: 8
+                  httpGet:
+                    path: /healthz
+                    port: 6443
+                    scheme: HTTPS
+                  initialDelaySeconds: 15
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 15
+                volumeMounts:
+                - mountPath: /etc/kubernetes/pki
+                  name: master-pki
+                  readOnly: true
+                - mountPath: /logs
+                  name: logs
+                - mountPath: /etc/ssl
+                  name: etc-ssl
+                  readOnly: true
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            dnsConfig:
+              searches:
+              - cluster.local
+            tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            volumes:
+            - name: master-pki
+              secret:
+                defaultMode: 420
+                secretName: master-pki
+            - name: logs
+              hostPath:
+                path: /home/t4/sigma-master/kok-minikube/logs/apiserver
+                type: DirectoryOrCreate
+            - name: audit-policy
+              configMap:
+                defaultMode: 420
+                name: apiserver-audit-config
+            - name: audit-logs
+              hostPath:
+                path: /home/t4/sigma-master/kok-minikube/audit/
+                type: DirectoryOrCreate
+            - name: etc-ssl
+              hostPath:
+                path: /etc/ssl
+                type: Directory  
+    service:
+      metadata:
+        name: apiserver
+      spec:
+        selector:
+          vc-test/component-name: apiserver
+        type: NodePort
+        ports:
+        - nodePort: 30443
+          port: 6443
+          protocol: TCP
+          targetPort: api
+  # a statefulset and service bundle for controller-manager
+  controllerManager:
+    metadata:
+      name: ctrl-mgr 
+      namespace: vc-test
+    # statefuleset template for controller-manager
+    statefulset:  
+      metadata:
+        name: vc-test/statefulset/controller-manager
+      spec:
+        serviceName: controller-manager
+        replicas: 3 
+        selector:
+          matchLabels:
+            vc-test/component-name: controller-manager
+        strategy:
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 1
+          type: RollingUpdate
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: controller-manager
+          spec:
+            containers:
+            - name: controller-manager
+              imagePullPolicy: Always
+              image: chaozheng/kok-ctrl-manager
+              command:
+              - kube-controller-manager
+              args:
+              - --bind-address=127.0.0.1
+              - --kubeconfig=/etc/kubernetes/kubeconfig/controller-manager.kubeconfig
+              - --authentication-kubeconfig=/etc/kubernetes/kubeconfig/controller-manager.kubeconfig
+              - --root-ca-file=/etc/kubernetes/pki/ca.crt
+              - --cluster-signing-key-file=/etc/kubernetes/pki/ca.key
+              - --cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt
+              - --use-service-account-credentials=true
+              - --service-account-private-key-file=/etc/kubernetes/pki/sa.key
+              - --controllers='*,bootstrapsigner,tokencleaner'
+              - --feature-gates=RotateKubeletServerCertificate=true,TTLAfterFinished=true
+              - --feature-gates=ScheduleDaemonSetPods=false
+              - --experimental-cluster-signing-duration=87600h
+              - --leader-elect=true
+              - --log-dir=/logs
+              - --logtostderr=false
+              - --alsologtostderr=false
+              - --v=4
+              livenessProbe:
+                failureThreshold: 8
+                httpGet:
+                  path: /healthz
+                  port: 10252
+                  scheme: HTTP
+                initialDelaySeconds: 15
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 15
+              volumeMounts:
+                - mountPath: /etc/kubernetes/pki
+                  name: master-pki
+                  readOnly: true
+                - mountPath: /etc/kubernetes/kubeconfig
+                  name: kubeconfig
+                  readOnly: true
+                - mountPath: /logs
+                  name: logs
+            tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            volumes:
+            - name: master-pki
+              secret:
+                defaultMode: 420
+                secretName: master-pki
+            - name: kubeconfig
+              secret:
+                defaultMode: 420
+                secretName: controller-manager.kubeconfig
+            - hostPath:
+                path: /home/t4/sigma-master/kok-minikube/logs/controller-manager
+                type: DirectoryOrCreate
+              name: logs
+    # a headless service for controller-manager
+    service:
+      metadata:
+        name: controller-manager
+        namespace: vc-test
+      spec:
+        selector:
+          vc-test/component-name: controller-manager
+        clusterIP: None
+    
+    

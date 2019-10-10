@@ -12,7 +12,6 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/spf13/cobra v0.0.0-20180319062004-c439c4fa0937
 	github.com/spf13/pflag v1.0.3
-	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 // indirect
 	golang.org/x/net v0.0.0-20190812203447-cdfb69ac37fc
 	golang.org/x/sys v0.0.0-20190429190828-d89cdac9e872 // indirect
 	golang.org/x/text v0.3.2 // indirect
@@ -21,6 +20,7 @@ require (
 	k8s.io/apimachinery v0.0.0
 	k8s.io/apiserver v0.0.0
 	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
+	k8s.io/component-base v0.0.0
 	k8s.io/cri-api v0.0.0
 	k8s.io/klog v0.3.1
 	k8s.io/kubernetes v1.15.3
