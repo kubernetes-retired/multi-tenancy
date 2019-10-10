@@ -1,3 +1,5 @@
+.PHONY: all fmt vet generate
+
 # Explicitly opt into go modules, even though we're inside a GOPATH directory
 export GO111MODULE=on
 
