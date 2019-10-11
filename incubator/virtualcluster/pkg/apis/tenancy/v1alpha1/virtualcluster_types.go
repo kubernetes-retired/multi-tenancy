@@ -17,22 +17,98 @@ limitations under the License.
 package v1alpha1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // VirtualclusterSpec defines the desired state of Virtualcluster
 type VirtualclusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ClusterDomain is the domain name of the virtual cluster
+	// e.g. a pod dns will be
+	// {some-pod}.{some-namespace}.svc.{ClusterDomain}
+	// +optional
+	ClusterDomain string `json:"clusterDomain,omitempty"`
+
+	// The name of the desired cluster version
+	ClusterVersionName string `json:"clusterVersionName"`
+
+	// The valid period of the tenant cluster PKI, if not set
+	// the PKI will never expire (i.e. 10 years)
+	// +optional
+	PKIExpireDays int64 `json:"pkiExpireDays,omitempty"`
+
+	// The Node Selector for deploying Component
+	// +optional
+	NodeSelector map[string]string
+}
+
+type StatefulSetSvcBundle struct {
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// StatefulSet that manages the specified component
+	StatefulSet *appsv1.StatefulSet `json:"statefulset,omitempty"`
+
+	// Service that exposes the StatefulSet
+	Service *corev1.Service `json:"service,omitempty"`
 }
 
 // VirtualclusterStatus defines the observed state of Virtualcluster
 type VirtualclusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// cluster phase of the virtual cluster
+	Phase ClusterPhase `json:"phase"`
+
+	// A human readable message indicating details about why the cluster is in
+	// this condition.
+	// +optional
+	Message string `json:"message"`
+
+	// A brief CamelCase message indicating details about why the cluster is in
+	// this state.
+	// e.g. 'Evicted'
+	// +optional
+	Reason string `json:"reason"`
+
+	// Cluster Conditions
+	Conditions []ClusterCondition `json:"conditions,omitempty"`
+
+	// Version publish history
+	ClusterVersionHistory []ClusterVersionHistory `json:"versionHistory,omitempty"`
+}
+
+type ClusterPhase string
+
+const (
+	// Cluster is processed by Operator, but not all components are ready
+	ClusterPending ClusterPhase = "Pending"
+
+	// All components are ready
+	ClusterRunning ClusterPhase = "Running"
+
+	// when update cluster spec, phase will be updating
+	ClusterUpdating ClusterPhase = "Updating"
+
+	// Cluster can not be initiated, or occur the error that Operator
+	// can not recover
+	ClusterError ClusterPhase = "Error"
+)
+
+type ClusterCondition struct {
+	// Cluster Condition Status
+	// Can be True, False, Unknown.
+	Status corev1.ConditionStatus `json:"status"`
+
+	// Last time the condition transitioned from one status to another.
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// Unique, one-word, CamelCase reason for the condition's last transition.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// Human-readable message indicating details about last transition.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +genclient

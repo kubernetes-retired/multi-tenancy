@@ -21,8 +21,96 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            clusterDomain:
+              type: string
+            clusterVersionName:
+              type: string
+            pkiExpireDays:
+              format: int64
+              type: integer
+          required:
+          - clusterVersionName
           type: object
         status:
+          properties:
+            conditions:
+              items:
+                properties:
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  reason:
+                    type: string
+                  status:
+                    type: string
+                required:
+                - status
+                type: object
+              type: array
+            message:
+              type: string
+            phase:
+              type: string
+            reason:
+              type: string
+            versionHistory:
+              items:
+                properties:
+                  ClusterVersionName:
+                    type: string
+                  clusterVersion:
+                    properties:
+                      apiVersion:
+                        type: string
+                      kind:
+                        type: string
+                      metadata:
+                        type: object
+                      spec:
+                        properties:
+                          apiServer:
+                            properties:
+                              metadata:
+                                type: object
+                              service:
+                                type: object
+                              statefulset:
+                                type: object
+                            type: object
+                          controllerManager:
+                            properties:
+                              metadata:
+                                type: object
+                              service:
+                                type: object
+                              statefulset:
+                                type: object
+                            type: object
+                          etcd:
+                            properties:
+                              metadata:
+                                type: object
+                              service:
+                                type: object
+                              statefulset:
+                                type: object
+                            type: object
+                        type: object
+                      status:
+                        type: object
+                    type: object
+                required:
+                - ClusterVersionName
+                - clusterVersion
+                type: object
+              type: array
+          required:
+          - phase
+          - message
+          - reason
           type: object
       type: object
   version: v1alpha1
