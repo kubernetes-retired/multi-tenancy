@@ -21,6 +21,79 @@ spec:
         metadata:
           type: object
         spec:
+          properties:
+            apiServer:
+              properties:
+                metadata:
+                  type: object
+                options:
+                  items:
+                    properties:
+                      defaultValue:
+                        type: string
+                      description:
+                        type: string
+                      metadata:
+                        type: object
+                      required:
+                        type: boolean
+                    required:
+                    - required
+                    type: object
+                  type: array
+                service:
+                  type: object
+                statefulset:
+                  type: object
+              type: object
+            controllerManager:
+              properties:
+                metadata:
+                  type: object
+                options:
+                  items:
+                    properties:
+                      defaultValue:
+                        type: string
+                      description:
+                        type: string
+                      metadata:
+                        type: object
+                      required:
+                        type: boolean
+                    required:
+                    - required
+                    type: object
+                  type: array
+                service:
+                  type: object
+                statefulset:
+                  type: object
+              type: object
+            etcd:
+              properties:
+                metadata:
+                  type: object
+                options:
+                  items:
+                    properties:
+                      defaultValue:
+                        type: string
+                      description:
+                        type: string
+                      metadata:
+                        type: object
+                      required:
+                        type: boolean
+                    required:
+                    - required
+                    type: object
+                  type: array
+                service:
+                  type: object
+                statefulset:
+                  type: object
+              type: object
           type: object
         status:
           type: object

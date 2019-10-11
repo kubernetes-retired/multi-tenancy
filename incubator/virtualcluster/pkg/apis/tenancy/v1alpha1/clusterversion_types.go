@@ -27,6 +27,9 @@ import (
 type ClusterVersionSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	APIServer         *StatefulSetSvcBundle `json:"apiServer,omitempty"`
+	ControllerManager *StatefulSetSvcBundle `json:"controllerManager,omitempty"`
+	ETCD              *StatefulSetSvcBundle `json:"etcd,omitempty"`
 }
 
 // ClusterVersionStatus defines the observed state of ClusterVersion
@@ -57,6 +60,12 @@ type ClusterVersionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ClusterVersion `json:"items"`
+}
+
+type ClusterVersionHistory struct {
+	ClusterVersionName string         `json:"ClusterVersionName"`
+	ClusterVersion     ClusterVersion `json:"clusterVersion"`
+	AppliedAt          metav1.Time    `json:"appliedAt"`
 }
 
 func init() {
