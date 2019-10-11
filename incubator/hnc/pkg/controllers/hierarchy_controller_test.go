@@ -40,38 +40,21 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{fooName}))
 	})
 
-	It("should set a condition if the parent is missing", func() {
+	It("should set CritParentMissing condition if the parent is missing", func() {
 		// Set up the parent-child relationship
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(func() bool {
-			barHier = getHierarchy(ctx, barName)
-			for _, cond := range barHier.Status.Conditions {
-				if cond.Code == tenancy.CritParentMissing {
-					return true
-				}
-			}
-			return false
-		}).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
 	})
 
-	It("should resolve the condition if the parent is later created", func() {
+	It("should unset CritParentMissing condition if the parent is later created", func() {
 		// Set up the parent-child relationship with the missing name
 		brumpfName := createNSName("brumpf")
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, barHier)
-		isMissing := func() bool {
-			barHier = getHierarchy(ctx, barName)
-			for _, cond := range barHier.Status.Conditions {
-				if cond.Code == tenancy.CritParentMissing {
-					return true
-				}
-			}
-			return false
-		}
-		Eventually(isMissing).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
 
 		// Create the missing parent
 		brumpfNS := &corev1.Namespace{}
@@ -79,7 +62,7 @@ var _ = Describe("Hierarchy", func() {
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
 
 		// Ensure the condition is resolved on the child
-		Eventually(isMissing).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
 		Eventually(func() []string {
@@ -88,16 +71,14 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{barName}))
 	})
 
-	It("should set a condition if a self-cycle is detected", func() {
+	It("should set CritParentInvalid condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
 		updateHierarchy(ctx, fooHier)
-		Eventually(func() []tenancy.Condition {
-			return getHierarchy(ctx, fooName).Status.Conditions
-		}).ShouldNot(BeNil())
+		Eventually(hasCondition(ctx, fooName, tenancy.CritParentInvalid)).Should(Equal(true))
 	})
 
-	It("should set a condition if a cycle is detected", func() {
+	It("should set CritParentInvalid condition if a cycle is detected", func() {
 		// Set up initial hierarchy
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = fooName
@@ -110,9 +91,7 @@ var _ = Describe("Hierarchy", func() {
 		fooHier := getHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(func() []tenancy.Condition {
-			return getHierarchy(ctx, fooName).Status.Conditions
-		}).ShouldNot(BeNil())
+		Eventually(hasCondition(ctx, fooName, tenancy.CritParentInvalid)).Should(Equal(true))
 	})
 
 	It("should create a child namespace if requested", func() {
@@ -130,7 +109,7 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{barName}))
 	})
 
-	It("should report a condition if a required child belongs elsewhere", func() {
+	It("should set CritRequiredChildConflict condition if a required child belongs elsewhere", func() {
 		bazName := createNS(ctx, "baz")
 
 		// Make baz a child of foo
@@ -146,28 +125,10 @@ var _ = Describe("Hierarchy", func() {
 		barHier.Spec.RequiredChildren = []string{bazName}
 		updateHierarchy(ctx, barHier)
 
-		// Verify that all three namespaces have at least one condition
-		Eventually(func() bool {
-			conds := getHierarchy(ctx, fooName).Status.Conditions
-			if len(conds) > 0 {
-				fmt.Printf("Conditions for foo: %+v\n", conds)
-			}
-			return len(conds) > 0
-		}).Should(BeTrue())
-		Eventually(func() bool {
-			conds := getHierarchy(ctx, barName).Status.Conditions
-			if len(conds) > 0 {
-				fmt.Printf("Conditions for bar: %+v\n", conds)
-			}
-			return len(conds) > 0
-		}).Should(BeTrue())
-		Eventually(func() bool {
-			conds := getHierarchy(ctx, bazName).Status.Conditions
-			if len(conds) > 0 {
-				fmt.Printf("Conditions for baz: %+v\n", conds)
-			}
-			return len(conds) > 0
-		}).Should(BeTrue())
+		// Verify that all three namespaces have CritRequiredChildConflict condition set.
+		Eventually(hasCondition(ctx, fooName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
+		Eventually(hasCondition(ctx, bazName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
 	})
 
 	It("should have a tree label", func() {
@@ -218,6 +179,18 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal("0"))
 	})
 })
+
+func hasCondition(ctx context.Context, nm string, code tenancy.Code) func() bool {
+	return func() bool {
+		conds := getHierarchy(ctx, nm).Status.Conditions
+		for _, cond := range conds {
+			if cond.Code == code {
+				return true
+			}
+		}
+		return false
+	}
+}
 
 func newHierarchy(nm string) *tenancy.HierarchyConfiguration {
 	hier := &tenancy.HierarchyConfiguration{}
