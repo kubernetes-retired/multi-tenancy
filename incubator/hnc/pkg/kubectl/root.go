@@ -99,7 +99,7 @@ func getHierarchy(nnm string) *tenancy.HierarchyConfiguration {
 	hier := &tenancy.HierarchyConfiguration{}
 	hier.Name = tenancy.Singleton
 	hier.Namespace = nnm
-	err := hncClient.Get().Resource("hierarchies").Namespace(nnm).Name(tenancy.Singleton).Do().Into(hier)
+	err := hncClient.Get().Resource("hierarchyconfigurations").Namespace(nnm).Name(tenancy.Singleton).Do().Into(hier)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error reading hierarchy for %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -111,9 +111,9 @@ func updateHierarchy(hier *tenancy.HierarchyConfiguration, reason string) {
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {
-		err = hncClient.Post().Resource("hierarchies").Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
+		err = hncClient.Post().Resource("hierarchyconfigurations").Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
 	} else {
-		err = hncClient.Put().Resource("hierarchies").Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
+		err = hncClient.Put().Resource("hierarchyconfigurations").Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
 	}
 	if err != nil {
 		fmt.Printf("Error %s: %s\n", reason, err)
