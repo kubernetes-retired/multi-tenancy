@@ -154,6 +154,7 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	}
 
 	// Clear locally-set conditions in the forest so we can set them to the latest.
+	hadCrit := ns.HasCritCondition()
 	ns.ClearConditions(forest.Local)
 
 	r.markExisting(log, ns)
@@ -161,15 +162,13 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	r.syncRequiredChildOf(log, inst, ns)
 	r.syncParent(log, inst, ns)
 
-	// TODO add CRIT_ANCESTOR condition
-
 	// Update the list of actual children, then resolve it versus the list of required children.
 	r.syncChildren(log, inst, ns)
 
 	r.syncLabel(log, nsInst, ns)
 
-	// Convert and pass in-memory conditions to Hierarchy object.
-	inst.Status.Conditions = ns.Conditions(log)
+	// Sync all conditions. This should be placed at the end after all conditions are updated.
+	r.syncConditions(log, inst, ns, hadCrit)
 }
 
 func (r *HierarchyReconciler) onMissingNamespace(log logr.Logger, ns *forest.Namespace, nsInst *corev1.Namespace) bool {
@@ -338,6 +337,52 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *tenancy.Hierar
 			msg := fmt.Sprintf("required child namespace %s is already a child namespace of %s", cn, cns.RequiredChildOf)
 			ns.SetCondition(forest.Local, tenancy.CritRequiredChildConflict, msg)
 		}
+	}
+}
+
+func (r *HierarchyReconciler) syncConditions(log logr.Logger, inst *tenancy.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
+	// Sync critical conditions after all locally-set conditions are updated.
+	r.syncCritConditions(log, ns, hadCrit)
+
+	// Convert and pass in-memory conditions to HierarchyConfiguration object.
+	inst.Status.Conditions = ns.Conditions(log)
+	setCritAncestorCondition(log, inst, ns)
+}
+
+// syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
+// namespace are gone or critical conditions are newly found.
+func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
+	hasCrit := ns.HasCritCondition()
+
+	// Early exit if there's no need to enqueue relatives.
+	if hadCrit == hasCrit {
+		return
+	}
+
+	msg := "added"
+	if hadCrit == true {
+		msg = "removed"
+	}
+	log.Info("Critical conditions are " + msg)
+	r.enqueueAffected(log, "descendant of a namespace with critical conditions "+msg, ns.DescendantNames()...)
+}
+
+func setCritAncestorCondition(log logr.Logger, inst *tenancy.HierarchyConfiguration, ns *forest.Namespace) {
+	ans := ns.Parent()
+	for ans != nil {
+		if !ans.HasCritCondition() {
+			ans = ans.Parent()
+			continue
+		}
+		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
+		msg := fmt.Sprintf("%s is the most recent ancestor with a critical condition", ans.Name())
+		condition := tenancy.Condition{
+			Code:    tenancy.CritAncestor,
+			Msg:     msg,
+			Affects: []tenancy.AffectedObject{{Namespace: ans.Name()}},
+		}
+		inst.Status.Conditions = append(inst.Status.Conditions, condition)
+		return
 	}
 }
 

@@ -233,9 +233,22 @@ func (ns *Namespace) HasCondition() bool {
 	return len(ns.conditions) > 0
 }
 
+// HasCritCondition returns if the namespace has any critical condition.
+func (ns *Namespace) HasCritCondition() bool {
+	// For now, all the critical conditions are set locally. It may not be true for
+	// future critical conditions. We may not want to just use local conditions.
+	return ns.GetCondition(Local) != nil
+}
+
 // ClearConditions clears local conditions in the namespace.
 func (ns *Namespace) ClearConditions(key string) {
 	delete(ns.conditions, key)
+}
+
+// GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
+func (ns *Namespace) GetCondition(key string) []condition {
+	c, _ := ns.conditions[key]
+	return c
 }
 
 // SetCondition adds a condition into the list of conditions for key string, returning
