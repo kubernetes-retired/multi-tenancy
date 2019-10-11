@@ -22,21 +22,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // VirtualclusterSpec defines the desired state of Virtualcluster
 type VirtualclusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// ClusterConfig contains information of the tenant cluster, such as
-	// apiversion and cluster domain
+	// ClusterDomain is the domain name of the virtual cluster
+	// e.g. a pod dns will be
+	// {some-pod}.{some-namespace}.svc.{ClusterDomain}
 	// +optional
 	ClusterDomain string `json:"clusterDomain,omitempty"`
 
-	// The name of the desired cluster version, if not set,
-	// config of each component need to be provided respectively
+	// The name of the desired cluster version
 	ClusterVersionName string `json:"clusterVersionName"`
 
 	// The valid period of the tenant cluster PKI, if not set
@@ -52,16 +46,16 @@ type VirtualclusterSpec struct {
 type StatefulSetSvcBundle struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// StatefulSet that manages the specified component
 	StatefulSet *appsv1.StatefulSet `json:"statefulset,omitempty"`
 
-	// Service that exposes the statefulset
+	// Service that exposes the StatefulSet
 	Service *corev1.Service `json:"service,omitempty"`
 }
 
 // VirtualclusterStatus defines the observed state of Virtualcluster
 type VirtualclusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// cluster phase of the virtual cluster
 	Phase ClusterPhase `json:"phase"`
 
 	// A human readable message indicating details about why the cluster is in
@@ -94,7 +88,7 @@ const (
 	// when update cluster spec, phase will be updating
 	ClusterUpdating ClusterPhase = "Updating"
 
-	// Cluster can not be inited, or occur the error that Operator
+	// Cluster can not be initiated, or occur the error that Operator
 	// can not recover
 	ClusterError ClusterPhase = "Error"
 )
@@ -103,10 +97,6 @@ type ClusterCondition struct {
 	// Cluster Condition Status
 	// Can be True, False, Unknown.
 	Status corev1.ConditionStatus `json:"status"`
-
-	// Last time we probed the condition.
-	// +optional
-	LastProbeTime metav1.Time `json:"lastProbeTime,omitempty"`
 
 	// Last time the condition transitioned from one status to another.
 	// +optional

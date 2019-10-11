@@ -20,22 +20,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // ClusterVersionSpec defines the desired state of ClusterVersion
 type ClusterVersionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	APIServer         *StatefulSetSvcBundle `json:"apiServer,omitempty"`
+	// APIserver configuration of the virtual cluster
+	APIServer *StatefulSetSvcBundle `json:"apiServer,omitempty"`
+
+	// Controller-manager configuration of the virtual cluster
 	ControllerManager *StatefulSetSvcBundle `json:"controllerManager,omitempty"`
-	ETCD              *StatefulSetSvcBundle `json:"etcd,omitempty"`
+
+	// ETCD configuration of the virtual cluster
+	ETCD *StatefulSetSvcBundle `json:"etcd,omitempty"`
 }
 
 // ClusterVersionStatus defines the observed state of ClusterVersion
 type ClusterVersionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +genclient
@@ -62,6 +60,7 @@ type ClusterVersionList struct {
 	Items           []ClusterVersion `json:"items"`
 }
 
+// ClusterVersionHistory contains ClusterVersions used by associated Virtualcluster
 type ClusterVersionHistory struct {
 	ClusterVersionName string         `json:"ClusterVersionName"`
 	ClusterVersion     ClusterVersion `json:"clusterVersion"`
