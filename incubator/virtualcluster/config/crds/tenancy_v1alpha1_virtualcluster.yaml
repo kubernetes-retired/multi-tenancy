@@ -26,27 +26,6 @@ spec:
               type: string
             clusterVersionName:
               type: string
-            externalUsers:
-              items:
-                properties:
-                  expireDays:
-                    format: int64
-                    type: integer
-                  groups:
-                    items:
-                      type: string
-                    type: array
-                  name:
-                    type: string
-                  username:
-                    type: string
-                required:
-                - name
-                - expireDays
-                - username
-                - groups
-                type: object
-              type: array
             pkiExpireDays:
               format: int64
               type: integer
@@ -87,9 +66,6 @@ spec:
                 properties:
                   ClusterVersionName:
                     type: string
-                  appliedAt:
-                    format: date-time
-                    type: string
                   clusterVersion:
                     properties:
                       apiVersion:
@@ -104,21 +80,6 @@ spec:
                             properties:
                               metadata:
                                 type: object
-                              options:
-                                items:
-                                  properties:
-                                    defaultValue:
-                                      type: string
-                                    description:
-                                      type: string
-                                    metadata:
-                                      type: object
-                                    required:
-                                      type: boolean
-                                  required:
-                                  - required
-                                  type: object
-                                type: array
                               service:
                                 type: object
                               statefulset:
@@ -128,21 +89,6 @@ spec:
                             properties:
                               metadata:
                                 type: object
-                              options:
-                                items:
-                                  properties:
-                                    defaultValue:
-                                      type: string
-                                    description:
-                                      type: string
-                                    metadata:
-                                      type: object
-                                    required:
-                                      type: boolean
-                                  required:
-                                  - required
-                                  type: object
-                                type: array
                               service:
                                 type: object
                               statefulset:
@@ -152,21 +98,6 @@ spec:
                             properties:
                               metadata:
                                 type: object
-                              options:
-                                items:
-                                  properties:
-                                    defaultValue:
-                                      type: string
-                                    description:
-                                      type: string
-                                    metadata:
-                                      type: object
-                                    required:
-                                      type: boolean
-                                  required:
-                                  - required
-                                  type: object
-                                type: array
                               service:
                                 type: object
                               statefulset:
@@ -179,7 +110,6 @@ spec:
                 required:
                 - ClusterVersionName
                 - clusterVersion
-                - appliedAt
                 type: object
               type: array
           required:

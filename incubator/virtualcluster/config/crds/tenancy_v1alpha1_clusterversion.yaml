@@ -26,21 +26,6 @@ spec:
               properties:
                 metadata:
                   type: object
-                options:
-                  items:
-                    properties:
-                      defaultValue:
-                        type: string
-                      description:
-                        type: string
-                      metadata:
-                        type: object
-                      required:
-                        type: boolean
-                    required:
-                    - required
-                    type: object
-                  type: array
                 service:
                   type: object
                 statefulset:
@@ -50,21 +35,6 @@ spec:
               properties:
                 metadata:
                   type: object
-                options:
-                  items:
-                    properties:
-                      defaultValue:
-                        type: string
-                      description:
-                        type: string
-                      metadata:
-                        type: object
-                      required:
-                        type: boolean
-                    required:
-                    - required
-                    type: object
-                  type: array
                 service:
                   type: object
                 statefulset:
@@ -74,21 +44,6 @@ spec:
               properties:
                 metadata:
                   type: object
-                options:
-                  items:
-                    properties:
-                      defaultValue:
-                        type: string
-                      description:
-                        type: string
-                      metadata:
-                        type: object
-                      required:
-                        type: boolean
-                    required:
-                    - required
-                    type: object
-                  type: array
                 service:
                   type: object
                 statefulset:

@@ -44,10 +44,6 @@ type VirtualclusterSpec struct {
 	// +optional
 	PKIExpireDays int64 `json:"pkiExpireDays"`
 
-	// the External Users (kubeconfig) need to be generated and stored to Secret
-	// +optional
-	ExternalUsers []ExternalUser `json:"externalUsers,omitempty"`
-
 	// The Node Selector for deploying Component
 	// +optional
 	NodeSelector map[string]string
@@ -56,43 +52,10 @@ type VirtualclusterSpec struct {
 type StatefulSetSvcBundle struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// Options allow users to specify command line options for
-	// this component
-	Options []ComponentOption `json:"options,omitempty"`
-
 	StatefulSet *appsv1.StatefulSet `json:"statefulset,omitempty"`
 
 	// Service that exposes the statefulset
 	Service *corev1.Service `json:"service,omitempty"`
-}
-
-type ComponentOption struct {
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// value of this options
-	// e.g. '*,bootstrapsigner,tokencleaner' for the `--controllers` option
-	Value *string `json:"defaultValue,omitempty"`
-
-	// Required
-	Required bool `json:"required"`
-
-	// The description of this option
-	Description *string `json:"description,omitempty"`
-}
-
-type ExternalUser struct {
-	// Name of the user, also used as the prefix of the secret Name.
-	// eg. if Name is admin, the Secret Name will be admin.kubeconfig
-	Name string `json:"name"`
-
-	// TLS Client Cert expire days
-	ExpireDays int64 `json:"expireDays"`
-
-	// RBAC Username
-	Username string `json:"username"`
-
-	// RBAC Groups
-	Groups []string `json:"groups"`
 }
 
 // VirtualclusterStatus defines the observed state of Virtualcluster

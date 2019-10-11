@@ -65,7 +65,6 @@ type ClusterVersionList struct {
 type ClusterVersionHistory struct {
 	ClusterVersionName string         `json:"ClusterVersionName"`
 	ClusterVersion     ClusterVersion `json:"clusterVersion"`
-	AppliedAt          metav1.Time    `json:"appliedAt"`
 }
 
 func init() {
