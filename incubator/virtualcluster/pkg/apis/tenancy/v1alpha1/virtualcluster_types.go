@@ -33,7 +33,7 @@ type VirtualclusterSpec struct {
 	// ClusterConfig contains information of the tenant cluster, such as
 	// apiversion and cluster domain
 	// +optional
-	ClusterDomain string `json:"clusterDomain"`
+	ClusterDomain string `json:"clusterDomain,omitempty"`
 
 	// The name of the desired cluster version, if not set,
 	// config of each component need to be provided respectively
@@ -42,7 +42,7 @@ type VirtualclusterSpec struct {
 	// The valid period of the tenant cluster PKI, if not set
 	// the PKI will never expire (i.e. 10 years)
 	// +optional
-	PKIExpireDays int64 `json:"pkiExpireDays"`
+	PKIExpireDays int64 `json:"pkiExpireDays,omitempty"`
 
 	// The Node Selector for deploying Component
 	// +optional

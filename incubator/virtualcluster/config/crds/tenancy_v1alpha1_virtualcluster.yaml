@@ -30,9 +30,7 @@ spec:
               format: int64
               type: integer
           required:
-          - clusterDomain
           - clusterVersionName
-          - pkiExpireDays
           type: object
         status:
           properties:
