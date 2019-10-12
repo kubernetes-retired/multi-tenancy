@@ -32,6 +32,7 @@ const (
 
 var (
 	Singleton = "hierarchy"
+	Resource  = "hierarchyconfigurations"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
