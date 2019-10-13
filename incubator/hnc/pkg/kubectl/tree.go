@@ -17,6 +17,7 @@ package kubectl
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -33,18 +35,29 @@ var (
 
 var treeCmd = &cobra.Command{
 	Use:   "tree",
-	Short: "Displays the hierarchy tree rooted at the given namespace",
-	Args:  cobra.ExactArgs(1),
+	Short: "Displays the hierarchy tree rooted at the given namespaces separated by space and if no namespace is provided, displays the tree starting at every root namespace on the cluster.",
 	Run: func(cmd *cobra.Command, args []string) {
-		nnm := args[0]
+		defaultList := len(args) == 0
 		footnotesByMsg = map[string]int{}
 		footnotes = []string{}
-		hier := getHierarchy(nnm)
-		fmt.Println(nameAndFootnotes(hier))
-		printSubtree("", hier)
-
+		var nsList []string
+		if defaultList {
+			nsList = getAllNamespaces()
+		} else {
+			nsList = args
+		}
+		for _, nnm := range nsList {
+			hier := getHierarchy(nnm)
+			//If we're showing the default list, skip all non-root namespaces since they'll be displayed as part of another namespace's tree.
+			if defaultList && hier.Spec.Parent != "" {
+				continue
+			}
+			fmt.Println(nameAndFootnotes(hier))
+			printSubtree("", hier)
+		}
 		if len(footnotes) > 0 {
 			fmt.Printf("\nConditions:\n")
+
 			for i, n := range footnotes {
 				fmt.Printf("%d) %s\n", i+1, n)
 			}
@@ -92,4 +105,18 @@ func nameAndFootnotes(hier *tenancy.HierarchyConfiguration) string {
 
 func init() {
 	rootCmd.AddCommand(treeCmd)
+}
+
+func getAllNamespaces() []string {
+	nsList, err := k8sClient.CoreV1().Namespaces().List(metav1.ListOptions{})
+	if err != nil {
+		fmt.Printf("Could not list namespaces: %s\n", err)
+		os.Exit(1)
+	}
+	result := []string{}
+	for _, each := range nsList.Items {
+		result = append(result, each.Name)
+	}
+	sort.Strings(result)
+	return result
 }
