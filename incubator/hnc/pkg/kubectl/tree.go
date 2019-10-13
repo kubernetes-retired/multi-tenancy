@@ -40,7 +40,7 @@ var treeCmd = &cobra.Command{
 		footnotesByMsg = map[string]int{}
 		footnotes = []string{}
 		hier := getHierarchy(nnm)
-		fmt.Println(nameAndFootnotes(hier))
+		fmt.Println(nameAndFootnotes(hier, nnm))
 		printSubtree("", hier)
 
 		if len(footnotes) > 0 {
@@ -53,9 +53,12 @@ var treeCmd = &cobra.Command{
 }
 
 func printSubtree(prefix string, hier *tenancy.HierarchyConfiguration) {
+	if hier == nil {
+		return
+	}
 	for i, cn := range hier.Status.Children {
 		ch := getHierarchy(cn)
-		tx := nameAndFootnotes(ch)
+		tx := nameAndFootnotes(ch, cn)
 		if i < len(hier.Status.Children)-1 {
 			fmt.Printf("%s├── %s\n", prefix, tx)
 			printSubtree(prefix+"|   ", ch)
@@ -66,7 +69,10 @@ func printSubtree(prefix string, hier *tenancy.HierarchyConfiguration) {
 	}
 }
 
-func nameAndFootnotes(hier *tenancy.HierarchyConfiguration) string {
+func nameAndFootnotes(hier *tenancy.HierarchyConfiguration, nnm string) string {
+	if hier == nil {
+		return fmt.Sprintf("%s (not found on apiserver)", nnm)
+	}
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
 		txt := cond.Msg

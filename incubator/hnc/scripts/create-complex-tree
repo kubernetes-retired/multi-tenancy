@@ -1,0 +1,15 @@
+#!/bin/bash
+
+echo You may need to run this script several times until all the parent namespaces
+echo have been created.
+kubectl hnc sub default foo
+kubectl hnc sub foo foot
+kubectl hnc sub foo fooz
+kubectl hnc sub fooz zoof
+kubectl hnc sub default bar
+kubectl hnc sub bar barracuda
+kubectl hnc sub bar bart
+kubectl hnc sub default baz
+kubectl hnc sub baz bazar
+kubectl hnc sub bazar bizzare
+kubectl hnc sub bizzare blizzard
