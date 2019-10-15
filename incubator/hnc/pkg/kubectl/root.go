@@ -117,3 +117,12 @@ func updateHierarchy(hier *tenancy.HierarchyConfiguration, reason string) {
 		os.Exit(1)
 	}
 }
+
+func childNamespaceExists(hier *tenancy.HierarchyConfiguration, cn string) bool {
+	for _, n := range hier.Spec.RequiredChildren {
+		if cn == n {
+			return true
+		}
+	}
+	return false
+}
