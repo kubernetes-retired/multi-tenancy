@@ -17,7 +17,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -104,39 +103,83 @@ func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, n
 // update deletes this object if it's an obsolete copy, and otherwise ensures it's been propagated
 // to any child namespaces.
 func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
-	// Make sure this object is correct and supposed to propagate. If not, delete it or mark it as
-	// modified. This should trigger one more reconciliation cycle and we'll get the children then.
-	if correct, err := r.ensureCorrectAncestry(ctx, log, inst); !correct || err != nil {
-		log.Info("Incorrect will not propagate")
+	// Make sure this object is correct and supposed to propagate. If not, delete it.
+	srcInst, err := r.getSourceInst(ctx, log, inst)
+	if err != nil {
 		return err
 	}
 
+	dests, good := r.syncWithForest(ctx, log, inst, srcInst)
+	if !good {
+		return r.Delete(ctx, inst)
+	}
+
 	// Make sure this gets propagated to any children that exist
-	return r.propagate(ctx, log, inst)
+	return r.propagate(ctx, log, inst, dests)
 }
 
-// ensureCorrectAncestry checks to see if the given object is correct. It returns true if
-// it's correct and ready to be propagated. The incorrect object will be deleted
-// if it's obsolete; or marked as modified if it's changed.
-func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, error) {
-	// Find what we expect the source to be.
-	missing, src, err := r.getSourceInst(ctx, log, inst)
-	if err != nil {
-		return false, err
+// syncWithForest syncs the object instance with the in-memory forest. This is the only place we
+// should lock the forest, so this fn needs to return everything relevant for the rest of the
+// reconciler. This fn shouldn't contact the apiserver since that's a slow operation and everything
+// will block on the lock being held. It returns true if the object instance is good and shouldn't
+// be deleted. It will also return a list of destinations for propagation.
+func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, inst, srcInst *unstructured.Unstructured) ([]string, bool) {
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+
+	// If srcInst isn't an ancestor of inst anymore, it should be deleted
+	if !r.hasCorrectAncestry(ctx, log, inst, srcInst) {
+		return nil, false
 	}
 
-	// The source instance no longer exists in the source namespace.
-	if missing {
-		log.Info("Will delete because the source object no longer exists in ancestor namespace(s)", "inheritedFrom", inst.GetLabels()[labelInheritedFrom])
-		return false, r.Delete(ctx, inst)
+	// If the object has been modified, alert the users and don't propagate it further
+	if !r.isUnmodified(ctx, log, inst, srcInst) {
+		// TODO add object condition here to replace the setAnnotation
+		log.Info("Marking as modified from the source", "inheritedFrom", srcInst.GetNamespace())
+		// Mark as modified if the copied fields don't match.
+		setAnnotation(inst, annotationModified, "true")
+		// TODO it's wrong to call apiserver in forest lock, will be replaced soon.
+		err := r.Update(ctx, inst)
+		if err != nil {
+			log.Error(err, "Couldn't add modified annotation")
+		}
+		return nil, true
 	}
 
-	// If there's no source, *this* is the source
+	// The object looks good; it should be propagated to its namespaces' children
+	return r.Forest.Get(inst.GetNamespace()).ChildNames(), true
+}
+
+// hasCorrectAncestry checks to see if the given object has correct ancestry. It returns false
+// if the source namespace is no longer an ancestor and the object should be deleted.
+func (r *ObjectReconciler) hasCorrectAncestry(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
 	if src == nil {
-		return true, nil
+		log.Info("Will delete because the source instance no longer exists", "inheritedFrom", getSourceNS(inst))
+		return false
 	}
 
-	// We found the object in an ancestor namespace. Is this object the same as the source?
+	if inst == src {
+		return true
+	}
+
+	// The source exists. Is it still in an ancestor namespace?
+	curNS := r.Forest.Get(inst.GetNamespace())
+	srcNS := r.Forest.Get(src.GetNamespace())
+	if !curNS.IsAncestor(srcNS) {
+		log.Info("Will delete because the source namespace is no longer an ancestor", "inheritedFrom", srcNS)
+		return false
+	}
+
+	return true
+}
+
+// isUnmodified checks to see if this object is the same as the source.
+func (r *ObjectReconciler) isUnmodified(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
+	if src == inst {
+		log.Info("This instance is the src itself")
+		return true
+	}
+
 	instCopied := copyObject(inst)
 	// The only difference could be namespace and labelInheritedFrom label.
 	// Make the namespaces and inheritedFrom labels the same before comparison.
@@ -144,28 +187,16 @@ func (r *ObjectReconciler) ensureCorrectAncestry(ctx context.Context, log logr.L
 	setLabel(instCopied, labelInheritedFrom, "")
 	srcCopied := copyObject(src)
 	setLabel(srcCopied, labelInheritedFrom, "")
-	equal := reflect.DeepEqual(instCopied, srcCopied)
-	if !equal {
-		log.Info("Marking as modified from the source", "inheritedFrom", src.GetNamespace())
-		// Mark as modified if the copied fields don't match.
-		setAnnotation(inst, annotationModified, "true")
-		err := r.Update(ctx, inst)
-		if err != nil {
-			log.Error(err, "Couldn't add modified annotation")
-			return false, err
-		}
-	}
-	return equal, nil
+	return reflect.DeepEqual(instCopied, srcCopied)
 }
 
-// getSourceInst gets source instance of this one. It returns nil if this instance isn't a copy.
-// It returns true if the source instance is missing. It could be that the source instance no
-// longer exists or the source namespace is no longer an ancestor.
-func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (bool, *unstructured.Unstructured, error) {
+// getSourceInst gets source instance of this one. It returns itself if it's the source. It returns
+// nil if the source instance no longer exists in the source namespace or there's an error.
+func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 	srcNS := getSourceNS(inst)
 	if srcNS == "" {
-		// this cannot be a copy
-		return false, nil, nil
+		// this is the src itself
+		return inst, nil
 	}
 
 	// Get the source instance from source namespace
@@ -176,25 +207,14 @@ func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, i
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("The source object no longer exists", "inheritedFrom", srcNS)
-			return true, nil, nil
+			return nil, nil
 		} else {
-			log.Info("Couldn't read", "source", srcNm)
-			return false, nil, err
+			log.Error(err, "Couldn't read", "source", srcNm)
+			return nil, err
 		}
 	}
 
-	// The source exists. Is it still in an ancestor namespace?
-	if yes, err := r.isAncestor(inst.GetNamespace(), srcNS); err != nil {
-		// This can fail if the names are bad. For now, take no action (ie don't
-		// delete). TODO: revisit this.
-		log.Error(err, "deleteObsolete")
-		return false, nil, err
-	} else if !yes {
-		log.Info("The source namespace is no longer an ancestor", "inheritedFrom", srcNS)
-		return true, nil, nil
-	}
-
-	return false, src, nil
+	return src, nil
 }
 
 // getSourceNS gets source namespace if it's set in "labelInheritedFrom" label.
@@ -213,12 +233,12 @@ func getSourceNS(inst *unstructured.Unstructured) string {
 // controller will automatically pick up the changes in the child and call this method again.
 //
 // TODO: parallelize?
-func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
+func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured, dests []string) error {
 	if r.isExcluded(log, inst) {
 		return nil
 	}
 	parent := inst.GetNamespace()
-	for _, child := range r.getChildNamespaces(inst.GetNamespace()) {
+	for _, child := range dests {
 		// Create an in-memory copy with the appropriate namespace.
 		copied := copyObject(inst)
 		copied.SetNamespace(child)
@@ -302,20 +322,6 @@ func copyObject(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	copied.SetUID("")
 
 	return copied
-}
-
-func (r *ObjectReconciler) isAncestor(nsNm, otherNm string) (bool, error) {
-	r.Forest.Lock()
-	defer r.Forest.Unlock()
-	ns := r.Forest.Get(nsNm)
-	if !ns.Exists() {
-		return false, fmt.Errorf("unknown namespace %q", nsNm)
-	}
-	nsSrc := r.Forest.Get(otherNm)
-	if !nsSrc.Exists() {
-		return false, fmt.Errorf("unknown namespace %q", otherNm)
-	}
-	return ns.IsAncestor(nsSrc), nil
 }
 
 func (r *ObjectReconciler) getChildNamespaces(nm string) []string {
