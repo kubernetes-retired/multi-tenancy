@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -41,16 +40,6 @@ type VirtualclusterSpec struct {
 	// The Node Selector for deploying Component
 	// +optional
 	NodeSelector map[string]string
-}
-
-type StatefulSetSvcBundle struct {
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// StatefulSet that manages the specified component
-	StatefulSet *appsv1.StatefulSet `json:"statefulset,omitempty"`
-
-	// Service that exposes the StatefulSet
-	Service *corev1.Service `json:"service,omitempty"`
 }
 
 // VirtualclusterStatus defines the observed state of Virtualcluster

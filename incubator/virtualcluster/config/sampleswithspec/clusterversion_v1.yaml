@@ -1,0 +1,262 @@
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: ClusterVersion
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: clusterversion-v1-light
+spec:
+  # a statefulset and service bundle for etcd
+  etcd:
+    metadata:
+      name: etcd 
+      namespace: vc-test
+    statefulset:
+      metadata:
+        name: vc-test/statefulset/etcd
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 10
+        serviceName: etcd
+        selector:
+          matchLabels:
+            vc-test/component-name: etcd
+        # etcd will not be updated, unless it is deleted
+        updateStrategy:
+          type: OnDelete
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: etcd
+          spec:
+            hostname: etcd
+            subdomain: etcd-svc
+            containers:
+              - name: etcd
+                image: chaozheng/etcd-amd64:v3.3.9
+                imagePullPolicy: Always
+                command: 
+                - etcd
+                args:
+                - --name 'vc-test-etcd' 
+                - --trusted-ca-file '/etc/kubernetes/pki/etcd/ca.pem' 
+                - --client-cert-auth 
+                - --cert-file '/etc/kubernetes/pki/etcd/etcd.pem' 
+                - --key-file '/etc/kubernetes/pki/etcd/etcd-key.pem' 
+                - --peer-client-cert-auth 
+                - --peer-trusted-ca-file '/etc/kubernetes/pki/etcd/ca.pem' 
+                - --peer-cert-file '/etc/kubernetes/pki/etcd/etcd.pem' 
+                - --peer-key-file '/etc/kubernetes/pki/etcd/etcd-key.pem' 
+                - --listen-peer-urls 'https://0.0.0.0:2380' 
+                - --listen-client-urls 'https://0.0.0.0:2379' 
+                - --initial-advertise-peer-urls 'https://etcd.etcd-svc.vc-test.svc.cluster.local:2380' 
+                # we use a headless service to encapsulate each pod
+                - --advertise-client-urls 'https://etcd.etcd-svc.vc-test.svc.cluster.local:2379' 
+                - --initial-cluster-state 'new' 
+                - --initial-cluster-token 'vc-test-etcd' 
+                - --initial-cluster 'vc-test-etcd=https://etcd.etcd-svc.vc-test.svc.cluster.local:2380' 
+                - --data-dir '/var/lib/etcd/data'
+                livenessProbe:
+                  exec:
+                    command:
+                    - /bin/sh
+                    - -ec
+                    - ETCDCTL_API=3 etcdctl --endpoints=etcd.vc-test.svc.cluster.local --cacert=/etc/kubernetes/pki/etcd/ca.pem --cert=/etc/kubernetes/pki/etcd/healthcheck-client.pem --key=/etc/kubernetes/pki/etcd/healthcheck-client-key.pem get foo 
+                  failureThreshold: 8
+                  initialDelaySeconds: 60
+                  timeoutSeconds: 15
+                volumeMounts:
+                - mountPath: /etc/kubernetes/pki/etcd
+                  name: etcd-pki
+            volumes: 
+            - name: etcd-pki
+              secret:
+                defaultMode: 420
+                secretName: pkiSecret 
+    # etcd will be accessed only by apiserver from inside the cluster, so we use a headless service to 
+    # encapsulate it
+    service:
+      metadata:
+        name: etcd-svc
+        namespace: vc-test
+        annotations:
+          service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+      spec:
+        type: ClusterIP
+        clusterIP: None
+        selector:
+          vc-test/component-name: etcd
+  # a statefulset and service bundle for apiserver
+  apiServer:
+    metadata:
+      name: apiserver
+      namespace: vc-test
+    statefulset:
+      metadata:
+        name: apiserver
+      spec:
+        replicas: 1
+        revisionHistoryLimit: 10
+        serviceName: apiserver-svc
+        selector:
+          matchLabels:
+            vc-test/component-name: apiserver
+        # apiserver will not be updated, unless it is deleted
+        updateStrategy:
+          type: OnDelete
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: apiserver
+          spec:
+            hostname: apiserver
+            subdomain: apiserver-svc
+            containers:
+            - name: apiserver
+              image: chaozheng/kok-apiserver
+              imagePullPolicy: Always
+              command:
+              - kube-apiserver
+              args:
+              - --bind-address=0.0.0.0 \
+              - --allow-privileged=true \
+              - --anonymous-auth=false \
+              - --client-ca-file=/etc/kubernetes/pki/apiserver/ca.pem \
+              - --tls-cert-file=/etc/kubernetes/pki/apiserver/kubernetes.pem \
+              - --tls-private-key-file=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
+              - --kubelet-https=true \
+              - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver/kubernetes.pem \
+              - --kubelet-client-key=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
+              - --enable-bootstrap-token-auth=true \
+              - --etcd-servers=https://127.0.0.1:2379 \
+              - --etcd-cafile=/etc/kubernetes/pki/apiserver/ca.pem \
+              - --etcd-certfile=/etc/kubernetes/pki/apiserver/kubernetes.pem \
+              - --etcd-keyfile=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
+              - --service-account-key-file=/etc/kubernetes/pki/apiserver/service-account-key.pem \
+              - --service-cluster-ip-range=10.32.0.0/16 \
+              - --service-node-port-range=30000-32767 \
+              - --authorization-mode=Node,RBAC \
+              - --runtime-config=api/all \
+              - --enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \
+              - --apiserver-count=1 \
+              - --endpoint-reconciler-type=master-count \
+              - --v=2
+              - --log-dir=/logs
+              ports:
+              - containerPort: 6443
+                name: api
+              livenessProbe:
+                failureThreshold: 8
+                httpGet:
+                  path: /healthz
+                  port: 6443
+                  scheme: HTTPS
+                initialDelaySeconds: 15
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 15
+              volumeMounts:
+              - mountPath: /etc/kubernetes/pki/apiserver
+                name: apiserver-pki
+                readOnly: true
+              - mountPath: /logs
+                name: logs
+            securityContext: {}
+            terminationGracePeriodSeconds: 30
+            dnsConfig:
+              searches:
+              - cluster.local
+            volumes:
+            - name: apiserver-pki
+              secret:
+                defaultMode: 420
+                secretName: master-pki
+            - name: logs
+              hostPath:
+                path: /home/virtualcluster/vc-test/logs/apiserver
+                type: DirectoryOrCreate
+    service:
+      metadata:
+        name: apiserver-svc
+      spec:
+        selector:
+          vc-test/component-name: apiserver
+        type: NodePort
+        ports:
+        - nodePort: 30443
+          port: 6443
+          protocol: TCP
+          targetPort: api
+  # a statefulset and service bundle for controller-manager
+  controllerManager:
+    metadata:
+      name: controller-manager
+      namespace: vc-test
+    # statefuleset template for controller-manager
+    statefulset:  
+      metadata:
+        name: controller-manager
+      spec:
+        serviceName: controller-manager-svc
+        replicas: 3 
+        selector:
+          matchLabels:
+            vc-test/component-name: controller-manager
+        updateStrategy:
+          type: OnDelete
+        template:
+          metadata:
+            labels:
+              vc-test/component-name: controller-manager
+          spec:
+            hostname: controller-manager
+            subdomain: controller-manager-svc
+            containers:
+            - name: controller-manager
+              imagePullPolicy: Always
+              image: chaozheng/kok-ctrl-manager
+              command:
+              - kube-controller-manager
+              args:
+              - --bind-address=0.0.0.0 \
+              - --cluster-cidr=10.200.0.0/16 \
+              - --cluster-signing-cert-file=/etc/kubernetes/pki/controller-manager/ca.pem \
+              - --cluster-signing-key-file=/etc/kubernetes/pki/controller-manager/ca-key.pem \
+              - --kubeconfig=./pki/kube-controller-manager.kubeconfig \
+              - --authorization-kubeconfig=/etc/kubernetes/kubeconfig/kube-controller-manager.kubeconfig \
+              - --authentication-kubeconfig=/etc/kubernetes/kubeconfig/kube-controller-manager.kubeconfig \
+              - --controllers='*,bootstrapsigner,tokencleaner'
+              # control pane contains only one instance for now
+              - --leader-elect=false \
+              - --root-ca-file=./ca.pem \
+              - --service-account-private-key-file=/etc/kubernetes/pki/controller-manager/service-account-key.pem \
+              - --service-cluster-ip-range=10.32.0.0/24 \
+              - --use-service-account-credentials=true \
+              - --experimental-cluster-signing-duration=87600h \
+              - --v=2
+              livenessProbe:
+                failureThreshold: 8
+                httpGet:
+                  path: /healthz
+                  port: 10252
+                  scheme: HTTP
+                initialDelaySeconds: 15
+                periodSeconds: 10
+                successThreshold: 1
+                timeoutSeconds: 15
+              volumeMounts:
+              - mountPath: /etc/kubernetes/pki/controller-manager
+                name: controller-manager-pki
+                readOnly: true
+              - mountPath: /etc/kubernetes/kubeconfig
+                name: kubeconfig
+                readOnly: true
+            volumes:
+            - name: controller-manager-pki
+              secret:
+                defaultMode: 420
+                secretName: controller-manager-pki
+            - name: kubeconfig
+              secret:
+                defaultMode: 420
+                secretName: controller-manager.kubeconfig
+    # controller-manager will never be accessed proactively, no need to be exposed 

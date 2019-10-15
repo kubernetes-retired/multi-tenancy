@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/emicklei/go-restful v2.9.6+incompatible
 	github.com/gogo/protobuf v1.2.1 // indirect
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/google/cadvisor v0.34.0
 	github.com/json-iterator/go v1.1.6 // indirect
 	github.com/onsi/ginkgo v1.8.0 // indirect

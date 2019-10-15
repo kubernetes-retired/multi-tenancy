@@ -17,7 +17,10 @@ limitations under the License.
 package clusterversion
 
 import (
+	"context"
+
 	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -28,15 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller")
+var log = logf.Log.WithName("clusterversion-controller")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
-// Add creates a new ClusterVersion Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
+// Add creates a new ClusterVersion Controller and adds it to the Manager with
+// default RBAC. The Manager will set fields on the Controller and Start it
+// when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
 }
@@ -59,7 +58,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -76,5 +74,42 @@ type ReconcileClusterVersion struct {
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get;update;patch
 func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+
+	// Fetch the ClusterVersion instance
+	log.Info("reconciling ClusterVersion...")
+	cv := &tenancyv1alpha1.ClusterVersion{}
+	err := r.Get(context.TODO(), request.NamespacedName, cv)
+	if err != nil {
+		// Error reading the object - requeue the request.
+		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
+	}
+	log.Info("new ClusterVersion event", "ClusterVersionName", cv.Name)
+
+	// Register finalizers
+	cvf := "clusterVersion.v1.finalizers"
+
+	if cv.ObjectMeta.DeletionTimestamp.IsZero() {
+		// the object has not been deleted yet, registers the finalizers
+		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == false {
+			cv.ObjectMeta.Finalizers = append(cv.ObjectMeta.Finalizers, cvf)
+			log.Info("register finalizer for ClusterVersion", "finalizer", cvf)
+			if err := r.Update(context.Background(), cv); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// the object is being deleted, star the finalizer
+		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == true {
+			// the finalizer logic
+			log.Info("a ClusterVersion object is deleted", "ClusterVersion", cv.Name)
+
+			// remove the finalizer after done
+			cv.ObjectMeta.Finalizers = ctrlutil.RemoveString(cv.ObjectMeta.Finalizers, cvf)
+			if err := r.Update(context.Background(), cv); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	return reconcile.Result{}, nil
 }
