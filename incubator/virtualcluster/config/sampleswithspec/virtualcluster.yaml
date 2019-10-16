@@ -3,9 +3,9 @@ kind: Virtualcluster
 metadata: 
   labels:
     controller-tools.k8s.io: "1.0"
-  name: virtualcluster-sample
+  name: vc-sample
 spec:
   clusterDomain: cluster.local
-  clusterVersionName: clusterversion-sample-light
+  clusterVersionName: cv-sample 
   # will expire in one year
   pkiExpireDays: 365

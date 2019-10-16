@@ -3,7 +3,7 @@ kind: ClusterVersion
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: clusterversion-v1-light
+  name: cv-sample 
 spec:
   # a statefulset and service bundle for etcd
   etcd:
@@ -38,14 +38,14 @@ spec:
                 - etcd
                 args:
                 - --name 'vc-test-etcd' 
-                - --trusted-ca-file '/etc/kubernetes/pki/etcd/ca.pem' 
+                - --trusted-ca-file '/etc/kubernetes/pki/etcd/ca.crt' 
                 - --client-cert-auth 
-                - --cert-file '/etc/kubernetes/pki/etcd/etcd.pem' 
-                - --key-file '/etc/kubernetes/pki/etcd/etcd-key.pem' 
+                - --cert-file '/etc/kubernetes/pki/etcd/tls.crt' 
+                - --key-file '/etc/kubernetes/pki/etcd/tls.key' 
                 - --peer-client-cert-auth 
-                - --peer-trusted-ca-file '/etc/kubernetes/pki/etcd/ca.pem' 
-                - --peer-cert-file '/etc/kubernetes/pki/etcd/etcd.pem' 
-                - --peer-key-file '/etc/kubernetes/pki/etcd/etcd-key.pem' 
+                - --peer-trusted-ca-file '/etc/kubernetes/pki/etcd/ca.crt' 
+                - --peer-cert-file '/etc/kubernetes/pki/etcd/tls.crt' 
+                - --peer-key-file '/etc/kubernetes/pki/etcd/tls.key' 
                 - --listen-peer-urls 'https://0.0.0.0:2380' 
                 - --listen-client-urls 'https://0.0.0.0:2379' 
                 - --initial-advertise-peer-urls 'https://etcd.etcd-svc.vc-test.svc.cluster.local:2380' 
@@ -60,18 +60,18 @@ spec:
                     command:
                     - /bin/sh
                     - -ec
-                    - ETCDCTL_API=3 etcdctl --endpoints=etcd.vc-test.svc.cluster.local --cacert=/etc/kubernetes/pki/etcd/ca.pem --cert=/etc/kubernetes/pki/etcd/healthcheck-client.pem --key=/etc/kubernetes/pki/etcd/healthcheck-client-key.pem get foo 
+                    - ETCDCTL_API=3 etcdctl --endpoints=etcd.vc-test.svc.cluster.local --cacert=/etc/kubernetes/pki/etcd/ca.pem --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt --key=/etc/kubernetes/pki/etcd/healthcheck-client.key get foo 
                   failureThreshold: 8
                   initialDelaySeconds: 60
                   timeoutSeconds: 15
                 volumeMounts:
                 - mountPath: /etc/kubernetes/pki/etcd
-                  name: etcd-pki
+                  name: etcd-ca
             volumes: 
-            - name: etcd-pki
+            - name: etcd-ca
               secret:
                 defaultMode: 420
-                secretName: pkiSecret 
+                secretName: etcd-ca
     # etcd will be accessed only by apiserver from inside the cluster, so we use a headless service to 
     # encapsulate it
     service:
@@ -120,18 +120,18 @@ spec:
               - --bind-address=0.0.0.0 \
               - --allow-privileged=true \
               - --anonymous-auth=false \
-              - --client-ca-file=/etc/kubernetes/pki/apiserver/ca.pem \
-              - --tls-cert-file=/etc/kubernetes/pki/apiserver/kubernetes.pem \
-              - --tls-private-key-file=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
+              - --client-ca-file=/etc/kubernetes/pki/apiserver/ca.crt \
+              - --tls-cert-file=/etc/kubernetes/pki/apiserver/tls.crt \
+              - --tls-private-key-file=/etc/kubernetes/pki/apiserver/tls.key \
               - --kubelet-https=true \
-              - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver/kubernetes.pem \
-              - --kubelet-client-key=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
+              - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver/tls.pem \
+              - --kubelet-client-key=/etc/kubernetes/pki/apiserver/tls.key \
               - --enable-bootstrap-token-auth=true \
               - --etcd-servers=https://127.0.0.1:2379 \
-              - --etcd-cafile=/etc/kubernetes/pki/apiserver/ca.pem \
-              - --etcd-certfile=/etc/kubernetes/pki/apiserver/kubernetes.pem \
-              - --etcd-keyfile=/etc/kubernetes/pki/apiserver/kubernetes-key.pem \
-              - --service-account-key-file=/etc/kubernetes/pki/apiserver/service-account-key.pem \
+              - --etcd-cafile=/etc/kubernetes/pki/apiserver/ca.crt \
+              - --etcd-certfile=/etc/kubernetes/pki/apiserver/tls.crt \
+              - --etcd-keyfile=/etc/kubernetes/pki/apiserver/tls.key \
+              - --service-account-key-file=/etc/kubernetes/pki/apiserver/service-account.key \
               - --service-cluster-ip-range=10.32.0.0/16 \
               - --service-node-port-range=30000-32767 \
               - --authorization-mode=Node,RBAC \
@@ -156,7 +156,7 @@ spec:
                 timeoutSeconds: 15
               volumeMounts:
               - mountPath: /etc/kubernetes/pki/apiserver
-                name: apiserver-pki
+                name: apiserver-ca
                 readOnly: true
               - mountPath: /logs
                 name: logs
@@ -166,10 +166,10 @@ spec:
               searches:
               - cluster.local
             volumes:
-            - name: apiserver-pki
+            - name: apiserver-ca
               secret:
                 defaultMode: 420
-                secretName: master-pki
+                secretName: apiserver-ca
             - name: logs
               hostPath:
                 path: /home/virtualcluster/vc-test/logs/apiserver

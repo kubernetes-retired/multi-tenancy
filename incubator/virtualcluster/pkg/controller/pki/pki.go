@@ -21,6 +21,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"math"
@@ -38,6 +39,15 @@ import (
 const (
 	DefaultClusterDomain = "cluster.local"
 	neverExpireDuration  = time.Hour * 24 * 365 * 10
+)
+
+const (
+	// RSAPrivateKeyBlockType is a possible value for pem.Block.Type.
+	RSAPrivateKeyBlockType = "RSA PRIVATE KEY"
+	// PublicKeyBlockType is a possible value for pem.Block.Type.
+	PublicKeyBlockType = "PUBLIC KEY"
+	// CertificateBlockType is a possible value for pem.Block.Type.
+	CertificateBlockType = "CERTIFICATE"
 )
 
 type CrtKeyPair struct {
@@ -301,6 +311,7 @@ func NewClientCrtAndKey(user string, ca *CrtKeyPair) (*CrtKeyPair, error) {
 	return &CrtKeyPair{crt, key}, nil
 }
 
+// ParseCertPEM decodes PEM-encoded data
 func ParseCertPEM(data []byte) (*x509.Certificate, error) {
 	certs, err := cert.ParseCertsPEM(data)
 	if nil != err {
@@ -308,6 +319,15 @@ func ParseCertPEM(data []byte) (*x509.Certificate, error) {
 	}
 
 	return certs[0], nil
+}
+
+// EncodeCertPEM returns PEM-endcoded certificate data
+func EncodeCertPEM(cert *x509.Certificate) []byte {
+	block := pem.Block{
+		Type:  CertificateBlockType,
+		Bytes: cert.Raw,
+	}
+	return pem.EncodeToMemory(&block)
 }
 
 func ParsePrivateKey(data []byte) (*rsa.PrivateKey, error) {
@@ -326,6 +346,28 @@ func ParsePrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	}
 
 	return key, nil
+}
+
+// EncodePublicKeyPEM returns PEM-encoded public data
+func EncodePublicKeyPEM(key *rsa.PublicKey) ([]byte, error) {
+	der, err := x509.MarshalPKIXPublicKey(key)
+	if err != nil {
+		return []byte{}, err
+	}
+	block := pem.Block{
+		Type:  PublicKeyBlockType,
+		Bytes: der,
+	}
+	return pem.EncodeToMemory(&block), nil
+}
+
+// EncodePrivateKeyPEM returns PEM-encoded private key data
+func EncodePrivateKeyPEM(key *rsa.PrivateKey) []byte {
+	block := pem.Block{
+		Type:  RSAPrivateKeyBlockType,
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	return pem.EncodeToMemory(&block)
 }
 
 func ParsePublicKey(data []byte) (*rsa.PublicKey, error) {

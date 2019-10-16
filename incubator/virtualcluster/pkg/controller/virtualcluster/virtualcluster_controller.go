@@ -21,11 +21,9 @@ import (
 	"errors"
 	"fmt"
 
-	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
-	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
+	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
@@ -135,6 +138,7 @@ func (r *ReconcileVirtualcluster) checkCRKind(request *reconcile.Request) (runti
 // virtual cluster will have a corresponding namespace whose name
 // is same as the virtual cluster's name
 func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
+	log.Info("creating namespace", "ns", ns)
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
@@ -143,62 +147,118 @@ func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
 	return r.Create(context.TODO(), namespace)
 }
 
-// createPKI constructs the PKI (all crt/key pair and kubeconfig) for the virtual clusters. All csr and key will
-// be stored as secrets in meta cluster
-func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (*vcpki.ClusterCAGroup, error) {
+// createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
+// virtual clusters, and store them as secrets in the meta cluster
+func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
 	caGroup := &vcpki.ClusterCAGroup{}
-	// 1. create root ca, all components will share a single root ca
+	// create root ca, all components will share a single root ca
 	rootCAPair, rootCAErr := vcpki.NewCertificateAuthority(&cert.Config{
 		CommonName:   "kubernetes",
 		Organization: []string{"kubernetes-sig.multi-tenancy.virtualcluster"},
 	})
 	if rootCAErr != nil {
-		return nil, rootCAErr
+		return rootCAErr
 	}
 	caGroup.RootCA = rootCAPair
 
 	etcdDomain := cv.GetEtcdDomain()
 
-	// 2. create crt, key for etcd
+	// create crt, key for etcd
 	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomain)
 	if etcdCrtErr != nil {
-		return nil, etcdCrtErr
+		return etcdCrtErr
 	}
 	caGroup.ETCD = etcdCAPair
 
-	// 3. create crt, key for apiserver
+	// create crt, key for apiserver
 	apiserverDomain := cv.GetAPIServerDomain()
 	apiserverCAPair, apiserverCrtErr :=
 		vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
 	if apiserverCrtErr != nil {
-		return nil, apiserverCrtErr
+		return apiserverCrtErr
 	}
 	caGroup.APIServer = apiserverCAPair
 
-	// 4. create kubeconfig for controller-manager
+	// create kubeconfig for controller-manager
 	ctrlmgrKbCfg, cmKbCfgErr := kubeconfig.GenerateKubeconfig(
 		"system:kube-controller-manager", vc.Name, rootCAPair, apiserverDomain)
 	if cmKbCfgErr != nil {
-		return nil, cmKbCfgErr
+		return cmKbCfgErr
 	}
 	caGroup.CtrlMgrKbCfg = ctrlmgrKbCfg
 
-	// 5. create kubeconfig for admin user
+	// create kubeconfig for admin user
 	adminKbCfg, adminKbCfgErr := kubeconfig.GenerateKubeconfig(
 		"admin", vc.Name, rootCAPair, apiserverDomain)
 	if adminKbCfgErr != nil {
-		return nil, adminKbCfgErr
+		return adminKbCfgErr
 	}
 	caGroup.AdminKbCfg = adminKbCfg
 
-	// 6. create rsa key for service-account
+	// create rsa key for service-account
 	svcAcctCAPair, saCrtErr := vcpki.NewServiceAccountSigningKey()
 	if saCrtErr != nil {
-		return nil, saCrtErr
+		return saCrtErr
 	}
 	caGroup.ServiceAccountPrivateKey = svcAcctCAPair
 
-	return caGroup, nil
+	// store ca and kubeconfig into secrets
+	genSrtsErr := r.createPKISecrets(caGroup, vc.Name)
+	if genSrtsErr != nil {
+		return genSrtsErr
+	}
+
+	return nil
+}
+
+// createPKISecrets creates secrets to store crt/key pairs and kubeconfigs
+// for master components of the virtual cluster
+func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup, namespace string) error {
+	// create secret for root crt/key pair
+	rootSrt, err := secret.CrtKeyPairToSecret(secret.RootCASecretName,
+		namespace, caGroup.RootCA)
+	if err != nil {
+		return err
+	}
+	// create secret for apiserver crt/key pair
+	apiserverSrt, err := secret.CrtKeyPairToSecret(secret.APIServerCASecretName,
+		namespace, caGroup.APIServer, caGroup.RootCA.Crt,
+		caGroup.ServiceAccountPrivateKey)
+	if err != nil {
+		return err
+	}
+	// create secret for etcd crt/key pair
+	etcdSrt, err := secret.CrtKeyPairToSecret(secret.ETCDCASecretName,
+		namespace, caGroup.ETCD, caGroup.RootCA.Crt)
+	if err != nil {
+		return err
+	}
+	// create secret for controller manager kubeconfig
+	ctrlMgrSrt := secret.KubeconfigToSecret(secret.ControllerManagerSecretName,
+		namespace, caGroup.CtrlMgrKbCfg)
+	// create secret for admin kubeconfig
+	adminSrt := secret.KubeconfigToSecret(secret.AdminSecretName,
+		namespace, caGroup.AdminKbCfg)
+	// create secret for service account rsa key
+	svcActSrt, err := secret.RsaKeyToSecret(secret.ServiceAccountSecretName,
+		namespace, caGroup.ServiceAccountPrivateKey)
+	if err != nil {
+		return err
+	}
+	secrets := []*v1.Secret{rootSrt, apiserverSrt, etcdSrt,
+		ctrlMgrSrt, adminSrt, svcActSrt}
+
+	// create all secrets on metacluster
+	for _, srt := range secrets {
+		log.Info("creating secret", "name",
+			srt.Name, "namespace", srt.Namespace)
+		err := r.Create(context.TODO(), srt)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcileVirtualcluster) updateVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
@@ -211,13 +271,23 @@ func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtu
 	if err := r.createNamespace(vc.Name); err != nil {
 		return reconcile.Result{}, err
 	}
+
 	// 2. create pki
-	if _, err := r.createPKI(vc, cv); err != nil {
+	if err := r.createPKI(vc, cv); err != nil {
 		return reconcile.Result{}, err
 	}
+
 	// 4. deploy etcd
-	// 5. deploy apiserver
-	// 6. deploy controller-manager
+	// err := deployETCD(vc, cv)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// // 5. deploy apiserver
+	// err := deployAPIServer(vc, cv)
+
+	// // 6. deploy controller-manager
+	// err := deployControllerManager(vc, cv)
 
 	return reconcile.Result{}, nil
 }
@@ -242,6 +312,9 @@ func (r *ReconcileVirtualcluster) reconcileVirtualcluster(vc *tenancyv1alpha1.Vi
 func (r *ReconcileVirtualcluster) reconcileClusterVersion(cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
 	log.Info("reconciling ClusterVersion(cv)", "cv-name", cv.Name)
 	log.Info("adding new ClusterVersion(cv)", "cv-name", cv.Name)
+	if r.clusterVersions == nil {
+		r.clusterVersions = make(map[string]*tenancyv1alpha1.ClusterVersion)
+	}
 	r.clusterVersions[cv.Name] = cv
 	return reconcile.Result{}, nil
 }
