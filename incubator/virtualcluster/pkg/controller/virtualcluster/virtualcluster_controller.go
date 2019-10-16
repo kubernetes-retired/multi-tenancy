@@ -18,7 +18,6 @@ package virtualcluster
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,14 +43,6 @@ import (
 
 var log = logf.Log.WithName("virtualcluster-controller")
 
-type CRKind int
-
-const (
-	virtualCluster CRKind = iota
-	clusterVersion
-	unknownCR
-)
-
 // Add creates a new Virtualcluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
@@ -74,12 +65,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to Virtualcluster
 	err = c.Watch(&source.Kind{Type: &tenancyv1alpha1.Virtualcluster{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to ClusterVersion
-	err = c.Watch(&source.Kind{Type: &tenancyv1alpha1.ClusterVersion{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -111,27 +96,7 @@ var _ reconcile.Reconciler = &ReconcileVirtualcluster{}
 // ReconcileVirtualcluster reconciles a Virtualcluster object
 type ReconcileVirtualcluster struct {
 	client.Client
-	scheme          *runtime.Scheme
-	clusterVersions map[string]*tenancyv1alpha1.ClusterVersion
-	virtualClusters map[string]*tenancyv1alpha1.Virtualcluster
-}
-
-func (r *ReconcileVirtualcluster) checkCRKind(request *reconcile.Request) (runtime.Object, CRKind, error) {
-	vc := &tenancyv1alpha1.Virtualcluster{}
-	var err error
-	err = r.Get(context.TODO(), request.NamespacedName, vc)
-	if err == nil {
-		log.Info("get vc", "vc-name", vc.Name)
-		return vc, virtualCluster, nil
-	}
-
-	cv := &tenancyv1alpha1.ClusterVersion{}
-	err = r.Get(context.TODO(), request.NamespacedName, cv)
-	if err == nil {
-		return cv, clusterVersion, nil
-	}
-
-	return nil, unknownCR, ignoreNotFound(err)
+	scheme *runtime.Scheme
 }
 
 // createNamespace creates a namespace for the virtual cluster. Each
@@ -261,11 +226,6 @@ func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup
 	return nil
 }
 
-func (r *ReconcileVirtualcluster) updateVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
-	log.Info("NOT IMPLEMENT YET")
-	return reconcile.Result{}, nil
-}
-
 func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
 	// 1. create ns
 	if err := r.createNamespace(vc.Name); err != nil {
@@ -292,33 +252,6 @@ func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtu
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileVirtualcluster) reconcileVirtualcluster(vc *tenancyv1alpha1.Virtualcluster) (reconcile.Result, error) {
-	log.Info("reconciling Virtualcluster(vc)", "vc-name", vc.Name)
-	// check if desired clusterversion exists
-	cv, exist := r.clusterVersions[vc.Spec.ClusterVersionName]
-	if !exist {
-		return reconcile.Result{}, fmt.Errorf("desired ClusterVersion %s does not exist", vc.Spec.ClusterVersionName)
-	}
-
-	// update exist virtual cluster
-	if _, exist := r.virtualClusters[vc.Name]; exist {
-		return r.updateVirtualcluster(vc, cv)
-	}
-
-	// create new virtual cluster
-	return r.createVirtualcluster(vc, cv)
-}
-
-func (r *ReconcileVirtualcluster) reconcileClusterVersion(cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
-	log.Info("reconciling ClusterVersion(cv)", "cv-name", cv.Name)
-	log.Info("adding new ClusterVersion(cv)", "cv-name", cv.Name)
-	if r.clusterVersions == nil {
-		r.clusterVersions = make(map[string]*tenancyv1alpha1.ClusterVersion)
-	}
-	r.clusterVersions[cv.Name] = cv
-	return reconcile.Result{}, nil
-}
-
 // Reconcile reads that state of the cluster for a Virtualcluster object and makes changes based on the state read
 // and what is in the Virtualcluster.Spec
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters,verbs=get;list;watch;create;update;patch;delete
@@ -326,27 +259,34 @@ func (r *ReconcileVirtualcluster) reconcileClusterVersion(cv *tenancyv1alpha1.Cl
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get;update;patch
 func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	log.Info("reconciling mainloop...")
-	cr, crKind, err := r.checkCRKind(&request)
+	log.Info("reconciling Virtualcluster...")
+	vc := &tenancyv1alpha1.Virtualcluster{}
+	if err := r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+		return reconcile.Result{}, ignoreNotFound(err)
+	}
 
-	switch crKind {
-	case virtualCluster:
-		// reconcile the Virtualcluster
-		vc, ok := cr.(*tenancyv1alpha1.Virtualcluster)
-		if !ok {
-			return reconcile.Result{}, errors.New("fail to assert Virtualcluste")
-		}
-		return r.reconcileVirtualcluster(vc)
-	case clusterVersion:
-		// reconcile the ClusterVersion
-		cv, ok := cr.(*tenancyv1alpha1.ClusterVersion)
-		if !ok {
-			return reconcile.Result{}, errors.New("fail to assert ClusterVersion")
-		}
-		return r.reconcileClusterVersion(cv)
-	default:
+	cvs := &tenancyv1alpha1.ClusterVersionList{}
+	if err := r.List(context.TODO(), cvs, client.InNamespace("")); err != nil {
 		return reconcile.Result{}, err
 	}
+
+	cv := getClusterVersion(cvs, vc.Spec.ClusterVersionName)
+	if cv == nil {
+		return reconcile.Result{},
+			fmt.Errorf("desired ClusterVersion %s not found",
+				vc.Spec.ClusterVersionName)
+	}
+
+	return r.createVirtualcluster(vc, cv)
+}
+
+func getClusterVersion(cvl *tenancyv1alpha1.ClusterVersionList, cvn string) *tenancyv1alpha1.ClusterVersion {
+	for _, cv := range cvl.Items {
+		if cv.Name == cvn {
+			return &cv
+		}
+	}
+	return nil
 }
 
 func ignoreNotFound(err error) error {

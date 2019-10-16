@@ -230,28 +230,6 @@ func NewEtcdServerCrtAndKey(ca *CrtKeyPair, etcdDomain string) (*CrtKeyPair, err
 	return &CrtKeyPair{etcdServerCert, etcdServerKey}, nil
 }
 
-// NewEtcdPeerCertAndKey generate certificate for etcd peering, signed by the given CA.
-func NewEtcdPeerCertAndKey(ca *CrtKeyPair, etcdDomain string) (*x509.Certificate, *rsa.PrivateKey, error) {
-
-	// create AltNames with defaults DNSNames/IPs
-	altNames := &cert.AltNames{
-		DNSNames: []string{etcdDomain},
-	}
-
-	config := CertConfig{
-		CommonName:     "kube-etcd-peer",
-		AltNames:       *altNames,
-		Usages:         []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		ExpireDuration: neverExpireDuration,
-	}
-	etcdPeerCert, etcdPeerKey, err := NewCertAndKey(config, ca.Crt, ca.Key)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failure while creating etcd peer key and certificate: %v", err)
-	}
-
-	return etcdPeerCert, etcdPeerKey, nil
-}
-
 // NewEtcdHealthcheckClientCertAndKey generate certificate for liveness probes to healthcheck etcd, signed by the given CA.
 func NewEtcdHealthcheckClientCertAndKey(ca *CrtKeyPair) (*x509.Certificate, *rsa.PrivateKey, error) {
 
@@ -311,6 +289,15 @@ func NewClientCrtAndKey(user string, ca *CrtKeyPair) (*CrtKeyPair, error) {
 	return &CrtKeyPair{crt, key}, nil
 }
 
+// EncodeCertPEM returns PEM-endcoded certificate data
+func EncodeCertPEM(cert *x509.Certificate) []byte {
+	block := pem.Block{
+		Type:  CertificateBlockType,
+		Bytes: cert.Raw,
+	}
+	return pem.EncodeToMemory(&block)
+}
+
 // ParseCertPEM decodes PEM-encoded data
 func ParseCertPEM(data []byte) (*x509.Certificate, error) {
 	certs, err := cert.ParseCertsPEM(data)
@@ -319,15 +306,6 @@ func ParseCertPEM(data []byte) (*x509.Certificate, error) {
 	}
 
 	return certs[0], nil
-}
-
-// EncodeCertPEM returns PEM-endcoded certificate data
-func EncodeCertPEM(cert *x509.Certificate) []byte {
-	block := pem.Block{
-		Type:  CertificateBlockType,
-		Bytes: cert.Raw,
-	}
-	return pem.EncodeToMemory(&block)
 }
 
 func ParsePrivateKey(data []byte) (*rsa.PrivateKey, error) {
@@ -348,6 +326,15 @@ func ParsePrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	return key, nil
 }
 
+// EncodePrivateKeyPEM returns PEM-encoded private key data
+func EncodePrivateKeyPEM(key *rsa.PrivateKey) []byte {
+	block := pem.Block{
+		Type:  RSAPrivateKeyBlockType,
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	return pem.EncodeToMemory(&block)
+}
+
 // EncodePublicKeyPEM returns PEM-encoded public data
 func EncodePublicKeyPEM(key *rsa.PublicKey) ([]byte, error) {
 	der, err := x509.MarshalPKIXPublicKey(key)
@@ -359,15 +346,6 @@ func EncodePublicKeyPEM(key *rsa.PublicKey) ([]byte, error) {
 		Bytes: der,
 	}
 	return pem.EncodeToMemory(&block), nil
-}
-
-// EncodePrivateKeyPEM returns PEM-encoded private key data
-func EncodePrivateKeyPEM(key *rsa.PrivateKey) []byte {
-	block := pem.Block{
-		Type:  RSAPrivateKeyBlockType,
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	}
-	return pem.EncodeToMemory(&block)
 }
 
 func ParsePublicKey(data []byte) (*rsa.PublicKey, error) {

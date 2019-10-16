@@ -16,11 +16,11 @@ limitations under the License.
 
 package controller
 
-// import (
-// 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/clusterversion"
-// )
-//
-// func init() {
-// 	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
-// 	AddToManagerFuncs = append(AddToManagerFuncs, clusterversion.Add)
-// }
+import (
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/clusterversion"
+)
+
+func init() {
+	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
+	AddToManagerFuncs = append(AddToManagerFuncs, clusterversion.Add)
+}

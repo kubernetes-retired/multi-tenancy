@@ -20,7 +20,7 @@ import (
 	"context"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -81,7 +81,7 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 	err := r.Get(context.TODO(), request.NamespacedName, cv)
 	if err != nil {
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
+		return reconcile.Result{}, ignoreNotFound(err)
 	}
 	log.Info("new ClusterVersion event", "ClusterVersionName", cv.Name)
 
@@ -90,7 +90,7 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 
 	if cv.ObjectMeta.DeletionTimestamp.IsZero() {
 		// the object has not been deleted yet, registers the finalizers
-		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == false {
+		if containString(cv.ObjectMeta.Finalizers, cvf) == false {
 			cv.ObjectMeta.Finalizers = append(cv.ObjectMeta.Finalizers, cvf)
 			log.Info("register finalizer for ClusterVersion", "finalizer", cvf)
 			if err := r.Update(context.Background(), cv); err != nil {
@@ -99,12 +99,12 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 		}
 	} else {
 		// the object is being deleted, star the finalizer
-		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == true {
+		if containString(cv.ObjectMeta.Finalizers, cvf) == true {
 			// the finalizer logic
 			log.Info("a ClusterVersion object is deleted", "ClusterVersion", cv.Name)
 
 			// remove the finalizer after done
-			cv.ObjectMeta.Finalizers = ctrlutil.RemoveString(cv.ObjectMeta.Finalizers, cvf)
+			cv.ObjectMeta.Finalizers = removeString(cv.ObjectMeta.Finalizers, cvf)
 			if err := r.Update(context.Background(), cv); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -112,4 +112,30 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func ignoreNotFound(err error) error {
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func containString(sli []string, s string) bool {
+	for _, str := range sli {
+		if str == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(sli []string, s string) (newSli []string) {
+	for _, str := range sli {
+		if str == s {
+			continue
+		}
+		newSli = append(newSli, str)
+	}
+	return
 }
