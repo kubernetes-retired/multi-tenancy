@@ -23,6 +23,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 
 	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 )
@@ -45,7 +46,7 @@ const (
 
 // RsaKeyToSecret encapsulates rsaKey into a secret object
 func RsaKeyToSecret(name, namespace string, rsaKey *rsa.PrivateKey) (*v1.Secret, error) {
-	encodedPubKey, err := vcpki.EncodePublicKeyPEM(&rsaKey.PublicKey)
+	encodedPubKey, err := pkiutil.EncodePublicKeyPEM(&rsaKey.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func CrtKeyPairToSecret(name, namespace string, ckp *vcpki.CrtKeyPair, keyOrCrt 
 	switch name {
 	case RootCASecretName:
 		data = map[string][]byte{
-			v1.TLSCertKey:       vcpki.EncodeCertPEM(ckp.Crt),
+			v1.TLSCertKey:       pkiutil.EncodeCertPEM(ckp.Crt),
 			v1.TLSPrivateKeyKey: vcpki.EncodePrivateKeyPEM(ckp.Key),
 		}
 	case APIServerCASecretName:
@@ -87,9 +88,9 @@ func CrtKeyPairToSecret(name, namespace string, ckp *vcpki.CrtKeyPair, keyOrCrt 
 		}
 
 		data = map[string][]byte{
-			RootCACrt:           vcpki.EncodeCertPEM(rootCACrt),
+			RootCACrt:           pkiutil.EncodeCertPEM(rootCACrt),
 			SvcActKey:           vcpki.EncodePrivateKeyPEM(svcActKey),
-			v1.TLSCertKey:       vcpki.EncodeCertPEM(ckp.Crt),
+			v1.TLSCertKey:       pkiutil.EncodeCertPEM(ckp.Crt),
 			v1.TLSPrivateKeyKey: vcpki.EncodePrivateKeyPEM(ckp.Key),
 		}
 	default:
@@ -101,8 +102,8 @@ func CrtKeyPairToSecret(name, namespace string, ckp *vcpki.CrtKeyPair, keyOrCrt 
 			return nil, errors.New("fail to assert root ca to *x509.Certificate")
 		}
 		data = map[string][]byte{
-			RootCACrt:           vcpki.EncodeCertPEM(rootCACrt),
-			v1.TLSCertKey:       vcpki.EncodeCertPEM(ckp.Crt),
+			RootCACrt:           pkiutil.EncodeCertPEM(rootCACrt),
+			v1.TLSCertKey:       pkiutil.EncodeCertPEM(ckp.Crt),
 			v1.TLSPrivateKeyKey: vcpki.EncodePrivateKeyPEM(ckp.Key),
 		}
 	}

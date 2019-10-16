@@ -18,6 +18,8 @@ package virtualcluster
 
 import (
 	"context"
+	"crypto/rsa"
+	"errors"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -27,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/cert"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -117,17 +120,23 @@ func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
 func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
-	rootCAPair, rootCAErr := vcpki.NewCertificateAuthority(&cert.Config{
+	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(&cert.Config{
 		CommonName:   "kubernetes",
 		Organization: []string{"kubernetes-sig.multi-tenancy.virtualcluster"},
 	})
 	if rootCAErr != nil {
 		return rootCAErr
 	}
+
+	rootRsaKey, ok := rootKey.(*rsa.PrivateKey)
+	if !ok {
+		return errors.New("fail to assert rsa PrivateKey")
+	}
+
+	rootCAPair := &vcpki.CrtKeyPair{rootCACrt, rootRsaKey}
 	caGroup.RootCA = rootCAPair
 
 	etcdDomain := cv.GetEtcdDomain()
-
 	// create crt, key for etcd
 	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomain)
 	if etcdCrtErr != nil {
