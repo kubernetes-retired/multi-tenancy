@@ -21,12 +21,13 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +43,15 @@ import (
 	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
 	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
+)
+
+const (
+	DefaultETCDPeerPort = 2380
+
+	// frequency of polling apiserver for readiness of each component
+	ComponentPollPeriod = 2 * time.Second
+	// timeout for components deployment
+	DeployTimeOut = 120 * time.Second
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
@@ -72,25 +82,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// watch Statefulsets created by Virtualcluster
-	err = c.Watch(&source.Kind{Type: &appsv1.StatefulSet{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &tenancyv1alpha1.Virtualcluster{},
-	})
-	if err != nil {
-		return err
-	}
-
-	// watch Services created by Virtualcluster
-	err = c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &tenancyv1alpha1.Virtualcluster{},
-	})
-
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -107,7 +98,7 @@ type ReconcileVirtualcluster struct {
 // is same as the virtual cluster's name
 func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
 	log.Info("creating namespace", "ns", ns)
-	namespace := &corev1.Namespace{
+	namespace := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
 		},
@@ -136,9 +127,9 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	rootCAPair := &vcpki.CrtKeyPair{rootCACrt, rootRsaKey}
 	caGroup.RootCA = rootCAPair
 
-	etcdDomain := cv.GetEtcdDomain()
+	etcdDomains := append(cv.GetEtcdServers(), cv.GetEtcdDomain())
 	// create crt, key for etcd
-	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomain)
+	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomains)
 	if etcdCrtErr != nil {
 		return etcdCrtErr
 	}
@@ -185,28 +176,107 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	return nil
 }
 
+// genInitialClusterArgs generates the values for `--inital-cluster` option of etcd based on the number of
+// replicas specified in etcd StatefulSet
+func genInitialClusterArgs(replicas int32, stsName, svcName string) (argsVal string) {
+	for i := int32(0); i < replicas; i++ {
+		// use 2380 as the default port for etcd peer communication
+		peerAddr := fmt.Sprintf("%s-%d=https://%s-%d.%s:%d", stsName, i, stsName, i, svcName, DefaultETCDPeerPort)
+		if i == replicas-1 {
+			argsVal = argsVal + peerAddr
+			break
+		}
+		argsVal = argsVal + peerAddr + ","
+	}
+
+	return argsVal
+}
+
+// completmentETCDTemplate completments the ETCD template of the specified clusterversion
+// based on the virtual cluster setting
+func completmentETCDTemplate(vcName string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcName
+	etcdBdl.Service.ObjectMeta.Namespace = vcName
+	args := etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args
+	icaVal := genInitialClusterArgs(*etcdBdl.StatefulSet.Spec.Replicas,
+		etcdBdl.StatefulSet.Name, etcdBdl.Service.Name)
+	args = append(args, "--initial-cluster", icaVal)
+	etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args = args
+}
+
+// completmentAPIServerTemplate completments the apiserver template of the specified clusterversion
+// based on the virtual cluster setting
+func completmentAPIServerTemplate(vcName string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	apiserverBdl.StatefulSet.ObjectMeta.Namespace = vcName
+	apiserverBdl.Service.ObjectMeta.Namespace = vcName
+}
+
+// completmentCtrlMgrTemplate completments the controller manager template of the specified clusterversion
+// based on the virtual cluster setting
+func completmentCtrlMgrTemplate(vcName string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	ctrlMgrBdl.StatefulSet.ObjectMeta.Namespace = vcName
+}
+
+// deployComponent deploys master component in namespace vcName based on the given StatefulSet
+// and Service Bundle ssBdl
+func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualcluster, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
+	log.Info("deploying StatefulSet for master component", "component", ssBdl.Name)
+
+	switch ssBdl.Name {
+	case "etcd":
+		completmentETCDTemplate(vc.Name, ssBdl)
+	case "apiserver":
+		completmentAPIServerTemplate(vc.Name, ssBdl)
+	case "controller-manager":
+		completmentCtrlMgrTemplate(vc.Name, ssBdl)
+	default:
+		fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
+	}
+
+	err := r.Create(context.TODO(), ssBdl.StatefulSet)
+	if err != nil {
+		return err
+	}
+
+	if ssBdl.Service != nil {
+		log.Info("deploying Service for master component", "component", ssBdl.Name)
+		err = r.Create(context.TODO(), ssBdl.Service)
+		if err != nil {
+			return err
+		}
+	}
+
+	// make sure the StatsfulSet is ready (i.e. Status.ReadyReplicas == Spec.Replicas)
+	for {
+		select {
+		case <-time.After(DeployTimeOut):
+			return fmt.Errorf("deploy %s timeout", ssBdl.Name)
+		case <-time.After(ComponentPollPeriod):
+			sts := &appsv1.StatefulSet{}
+			if err := r.Get(context.TODO(), types.NamespacedName{vc.Name, ssBdl.Name}, sts); err != nil {
+				return err
+			}
+			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
+				log.Info("component is ready", "component", ssBdl.Name)
+				return nil
+			}
+		}
+	}
+
+}
+
 // createPKISecrets creates secrets to store crt/key pairs and kubeconfigs
 // for master components of the virtual cluster
 func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup, namespace string) error {
 	// create secret for root crt/key pair
-	rootSrt, err := secret.CrtKeyPairToSecret(secret.RootCASecretName,
+	rootSrt := secret.CrtKeyPairToSecret(secret.RootCASecretName,
 		namespace, caGroup.RootCA)
-	if err != nil {
-		return err
-	}
 	// create secret for apiserver crt/key pair
-	apiserverSrt, err := secret.CrtKeyPairToSecret(secret.APIServerCASecretName,
-		namespace, caGroup.APIServer, caGroup.RootCA.Crt,
-		caGroup.ServiceAccountPrivateKey)
-	if err != nil {
-		return err
-	}
+	apiserverSrt := secret.CrtKeyPairToSecret(secret.APIServerCASecretName,
+		namespace, caGroup.APIServer)
 	// create secret for etcd crt/key pair
-	etcdSrt, err := secret.CrtKeyPairToSecret(secret.ETCDCASecretName,
-		namespace, caGroup.ETCD, caGroup.RootCA.Crt)
-	if err != nil {
-		return err
-	}
+	etcdSrt := secret.CrtKeyPairToSecret(secret.ETCDCASecretName,
+		namespace, caGroup.ETCD)
 	// create secret for controller manager kubeconfig
 	ctrlMgrSrt := secret.KubeconfigToSecret(secret.ControllerManagerSecretName,
 		namespace, caGroup.CtrlMgrKbCfg)
@@ -235,42 +305,58 @@ func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup
 	return nil
 }
 
-func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
+// createVirtualcluster creates a new Virtualcluster based on the specified ClusterVersion
+func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (rcleRst reconcile.Result, err error) {
+	defer func() {
+		if err != nil {
+			log.Error(err, "fail to create virtualcluster, remove namespace for deleting related resources")
+		}
+	}()
+
 	// 1. create ns
-	if err := r.createNamespace(vc.Name); err != nil {
-		return reconcile.Result{}, err
+	err = r.createNamespace(vc.Name)
+	if err != nil {
+		return
 	}
 
-	// 2. create pki
-	if err := r.createPKI(vc, cv); err != nil {
-		return reconcile.Result{}, err
+	// 2. create PKI
+	err = r.createPKI(vc, cv)
+	if err != nil {
+		return
 	}
 
 	// 4. deploy etcd
-	// err := deployETCD(vc, cv)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err = r.deployComponent(vc, cv.Spec.ETCD)
+	if err != nil {
+		return
+	}
 
-	// // 5. deploy apiserver
-	// err := deployAPIServer(vc, cv)
+	// 5. deploy apiserver
+	err = r.deployComponent(vc, cv.Spec.APIServer)
+	if err != nil {
+		return
+	}
 
-	// // 6. deploy controller-manager
-	// err := deployControllerManager(vc, cv)
+	// 6. deploy controller-manager
+	err = r.deployComponent(vc, cv.Spec.ControllerManager)
+	if err != nil {
+		return
+	}
 
-	return reconcile.Result{}, nil
+	return
 }
 
 // Reconcile reads that state of the cluster for a Virtualcluster object and makes changes based on the state read
 // and what is in the Virtualcluster.Spec
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get
 func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	log.Info("reconciling Virtualcluster...")
 	vc := &tenancyv1alpha1.Virtualcluster{}
-	if err := r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+	err := r.Get(context.TODO(), request.NamespacedName, vc)
+	if err != nil {
 		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
 	}
 
@@ -285,7 +371,6 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcil
 			fmt.Errorf("desired ClusterVersion %s not found",
 				vc.Spec.ClusterVersionName)
 	}
-
 	return r.createVirtualcluster(vc, cv)
 }
 
