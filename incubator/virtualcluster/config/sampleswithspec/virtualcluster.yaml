@@ -1,0 +1,11 @@
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: Virtualcluster
+metadata: 
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: vc-sample
+spec:
+  clusterDomain: cluster.local
+  clusterVersionName: cv-sample 
+  # will expire in one year
+  pkiExpireDays: 365
