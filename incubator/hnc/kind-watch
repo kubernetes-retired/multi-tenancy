@@ -1,2 +1,0 @@
-#!/bin/bash
-kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager

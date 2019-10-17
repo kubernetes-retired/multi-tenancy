@@ -35,11 +35,5 @@ GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.2.1
 
 hack_dir=$(dirname ${BASH_SOURCE})
 
-echo "Running 'make kubectl'"
-make kubectl -C "$hack_dir/.."
-
-echo "Running 'make test-kustomize'"
-make test-kustomize -C "$hack_dir/.."
-
 echo "Running 'make tests'"
 make test -C "$hack_dir/.."

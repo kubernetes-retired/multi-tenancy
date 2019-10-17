@@ -47,14 +47,19 @@ In this directory:
 * Run `. devenv` (or `source devenv`) to setup your `KUBECONFIG` env var to
   point to the local Kind cluster, and the `PATH` env vars to add the
   `kubectl-hnc` plugin to your path.
-* Run `./kind-reset` to stop any existing KIND cluster and setup a new one,
+* Run `make kind-reset` to stop any existing KIND cluster and setup a new one,
   including the cert manager required to run the webhooks. Note that the cert
   manager may take several minutes to finish working.
-* Run `make test` to run the controller (excluding the validating webhook)
-  locally.
-* Run `./kind-deploy` to build the image, load it into KIND, and deploy to KIND.
-* Run `./kind-watch` to watch the logs from the HNC container.
-* Run `make kubectl` to build the kubectl plugin.
+* Run `make kind-deploy` to build the image, load it into KIND, and
+  deploy to KIND.
+  * An intermediate kustomization file will be put into `manifests/`, as well as
+    `hnc-manager.yaml`, the output of `kustomize build`. This directory is not
+    included in Git, and is actually populated by `make manifests`. Several
+    other targets build `manifests` too, including `test`.
+  * You can also run the controller locally (ie, not on the cluster) by saying
+    `make run`. Webhooks don't work in this mode because I haven't bothered to
+    find an easy way to make them work yet.
+* Run `make kind-watch` to watch the logs from the HNC container.
 
 At this point, you should be able to run the demo script yourself. Please
 contact us on Slack if you're having trouble.

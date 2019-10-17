@@ -1,8 +1,0 @@
-#!/bin/bash
-kind delete cluster
-kind create cluster
-export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-kubectl create namespace cert-manager
-kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.8.1/cert-manager.yaml
-make install
