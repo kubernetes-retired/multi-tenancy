@@ -4,19 +4,32 @@ export GO111MODULE=on
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 
-all: test manager vn-agent
+# Build code.
+#
+# Args:
+#   WHAT: Directory names to build.  If any of these directories has a 'main'
+#     package, the build will produce executable files under $(OUT_DIR).
+#     If not specified, "everything" will be built.
+#   GOFLAGS: Extra flags to pass to 'go' when building.
+#   GOLDFLAGS: Extra linking flags passed to 'go' when building.
+#   GOGCFLAGS: Additional go compile flags passed to 'go' when building.
+#
+# Example:
+#   make
+#   make all
+#   make all WHAT=cmd/kubelet GOFLAGS=-v
+#   make all GOLDFLAGS=""
+#     Note: Specify GOLDFLAGS as an empty string for building unstripped binaries, which allows
+#           you to use code debugging tools like delve. When GOLDFLAGS is unspecified, it defaults
+#           to "-s -w" which strips debug information. Other flags that can be used for GOLDFLAGS
+#           are documented at https://golang.org/cmd/link/
+.PHONY: all
+all: test
+	hack/make-rules/build.sh $(WHAT)
 
 # Run tests
 test: generate fmt vet manifests
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
-
-# Build manager binary
-manager: generate fmt vet
-	go build -o bin/manager github.com/multi-tenancy/incubator/virtualcluster/cmd/manager
-
-# Build vn-agent binary
-vn-agent: fmt vet
-	go build -o bin/vn-agent github.com/multi-tenancy/incubator/virtualcluster/cmd/vn-agent
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
@@ -50,11 +63,13 @@ ifndef GOPATH
 endif
 	go generate ./pkg/... ./cmd/...
 
-# Build the docker image
-docker-build: test
-	docker build . -t ${IMG}
-	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+# Build docker image.
+#
+# 1. build all binaries.
+# 2. copy binaries to the corresponding docker image.
+.PHONY: release-images
+release-images: test
+	hack/make-rules/release-images.sh
 
 # Push the docker image
 docker-push:
