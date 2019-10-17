@@ -25,7 +25,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/cert"
@@ -42,6 +41,7 @@ import (
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
 	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
@@ -271,7 +271,7 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcil
 	log.Info("reconciling Virtualcluster...")
 	vc := &tenancyv1alpha1.Virtualcluster{}
 	if err := r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
-		return reconcile.Result{}, ignoreNotFound(err)
+		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
 	}
 
 	cvs := &tenancyv1alpha1.ClusterVersionList{}
@@ -296,30 +296,4 @@ func getClusterVersion(cvl *tenancyv1alpha1.ClusterVersionList, cvn string) *ten
 		}
 	}
 	return nil
-}
-
-func ignoreNotFound(err error) error {
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	return err
-}
-
-func containString(sli []string, s string) bool {
-	for _, str := range sli {
-		if str == s {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(sli []string, s string) (newSli []string) {
-	for _, str := range sli {
-		if str == s {
-			continue
-		}
-		newSli = append(newSli, str)
-	}
-	return
 }
