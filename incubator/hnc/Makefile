@@ -19,29 +19,27 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-.PHONY: all test manager kubectl run deploy manifests fmt vet generate docker-build docker-push controller-gen kind-reset kind-deploy kind-watch
+all: test docker-build
 
-all: manager
+###################### LOCAL ARTIFACTS #########################
 
 # Run tests
-test: manager kubectl manifests
+test: build
 	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
 
-# Build manager binary
-manager: generate fmt vet
+# Builds all binaries (manager and kubectl) and manifests
+build: generate fmt vet manifests
 	go build -o bin/manager ./cmd/manager/main.go
-
-# Build kubectl plugin
-kubectl: generate fmt vet
 	go build -o bin/kubectl-hnc ./cmd/kubectl/main.go
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: manager
-	go run ./cmd/manager/main.go --novalidation
+# Install kubectl plugin
+kubectl: build
+	go build -o ${GOPATH}/bin/kubectl-hnc ./cmd/kubectl/main.go
+	@echo "Installed kubectl-hnc to GOPATH/bin"
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: docker-push kubectl manifests
-	kubectl apply -f manifests/hnc-manager.yaml
+# Run against the configured Kubernetes cluster in ~/.kube/config
+run: build
+	go run ./cmd/manager/main.go --novalidation
 
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
@@ -68,19 +66,6 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
-# Build the docker image
-docker-build: generate fmt vet
-	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
-	docker build . -t ${IMG}
-
-# Push the docker image
-docker-push: docker-build
-ifeq ($(CONFIG),kind)
-	kind load docker-image ${IMG}
-else
-	docker push ${IMG}
-endif
-
 # find or download controller-gen
 # download controller-gen if necessary
 controller-gen:
@@ -91,22 +76,55 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-# Creates a local kind cluster, destroying the old one if necessary. It's not
-# *necessary* to call this wih CONFIG=kind but it's not a bad idea either so
-# the correct manifests get created.
-kind-reset: manifests
-	@echo "Warning: you must have sourced 'devenv' so kubectl points to the Kind cluster"
+###################### DEPLOYABLE ARTIFACTS AND ACTIONS #########################
+
+# Deploy controller in the configured Kubernetes cluster in ~/.kube/config.
+#
+# We only delete and redeploy the deployment, and nothing else, because a)
+# deleting the CRDs will cause all the existing hierarchy configs to be wiped
+# away and b) if we don't delete the deployment, a new image won't be pulled
+# unless the tag changes.
+deploy: deploy-prereq docker-push kubectl manifests
+	-kubectl -n hnc-system delete deployment hnc-controller-manager
+	kubectl apply -f manifests/hnc-manager.yaml
+
+deploy-watch:
+	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
+
+# Installs prerequisites
+deploy-prereq:
+	@kubectl cluster-info
+	-kubectl create namespace cert-manager
+	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true --overwrite
+	kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.8.1/cert-manager.yaml
+
+# Push the docker image
+docker-push: docker-build
+ifeq ($(CONFIG),kind)
+	kind load docker-image ${IMG}
+else
+	docker push ${IMG}
+endif
+
+# Build the docker image
+docker-build: generate fmt vet
+	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
+	docker build . -t ${IMG}
+
+###################### KIND ACTIONS #########################
+
+# Creates a local kind cluster, destroying the old one if necessary.
+kind-reboot:
 	@echo "Warning: the 'kind' command must be in your path for this to work"
 	-kind delete cluster
 	kind create cluster
-	kubectl create namespace cert-manager
-	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true
-	kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.8.1/cert-manager.yaml
-	kubectl apply -f config/crd/bases
+
+# Creates a local kind cluster, destroying the old one if necessary. It's not
+# *necessary* to call this wih CONFIG=kind but it's not a bad idea either so
+# the correct manifests get created.
+kind-reset: kind-reboot deploy-prereq
+	@echo "If this didn't work, ensure you ran 'source devenv' to point kubectl at kind'"
 
 # Convenience target to deploy specifically for kind
 kind-deploy:
 	CONFIG=kind $(MAKE) deploy
-
-kind-watch:
-	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
