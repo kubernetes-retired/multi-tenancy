@@ -22,15 +22,14 @@ import (
 // Any changes here need to also be reflected in the kubebuilder:validation:Enum comment, below.
 // The meanings of all these constants are defined in the comment to Condition.Code, below.
 const (
-	CritParentMissing         Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid         Code = "CRIT_PARENT_INVALID"
-	CritRequiredChildConflict Code = "CRIT_REQUIRED_CHILD_CONFLICT"
-	CritAncestor              Code = "CRIT_ANCESTOR"
-	ObjectOverridden          Code = "OBJECT_OVERRIDDEN"
-	ObjectDescendantOverriden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
-	MetaGroup                      = "hnc.x-k8s.io"
-	LabelInheritedFrom             = MetaGroup + "/inheritedFrom"
-	AnnotationModified             = MetaGroup + "/modified"
+	CritParentMissing          Code = "CRIT_PARENT_MISSING"
+	CritParentInvalid          Code = "CRIT_PARENT_INVALID"
+	CritRequiredChildConflict  Code = "CRIT_REQUIRED_CHILD_CONFLICT"
+	CritAncestor               Code = "CRIT_ANCESTOR"
+	ObjectOverridden           Code = "OBJECT_OVERRIDDEN"
+	ObjectDescendantOverridden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
+	MetaGroup                       = "hnc.x-k8s.io"
+	LabelInheritedFrom              = MetaGroup + "/inheritedFrom"
 )
 
 var (

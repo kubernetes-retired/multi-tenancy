@@ -17,10 +17,11 @@ var _ = Describe("Secret", func() {
 	ctx := context.Background()
 
 	var (
-		fooName string
-		barName string
-		bazName string
-		quxName string
+		fooName  string
+		barName  string
+		bazName  string
+		quxName  string
+		quuxName string
 	)
 
 	BeforeEach(func() {
@@ -28,6 +29,7 @@ var _ = Describe("Secret", func() {
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
 		quxName = createNS(ctx, "qux")
+		quuxName = createNS(ctx, "quux")
 
 		// Give them each a secret
 		makeSecret(ctx, fooName, "foo-sec")
@@ -62,7 +64,7 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
 	})
 
-	It("should be marked as modified if not matching the source", func() {
+	It("should set object conditions if not matching the source", func() {
 		// Set tree as qux -> baz -> bar and make sure the propagation of bar-sec is
 		// *fully finished* before modifying the bar-sec in baz namespace
 		setParent(ctx, bazName, barName)
@@ -70,40 +72,91 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
 		Eventually(hasSecret(ctx, quxName, "bar-sec")).Should(BeTrue())
 
-		Eventually(hasAnnotationModified(ctx, bazName, "bar-sec")).Should(BeFalse())
-		Eventually(hasAnnotationModified(ctx, bazName, "baz-sec")).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, barName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, quxName)).Should(BeFalse())
 
-		modifySecret(ctx, bazName, "bar-sec")
+		// Wait for 2 seconds for the object propagation from setParent() are finished.
+		time.Sleep(2 * time.Second)
+		modifySecret(ctx, quxName, "bar-sec")
 
-		// Wait 5s for the annotation to be updated. Even 4s may have timeout error.
-		// TODO: revisit this to see why it's so slow.
-		Eventually(hasAnnotationModified(ctx, bazName, "bar-sec"), 5*time.Second).Should(BeTrue())
-		Eventually(hasAnnotationModified(ctx, bazName, "baz-sec")).Should(BeFalse())
+		Eventually(hasCondition(ctx, quxName, api.ObjectOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.ObjectDescendantOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.ObjectOverridden)).Should(BeFalse())
+		Eventually(hasCondition(ctx, quxName, api.ObjectDescendantOverridden)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
 	})
 
-	It("should not be propagated if marked as modified", func() {
+	It("should unset object conditions if it matches the source again", func() {
+		// Set tree as qux -> baz -> bar and make sure the propagation of bar-sec is
+		// *fully finished* before modifying the bar-sec in baz namespace
+		setParent(ctx, bazName, barName)
+		setParent(ctx, quxName, bazName)
+		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Eventually(hasSecret(ctx, quxName, "bar-sec")).Should(BeTrue())
+
+		Eventually(hasAnyCondition(ctx, barName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, quxName)).Should(BeFalse())
+
+		time.Sleep(2 * time.Second)
+		modifySecret(ctx, quxName, "bar-sec")
+
+		Eventually(hasCondition(ctx, quxName, api.ObjectOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.ObjectDescendantOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.ObjectOverridden)).Should(BeFalse())
+		Eventually(hasCondition(ctx, quxName, api.ObjectDescendantOverridden)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
+
+		// Restore the modified secret and make sure all object conditions are gone.
+		time.Sleep(2 * time.Second)
+		unmodifySecret(ctx, quxName, "bar-sec")
+
+		Eventually(hasAnyCondition(ctx, quxName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, barName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
+	})
+
+	It("should not be propagated if it has a modified ancestor(including itself)", func() {
 		// Set tree as qux -> bar -> foo and make sure the propagation of foo-sec is
-		// *fully finished* before modifying the foo-sec in bar namespace
+		// *fully finished* before modifying the foo-sec in qux namespace
 		setParent(ctx, barName, fooName)
 		setParent(ctx, quxName, barName)
 		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
 		Eventually(hasSecret(ctx, quxName, "foo-sec")).Should(BeTrue())
 
-		modifySecret(ctx, barName, "foo-sec")
+		Eventually(hasAnyCondition(ctx, fooName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, barName)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, quxName)).Should(BeFalse())
 
-		// Wait 5s for the annotation to be updated. Even 4s may have timeout error.
-		// TODO: revisit this. There may be racing updates between modifySecret and setParent.
-		Eventually(hasAnnotationModified(ctx, barName, "foo-sec"), 5*time.Second).Should(BeTrue())
+		time.Sleep(2 * time.Second)
+		modifySecret(ctx, quxName, "foo-sec")
 
-		// Change the parent. Give the controller a chance to copy the objects and make
-		// sure that at least the correct one was copied. This gives us more confidence
-		// that if the other one *isn't* copied, this is because we decided not to, and
-		// not that we just haven't gotten to it yet.
-		setParent(ctx, bazName, barName)
+		Eventually(hasCondition(ctx, quxName, api.ObjectOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, fooName, api.ObjectDescendantOverridden)).Should(BeTrue())
+		Eventually(hasCondition(ctx, fooName, api.ObjectOverridden)).Should(BeFalse())
+		Eventually(hasCondition(ctx, quxName, api.ObjectDescendantOverridden)).Should(BeFalse())
+		Eventually(hasAnyCondition(ctx, barName)).Should(BeFalse())
+
+		// Add baz to the hierarchy under qux, which has the modified secret, and make
+		// sure the modified secret isn't copied but the unmodified one is. Give the
+		// controller a chance to copy the objects and make sure that the correct one
+		// was copied. This gives us more confidence that if the other one *isn't* copied,
+		// this is because we decided not to, and not that we just haven't gotten to it yet.
+		setParent(ctx, bazName, quxName)
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
 
 		// Make sure the bad one wasn't copied.
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+
+		// Make sure no object conditions set in bazName
+		Eventually(hasAnyCondition(ctx, bazName)).Should(BeFalse())
+
+		// Make sure correct propagation on other clean branches
+		setParent(ctx, quuxName, barName)
+		Eventually(hasSecret(ctx, quuxName, "foo-sec")).Should(BeTrue())
+		Eventually(hasSecret(ctx, quuxName, "bar-sec")).Should(BeTrue())
+		Eventually(hasAnyCondition(ctx, quuxName)).Should(BeFalse())
 	})
 
 	It("should be removed if the source no longer exists", func() {
@@ -117,6 +170,13 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
 	})
 })
+
+func hasAnyCondition(ctx context.Context, nm string) func() bool {
+	return func() bool {
+		conds := getHierarchy(ctx, nm).Status.Conditions
+		return conds != nil
+	}
+}
 
 func makeSecret(ctx context.Context, nsName, secretName string) {
 	sec := &corev1.Secret{}
@@ -193,14 +253,15 @@ func modifySecret(ctx context.Context, nsName, secretName string) {
 	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
 }
 
-func hasAnnotationModified(ctx context.Context, nsName, secretName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-		sec := &corev1.Secret{}
-		ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
-		return sec.GetAnnotations()["hnc.x-k8s.io/modified"] == "true"
-	}
+func unmodifySecret(ctx context.Context, nsName, secretName string) {
+	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
+	sec := &corev1.Secret{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+
+	labels := sec.GetLabels()
+	delete(labels, "modify")
+	sec.SetLabels(labels)
+	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
 }
 
 func removeSecret(ctx context.Context, nsName, secretName string) {

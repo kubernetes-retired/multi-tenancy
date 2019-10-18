@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -40,6 +41,9 @@ type ObjectReconciler struct {
 
 	// Forest is the in-memory forest managed by the HierarchyReconciler.
 	Forest *forest.Forest
+
+	// HierarchyReconciler is for reconciling namespaces when object conditions are detected.
+	HierarchyReconciler *HierarchyReconciler
 
 	// GVK is the group/version/kind handled by this reconciler.
 	GVK schema.GroupVersionKind
@@ -131,27 +135,39 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
+	log.Info("Checking")
+
 	// If srcInst isn't an ancestor of inst anymore, it should be deleted
 	if !r.hasCorrectAncestry(ctx, log, inst, srcInst) {
 		return nil, false
 	}
 
-	// If the object has been modified, alert the users and don't propagate it further
-	if !reflect.DeepEqual(canonical(inst), canonical(srcInst)) {
-		// TODO add object condition here to replace the setAnnotation
-		log.Info("Marking as modified from the source", "inheritedFrom", srcInst.GetNamespace())
-		// Mark as modified if the canonical fields don't match.
-		setAnnotation(inst, api.AnnotationModified, "true")
-		// TODO it's wrong to call apiserver in forest lock, will be replaced soon.
-		err := r.Update(ctx, inst)
-		if err != nil {
-			log.Error(err, "Couldn't add modified annotation")
-		}
+	// If any ancestor has ObjectOverridden condition, don't propagate it.
+	if r.hasOverriddenAncestry(ctx, log, inst, srcInst) {
 		return nil, true
 	}
 
+	// If the object has been overridden, alert the users and don't propagate it further.
+	if r.isOverridden(ctx, log, inst, srcInst) {
+		return nil, true
+	}
+
+	// TODO set ObjectAncestorOverridden condition on the descendants whose expected objects are
+	//  not propagated because an ancestor object is overridden.
+
+	dsts := []string{}
+	for _, child := range r.Forest.Get(inst.GetNamespace()).ChildNames() {
+		cns := r.Forest.Get(child)
+		srcKey := affectedObjectKey(srcInst)
+		if !cns.HasKeyedCondition(srcKey, api.ObjectOverridden) {
+			log.Info("Child not overridden", "child", child)
+			dsts = append(dsts, child)
+		} else {
+			log.Info("Child overridden!", "child", child)
+		}
+	}
 	// The object looks good; it should be propagated to its namespaces' children
-	return r.Forest.Get(inst.GetNamespace()).ChildNames(), true
+	return dsts, true
 }
 
 // hasCorrectAncestry checks to see if the given object has correct ancestry. It returns false
@@ -175,6 +191,74 @@ func (r *ObjectReconciler) hasCorrectAncestry(ctx context.Context, log logr.Logg
 	}
 
 	return true
+}
+
+func (r *ObjectReconciler) hasOverriddenAncestry(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
+	if inst == src {
+		return false
+	}
+
+	srcKey := affectedObjectKey(src)
+	sns := r.Forest.Get(src.GetNamespace())
+	if !sns.HasConditionCode(api.ObjectDescendantOverridden) {
+		// Early exit if the source doesn't have ObjectDescendantOverridden condition.
+		return false
+	}
+
+	// Find if any ancestor (including itself) has ObjectOverridden condition.
+	ans := r.Forest.Get(inst.GetNamespace()).Parent()
+	for ans != sns {
+		curKey := replaceKeyNamespace(srcKey, ans.Name())
+		if ans.HasKeyedCondition(srcKey, api.ObjectOverridden) {
+			log.Info("Ancestor modified", "modified", curKey)
+			return true
+		}
+		ans = ans.Parent()
+	}
+
+	return false
+}
+
+// isOverridden returns true if the instance is overridden from the source. It will set/unset accordingly
+// object conditions in the forest and enqueue affected namespaces to HierarchyReconciler for updating
+// the conditions with the API server.
+func (r *ObjectReconciler) isOverridden(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
+	ak := affectedObjectKey(inst)
+	sak := affectedObjectKey(src)
+	msgObj := fmt.Sprintf("object overridden from source %s", sak)
+	msgDsc := fmt.Sprintf("descendent object %s overridden", ak)
+	nnm := inst.GetNamespace()
+	snnm := src.GetNamespace()
+	ns := r.Forest.Get(nnm)
+	sns := r.Forest.Get(snnm)
+
+	overridden := true
+	if reflect.DeepEqual(canonical(inst), canonical(src)) {
+		log.Info("Unmodified from source.")
+		overridden = false
+		// If not modified, unset object conditions if they exist.
+		unsetObj := ns.UnsetCondition(sak, api.ObjectOverridden, msgObj)
+		unsetDsc := sns.UnsetCondition(ak, api.ObjectDescendantOverridden, msgDsc)
+		// Early exist if not object conditions are unset, so don't call HierarchyReconciler.
+		if !unsetObj && !unsetDsc {
+			return overridden
+		}
+		log.Info("Instance restored, object conditions unsetted", "ObjectOverridden", nnm, "ObjectDescendentOverridden", snnm)
+	} else {
+		if ns.HasKeyedCondition(sak, api.ObjectOverridden) {
+			log.Info("Modified, but condition already existed.")
+			return true
+		}
+		log.Info("Instance modified, setting object conditions", "ObjectOverridden", nnm, "ObjectDescendentOverridden", snnm)
+		ns.SetCondition(sak, api.ObjectOverridden, msgObj)
+		sns.SetCondition(ak, api.ObjectDescendantOverridden, msgDsc)
+	}
+
+	// Enqueue affected namespaces to HierarchyReconciler to update the conditions.
+	r.HierarchyReconciler.enqueueAffected(log, msgObj, nnm)
+	r.HierarchyReconciler.enqueueAffected(log, msgDsc, snnm)
+
+	return overridden
 }
 
 // getSourceInst gets source instance of this one. It returns itself if it's the source. It returns
@@ -369,15 +453,6 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).For(target).Complete(r)
 }
 
-func setAnnotation(inst *unstructured.Unstructured, annotation string, value string) {
-	annotations := inst.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[annotation] = value
-	inst.SetAnnotations(annotations)
-}
-
 type apiInstances interface {
 	GetLabels() map[string]string
 	SetLabels(labels map[string]string)
@@ -390,4 +465,15 @@ func setLabel(inst apiInstances, label string, value string) {
 	}
 	labels[label] = value
 	inst.SetLabels(labels)
+}
+
+func affectedObjectKey(inst *unstructured.Unstructured) string {
+	gvk := inst.GroupVersionKind()
+	return gvk.Group + "/" + gvk.Version + "/" + gvk.Kind + "/" + inst.GetNamespace() + "/" + inst.GetName()
+}
+
+func replaceKeyNamespace(key, namespace string) string {
+	split := strings.Split(key, "/")
+	split[3] = namespace
+	return strings.Join(split, "/")
 }

@@ -16,6 +16,13 @@ import (
 //
 // This function is called both from main.go as well as from the integ tests.
 func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
+	// Create the HierarchyReconciler
+	hr := &HierarchyReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("controllers").WithName("Hierarchy"),
+		Forest:   f,
+		Affected: make(chan event.GenericEvent),
+	}
 	// Create all object reconcillers
 	gvks := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Secret"},
@@ -29,10 +36,11 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	objReconcilers := []NamespaceSyncer{}
 	for _, gvk := range gvks {
 		or := &ObjectReconciler{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName(gvk.Kind),
-			Forest: f,
-			GVK:    gvk,
+			Client:              mgr.GetClient(),
+			Log:                 ctrl.Log.WithName("controllers").WithName(gvk.Kind),
+			Forest:              f,
+			HierarchyReconciler: hr,
+			GVK:                 gvk,
 		}
 		if err := or.SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("cannot create %v controller: %s", gvk, err.Error())
@@ -40,14 +48,8 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 		objReconcilers = append(objReconcilers, or)
 	}
 
-	// Create the HierarchyReconciler, passing it the object reconcillers so it can call them.
-	hr := &HierarchyReconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("Hierarchy"),
-		Forest:   f,
-		Types:    objReconcilers,
-		Affected: make(chan event.GenericEvent),
-	}
+	// Update the HierarchyReconciler, passing it the object reconcillers so it can call them.
+	hr.Types = objReconcilers
 	if err := hr.SetupWithManager(mgr, maxReconciles); err != nil {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
 	}

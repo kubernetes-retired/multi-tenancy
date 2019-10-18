@@ -246,22 +246,45 @@ func (ns *Namespace) HasCondition() bool {
 func (ns *Namespace) HasCritCondition() bool {
 	// For now, all the critical conditions are set locally. It may not be true for
 	// future critical conditions. We may not want to just use local conditions.
-	return ns.GetCondition(Local) != nil
+	return ns.GetConditions(Local) != nil
 }
 
-// ClearConditions clears local conditions in the namespace.
+// HasKeyedCondition checks to see if an object has object conditions for a key string.
+func (ns *Namespace) HasKeyedCondition(key string, code api.Code) bool {
+	conds := ns.GetConditions(key)
+	for _, cond := range conds {
+		if cond.code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// HasConditionCode checks to see if an object has object conditions for a code.
+func (ns *Namespace) HasConditionCode(code api.Code) bool {
+	for _, conds := range ns.conditions {
+		for _, cond := range conds {
+			if cond.code == code {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// ClearConditions clears conditions in the namespace for a key string.
 func (ns *Namespace) ClearConditions(key string) {
 	delete(ns.conditions, key)
 }
 
-// GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
-func (ns *Namespace) GetCondition(key string) []condition {
+// GetConditions gets a condition list from a key string. It returns nil, if the key doesn't exist.
+func (ns *Namespace) GetConditions(key string) []condition {
 	c, _ := ns.conditions[key]
 	return c
 }
 
-// SetCondition adds a condition into the list of conditions for key string, returning
-// true if it does not exist previously.
+// SetCondition adds a condition into the list of conditions for a key string.
 func (ns *Namespace) SetCondition(key string, code api.Code, msg string) {
 	oldConditions := ns.conditions[key]
 	for _, condition := range oldConditions {
@@ -271,6 +294,27 @@ func (ns *Namespace) SetCondition(key string, code api.Code, msg string) {
 	}
 
 	ns.conditions[key] = append(oldConditions, condition{code: code, msg: msg})
+}
+
+// UnsetCondition removes a condition from the list of conditions for a key string.
+// It return true if the condition existed and is now removed.
+func (ns *Namespace) UnsetCondition(key string, code api.Code, msg string) bool {
+	existed := false
+	conds := ns.conditions[key]
+	newConds := []condition{}
+	for _, cond := range conds {
+		if cond.code == code && cond.msg == msg {
+			existed = true
+		} else {
+			newConds = append(newConds, condition{code: cond.code, msg: cond.msg})
+		}
+	}
+
+	ns.conditions[key] = newConds
+	if len(newConds) == 0 {
+		ns.ClearConditions(key)
+	}
+	return existed
 }
 
 // Conditions returns a list of conditions in the namespace.
