@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -147,7 +148,12 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	}
 
 	// The object looks good; it should be propagated to its namespaces' children
-	return r.Forest.Get(inst.GetNamespace()).ChildNames(), true
+	ns := r.Forest.Get(inst.GetNamespace())
+	if ns == nil {
+		msg := fmt.Sprintf("Empty namespace for object %s", toString(inst))
+		log.Error(nil, msg)
+	}
+	return ns.ChildNames(), true
 }
 
 // hasCorrectAncestry checks to see if the given object has correct ancestry. It returns false
@@ -383,4 +389,9 @@ func setLabel(inst apiInstances, label string, value string) {
 	}
 	labels[label] = value
 	inst.SetLabels(labels)
+}
+
+func toString(inst *unstructured.Unstructured) string {
+	gvk := inst.GroupVersionKind()
+	return gvk.Group + "/" + gvk.Version + "/" + gvk.Kind + "/" + inst.GetNamespace() + "/" + inst.GetName()
 }
