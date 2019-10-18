@@ -136,9 +136,9 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	rootCAPair := &vcpki.CrtKeyPair{rootCACrt, rootRsaKey}
 	caGroup.RootCA = rootCAPair
 
-	etcdDomain := cv.GetEtcdDomain()
+	etcdDomains := append(cv.GetEtcdServers(), cv.GetEtcdDomain())
 	// create crt, key for etcd
-	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomain)
+	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomains)
 	if etcdCrtErr != nil {
 		return etcdCrtErr
 	}
@@ -182,6 +182,56 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 		return genSrtsErr
 	}
 
+	return nil
+}
+
+// genInitialClusterArgs generate the values for `--inital-cluster` option of etcd based on the number of
+// replicas specified in etcd StatefulSet
+func genInitialClusterArgs(replicas int32, stsName string, svcName string) (argsVal string) {
+	for i := int32(0); i < replicas; i++ {
+		peerAddr := fmt.Sprintf("%s-%d=https://%s-%d.%s:2380", stsName, i, stsName, i, svcName)
+		if i == replicas-1 {
+			argsVal = argsVal + peerAddr
+			break
+		}
+		argsVal = argsVal + peerAddr + ","
+	}
+
+	return argsVal
+}
+
+// completmentETCDTemplate completments the ETCD template provided by given clusterversion
+// based on the virtual cluster setting
+func completmentETCDTemplate(vcName string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcName
+	args := &etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args
+	icaVal := genInitialClusterArgs(*etcdBdl.StatefulSet.Spec.Replicas,
+		etcdBdl.StatefulSet.Name, etcdBdl.Service.Name)
+	*args = append(*args, "--initial-cluster", icaVal)
+}
+
+// deployComponent deploys master component in namespace vcName based on the given StatefulSet
+// and Service Bundle ssBdl
+func (r *ReconcileVirtualcluster) deployComponent(vcName string, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
+	log.Info("deploying StatefulSet for master component", "component", ssBdl.Name)
+
+	switch ssBdl.Name {
+	case "etcd":
+		completmentETCDTemplate(vcName, ssBdl)
+	default:
+		fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
+	}
+
+	err := r.Create(context.TODO(), ssBdl.StatefulSet)
+	if err != nil {
+		return err
+	}
+	log.Info("deploying Service for master component", "component", ssBdl.Name)
+	ssBdl.Service.ObjectMeta.Namespace = vcName
+	err = r.Create(context.TODO(), ssBdl.Service)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -235,22 +285,23 @@ func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup
 	return nil
 }
 
+// createVirtualcluster creates a new Virtualcluster based on the specified ClusterVersion
 func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (reconcile.Result, error) {
 	// 1. create ns
 	if err := r.createNamespace(vc.Name); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// 2. create pki
+	// 2. create pkNamei
 	if err := r.createPKI(vc, cv); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// 4. deploy etcd
-	// err := deployETCD(vc, cv)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	err := r.deployComponent(vc.Name, cv.Spec.ETCD)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// // 5. deploy apiserver
 	// err := deployAPIServer(vc, cv)

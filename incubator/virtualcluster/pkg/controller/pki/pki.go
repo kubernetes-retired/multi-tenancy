@@ -23,6 +23,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
@@ -90,7 +91,6 @@ func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.Virtualcluster, a
 // NewAPIServerKubeletClientCertAndKey creates certificate for the apiservers to connect to the
 // kubelets securely, signed by the ca.
 func NewAPIServerKubeletClientCertAndKey(ca *CrtKeyPair) (*x509.Certificate, *rsa.PrivateKey, error) {
-
 	config := &cert.Config{
 		CommonName:   "kube-apiserver-kubelet-client",
 		Organization: []string{"system:masters"},
@@ -110,17 +110,19 @@ func NewAPIServerKubeletClientCertAndKey(ca *CrtKeyPair) (*x509.Certificate, *rs
 }
 
 // NewEtcdServerCrtAndKey creates new crt-key pair using ca for etcd
-func NewEtcdServerCrtAndKey(ca *CrtKeyPair, etcdDomain string) (*CrtKeyPair, error) {
-
+func NewEtcdServerCrtAndKey(ca *CrtKeyPair, etcdDomains []string) (*CrtKeyPair, error) {
 	// create AltNames with defaults DNSNames/IPs
+	// log.Println("adding etcd domains into cert ", "domains ", etcdDomains)
 	altNames := &cert.AltNames{
-		DNSNames: []string{etcdDomain},
+		DNSNames: etcdDomains,
+		IPs:      []net.IP{net.ParseIP("127.0.0.1")},
 	}
 
 	config := &cert.Config{
 		CommonName: "kube-etcd",
 		AltNames:   *altNames,
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		// all peers will use this crt-key pair as well
+		Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}
 	etcdServerCert, etcdServerKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
 	if err != nil {
