@@ -205,16 +205,25 @@ func (ns *Namespace) RelativesNames() []string {
 // a path from `other` to the current namespace (if `other` is nil, the first element of the slice
 // will be the root of the tree, *not* the empty string).
 func (ns *Namespace) AncestoryNames(other *Namespace) []string {
+	if ns == nil {
+		// Nil forest has nil ancestory
+		return nil
+	}
 	if ns == other || (ns.parent == nil && other == nil) {
+		// Either we found `other` or the root
 		return []string{ns.name}
 	}
 	if ns.parent == nil {
+		// Ancestory to `other` doesn't exist
 		return nil
 	}
 	ancestory := ns.parent.AncestoryNames(other)
 	if ancestory == nil {
+		// Ancestory to `other` wasn't found
 		return nil
 	}
+
+	// Add ourselves to the ancestory
 	return append(ancestory, ns.name)
 }
 
