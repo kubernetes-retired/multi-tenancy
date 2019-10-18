@@ -72,6 +72,10 @@ func init() {
 		},
 	}
 	kubecfgFlags.AddFlags(rootCmd.PersistentFlags())
+
+	rootCmd.AddCommand(newSetCmd())
+	rootCmd.AddCommand(newShowCmd())
+	rootCmd.AddCommand(newTreeCmd())
 }
 
 func Execute() {

@@ -75,6 +75,6 @@ var showCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(showCmd)
+func newShowCmd() *cobra.Command {
+	return showCmd
 }
