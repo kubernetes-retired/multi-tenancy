@@ -176,7 +176,6 @@ func (r *ObjectReconciler) hasCorrectAncestry(ctx context.Context, log logr.Logg
 // isUnmodified checks to see if this object is the same as the source.
 func (r *ObjectReconciler) isUnmodified(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
 	if src == inst {
-		log.Info("This instance is the src itself")
 		return true
 	}
 
