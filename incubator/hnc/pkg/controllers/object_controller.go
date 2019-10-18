@@ -103,6 +103,15 @@ func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, n
 // update deletes this object if it's an obsolete copy, and otherwise ensures it's been propagated
 // to any child namespaces.
 func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
+	// If for some reason this has been called on an object that isn't namespaced, let's generate some
+	// logspam!
+	if inst.GetNamespace() == "" {
+		for i := 0; i < 100; i++ {
+			log.Info("Non-namespaced object!!!")
+		}
+		return nil
+	}
+
 	// Make sure this object is correct and supposed to propagate. If not, delete it.
 	srcInst, err := r.getSourceInst(ctx, log, inst)
 	if err != nil {
