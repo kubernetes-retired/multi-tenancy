@@ -2,5 +2,3 @@
 echo "Make sure you source this file, don't run it!"
 echo "Setting KUBECONFIG to kind cluster"
 export KUBECONFIG="$(kind get kubeconfig-path --name="kind")"
-echo "Adding /bin to path for kubectl plugin"
-export PATH=$PATH:`pwd`/bin
