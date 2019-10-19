@@ -258,20 +258,24 @@ func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *tenancy.Hierarch
 
 func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Depth label only makes sense if there's no error condition.
-	if !ns.HasCondition() {
-		// AncestoryNames includes the namespace itself.
-		ancestors := ns.AncestoryNames(nil)
-		for i, ancestor := range ancestors {
-			labelDepthSuffix := ancestor + ".tree." + metaGroup + "/depth"
-			dist := strconv.Itoa(len(ancestors) - i - 1)
-			setLabel(nsInst, labelDepthSuffix, dist)
-			log.Info("Adding label", "label name",
-				labelDepthSuffix, "label value", dist)
-		}
-		// All namespaces in its subtree should update the labels as well.
-		if descendants := ns.DescendantNames(); descendants != nil {
-			r.enqueueAffected(log, "update depth label", descendants...)
-		}
+	if ns.HasCondition() {
+		return
+	}
+
+	// AncestoryNames includes the namespace itself.
+	ancestors := ns.AncestoryNames(nil)
+	for i, ancestor := range ancestors {
+		labelDepthSuffix := ancestor + ".tree." + metaGroup + "/depth"
+		dist := strconv.Itoa(len(ancestors) - i - 1)
+		setLabel(nsInst, labelDepthSuffix, dist)
+	}
+
+	// All namespaces in its subtree should update the labels as well.
+	//
+	// TODO: only enqueue these when the parent has changed? We don't need to enqueue this every time
+	// the hc is updated for any reason.
+	if descendants := ns.DescendantNames(); descendants != nil {
+		r.enqueueAffected(log, "update depth label", descendants...)
 	}
 }
 
@@ -375,7 +379,7 @@ func setCritAncestorCondition(log logr.Logger, inst *tenancy.HierarchyConfigurat
 			continue
 		}
 		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
-		msg := fmt.Sprintf("%s is the most recent ancestor with a critical condition", ans.Name())
+		msg := fmt.Sprintf("Propagation paused in the subtree of %s due to a critical condition", ans.Name())
 		condition := tenancy.Condition{
 			Code:    tenancy.CritAncestor,
 			Msg:     msg,
