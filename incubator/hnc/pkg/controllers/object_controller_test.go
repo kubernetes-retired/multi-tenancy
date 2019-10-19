@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var _ = Describe("Secret", func() {
@@ -148,11 +148,11 @@ func setParent(ctx context.Context, nm string, pnm string) {
 	}
 }
 
-func newOrGetHierarchy(ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
-	hier := &tenancy.HierarchyConfiguration{}
+func newOrGetHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
+	hier := &api.HierarchyConfiguration{}
 	hier.ObjectMeta.Namespace = nm
-	hier.ObjectMeta.Name = tenancy.Singleton
-	snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
+	hier.ObjectMeta.Name = api.Singleton
+	snm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	if err := k8sClient.Get(ctx, snm, hier); err != nil {
 		ExpectWithOffset(2, errors.IsNotFound(err)).Should(BeTrue())
 	}
