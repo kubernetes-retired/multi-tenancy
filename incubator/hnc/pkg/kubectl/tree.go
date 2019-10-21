@@ -23,7 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var (
@@ -52,7 +52,7 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-func printSubtree(prefix string, hier *tenancy.HierarchyConfiguration) {
+func printSubtree(prefix string, hier *api.HierarchyConfiguration) {
 	for i, cn := range hier.Status.Children {
 		ch := getHierarchy(cn)
 		tx := nameAndFootnotes(ch)
@@ -66,7 +66,7 @@ func printSubtree(prefix string, hier *tenancy.HierarchyConfiguration) {
 	}
 }
 
-func nameAndFootnotes(hier *tenancy.HierarchyConfiguration) string {
+func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
 		txt := cond.Msg
