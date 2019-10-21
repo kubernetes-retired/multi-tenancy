@@ -13,10 +13,6 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
-const (
-	metaGroup = "hnc.x-k8s.io"
-)
-
 var _ = Describe("Hierarchy", func() {
 	ctx := context.Background()
 
@@ -190,38 +186,38 @@ var _ = Describe("Hierarchy", func() {
 		// Verify that bar has a tree label related to foo
 		Eventually(func() bool {
 			barNS := getNamespace(ctx, barName)
-			_, ok := barNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			_, ok := barNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
 			return ok
 		}).Should(BeTrue())
 		// Verify the label value
 		Eventually(func() string {
 			barNS := getNamespace(ctx, barName)
-			val, _ := barNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			val, _ := barNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
 			return val
 		}).Should(Equal("1"))
 		// Verify that bar has a tree label related to bar itself
 		Eventually(func() bool {
 			barNS := getNamespace(ctx, barName)
-			_, ok := barNS.GetLabels()[barName+".tree."+metaGroup+"/depth"]
+			_, ok := barNS.GetLabels()[barName+".tree."+api.MetaGroup+"/depth"]
 			return ok
 		}).Should(BeTrue())
 		// Verify the label value
 		Eventually(func() string {
 			barNS := getNamespace(ctx, barName)
-			val, _ := barNS.GetLabels()[barName+".tree."+metaGroup+"/depth"]
+			val, _ := barNS.GetLabels()[barName+".tree."+api.MetaGroup+"/depth"]
 			return val
 		}).Should(Equal("0"))
 		// Verify that foo has a tree label related to foo itself
 		Eventually(func() bool {
 			fmt.Println(getHierarchy(ctx, fooName))
 			fooNS := getNamespace(ctx, fooName)
-			_, ok := fooNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			_, ok := fooNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
 			return ok
 		}).Should(BeTrue())
 		// Verify the label value
 		Eventually(func() string {
 			fooNS := getNamespace(ctx, fooName)
-			val, _ := fooNS.GetLabels()[fooName+".tree."+metaGroup+"/depth"]
+			val, _ := fooNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
 			return val
 		}).Should(Equal("0"))
 	})
