@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -85,7 +85,7 @@ type Namespace struct {
 }
 
 type condition struct {
-	code tenancy.Code
+	code api.Code
 	msg  string
 }
 
@@ -262,7 +262,7 @@ func (ns *Namespace) GetCondition(key string) []condition {
 
 // SetCondition adds a condition into the list of conditions for key string, returning
 // true if it does not exist previously.
-func (ns *Namespace) SetCondition(key string, code tenancy.Code, msg string) {
+func (ns *Namespace) SetCondition(key string, code api.Code, msg string) {
 	oldConditions := ns.conditions[key]
 	for _, condition := range oldConditions {
 		if condition.code == code && condition.msg == msg {
@@ -275,18 +275,18 @@ func (ns *Namespace) SetCondition(key string, code tenancy.Code, msg string) {
 
 // Conditions returns a list of conditions in the namespace.
 // It converts map[string][]condition into []Condition.
-func (ns *Namespace) Conditions(log logr.Logger) []tenancy.Condition {
+func (ns *Namespace) Conditions(log logr.Logger) []api.Condition {
 	return flatten(ns.convertConditions(log))
 }
 
 // convertConditions converts string -> condition{code, msg} map into condition{code, msg} -> affected map.
-func (ns *Namespace) convertConditions(log logr.Logger) map[tenancy.Code]map[string][]tenancy.AffectedObject {
-	converted := map[tenancy.Code]map[string][]tenancy.AffectedObject{}
+func (ns *Namespace) convertConditions(log logr.Logger) map[api.Code]map[string][]api.AffectedObject {
+	converted := map[api.Code]map[string][]api.AffectedObject{}
 	for key, conditions := range ns.conditions {
 		for _, condition := range conditions {
 			affectedObject := getAffectedObject(key, log)
 			if affected, ok := converted[condition.code][condition.msg]; !ok {
-				converted[condition.code] = map[string][]tenancy.AffectedObject{condition.msg: {affectedObject}}
+				converted[condition.code] = map[string][]api.AffectedObject{condition.msg: {affectedObject}}
 			} else {
 				converted[condition.code][condition.msg] = append(affected, affectedObject)
 			}
@@ -296,15 +296,15 @@ func (ns *Namespace) convertConditions(log logr.Logger) map[tenancy.Code]map[str
 }
 
 // flatten flattens condition{code, msg} -> affected map into a list of condition{code, msg, []affected}.
-func flatten(m map[tenancy.Code]map[string][]tenancy.AffectedObject) []tenancy.Condition {
-	flattened := []tenancy.Condition{}
+func flatten(m map[api.Code]map[string][]api.AffectedObject) []api.Condition {
+	flattened := []api.Condition{}
 	for code, msgAffected := range m {
 		for msg, affected := range msgAffected {
 			// Local conditions do not need Affects.
-			if len(affected) == 1 && (tenancy.AffectedObject{}) == affected[0] {
-				flattened = append(flattened, tenancy.Condition{Code: code, Msg: msg})
+			if len(affected) == 1 && (api.AffectedObject{}) == affected[0] {
+				flattened = append(flattened, api.Condition{Code: code, Msg: msg})
 			} else {
-				flattened = append(flattened, tenancy.Condition{Code: code, Msg: msg, Affects: affected})
+				flattened = append(flattened, api.Condition{Code: code, Msg: msg, Affects: affected})
 			}
 		}
 	}
@@ -315,19 +315,19 @@ func flatten(m map[tenancy.Code]map[string][]tenancy.AffectedObject) []tenancy.C
 }
 
 // getAffectedObject gets AffectedObject from a namespace or a string of form group/version/kind/namespace/name.
-func getAffectedObject(gvknn string, log logr.Logger) tenancy.AffectedObject {
+func getAffectedObject(gvknn string, log logr.Logger) api.AffectedObject {
 	if gvknn == Local {
-		return tenancy.AffectedObject{}
+		return api.AffectedObject{}
 	}
 
 	a := strings.Split(gvknn, "/")
 	// The affected is a namespace.
 	if len(a) == 1 {
-		return tenancy.AffectedObject{Namespace: a[0]}
+		return api.AffectedObject{Namespace: a[0]}
 	}
 	// The affected is an object.
 	if len(a) == 5 {
-		return tenancy.AffectedObject{
+		return api.AffectedObject{
 			Group:     a[0],
 			Version:   a[1],
 			Kind:      a[2],
@@ -338,7 +338,7 @@ func getAffectedObject(gvknn string, log logr.Logger) tenancy.AffectedObject {
 
 	// Return an invalid object with key as name if the key is invalid.
 	log.Info("Invalid key for the affected object", "key", gvknn)
-	return tenancy.AffectedObject{
+	return api.AffectedObject{
 		Group:     "",
 		Version:   "",
 		Kind:      "",

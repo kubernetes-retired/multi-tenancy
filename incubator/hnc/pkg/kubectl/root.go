@@ -30,7 +30,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var k8sClient *kubernetes.Clientset
@@ -38,7 +38,7 @@ var hncClient *rest.RESTClient
 var rootCmd *cobra.Command
 
 func init() {
-	tenancy.AddToScheme(scheme.Scheme)
+	api.AddToScheme(scheme.Scheme)
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
@@ -59,7 +59,7 @@ func init() {
 
 			// create the HNC clientset
 			hncConfig := *config
-			hncConfig.ContentConfig.GroupVersion = &tenancy.GroupVersion
+			hncConfig.ContentConfig.GroupVersion = &api.GroupVersion
 			hncConfig.APIPath = "/apis"
 			hncConfig.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
 			hncConfig.UserAgent = rest.DefaultKubernetesUserAgent()
@@ -88,15 +88,15 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE") // windows
 }
 
-func getHierarchy(nnm string) *tenancy.HierarchyConfiguration {
+func getHierarchy(nnm string) *api.HierarchyConfiguration {
 	if _, err := k8sClient.CoreV1().Namespaces().Get(nnm, metav1.GetOptions{}); err != nil {
 		fmt.Printf("Error reading namespace %s: %s\n", nnm, err)
 		os.Exit(1)
 	}
-	hier := &tenancy.HierarchyConfiguration{}
-	hier.Name = tenancy.Singleton
+	hier := &api.HierarchyConfiguration{}
+	hier.Name = api.Singleton
 	hier.Namespace = nnm
-	err := hncClient.Get().Resource(tenancy.Resource).Namespace(nnm).Name(tenancy.Singleton).Do().Into(hier)
+	err := hncClient.Get().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Do().Into(hier)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error reading hierarchy for %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -104,13 +104,13 @@ func getHierarchy(nnm string) *tenancy.HierarchyConfiguration {
 	return hier
 }
 
-func updateHierarchy(hier *tenancy.HierarchyConfiguration, reason string) {
+func updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {
-		err = hncClient.Post().Resource(tenancy.Resource).Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
+		err = hncClient.Post().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
 	} else {
-		err = hncClient.Put().Resource(tenancy.Resource).Namespace(nnm).Name(tenancy.Singleton).Body(hier).Do().Error()
+		err = hncClient.Put().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
 	}
 	if err != nil {
 		fmt.Printf("Error %s: %s\n", reason, err)
@@ -118,7 +118,7 @@ func updateHierarchy(hier *tenancy.HierarchyConfiguration, reason string) {
 	}
 }
 
-func childNamespaceExists(hier *tenancy.HierarchyConfiguration, cn string) bool {
+func childNamespaceExists(hier *api.HierarchyConfiguration, cn string) bool {
 	for _, n := range hier.Spec.RequiredChildren {
 		if cn == n {
 			return true

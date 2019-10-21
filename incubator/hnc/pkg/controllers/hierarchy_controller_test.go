@@ -10,7 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 const (
@@ -45,7 +45,7 @@ var _ = Describe("Hierarchy", func() {
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
 	})
 
 	It("should unset CritParentMissing condition if the parent is later created", func() {
@@ -54,7 +54,7 @@ var _ = Describe("Hierarchy", func() {
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
 
 		// Create the missing parent
 		brumpfNS := &corev1.Namespace{}
@@ -62,7 +62,7 @@ var _ = Describe("Hierarchy", func() {
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
 
 		// Ensure the condition is resolved on the child
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
 		Eventually(func() []string {
@@ -76,13 +76,13 @@ var _ = Describe("Hierarchy", func() {
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
 
 		// Set bar as foo's parent
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, tenancy.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(true))
 	})
 
 	It("should unset CritAncestor condition if critical conditions in ancestors are gone", func() {
@@ -91,13 +91,13 @@ var _ = Describe("Hierarchy", func() {
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
 
 		// Set bar as foo's parent
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, tenancy.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(true))
 
 		// Create the missing parent
 		brumpfNS := &corev1.Namespace{}
@@ -105,7 +105,7 @@ var _ = Describe("Hierarchy", func() {
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
 
 		// Ensure the condition is resolved on the child
-		Eventually(hasCondition(ctx, barName, tenancy.CritParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
 		Eventually(func() []string {
@@ -115,14 +115,14 @@ var _ = Describe("Hierarchy", func() {
 
 		// Ensure foo is enqueued and thus get CritAncestor condition updated after
 		// critical conditions are resolved in bar.
-		Eventually(hasCondition(ctx, fooName, tenancy.CritAncestor)).Should(Equal(false))
+		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(false))
 	})
 
 	It("should set CritParentInvalid condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, tenancy.CritParentInvalid)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritParentInvalid)).Should(Equal(true))
 	})
 
 	It("should set CritParentInvalid condition if a cycle is detected", func() {
@@ -138,7 +138,7 @@ var _ = Describe("Hierarchy", func() {
 		fooHier := getHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, tenancy.CritParentInvalid)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritParentInvalid)).Should(Equal(true))
 	})
 
 	It("should create a child namespace if requested", func() {
@@ -173,9 +173,9 @@ var _ = Describe("Hierarchy", func() {
 		updateHierarchy(ctx, barHier)
 
 		// Verify that all three namespaces have CritRequiredChildConflict condition set.
-		Eventually(hasCondition(ctx, fooName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
-		Eventually(hasCondition(ctx, barName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
-		Eventually(hasCondition(ctx, bazName, tenancy.CritRequiredChildConflict)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritRequiredChildConflict)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritRequiredChildConflict)).Should(Equal(true))
+		Eventually(hasCondition(ctx, bazName, api.CritRequiredChildConflict)).Should(Equal(true))
 	})
 
 	It("should have a tree label", func() {
@@ -227,7 +227,7 @@ var _ = Describe("Hierarchy", func() {
 	})
 })
 
-func hasCondition(ctx context.Context, nm string, code tenancy.Code) func() bool {
+func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {
 	return func() bool {
 		conds := getHierarchy(ctx, nm).Status.Conditions
 		for _, cond := range conds {
@@ -239,20 +239,20 @@ func hasCondition(ctx context.Context, nm string, code tenancy.Code) func() bool
 	}
 }
 
-func newHierarchy(nm string) *tenancy.HierarchyConfiguration {
-	hier := &tenancy.HierarchyConfiguration{}
+func newHierarchy(nm string) *api.HierarchyConfiguration {
+	hier := &api.HierarchyConfiguration{}
 	hier.ObjectMeta.Namespace = nm
-	hier.ObjectMeta.Name = tenancy.Singleton
+	hier.ObjectMeta.Name = api.Singleton
 	return hier
 }
 
-func getHierarchy(ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
+func getHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
 	return getHierarchyWithOffset(1, ctx, nm)
 }
 
-func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *tenancy.HierarchyConfiguration {
-	snm := types.NamespacedName{Namespace: nm, Name: tenancy.Singleton}
-	hier := &tenancy.HierarchyConfiguration{}
+func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *api.HierarchyConfiguration {
+	snm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
+	hier := &api.HierarchyConfiguration{}
 	EventuallyWithOffset(offset+1, func() error {
 		return k8sClient.Get(ctx, snm, hier)
 	}).Should(Succeed())
@@ -272,7 +272,7 @@ func getNamespaceWithOffset(offset int, ctx context.Context, nm string) *corev1.
 	return ns
 }
 
-func updateHierarchy(ctx context.Context, h *tenancy.HierarchyConfiguration) {
+func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
 	if h.CreationTimestamp.IsZero() {
 		Expect(k8sClient.Create(ctx, h)).Should(Succeed())
 	} else {

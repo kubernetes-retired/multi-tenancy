@@ -308,6 +308,12 @@ type realAuthzClient struct {
 
 // IsAdmin implements authzClient
 func (r *realAuthzClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm string) (bool, error) {
+	// Convert the Extra type
+	authzExtra := map[string]authzv1.ExtraValue{}
+	for k, v := range ui.Extra {
+		authzExtra[k] = (authzv1.ExtraValue)(v)
+	}
+
 	// Construct the request
 	sar := &authzv1.SubjectAccessReview{
 		Spec: authzv1.SubjectAccessReviewSpec{
@@ -321,7 +327,7 @@ func (r *realAuthzClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm
 			User:   ui.Username,
 			Groups: ui.Groups,
 			UID:    ui.UID,
-			// TODO: add Extra (need to convert the types)
+			Extra:  authzExtra,
 		},
 	}
 

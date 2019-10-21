@@ -43,3 +43,4 @@ please at least join one of the following groups to access the docs:
 ## Working Group Meeting Records
 
 - [YouTube Channel](https://www.youtube.com/playlist?list=PL69nYSiGNLP1tBA0W8zEe6UwPsabGQk-j&disable_polymer=true)
+- [Meeting Notes and Agenda](https://docs.google.com/document/d/1fj3yzmeU2eU8ZNBCUJG97dk_wC7228-e_MmdcmTNrZY/edit)

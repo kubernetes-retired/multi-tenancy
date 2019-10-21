@@ -29,7 +29,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
@@ -43,7 +43,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = tenancy.AddToScheme(scheme)
+	_ = api.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
