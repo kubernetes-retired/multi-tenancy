@@ -28,6 +28,9 @@ const (
 	CritAncestor              Code = "CRIT_ANCESTOR"
 	ObjectOverridden          Code = "OBJECT_OVERRIDDEN"
 	ObjectDescendantOverriden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
+	MetaGroup                      = "hnc.x-k8s.io"
+	LabelInheritedFrom             = MetaGroup + "/inheritedFrom"
+	AnnotationModified             = MetaGroup + "/modified"
 )
 
 var (
