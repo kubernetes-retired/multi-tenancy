@@ -38,9 +38,15 @@ var _ = Describe("Secret", func() {
 	It("should be copied to descendents", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
+
 		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
 	})
 
 	It("should be removed if the hierarchy changes", func() {
@@ -127,6 +133,20 @@ func hasSecret(ctx context.Context, nsName, secretName string) func() bool {
 		err := k8sClient.Get(ctx, nnm, sec)
 		return err == nil
 	}
+}
+
+func secretInheritedFrom(ctx context.Context, nsName, secretName string) string {
+	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
+	sec := &corev1.Secret{}
+	if err := k8sClient.Get(ctx, nnm, sec); err != nil {
+		// should have been caught above
+		return err.Error()
+	}
+	if sec.ObjectMeta.Labels == nil {
+		return ""
+	}
+	lif, _ := sec.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	return lif
 }
 
 func setParent(ctx context.Context, nm string, pnm string) {
