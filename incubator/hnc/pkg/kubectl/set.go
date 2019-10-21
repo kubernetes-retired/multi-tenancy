@@ -17,6 +17,7 @@ package kubectl
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -28,55 +29,93 @@ var setCmd = &cobra.Command{
 	Args:    cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
-		hier := getHierarchy(nnm)
-		oldpnm := hier.Spec.Parent
+		hc := getHierarchy(nnm)
+		oldpnm := hc.Spec.Parent
+		flags := cmd.Flags()
+		numChanges := 0
 
-		if cmd.Flags().Changed("root") {
+		if flags.Changed("root") && flags.Changed("parent") {
+			fmt.Println("Cannot set both --root and --parent at the same time")
+			os.Exit(1)
+		}
+
+		if flags.Changed("root") {
 			if oldpnm == "" {
 				fmt.Printf("%s is already a root namespace; unchanged", nnm)
-				return
+			} else {
+				hc.Spec.Parent = ""
+				fmt.Printf("Unsetting the parent of %s (was previously %s)\n", nnm, oldpnm)
+				numChanges++
 			}
-			hier.Spec.Parent = ""
-			updateHierarchy(hier, fmt.Sprintf("unsetting the parent of %s", nnm))
-			fmt.Printf("Unset the parent of %s (was previously %s)\n", nnm, oldpnm)
-			return
 		}
 
-		if cmd.Flags().Changed("parent") {
-			pnm, _ := cmd.Flags().GetString("parent")
+		if flags.Changed("parent") {
+			pnm, _ := flags.GetString("parent")
 			if oldpnm == pnm {
 				fmt.Printf("Parent of %s is already %s; unchanged\n", nnm, pnm)
-				return
-			}
-			hier.Spec.Parent = pnm
-			updateHierarchy(hier, fmt.Sprintf("setting the parent of %s to %s", nnm, pnm))
-			if oldpnm == "" {
-				fmt.Printf("Set the parent of %s to %s\n", nnm, pnm)
 			} else {
-				fmt.Printf("Changed the parent of %s from %s to %s\n", nnm, oldpnm, pnm)
+				hc.Spec.Parent = pnm
+				if oldpnm == "" {
+					fmt.Printf("Setting the parent of %s to %s\n", nnm, pnm)
+				} else {
+					fmt.Printf("Changing the parent of %s from %s to %s\n", nnm, oldpnm, pnm)
+				}
+				numChanges++
 			}
 		}
 
-		if cmd.Flags().Changed("requiredChild") {
-			rcns, _ := cmd.Flags().GetStringArray("requiredChild")
+		if flags.Changed("requiredChild") {
+			rcns, _ := flags.GetStringArray("requiredChild")
 
 			for _, rcn := range rcns {
-				ns := getHierarchy(nnm)
-				if childNamespaceExists(ns, rcn) {
+				if childNamespaceExists(hc, rcn) {
 					fmt.Printf("Required child %s already present in %s\n", rcn, nnm)
 					continue
 				}
-				ns.Spec.RequiredChildren = append(ns.Spec.RequiredChildren, rcn)
-				updateHierarchy(ns, fmt.Sprintf("adding required child %s", rcn))
-				fmt.Printf("Added required child %s\n", rcn)
+				hc.Spec.RequiredChildren = append(hc.Spec.RequiredChildren, rcn)
+				fmt.Printf("Adding required child %s\n", rcn)
+				numChanges++
 			}
+		}
+
+		if flags.Changed("optionalChild") {
+			cnm, _ := flags.GetString("optionalChild")
+			found := false
+			newRCs := []string{}
+			for _, rc := range hc.Spec.RequiredChildren {
+				if rc == cnm {
+					found = true
+					continue
+				}
+				newRCs = append(newRCs, rc)
+			}
+
+			if !found {
+				fmt.Printf("%s is not a required child of %s\n", cnm, nnm)
+			} else {
+				fmt.Printf("Making required child %s optional\n", cnm)
+				hc.Spec.RequiredChildren = newRCs
+				numChanges++
+			}
+		}
+
+		if numChanges > 0 {
+			updateHierarchy(hc, fmt.Sprintf("setting hierarchical configuration of %s", nnm))
+			word := "property"
+			if numChanges > 1 {
+				word = "properties"
+			}
+			fmt.Printf("Succesfully updated %d %s of the hierarchical configuration of %s\n", numChanges, word, nnm)
+		} else {
+			fmt.Printf("No changes made\n")
 		}
 	},
 }
 
-func init() {
+func newSetCmd() *cobra.Command {
 	setCmd.Flags().Bool("root", false, "Turns namespace into root namespace")
 	setCmd.Flags().String("parent", "", "Parent namespace")
 	setCmd.Flags().StringArray("requiredChild", []string{""}, "Required Child namespace")
-	rootCmd.AddCommand(setCmd)
+	setCmd.Flags().String("optionalChild", "", "Turns a required child namespace into an optional child namespace")
+	return setCmd
 }

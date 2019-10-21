@@ -92,6 +92,6 @@ func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 	return fmt.Sprintf("%s (%s)", hier.Namespace, strings.Join(ns, ","))
 }
 
-func init() {
-	rootCmd.AddCommand(treeCmd)
+func newTreeCmd() *cobra.Command {
+	return treeCmd
 }
