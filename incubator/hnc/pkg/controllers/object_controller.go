@@ -28,13 +28,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-)
-
-const (
-	metaGroup          = "hnc.x-k8s.io"
-	labelInheritedFrom = metaGroup + "/inheritedFrom"
-	annotationModified = metaGroup + "/modified"
 )
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
@@ -146,7 +141,7 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 		// TODO add object condition here to replace the setAnnotation
 		log.Info("Marking as modified from the source", "inheritedFrom", srcInst.GetNamespace())
 		// Mark as modified if the canonical fields don't match.
-		setAnnotation(inst, annotationModified, "true")
+		setAnnotation(inst, api.AnnotationModified, "true")
 		// TODO it's wrong to call apiserver in forest lock, will be replaced soon.
 		err := r.Update(ctx, inst)
 		if err != nil {
@@ -209,7 +204,7 @@ func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, i
 	return src, nil
 }
 
-// getSourceNS gets source namespace if it's set in "labelInheritedFrom" label.
+// getSourceNS gets source namespace if it's set in "api.LabelInheritedFrom" label.
 // It returns an empty string if this instance is the source
 func getSourceNS(inst *unstructured.Unstructured) string {
 	labels := inst.GetLabels()
@@ -217,7 +212,7 @@ func getSourceNS(inst *unstructured.Unstructured) string {
 		// this cannot be a copy
 		return ""
 	}
-	inheritedFrom, _ := labels[labelInheritedFrom]
+	inheritedFrom, _ := labels[api.LabelInheritedFrom]
 	return inheritedFrom
 }
 
@@ -235,7 +230,7 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	// original source.
 	srcNS := inst.GetNamespace()
 	if il := inst.GetLabels(); il != nil {
-		if v, ok := il[labelInheritedFrom]; ok {
+		if v, ok := il[api.LabelInheritedFrom]; ok {
 			srcNS = v
 		}
 	}
@@ -246,11 +241,11 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 		propagated := canonical(inst)
 		propagated.SetNamespace(dst)
 		labels := propagated.GetLabels()
-		labels[labelInheritedFrom] = srcNS
+		labels[api.LabelInheritedFrom] = srcNS
 		propagated.SetLabels(labels)
 
 		// Push to the apiserver
-		log.Info("Propagating", "dst", dst, "origin", labels[labelInheritedFrom])
+		log.Info("Propagating", "dst", dst, "origin", labels[api.LabelInheritedFrom])
 		err := r.Update(ctx, propagated)
 		if err != nil && errors.IsNotFound(err) {
 			err = r.Create(ctx, propagated)
@@ -317,7 +312,7 @@ func canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	// Non-HNC annotations:
 	newAnnots := map[string]string{}
 	for k, v := range inst.GetAnnotations() {
-		if !strings.HasPrefix(k, metaGroup) {
+		if !strings.HasPrefix(k, api.MetaGroup) {
 			newAnnots[k] = v
 		}
 	}
@@ -326,7 +321,7 @@ func canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	// Non-HNC labels:
 	newLabels := map[string]string{}
 	for k, v := range inst.GetLabels() {
-		if !strings.HasPrefix(k, metaGroup) {
+		if !strings.HasPrefix(k, api.MetaGroup) {
 			newLabels[k] = v
 		}
 	}
