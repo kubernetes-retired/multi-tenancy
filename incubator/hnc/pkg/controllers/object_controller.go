@@ -226,25 +226,31 @@ func getSourceNS(inst *unstructured.Unstructured) string {
 //
 // TODO: parallelize?
 func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured, dests []string) error {
+	// The HNC can blacklist certain objects.
 	if r.isExcluded(log, inst) {
 		return nil
 	}
-	parent := inst.GetNamespace()
-	for _, child := range dests {
-		// Create an in-memory copy with the appropriate namespace.
-		propagated := canonical(inst)
-		propagated.SetNamespace(child)
 
-		// If the label to the source namespace is missing, then the object we're copying
-		// must be the original, so point the label to this namespace.
-		labels := propagated.GetLabels()
-		if _, exists := labels[labelInheritedFrom]; !exists {
-			labels[labelInheritedFrom] = parent
-			propagated.SetLabels(labels)
+	// Find the original source. If the instance doesn't have the inheritedFrom label set, it _is_ the
+	// original source.
+	srcNS := inst.GetNamespace()
+	if il := inst.GetLabels(); il != nil {
+		if v, ok := il[labelInheritedFrom]; ok {
+			srcNS = v
 		}
+	}
+
+	// Propagate the object to all destination namespaces.
+	for _, dst := range dests {
+		// Create an in-memory canonical version, and set the new properties.
+		propagated := canonical(inst)
+		propagated.SetNamespace(dst)
+		labels := propagated.GetLabels()
+		labels[labelInheritedFrom] = srcNS
+		propagated.SetLabels(labels)
 
 		// Push to the apiserver
-		log.Info("Propagating", "dst", child, "origin", labels[labelInheritedFrom])
+		log.Info("Propagating", "dst", dst, "origin", labels[labelInheritedFrom])
 		err := r.Update(ctx, propagated)
 		if err != nil && errors.IsNotFound(err) {
 			err = r.Create(ctx, propagated)
