@@ -25,18 +25,21 @@ import (
 
 var showCmd = &cobra.Command{
 	Use:   "show",
-	Short: "Displays information about the hierarchy",
+	Short: "Displays information about the hierarchy configuration",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
+		fmt.Printf("Hierarchy configuration for namespace %s\n", nnm)
 		hier := getHierarchy(nnm)
-		fmt.Printf("Hierarchy for namespace %s\n", nnm)
+
+		// Parent
 		if hier.Spec.Parent != "" {
 			fmt.Printf("  Parent: %s\n", hier.Spec.Parent)
 		} else {
 			fmt.Printf("  No parent\n")
 		}
 
+		// Children
 		childrenAndStatus := map[string]string{}
 		for _, cn := range hier.Status.Children {
 			childrenAndStatus[cn] = ""
@@ -62,14 +65,30 @@ var showCmd = &cobra.Command{
 		} else {
 			fmt.Printf("  No children\n")
 		}
-		if hier.Spec.Parent != "" || len(hier.Status.Children) > 0 {
-			if len(hier.Status.Conditions) > 0 {
-				fmt.Printf("  Conditions:\n")
-				for _, c := range hier.Status.Conditions {
-					fmt.Printf("  - %v\n", c)
+
+		// Early exit if no conditions
+		if len(hier.Status.Conditions) == 0 {
+			fmt.Printf("  No conditions\n")
+			return
+		}
+
+		// Conditions
+		fmt.Printf("  Conditions:\n")
+		for _, c := range hier.Status.Conditions {
+			fmt.Printf("  - %s: %s\n", c.Code, c.Msg)
+			if len(c.Affects) == 0 {
+				continue
+			}
+			fmt.Printf("    - Affected by this condition:\n")
+			for _, a := range c.Affects {
+				if a.Name != "" {
+					if a.Group == "" {
+						a.Group = "core"
+					}
+					fmt.Printf("      - %s/%s (%s/%s/%s\n", a.Namespace, a.Name, a.Group, a.Version, a.Kind)
+				} else {
+					fmt.Printf("      - %s\n", a.Namespace)
 				}
-			} else {
-				fmt.Printf("  No conditions\n")
 			}
 		}
 	},

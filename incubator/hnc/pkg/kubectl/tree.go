@@ -66,15 +66,17 @@ func printSubtree(prefix string, hier *api.HierarchyConfiguration) {
 	}
 }
 
+// nameAndFootnotes returns the text to print to describe the namespace, in the form of the
+// namespace's name along with references to any footnotes. Example: default (1)
 func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
-		txt := cond.Msg
+		txt := (string)(cond.Code) + ": " + cond.Msg
 		if idx, ok := footnotesByMsg[txt]; ok {
 			notes = append(notes, idx)
 		} else {
 			footnotes = append(footnotes, txt)
-			footnotesByMsg[cond.Msg] = len(footnotes)
+			footnotesByMsg[txt] = len(footnotes)
 			notes = append(notes, len(footnotes))
 		}
 	}
