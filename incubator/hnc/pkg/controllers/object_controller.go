@@ -18,10 +18,10 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -142,10 +142,10 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	}
 
 	// If the object has been modified, alert the users and don't propagate it further
-	if !r.isUnmodified(ctx, log, inst, srcInst) {
+	if !reflect.DeepEqual(canonical(inst), canonical(srcInst)) {
 		// TODO add object condition here to replace the setAnnotation
 		log.Info("Marking as modified from the source", "inheritedFrom", srcInst.GetNamespace())
-		// Mark as modified if the copied fields don't match.
+		// Mark as modified if the canonical fields don't match.
 		setAnnotation(inst, annotationModified, "true")
 		// TODO it's wrong to call apiserver in forest lock, will be replaced soon.
 		err := r.Update(ctx, inst)
@@ -180,22 +180,6 @@ func (r *ObjectReconciler) hasCorrectAncestry(ctx context.Context, log logr.Logg
 	}
 
 	return true
-}
-
-// isUnmodified checks to see if this object is the same as the source.
-func (r *ObjectReconciler) isUnmodified(ctx context.Context, log logr.Logger, inst, src *unstructured.Unstructured) bool {
-	if src == inst {
-		return true
-	}
-
-	instCopied := copyObject(inst)
-	// The only difference could be namespace and labelInheritedFrom label.
-	// Make the namespaces and inheritedFrom labels the same before comparison.
-	instCopied.SetNamespace(src.GetNamespace())
-	setLabel(instCopied, labelInheritedFrom, "")
-	srcCopied := copyObject(src)
-	setLabel(srcCopied, labelInheritedFrom, "")
-	return reflect.DeepEqual(instCopied, srcCopied)
 }
 
 // getSourceInst gets source instance of this one. It returns itself if it's the source. It returns
@@ -248,28 +232,25 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	parent := inst.GetNamespace()
 	for _, child := range dests {
 		// Create an in-memory copy with the appropriate namespace.
-		copied := copyObject(inst)
-		copied.SetNamespace(child)
+		propagated := canonical(inst)
+		propagated.SetNamespace(child)
 
 		// If the label to the source namespace is missing, then the object we're copying
 		// must be the original, so point the label to this namespace.
-		labels := copied.GetLabels()
-		if labels == nil {
-			labels = map[string]string{}
-		}
+		labels := propagated.GetLabels()
 		if _, exists := labels[labelInheritedFrom]; !exists {
 			labels[labelInheritedFrom] = parent
-			copied.SetLabels(labels)
+			propagated.SetLabels(labels)
 		}
 
 		// Push to the apiserver
 		log.Info("Propagating", "dst", child, "origin", labels[labelInheritedFrom])
-		err := r.Update(ctx, copied)
+		err := r.Update(ctx, propagated)
 		if err != nil && errors.IsNotFound(err) {
-			err = r.Create(ctx, copied)
+			err = r.Create(ctx, propagated)
 		}
 		if err != nil {
-			log.Error(err, "Couldn't propagate", "copy", copied)
+			log.Error(err, "Couldn't propagate", "object", propagated)
 			return err
 		}
 	}
@@ -283,11 +264,11 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 	// so no need to do this recursively. TODO: maybe do a search on the label value instead?
 	// Parallelize?
 	for _, child := range r.getChildNamespaces(nnm.Namespace) {
-		// Try to find the copied objects, if they exist
-		copiedNnm := types.NamespacedName{Namespace: child, Name: nnm.Name}
-		copied := &unstructured.Unstructured{}
-		copied.SetGroupVersionKind(r.GVK)
-		err := r.Get(ctx, copiedNnm, copied)
+		// Try to find the propagated objects, if they exist
+		propagatedNnm := types.NamespacedName{Namespace: child, Name: nnm.Name}
+		propagated := &unstructured.Unstructured{}
+		propagated.SetGroupVersionKind(r.GVK)
+		err := r.Get(ctx, propagatedNnm, propagated)
 
 		// Is it already gone?
 		if errors.IsNotFound(err) {
@@ -295,16 +276,16 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 		}
 		// Some other error?
 		if err != nil {
-			log.Error(err, "Couldn't read copied object that needs to be deleted", "name", copiedNnm)
+			log.Error(err, "Couldn't read propagated object that needs to be deleted", "name", propagatedNnm)
 			return err
 		}
 
 		// TODO: double-check the label - or maybe just call deleteObsolete?
 
 		// Delete the copy
-		log.Info("Deleting", "propagated", copiedNnm)
-		if err := r.Delete(ctx, copied); err != nil {
-			log.Error(err, "Coudln't delete", "copy", copied)
+		log.Info("Deleting", "propagated", propagatedNnm)
+		if err := r.Delete(ctx, propagated); err != nil {
+			log.Error(err, "Coudln't delete", "propagated", propagated)
 			return err
 		}
 	}
@@ -312,24 +293,40 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 	return nil
 }
 
-func copyObject(inst *unstructured.Unstructured) *unstructured.Unstructured {
-	copied := inst.DeepCopy()
+// canonical returns a canonicalized version of the object - that is, one that has the same name,
+// spec and non-HNC labels and annotations, but with the status and all other metadata cleared
+// (including, notably, the namespace). The resulting object is suitable to be copied into a new
+// namespace, or two canonicalized objects are suitable for being compared via reflect.DeepEqual.
+//
+// As a side effect, the label and annotation maps are always initialized in the returned value.
+func canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
+	// Start with a copy and clear the status and metadata
+	c := inst.DeepCopy()
+	delete(c.Object, "status")
+	delete(c.Object, "metadata")
 
-	// Clear all irrelevant fields. cf https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.15/#objectmeta-v1-meta
-	copied.SetCreationTimestamp(metav1.Time{})
-	copied.SetDeletionGracePeriodSeconds(nil)
-	copied.SetDeletionTimestamp(nil)
-	copied.SetFinalizers(nil) // TODO: double-check this is the right thing to do?
-	copied.SetGenerateName("")
-	copied.SetGeneration(0)
-	copied.SetInitializers(nil) // TODO: is this correct?
-	// TODO: what about managedFields?
-	// TODO: use ownerReferences instead?
-	copied.SetResourceVersion("")
-	copied.SetSelfLink("")
-	copied.SetUID("")
+	// Restore the whitelisted metadata. Name:
+	c.SetName(inst.GetName())
 
-	return copied
+	// Non-HNC annotations:
+	newAnnots := map[string]string{}
+	for k, v := range inst.GetAnnotations() {
+		if !strings.HasPrefix(k, metaGroup) {
+			newAnnots[k] = v
+		}
+	}
+	c.SetAnnotations(newAnnots)
+
+	// Non-HNC labels:
+	newLabels := map[string]string{}
+	for k, v := range inst.GetLabels() {
+		if !strings.HasPrefix(k, metaGroup) {
+			newLabels[k] = v
+		}
+	}
+	c.SetLabels(newLabels)
+
+	return c
 }
 
 func (r *ObjectReconciler) getChildNamespaces(nm string) []string {
