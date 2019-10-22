@@ -83,7 +83,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = controllers.Create(k8sManager, forest.NewForest())
+	err = controllers.Create(k8sManager, forest.NewForest(), 100)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
