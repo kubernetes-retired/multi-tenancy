@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -101,6 +103,12 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 	if isHNCServiceAccount(req.ui) {
 		log.Info("Allowed change by HNC SA")
 		return allow("HNC SA")
+	}
+
+	// Verify the HC is legal in isolation (i.e., before checking the rest of the forest)
+	resp := checkConfig(req.hc)
+	if !resp.Allowed {
+		return resp
 	}
 
 	// Do all checks that require holding the in-memory lock. Generate a list of authz checks we
@@ -289,6 +297,31 @@ func isHNCServiceAccount(user *authnv1.UserInfo) bool {
 		}
 	}
 	return false
+}
+
+// checkConfig is checking whether namespaces in the hierarchy configuration meet kubernetes requirements.
+// if required children's field contains invalid name, it returns admission response that reject namespaces creation.
+func checkConfig(hc *api.HierarchyConfiguration) admission.Response {
+
+	// Check if children names in requiredChildren field obey kubernetes namespace regex format.
+	// invalidRCs accomodates illegal required child(RC) name(s).
+	invalidRCs := []string{}
+	for _, rc := range hc.Spec.RequiredChildren {
+		if resp := validateNamespace(rc); resp != nil {
+			invalidRCs = append(invalidRCs, rc)
+		}
+	}
+
+	if len(invalidRCs) > 0 {
+		return deny(metav1.StatusReasonBadRequest, fmt.Sprintf("The following required children are not valid namespace names: %s", strings.Join(invalidRCs, ", ")))
+	}
+	return allow("")
+}
+
+// validateNamespace validates a string is a valid namespace using apimachinery.
+// https://godoc.org/k8s.io/apimachinery/pkg/util/validation#IsDNS1123Label
+func validateNamespace(s string) []string {
+	return validation.IsDNS1123Label(s)
 }
 
 func (v *Hierarchy) InjectClient(c client.Client) error {
