@@ -22,8 +22,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,17 +33,22 @@ var (
 )
 
 var treeCmd = &cobra.Command{
-	Use:   "tree",
-	Short: "Displays the hierarchy tree rooted at the given namespaces separated by space and if no namespace is provided, displays the tree starting at every root namespace on the cluster.",
+	Use:     "tree",
+	Short:   "Displays the hierarchy tree rooted at the given namespaces separated by space and if no namespace is provided, displays the tree starting at every root namespace on the cluster.",
+	Aliases: []string{"tree"},
 	Run: func(cmd *cobra.Command, args []string) {
-		defaultList := len(args) == 0
+		flags := cmd.Flags()
 		footnotesByMsg = map[string]int{}
 		footnotes = []string{}
 		var nsList []string
-		if defaultList {
+		defaultList := len(args) == 0
+		nsList = args
+		if flags.Changed("all-namespace") {
 			nsList = getAllNamespaces()
-		} else {
-			nsList = args
+		}
+		if defaultList && !flags.Changed("all-namespace") {
+			fmt.Printf("Error: requires some argument or flag but provided none\n")
+			return
 		}
 		for _, nnm := range nsList {
 			hier := getHierarchy(nnm)
@@ -105,6 +110,7 @@ func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 }
 
 func newTreeCmd() *cobra.Command {
+	treeCmd.Flags().CountP("all-namespace", "A", "Show tree for all namespaces")
 	return treeCmd
 }
 
