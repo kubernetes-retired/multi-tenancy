@@ -16,12 +16,25 @@ limitations under the License.
 
 package v1alpha1
 
+import "fmt"
+
 // GetEtcdDomain returns the dns of etcd service, note that, though the
 // complete etcd svc dns is {etcdSvcName}.{namespace}.svc.{clusterdomain},
 // this EtcdDomain is only used by apiserver that in the same namespace,
 // so the etcdSvcName is adequate
 func (cv *ClusterVersion) GetEtcdDomain() string {
 	return cv.Spec.ETCD.Service.Name
+}
+
+// GetEtcdServers returns the list of hostnames of etcd pods
+func (cv *ClusterVersion) GetEtcdServers() (etcdServers []string) {
+	etcdStsName := cv.Spec.ETCD.StatefulSet.Name
+	replicas := cv.Spec.ETCD.StatefulSet.Spec.Replicas
+	var i int32
+	for ; i < *replicas; i++ {
+		etcdServers = append(etcdServers, fmt.Sprintf("%s-%d.%s", etcdStsName, i, cv.GetEtcdDomain()))
+	}
+	return etcdServers
 }
 
 // GetApiserverDomain returns the dns of the apiserver service
