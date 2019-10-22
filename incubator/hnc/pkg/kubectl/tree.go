@@ -43,10 +43,10 @@ var treeCmd = &cobra.Command{
 		var nsList []string
 		defaultList := len(args) == 0
 		nsList = args
-		if flags.Changed("all-namespace") {
+		if flags.Changed("all-namespaces") {
 			nsList = getAllNamespaces()
 		}
-		if defaultList && !flags.Changed("all-namespace") {
+		if defaultList && !flags.Changed("all-namespaces") {
 			fmt.Printf("Error: requires some argument or flag but provided none\n")
 			return
 		}
@@ -110,7 +110,7 @@ func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 }
 
 func newTreeCmd() *cobra.Command {
-	treeCmd.Flags().CountP("all-namespace", "A", "Show tree for all namespaces")
+	treeCmd.Flags().CountP("all-namespaces", "A", "Show tree for all namespaces")
 	return treeCmd
 }
 
