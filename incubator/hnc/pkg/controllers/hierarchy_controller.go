@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -537,7 +538,7 @@ func (r *HierarchyReconciler) getNamespace(ctx context.Context, nm string) (*cor
 	return ns, nil
 }
 
-func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
 	// Maps namespaces to their singletons
 	nsMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
@@ -548,9 +549,13 @@ func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}},
 			}
 		})
+	opts := controller.Options{
+		MaxConcurrentReconciles: maxReconciles,
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.HierarchyConfiguration{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
+		WithOptions(opts).
 		Complete(r)
 }

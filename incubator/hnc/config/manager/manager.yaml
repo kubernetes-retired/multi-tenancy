@@ -25,7 +25,7 @@ spec:
       containers:
       - command:
         - /manager
-        args:
+        args: # overridden if manager_auth_proxy_patch.yaml is used
         - --enable-leader-election
         image: controller:latest
         name: manager

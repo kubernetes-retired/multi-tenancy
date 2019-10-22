@@ -15,7 +15,7 @@ import (
 // configuration object.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager, f *forest.Forest) error {
+func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	// Create all object reconcillers
 	gvks := []schema.GroupVersionKind{
 		{Group: "", Version: "v1", Kind: "Secret"},
@@ -48,7 +48,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest) error {
 		Types:    objReconcilers,
 		Affected: make(chan event.GenericEvent),
 	}
-	if err := hr.SetupWithManager(mgr); err != nil {
+	if err := hr.SetupWithManager(mgr, maxReconciles); err != nil {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
 	}
 
