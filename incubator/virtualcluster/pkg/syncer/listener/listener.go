@@ -14,20 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package app
+package listener
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 
-func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:  "syncer",
-		Long: ``,
-		Run: func(cmd *cobra.Command, args []string) {
+var Listeners []ClusterChangeListener
 
-		},
-	}
+type ClusterChangeListener interface {
+	AddCluster(cluster *cluster.Cluster)
+	RemoveCluster(cluster *cluster.Cluster)
+}
 
-	return cmd
+func AddListener(listener ClusterChangeListener) {
+	Listeners = append(Listeners, listener)
 }
