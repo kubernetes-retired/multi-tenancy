@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // Cluster stores a Kubernetes client, cache, and other cluster-scoped dependencies.
@@ -80,6 +82,11 @@ func (c *Cluster) GetClusterName() string {
 // It is used by other Cluster getters, and to add custom resources to the scheme.
 func (c *Cluster) GetScheme() *runtime.Scheme {
 	return scheme.Scheme
+}
+
+// GetClientInfo returns the cluster client info.
+func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
+	return reconciler.NewClusterInfo(c.Name, c.Config)
 }
 
 // GetMapper returns a lazily created apimachinery RESTMapper.

@@ -29,8 +29,8 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/resource-syncer/reconciler"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/resource-syncer/handler"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 )
 
 // MultiClusterController implements the controller pattern.
@@ -63,7 +63,7 @@ type Options struct {
 	// Reconciler is a function that can be called at any time with the Name / Namespace of an object and
 	// ensures that the state of the system matches the state specified in the object.
 	// Defaults to the DefaultReconcileFunc.
-	reconciler reconciler.Reconciler
+	Reconciler reconciler.Reconciler
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
@@ -85,8 +85,8 @@ type Cluster interface {
 }
 
 // NewController creates a new Controller.
-func NewController(name string, options Options) (*MultiClusterController, error) {
-	if options.reconciler == nil {
+func NewController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
+	if options.Reconciler == nil {
 		return nil, fmt.Errorf("must specify Reconciler")
 	}
 
@@ -95,9 +95,10 @@ func NewController(name string, options Options) (*MultiClusterController, error
 	}
 
 	c := &MultiClusterController{
-		name:     name,
-		clusters: make(map[Cluster]struct{}),
-		Options:  options,
+		name:       name,
+		objectType: objectType,
+		clusters:   make(map[Cluster]struct{}),
+		Options:    options,
 	}
 
 	if c.JitterPeriod == 0 {
@@ -171,6 +172,20 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 	}
 }
 
+// Get returns object with specific cluster, namespace and name.
+func (c *MultiClusterController) Get(cluster, namespace, name string) (interface{}, error) {
+	return nil, nil
+}
+
+func (c *MultiClusterController) GetCluster(clusterName string) Cluster {
+	for cluster, _ := range c.clusters {
+		if cluster.GetClusterName() == clusterName {
+			return cluster
+		}
+	}
+	return nil
+}
+
 // worker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the reconcileHandler is never invoked concurrently with the same object.
 func (c *MultiClusterController) worker() {
@@ -213,7 +228,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	}
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
 	// string of the resource to be synced.
-	if result, err := c.reconciler.Reconcile(req); err != nil {
+	if result, err := c.Reconciler.Reconcile(req); err != nil {
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
 		klog.Error("Could not reconcile Request. Stop working.")
@@ -229,7 +244,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	// Finally, if no error occurs we Forget this item so it does not
 	// get queued again until another change happens.
 	c.Queue.Forget(obj)
-	
+
 	// Return true, don't take a break
 	return true
 }
