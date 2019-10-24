@@ -26,18 +26,26 @@ func TestStructure(t *testing.T) {
 		name string
 		nnm  string
 		pnm  string
+		rcm  []string
 		fail bool
 	}{
 		{name: "ok", nnm: "foo", pnm: "baz"},
 		{name: "missing parent", nnm: "foo", pnm: "brumpf"},
 		{name: "self-cycle", nnm: "foo", pnm: "foo", fail: true},
 		{name: "other cycle", nnm: "foo", pnm: "bar", fail: true},
+		{name: "rc ok", rcm: []string{"bar-baz"}, nnm: "foo"},
+		{name: "rc upper invalid", rcm: []string{"BAR"}, nnm: "foo", fail: true},
+		{name: "rc begin invalid", rcm: []string{"^bar"}, nnm: "foo", fail: true},
+		{name: "rc end invalid", rcm: []string{"bar^"}, nnm: "foo", fail: true},
+		{name: "rc char invalid", rcm: []string{"bar.baz"}, nnm: "foo", fail: true},
+		{name: "rc max str len", rcm: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nnm: "foo"},
+		{name: "rc over max str len", rcm: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nnm: "foo", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
-			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
+			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm, RequiredChildren: tc.rcm}}
 			hc.ObjectMeta.Name = api.Singleton
 			hc.ObjectMeta.Namespace = tc.nnm
 			req := &request{hc: hc}
