@@ -47,7 +47,9 @@ type Client interface {
 
 func init() {
 	api.AddToScheme(scheme.Scheme)
+
 	client = &realClient{}
+
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	rootCmd = &cobra.Command{

@@ -38,6 +38,7 @@ import (
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 )
 
 // HierarchyReconciler is responsible for determining the forest structure from the Hierarchy CRs,
@@ -279,7 +280,7 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 	for i, ancestor := range ancestors {
 		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
-		setLabel(nsInst, l, dist)
+		metadata.SetLabel(nsInst, l, dist)
 	}
 
 	// All namespaces in its subtree should update the labels as well.
