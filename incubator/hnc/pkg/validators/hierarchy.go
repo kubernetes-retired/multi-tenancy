@@ -405,6 +405,8 @@ func codeFromReason(reason metav1.StatusReason) int32 {
 		return 500
 	case metav1.StatusReasonUnauthorized:
 		return 401
+	case metav1.StatusReasonForbidden:
+		return 403
 	case metav1.StatusReasonConflict:
 		return 409
 	case metav1.StatusReasonBadRequest:
