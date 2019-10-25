@@ -52,18 +52,12 @@ rules:
   - get
   - list
   - watch
-  - create
-  - update
-  - patch
-  - delete
 - apiGroups:
   - tenancy.x-k8s.io
   resources:
   - clusterversions/status
   verbs:
   - get
-  - update
-  - patch
 - apiGroups:
   - admissionregistration.k8s.io
   resources:

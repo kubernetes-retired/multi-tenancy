@@ -53,8 +53,9 @@ preferences: {}
 `
 )
 
-func GenerateKubeconfig(user string, clusterName string, rootCA *vcpki.CrtKeyPair, apiserverDomain string) (string, error) {
-	caPair, err := vcpki.NewClientCrtAndKey(user, rootCA)
+// GenerateKubeconfig generates kubeconfig for given user
+func GenerateKubeconfig(user, clusterName, apiserverDomain string, groups []string, rootCA *vcpki.CrtKeyPair) (string, error) {
+	caPair, err := vcpki.NewClientCrtAndKey(user, rootCA, groups)
 	if err != nil {
 		return "", err
 	}
@@ -62,6 +63,7 @@ func GenerateKubeconfig(user string, clusterName string, rootCA *vcpki.CrtKeyPai
 		[]string{apiserverDomain}, rootCA.Crt, caPair, user)
 }
 
+// encodeCertPEM encodes x509 certificate to pem
 func encodeCertPEM(cert *x509.Certificate) []byte {
 	block := pem.Block{
 		Type:  "CERTIFICATE",
@@ -70,6 +72,7 @@ func encodeCertPEM(cert *x509.Certificate) []byte {
 	return pem.EncodeToMemory(&block)
 }
 
+// encodePrivateKeyPEM encodes rsa key to pem
 func encodePrivateKeyPEM(private *rsa.PrivateKey) []byte {
 	return pem.EncodeToMemory(&pem.Block{
 		Bytes: x509.MarshalPKCS1PrivateKey(private),
@@ -77,6 +80,7 @@ func encodePrivateKeyPEM(private *rsa.PrivateKey) []byte {
 	})
 }
 
+// generateKubeconfigUseCertAndKey generates kubeconfig based on the given crt/key pair
 func generateKubeconfigUseCertAndKey(clusterName string, ips []string, apiserverCA *x509.Certificate, caPair *vcpki.CrtKeyPair, username string) (string, error) {
 	urls := make([]string, 0, len(ips))
 	for _, ip := range ips {
@@ -94,6 +98,7 @@ func generateKubeconfigUseCertAndKey(clusterName string, ips []string, apiserver
 	return getTemplateContent(kubeconfigTemplate, ctx)
 }
 
+// getTemplateContent fills out the kubeconfig templates based on the context
 func getTemplateContent(kubeConfigTmpl string, context interface{}) (string, error) {
 	t, tmplPrsErr := template.New("test").Parse(kubeConfigTmpl)
 	if tmplPrsErr != nil {

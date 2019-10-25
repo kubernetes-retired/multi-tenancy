@@ -189,10 +189,11 @@ func NewFrontProxyClientCertAndKey(ca *CrtKeyPair) (*CrtKeyPair, error) {
 }
 
 // NewClientCrtAndKey creates crt-key pair for client
-func NewClientCrtAndKey(user string, ca *CrtKeyPair) (*CrtKeyPair, error) {
+func NewClientCrtAndKey(user string, ca *CrtKeyPair, groups []string) (*CrtKeyPair, error) {
 	config := &cert.Config{
-		CommonName: user,
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		CommonName:   user,
+		Organization: groups,
+		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 
 	crt, key, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)

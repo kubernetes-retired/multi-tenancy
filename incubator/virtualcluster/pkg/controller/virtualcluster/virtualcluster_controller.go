@@ -124,7 +124,10 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 		return errors.New("fail to assert rsa PrivateKey")
 	}
 
-	rootCAPair := &vcpki.CrtKeyPair{rootCACrt, rootRsaKey}
+	rootCAPair := &vcpki.CrtKeyPair{
+		Crt: rootCACrt,
+		Key: rootRsaKey,
+	}
 	caGroup.RootCA = rootCAPair
 
 	etcdDomains := append(cv.GetEtcdServers(), cv.GetEtcdDomain())
@@ -146,7 +149,7 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 
 	// create kubeconfig for controller-manager
 	ctrlmgrKbCfg, cmKbCfgErr := kubeconfig.GenerateKubeconfig(
-		"system:kube-controller-manager", vc.Name, rootCAPair, apiserverDomain)
+		"system:kube-controller-manager", vc.Name, apiserverDomain, []string{}, rootCAPair)
 	if cmKbCfgErr != nil {
 		return cmKbCfgErr
 	}
@@ -154,7 +157,7 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 
 	// create kubeconfig for admin user
 	adminKbCfg, adminKbCfgErr := kubeconfig.GenerateKubeconfig(
-		"admin", vc.Name, rootCAPair, apiserverDomain)
+		"admin", vc.Name, apiserverDomain, []string{"system:masters"}, rootCAPair)
 	if adminKbCfgErr != nil {
 		return adminKbCfgErr
 	}
@@ -230,7 +233,7 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 	case "controller-manager":
 		completmentCtrlMgrTemplate(vc.Name, ssBdl)
 	default:
-		fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
+		return fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
 	}
 
 	err := r.Create(context.TODO(), ssBdl.StatefulSet)
@@ -247,13 +250,18 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 	}
 
 	// make sure the StatsfulSet is ready (i.e. Status.ReadyReplicas == Spec.Replicas)
+	timeout := time.After(DeployTimeOut)
 	for {
+		period := time.After(ComponentPollPeriod)
 		select {
-		case <-time.After(DeployTimeOut):
+		case <-timeout:
 			return fmt.Errorf("deploy %s timeout", ssBdl.Name)
-		case <-time.After(ComponentPollPeriod):
+		case <-period:
 			sts := &appsv1.StatefulSet{}
-			if err := r.Get(context.TODO(), types.NamespacedName{vc.Name, ssBdl.Name}, sts); err != nil {
+			if err := r.Get(context.TODO(), types.NamespacedName{
+				Namespace: vc.Name,
+				Name:      ssBdl.Name},
+				sts); err != nil {
 				return err
 			}
 			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {

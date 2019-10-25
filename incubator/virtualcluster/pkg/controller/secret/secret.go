@@ -27,8 +27,6 @@ import (
 )
 
 const (
-	ControllerManagerKubeconfig = "controller-manager.kubeconfig"
-
 	RootCASecretName            = "root-ca"
 	APIServerCASecretName       = "apiserver-ca"
 	ETCDCASecretName            = "etcd-ca"
@@ -80,7 +78,7 @@ func KubeconfigToSecret(name, namespace string, cfgContent string) *v1.Secret {
 		},
 		Type: v1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			ControllerManagerKubeconfig: []byte(cfgContent),
+			name: []byte(cfgContent),
 		},
 	}
 }

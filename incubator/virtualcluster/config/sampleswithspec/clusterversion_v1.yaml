@@ -30,7 +30,7 @@ spec:
             subdomain: etcd
             containers:
             - name: etcd
-              image: chaozheng/etcd-v3.4.0-amd64
+              image: virtualcluster/etcd-v3.4.0
               imagePullPolicy: Always
               command: 
               - etcd
@@ -119,7 +119,7 @@ spec:
             subdomain: apiserver-svc
             containers:
             - name: apiserver
-              image: chaozheng/apiserver-v1.15.4
+              image: virtualcluster/apiserver-v1.15.4
               imagePullPolicy: Always
               command:
               - kube-apiserver
@@ -147,7 +147,6 @@ spec:
               - --apiserver-count=1
               - --endpoint-reconciler-type=master-count
               - --v=2
-              - --log-dir=/logs
               ports:
               - containerPort: 6443
                 name: api
@@ -169,8 +168,6 @@ spec:
               - mountPath: /etc/kubernetes/pki/service-account
                 name: serviceaccount-rsa
                 readOnly: true
-              - mountPath: /logs
-                name: logs
             securityContext: {}
             terminationGracePeriodSeconds: 30
             dnsConfig:
@@ -189,10 +186,6 @@ spec:
               secret:
                 defaultMode: 420
                 secretName: serviceaccount-rsa
-            - name: logs
-              hostPath:
-                path: /home/virtualcluster/logs/apiserver
-                type: DirectoryOrCreate
     service:
       metadata:
         name: apiserver-svc
@@ -228,8 +221,8 @@ spec:
           spec:
             containers:
             - name: controller-manager
+              image: virtualcluster/controller-manager-v1.15.4
               imagePullPolicy: Always
-              image: chaozheng/controller-manager-v1.15.4
               command:
               - kube-controller-manager
               args:
@@ -237,9 +230,9 @@ spec:
               - --cluster-cidr=10.200.0.0/16
               - --cluster-signing-cert-file=/etc/kubernetes/pki/root/tls.crt
               - --cluster-signing-key-file=/etc/kubernetes/pki/root/tls.key
-              - --kubeconfig=/etc/kubernetes/kubeconfig/controller-manager.kubeconfig
-              - --authorization-kubeconfig=/etc/kubernetes/kubeconfig/controller-manager.kubeconfig
-              - --authentication-kubeconfig=/etc/kubernetes/kubeconfig/controller-manager.kubeconfig
+              - --kubeconfig=/etc/kubernetes/kubeconfig/controller-manager-kubeconfig
+              - --authorization-kubeconfig=/etc/kubernetes/kubeconfig/controller-manager-kubeconfig
+              - --authentication-kubeconfig=/etc/kubernetes/kubeconfig/controller-manager-kubeconfig
               # control plane contains only one instance for now
               - --leader-elect=false
               - --root-ca-file=/etc/kubernetes/pki/root/tls.crt
