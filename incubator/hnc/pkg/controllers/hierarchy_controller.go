@@ -320,7 +320,7 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 	// child of this namespace. There could be one of two reasons: either the namespace hasn't been
 	// created (yet), in which case we just need to enqueue it for reconciliation, or else it *also*
 	// is claimed by another namespace.
-	for cn, _ := range reqSet {
+	for cn := range reqSet {
 		log.Info("Required child is missing", "child", cn)
 		cns := r.Forest.Get(cn)
 		// If this child isn't claimed by another parent, claim it and make sure it gets reconciled

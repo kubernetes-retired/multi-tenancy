@@ -178,7 +178,7 @@ func (c *MultiClusterController) Get(cluster, namespace, name string) (interface
 }
 
 func (c *MultiClusterController) GetCluster(clusterName string) Cluster {
-	for cluster, _ := range c.clusters {
+	for cluster := range c.clusters {
 		if cluster.GetClusterName() == clusterName {
 			return cluster
 		}

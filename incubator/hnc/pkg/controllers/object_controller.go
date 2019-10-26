@@ -188,10 +188,10 @@ func (r *ObjectReconciler) getSourceInst(ctx context.Context, log logr.Logger, i
 		if errors.IsNotFound(err) {
 			log.Info("The source object no longer exists", "inheritedFrom", srcNS)
 			return nil, nil
-		} else {
-			log.Error(err, "Couldn't read", "source", srcNm)
-			return nil, err
 		}
+
+		log.Error(err, "Couldn't read", "source", srcNm)
+		return nil, err
 	}
 
 	return src, nil
