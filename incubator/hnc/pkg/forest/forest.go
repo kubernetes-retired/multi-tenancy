@@ -181,7 +181,7 @@ func (ns *Namespace) ChildNames() []string {
 		return nil
 	}
 	nms := []string{}
-	for k, _ := range ns.children {
+	for k := range ns.children {
 		nms = append(nms, k)
 	}
 	sort.Strings(nms)
@@ -194,7 +194,7 @@ func (ns *Namespace) RelativesNames() []string {
 	if ns.parent != nil {
 		a = append(a, ns.parent.name)
 	}
-	for k, _ := range ns.children {
+	for k := range ns.children {
 		a = append(a, k)
 	}
 
@@ -353,8 +353,8 @@ func (ns *Namespace) DescendantNames() []string {
 	children := ns.ChildNames()
 	descendants := children
 	for _, child := range children {
-		child_ns := ns.forest.Get(child)
-		descendantsOfChild := child_ns.DescendantNames()
+		childNs := ns.forest.Get(child)
+		descendantsOfChild := childNs.DescendantNames()
 		descendants = append(descendants, descendantsOfChild...)
 	}
 	return descendants
