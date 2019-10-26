@@ -138,15 +138,8 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 
 	// If the object has been modified, alert the users and don't propagate it further
 	if !reflect.DeepEqual(canonical(inst), canonical(srcInst)) {
-		// TODO add object condition here to replace the setAnnotation
-		log.Info("Marking as modified from the source", "inheritedFrom", srcInst.GetNamespace())
-		// Mark as modified if the canonical fields don't match.
-		setAnnotation(inst, api.AnnotationModified, "true")
-		// TODO it's wrong to call apiserver in forest lock, will be replaced soon.
-		err := r.Update(ctx, inst)
-		if err != nil {
-			log.Error(err, "Couldn't add modified annotation")
-		}
+		// TODO add object condition
+		log.Info("Modified from the source", "inheritedFrom", srcInst.GetNamespace())
 		return nil, true
 	}
 
@@ -367,15 +360,6 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	target := &unstructured.Unstructured{}
 	target.SetGroupVersionKind(r.GVK)
 	return ctrl.NewControllerManagedBy(mgr).For(target).Complete(r)
-}
-
-func setAnnotation(inst *unstructured.Unstructured, annotation string, value string) {
-	annotations := inst.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[annotation] = value
-	inst.SetAnnotations(annotations)
 }
 
 type apiInstances interface {
