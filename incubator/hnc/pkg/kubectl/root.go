@@ -36,9 +36,19 @@ import (
 var k8sClient *kubernetes.Clientset
 var hncClient *rest.RESTClient
 var rootCmd *cobra.Command
+var client Client
+
+type realClient struct{}
+
+type Client interface {
+	getHierarchy(nnm string) *api.HierarchyConfiguration
+	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
+}
 
 func init() {
 	api.AddToScheme(scheme.Scheme)
+
+	client = &realClient{}
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
@@ -92,7 +102,7 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE") // windows
 }
 
-func getHierarchy(nnm string) *api.HierarchyConfiguration {
+func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 	if _, err := k8sClient.CoreV1().Namespaces().Get(nnm, metav1.GetOptions{}); err != nil {
 		fmt.Printf("Error reading namespace %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -108,7 +118,7 @@ func getHierarchy(nnm string) *api.HierarchyConfiguration {
 	return hier
 }
 
-func updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
+func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {

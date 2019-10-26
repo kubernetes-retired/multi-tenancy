@@ -29,7 +29,7 @@ var setCmd = &cobra.Command{
 	Args:    cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
-		hc := getHierarchy(nnm)
+		hc := client.getHierarchy(nnm)
 		oldpnm := hc.Spec.Parent
 		flags := cmd.Flags()
 		numChanges := 0
@@ -100,7 +100,7 @@ var setCmd = &cobra.Command{
 		}
 
 		if numChanges > 0 {
-			updateHierarchy(hc, fmt.Sprintf("setting hierarchical configuration of %s", nnm))
+			client.updateHierarchy(hc, fmt.Sprintf("setting hierarchical configuration of %s", nnm))
 			word := "property"
 			if numChanges > 1 {
 				word = "properties"
