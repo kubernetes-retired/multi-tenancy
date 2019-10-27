@@ -24,7 +24,9 @@ IMG ?= controller:latest
 #           to "-s -w" which strips debug information. Other flags that can be used for GOLDFLAGS
 #           are documented at https://golang.org/cmd/link/
 .PHONY: all
-all: test
+all: test build
+
+build: 
 	hack/make-rules/build.sh $(WHAT)
 
 # Run tests
@@ -47,6 +49,7 @@ deploy: manifests
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) all
+	hack/make-rules/replace-null.sh
 
 # Run go fmt against code
 fmt:

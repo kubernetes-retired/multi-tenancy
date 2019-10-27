@@ -54,7 +54,11 @@ const (
 	DeployTimeOut = 120 * time.Second
 )
 
-var log = logf.Log.WithName("virtualcluster-controller")
+var (
+	log = logf.Log.WithName("virtualcluster-controller")
+	// the default nodePort range used by kubernetes
+	nodePortRange = [2]int32{30000, 32767}
+)
 
 // Add creates a new Virtualcluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
@@ -65,19 +69,25 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileVirtualcluster{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileVirtualcluster{
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("virtualcluster-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("virtualcluster-controller",
+		mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to Virtualcluster
-	err = c.Watch(&source.Kind{Type: &tenancyv1alpha1.Virtualcluster{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{
+		Type: &tenancyv1alpha1.Virtualcluster{}},
+		&handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -111,10 +121,11 @@ func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
 func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
-	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(&cert.Config{
-		CommonName:   "kubernetes",
-		Organization: []string{"kubernetes-sig.multi-tenancy.virtualcluster"},
-	})
+	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(
+		&cert.Config{
+			CommonName:   "kubernetes",
+			Organization: []string{"kubernetes-sig.multi-tenancy.virtualcluster"},
+		})
 	if rootCAErr != nil {
 		return rootCAErr
 	}
@@ -149,7 +160,8 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 
 	// create kubeconfig for controller-manager
 	ctrlmgrKbCfg, cmKbCfgErr := kubeconfig.GenerateKubeconfig(
-		"system:kube-controller-manager", vc.Name, apiserverDomain, []string{}, rootCAPair)
+		"system:kube-controller-manager",
+		vc.Name, apiserverDomain, []string{}, rootCAPair)
 	if cmKbCfgErr != nil {
 		return cmKbCfgErr
 	}
@@ -157,7 +169,8 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 
 	// create kubeconfig for admin user
 	adminKbCfg, adminKbCfgErr := kubeconfig.GenerateKubeconfig(
-		"admin", vc.Name, apiserverDomain, []string{"system:masters"}, rootCAPair)
+		"admin", vc.Name, apiserverDomain,
+		[]string{"system:masters"}, rootCAPair)
 	if adminKbCfgErr != nil {
 		return adminKbCfgErr
 	}
@@ -184,7 +197,8 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 func genInitialClusterArgs(replicas int32, stsName, svcName string) (argsVal string) {
 	for i := int32(0); i < replicas; i++ {
 		// use 2380 as the default port for etcd peer communication
-		peerAddr := fmt.Sprintf("%s-%d=https://%s-%d.%s:%d", stsName, i, stsName, i, svcName, DefaultETCDPeerPort)
+		peerAddr := fmt.Sprintf("%s-%d=https://%s-%d.%s:%d",
+			stsName, i, stsName, i, svcName, DefaultETCDPeerPort)
 		if i == replicas-1 {
 			argsVal = argsVal + peerAddr
 			break
@@ -223,7 +237,8 @@ func completmentCtrlMgrTemplate(vcName string, ctrlMgrBdl *tenancyv1alpha1.State
 // deployComponent deploys master component in namespace vcName based on the given StatefulSet
 // and Service Bundle ssBdl
 func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualcluster, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
-	log.Info("deploying StatefulSet for master component", "component", ssBdl.Name)
+	log.Info("deploying StatefulSet for master component", "component",
+		ssBdl.Name)
 
 	switch ssBdl.Name {
 	case "etcd":
@@ -242,14 +257,16 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 	}
 
 	if ssBdl.Service != nil {
-		log.Info("deploying Service for master component", "component", ssBdl.Name)
+		log.Info("deploying Service for master component", "component",
+			ssBdl.Name)
 		err = r.Create(context.TODO(), ssBdl.Service)
 		if err != nil {
 			return err
 		}
 	}
 
-	// make sure the StatsfulSet is ready (i.e. Status.ReadyReplicas == Spec.Replicas)
+	// make sure the StatsfulSet is ready
+	// (i.e. Status.ReadyReplicas == Spec.Replicas)
 	timeout := time.After(DeployTimeOut)
 	for {
 		period := time.After(ComponentPollPeriod)

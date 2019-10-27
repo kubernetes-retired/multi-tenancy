@@ -28,8 +28,8 @@ func main() {
 	flag.Parse()
 	createCmd := flag.NewFlagSet("create", flag.ExitOnError)
 	yaml := createCmd.String("yaml", "", "path to the yaml file of the object that will be created.")
-	crtKbCfg := createCmd.String("kubeconfig", "", "path to the kubeconfig.")
-	vcKbCfg := createCmd.String("vckbcfg", "vc.kubeconfig", "path to the kubeconfig that is used to access virtual cluster.")
+	vcKbCfg := createCmd.String("vckbcfg", "", "path to the kubeconfig that is used to access virtual cluster.")
+	crtKbCfg := createCmd.String("kubeconfig", "", "path to the kubeconfig of the meta cluster.")
 	minikube := createCmd.Bool("minikube", false, "if running with minikube. (default false)")
 
 	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)

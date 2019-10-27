@@ -37,13 +37,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	netutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 )
 
 const (
 	DefaultPKIExpireDays = 365
-	apiserverNodePort    = 30443
-	pollStsPeriod        = 2 * time.Second
-	pollStsTimeout       = 120 * time.Second
+	APIServerSvcName     = "apiserver-svc"
+
+	// 	apiserverNodePort    = 30443
+	pollStsPeriod  = 2 * time.Second
+	pollStsTimeout = 120 * time.Second
 )
 
 // yamlToObj read yaml from yamlPath and deserialize to a runtime.Object
@@ -215,7 +218,7 @@ func genKubeConfig(clusterName, vcKbCfg string, cli client.Client, minikube bool
 	}
 	// replace the server address in kubeconfig if using minikube
 	if minikube == true {
-		kbCfgBytes, err = replaceServerAddr(kbCfgBytes)
+		kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterName)
 		if err != nil {
 			return err
 		}
@@ -232,12 +235,16 @@ func genKubeConfig(clusterName, vcKbCfg string, cli client.Client, minikube bool
 
 // replaceServerAddr replace api server IP with the minikube gateway IP, and
 // disable TLS varification by removing the server CA
-func replaceServerAddr(kubeCfgContent []byte) ([]byte, error) {
+func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterName string) ([]byte, error) {
 	minikubeIP, err := getMinikubeIP()
 	if err != nil {
 		return nil, err
 	}
-	newStr := fmt.Sprintf("server: https://%s:%d", minikubeIP, apiserverNodePort)
+	svcNodePort, err := netutil.GetSvcNodePort(APIServerSvcName, clusterName, cli)
+	if err != nil {
+		return nil, err
+	}
+	newStr := fmt.Sprintf("server: https://%s:%d", minikubeIP, svcNodePort)
 	lines := strings.Split(string(kubeCfgContent), "\n")
 	// remove server CA, disable TLS varification
 	for i := 0; i < len(lines); {

@@ -194,8 +194,7 @@ spec:
           component-name: apiserver
         type: NodePort
         ports:
-        - nodePort: 30443
-          port: 6443
+        - port: 6443
           protocol: TCP
           targetPort: api
   # a statefulset and service bundle for controller-manager

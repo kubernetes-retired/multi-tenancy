@@ -3,7 +3,7 @@ kind: Virtualcluster
 metadata: 
   labels:
     controller-tools.k8s.io: "1.0"
-  name: vc-sample
+  name: vc-sample-1
   namespace: default
 spec:
   clusterDomain: cluster.local
