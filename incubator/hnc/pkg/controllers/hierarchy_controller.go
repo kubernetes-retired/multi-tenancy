@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -263,12 +264,22 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 		return
 	}
 
+	// Pre-define label depth suffix
+	labelDepthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
+
+	// Remove all existing depth labels.
+	for k := range nsInst.Labels {
+		if strings.HasSuffix(k, labelDepthSuffix) {
+			delete(nsInst.Labels, k)
+		}
+	}
+
 	// AncestoryNames includes the namespace itself.
 	ancestors := ns.AncestoryNames(nil)
 	for i, ancestor := range ancestors {
-		labelDepthSuffix := ancestor + ".tree." + api.MetaGroup + "/depth"
+		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
-		setLabel(nsInst, labelDepthSuffix, dist)
+		setLabel(nsInst, l, dist)
 	}
 
 	// All namespaces in its subtree should update the labels as well.

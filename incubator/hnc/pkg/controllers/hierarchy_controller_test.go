@@ -221,6 +221,69 @@ var _ = Describe("Hierarchy", func() {
 			return val
 		}).Should(Equal("0"))
 	})
+
+	It("should update labels when parent is changed", func() {
+		// Set up key-value pair for non-HNC label
+		const keyName = "key"
+		const valueName = "value"
+
+		// Set up initial hierarchy
+		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
+		bazHier := newHierarchy(bazName)
+		depthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+
+		// Make baz as a child of bar
+		bazHier.Spec.Parent = barName
+		updateHierarchy(ctx, bazHier)
+
+		// Verify all labels on baz after set bar as parent
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+
+		// Change parent to foo
+		bazHier.Spec.Parent = fooName
+		updateHierarchy(ctx, bazHier)
+
+		// Verify all labels on baz after change parent to foo
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, fooName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+	})
+
+	It("should update labels when parent is removed", func() {
+		// Set up key-value pair for non-HNC label
+		const keyName = "key"
+		const valueName = "value"
+
+		// Set up initial hierarchy
+		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
+		bazHier := newHierarchy(bazName)
+		depthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+
+		// Make baz as a child of bar
+		bazHier.Spec.Parent = barName
+		updateHierarchy(ctx, bazHier)
+
+		// Verify all labels on baz after set bar as parent
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+
+		// Remove parent from baz
+		bazHier.Spec.Parent = ""
+		updateHierarchy(ctx, bazHier)
+
+		// Verify all labels on baz after parent removed
+		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
+	})
 })
 
 func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {
@@ -286,6 +349,18 @@ func createNSName(prefix string) string {
 	return fmt.Sprintf("%s-%x", prefix, suffix)
 }
 
+// createNSWithLabel has similar function to createNS with label as additional parameter
+func createNSWithLabel(ctx context.Context, prefix string, label map[string]string) string {
+	nm := createNSName(prefix)
+
+	// Create the namespace
+	ns := &corev1.Namespace{}
+	ns.SetLabels(label)
+	ns.Name = nm
+	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+	return nm
+}
+
 // createNS is a convenience function to create a namespace and wait for its singleton to be
 // created. It's used in other tests in this package, but basically duplicates the code in this test
 // (it didn't originally). TODO: refactor.
@@ -297,4 +372,12 @@ func createNS(ctx context.Context, prefix string) string {
 	ns.Name = nm
 	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
 	return nm
+}
+
+func getLabel(ctx context.Context, from, label string) func() string {
+	return func() string {
+		ns := getNamespace(ctx, from)
+		val, _ := ns.GetLabels()[label]
+		return val
+	}
 }
