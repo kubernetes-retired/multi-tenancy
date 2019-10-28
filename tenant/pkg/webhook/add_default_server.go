@@ -17,7 +17,7 @@ limitations under the License.
 package webhook
 
 import (
-	server "github.com/multi-tenancy/tenant/pkg/webhook/default_server"
+	server "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/webhook/default_server"
 )
 
 func init() {

@@ -20,9 +20,9 @@ import (
 	"flag"
 	"os"
 
-	"github.com/multi-tenancy/tenant/pkg/apis"
-	"github.com/multi-tenancy/tenant/pkg/controller"
-	"github.com/multi-tenancy/tenant/pkg/webhook"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"

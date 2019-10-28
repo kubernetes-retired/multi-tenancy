@@ -19,7 +19,7 @@ package defaultserver
 import (
 	"fmt"
 
-	"github.com/multi-tenancy/tenant/pkg/webhook/default_server/tenant/validating"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/webhook/default_server/tenant/validating"
 )
 
 func init() {
