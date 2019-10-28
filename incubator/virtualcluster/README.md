@@ -16,31 +16,29 @@ make vcctl-osx
 make all WHAT=cmd/vcctl
 ```
 
-3. Remove `status` subresource from crd yaml (i.e. `config/crds/tenancy_v1alpha1_clusterversion.yaml` and `config/crds/tenancy_v1alpha1_virtualcluster.yaml`) 
-
 4. Install crd
 ```bash
 kubectl apply -f config/crds
 ```
 
-4. Setup `vc-manager`
+5. Setup `vc-manager`
 ```bash
 kubectl apply -f config/setup
 ```
 
-5. Create clusterversion once `vc-manager` is ready
+6. Create clusterversion once `vc-manager` is ready
 ```bash 
-_output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1.yaml
+_output/bin/vcctl create -yaml config/sampleswithspec/clusterversion-v1.yaml
 ```
 
-6. If using minikube, create virtualcluster using following command 
+7. If using minikube, create virtualcluster using following command 
 ```bash
-_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster.yaml -minikube true
+_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster-1.yaml -vckbcfg v1.kubeconfig -minikube
 ```
 
-7. Once the tenant master is created, a kubeconfig file `vc.kubeconfig` will be created
+8. Once the tenant master is created, a kubeconfig file `vc1.kubeconfig` will be created
 
-8. Check if tenant master is up and running by command 
+9. Check if tenant master is up and running by command 
 
 ```bash
 kubectl cluster-info --kubeconfig vc.kubeconfig
@@ -48,10 +46,18 @@ kubectl cluster-info --kubeconfig vc.kubeconfig
 if all goes well, the output will look like following
 
 ```bash
-Kubernetes master is running at https://192.168.99.187:30443
+Kubernetes master is running at https://XXX.XXX.XX.XXX:XXXXX
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
 ```
+
+10. There can be multiple virtualclusters running simultaneously on the meta cluster, you 
+can create a second virtual cluster by using other virtualcluster yaml, for example
+```bash
+_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster-2.yaml -vckbcfg v2.kubeconfig -minikube
+```
+
+11. Same as before, `v2.kubeconfig` will be generated once the second virtualcluster is up and running. 
 
 ## Setup vn-agent
 
