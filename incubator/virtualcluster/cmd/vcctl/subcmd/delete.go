@@ -16,9 +16,61 @@ limitations under the License.
 package subcmd
 
 import (
+	"context"
 	"errors"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	vcctlutil "github.com/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
+	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
+// Delete deletes the Virtualcluster vcName
 func Delete(yaml string) error {
-	return errors.New("NOT IMPLEMENT YET")
+	kbCfg, err := config.GetConfig()
+	if err != nil {
+		return err
+	}
+	mgr, err := manager.New(kbCfg,
+		manager.Options{MetricsBindAddress: ":8081"})
+	if err != nil {
+		return err
+	}
+
+	err = tenancyv1alpha1.AddToScheme(mgr.GetScheme())
+	if err != nil {
+		return err
+	}
+
+	ro, err := vcctlutil.YamlToObj(mgr.GetScheme(), yaml)
+	if err != nil {
+		return err
+	}
+
+	vc, ok := ro.(*tenancyv1alpha1.Virtualcluster)
+	if !ok {
+		return errors.New("please specify a virtualcluster yaml")
+	}
+
+	// delete the namespace and all resources of the virtualcluster
+	err = mgr.GetClient().Delete(context.TODO(),
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: vc.Name,
+			},
+		})
+	if err != nil {
+		return err
+	}
+
+	// delete the virtualcluster object
+	err = mgr.GetClient().Delete(context.TODO(), vc)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

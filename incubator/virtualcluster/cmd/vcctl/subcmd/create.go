@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -29,13 +28,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	vcctlutil "github.com/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
 	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	netutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 )
@@ -48,27 +46,6 @@ const (
 	pollStsPeriod  = 2 * time.Second
 	pollStsTimeout = 120 * time.Second
 )
-
-// yamlToObj read yaml from yamlPath and deserialize to a runtime.Object
-// NOTE: make sure the target object type is added to scheme
-func yamlToObj(scheme *runtime.Scheme, yamlPath string) (runtime.Object, error) {
-	yamlFn, err := os.OpenFile(yamlPath, os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-	yamlContent, err := ioutil.ReadAll(yamlFn)
-	if err != nil {
-		return nil, err
-	}
-
-	decode := serializer.NewCodecFactory(scheme).UniversalDeserializer().Decode
-	obj, _, err := decode([]byte(yamlContent), nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return obj, nil
-}
 
 // Create creates an object based on the file yamlPath
 func Create(yamlPath, vcKbCfg string, minikube bool) error {
@@ -90,12 +67,12 @@ func Create(yamlPath, vcKbCfg string, minikube bool) error {
 		return err
 	}
 
-	obj, err := yamlToObj(mgr.GetScheme(), yamlPath)
+	obj, err := vcctlutil.YamlToObj(mgr.GetScheme(), yamlPath)
 	if err != nil {
 		return err
 	}
 
-	// create a new client here to talk to apiserver directly
+	// create a new client to talk to apiserver directly
 	// NOTE the client returned by manager.GetClient() will talk to local cache only
 	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
 	if err != nil {

@@ -33,7 +33,7 @@ func main() {
 	minikube := createCmd.Bool("minikube", false, "if running with minikube. (default false)")
 
 	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
-	delYaml := deleteCmd.String("yaml", "", "path to the yaml file of the object that will be deleted.")
+	delYaml := deleteCmd.String("yaml", "", "path to the yaml file of the virtualcluster that will be deleted.")
 	delKbCfg := deleteCmd.String("kubeconfig", "", "path to the kubeconfig file.")
 
 	if len(os.Args) < 2 {
@@ -53,7 +53,7 @@ func main() {
 			log.Fatalf("fail to create object: %s", err)
 		}
 	case "delete":
-		createCmd.Parse(os.Args[2:])
+		deleteCmd.Parse(os.Args[2:])
 		// set flag --kubeconfig for pkg sigs.k8s.io/controller-runtime/pkg/client/config
 		if *delKbCfg != "" {
 			if err := flag.Lookup("kubeconfig").Value.Set(*delKbCfg); err != nil {
