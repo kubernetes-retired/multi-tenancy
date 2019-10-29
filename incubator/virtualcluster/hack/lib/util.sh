@@ -35,8 +35,7 @@ wait-for-jobs() {
 # TODO replace controller-gen, and remove this hack 
 replace-null() {
   for f in config/crds/*; do
-    tac $f \
-      | awk -F: 'NR==1, NR==2{$2="[]"}1' OFS='\: ' \
-      | tac > $f.tmp && mv $f.tmp $f
+    sed 's/conditions: null/conditions: []/g; s/storedVersions: null/storedVersions: []/g' $f > $f.tmp 
+    mv $f.tmp $f
   done
 }
