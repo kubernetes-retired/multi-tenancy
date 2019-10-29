@@ -24,7 +24,6 @@ import (
 	"k8s.io/apiserver/pkg/util/term"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
-	"k8s.io/component-base/version/verflag"
 	"k8s.io/client-go/tools/leaderelection"
 
 	"k8s.io/klog"
@@ -49,8 +48,6 @@ keep tenant requests are synchronized to super master by creating corresponding
 custom resources on behalf of the tenant users in super master, following the
 resource isolation policy specified in Tenant CRD.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			verflag.PrintAndExitIfRequested()
-
 			c, err := s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -66,7 +63,6 @@ resource isolation policy specified in Tenant CRD.`,
 
 	fs := cmd.Flags()
 	namedFlagSets := s.Flags()
-	verflag.AddFlags(namedFlagSets.FlagSet("global"))
 	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
 
 	for _, f := range namedFlagSets.FlagSets {

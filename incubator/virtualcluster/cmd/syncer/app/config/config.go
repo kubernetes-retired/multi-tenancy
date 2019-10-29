@@ -17,7 +17,6 @@ limitations under the License.
 package config
 
 import (
-	componentbaseconfig "k8s.io/component-base/config"
 	clientset "k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/informers"
@@ -26,12 +25,13 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 
 	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 )
 
 // Config has all the context to run a Syncer.
 type Config struct {
-	// leaderElection defines the configuration of leader election client.
-	LeaderElectionConfiguration componentbaseconfig.LeaderElectionConfiguration
+	// config is the syncer's configuration object.
+	ComponentConfig syncerconfig.SyncerConfiguration
 
 	// the general kube client
 	Client                 clientset.Interface
