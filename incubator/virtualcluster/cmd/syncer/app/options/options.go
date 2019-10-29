@@ -21,27 +21,29 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/uuid"
 	corev1 "k8s.io/api/core/v1"
-	componentbaseconfig "k8s.io/component-base/config"
-	cliflag "k8s.io/component-base/cli/flag"
+	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgokubescheme "k8s.io/client-go/kubernetes/scheme"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
+	cliflag "k8s.io/component-base/cli/flag"
+	componentbaseconfig "k8s.io/component-base/config"
 
 	"k8s.io/klog"
 
-	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
-	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
+	syncerappconfig "github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
 	vcclient "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
+	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -51,11 +53,8 @@ const (
 
 // ResourceSyncerOptions is the main context object for the resource syncer.
 type ResourceSyncerOptions struct {
-	// ClientConnection specifies the kubeconfig file and client connection
-	// settings for the proxy server to use when communicating with the apiserver.
-	ClientConnection componentbaseconfig.ClientConnectionConfiguration
-	// leaderElection defines the configuration of leader election client.
-	LeaderElection componentbaseconfig.LeaderElectionConfiguration
+	// The syncer configuration.
+	ComponentConfig syncerconfig.SyncerConfiguration
 
 	SuperMaster           string
 	SuperMasterKubeconfig string
@@ -63,7 +62,12 @@ type ResourceSyncerOptions struct {
 
 // NewResourceSyncerOptions creates a new resource syncer with a default config.
 func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
-	return &ResourceSyncerOptions{}, nil
+	return &ResourceSyncerOptions{
+		ComponentConfig: syncerconfig.SyncerConfiguration{
+			LeaderElection:   syncerconfig.SyncerLeaderElectionConfiguration{},
+			ClientConnection: componentbaseconfig.ClientConnectionConfiguration{},
+		},
+	}, nil
 }
 
 func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
@@ -73,15 +77,45 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.SuperMasterKubeconfig, "super-master-kubeconfig", o.SuperMasterKubeconfig, "Path to kubeconfig file with authorization and master location information.")
 
+	BindFlags(&o.ComponentConfig.LeaderElection, fss.FlagSet("leader election"))
+
 	return fss
 }
 
+// BindFlags binds the LeaderElectionConfiguration struct fields to a flagset
+func BindFlags(l *syncerconfig.SyncerLeaderElectionConfiguration, fs *pflag.FlagSet) {
+	fs.BoolVar(&l.LeaderElect, "leader-elect", l.LeaderElect, ""+
+		"Start a leader election client and gain leadership before "+
+		"executing the main loop. Enable this when running replicated "+
+		"components for high availability.")
+	fs.DurationVar(&l.LeaseDuration.Duration, "leader-elect-lease-duration", l.LeaseDuration.Duration, ""+
+		"The duration that non-leader candidates will wait after observing a leadership "+
+		"renewal until attempting to acquire leadership of a led but unrenewed leader "+
+		"slot. This is effectively the maximum duration that a leader can be stopped "+
+		"before it is replaced by another candidate. This is only applicable if leader "+
+		"election is enabled.")
+	fs.DurationVar(&l.RenewDeadline.Duration, "leader-elect-renew-deadline", l.RenewDeadline.Duration, ""+
+		"The interval between attempts by the acting master to renew a leadership slot "+
+		"before it stops leading. This must be less than or equal to the lease duration. "+
+		"This is only applicable if leader election is enabled.")
+	fs.DurationVar(&l.RetryPeriod.Duration, "leader-elect-retry-period", l.RetryPeriod.Duration, ""+
+		"The duration the clients should wait between attempting acquisition and renewal "+
+		"of a leadership. This is only applicable if leader election is enabled.")
+	fs.StringVar(&l.ResourceLock, "leader-elect-resource-lock", l.ResourceLock, ""+
+		"The type of resource object that is used for locking during "+
+		"leader election. Supported options are `endpoints` (default) and `configmaps`.")
+	fs.StringVar(&l.LockObjectNamespace, "lock-object-namespace", l.LockObjectNamespace, "DEPRECATED: define the namespace of the lock object.")
+	fs.StringVar(&l.LockObjectName, "lock-object-name", l.LockObjectName, "DEPRECATED: define the name of the lock object.")
+
+}
+
 // Config return a syncer config object
-func (o *ResourceSyncerOptions) Config() (*syncerconfig.Config, error) {
-	c := &syncerconfig.Config{}
+func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
+	c := &syncerappconfig.Config{}
+	c.ComponentConfig = o.ComponentConfig
 
 	// Prepare kube clients
-	inClusterClient, leaderElectionClient, virtualClusterClient, superMasterClient, err := createClients(o.ClientConnection, o.SuperMaster, o.LeaderElection.RenewDeadline.Duration)
+	inClusterClient, leaderElectionClient, virtualClusterClient, superMasterClient, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +128,8 @@ func (o *ResourceSyncerOptions) Config() (*syncerconfig.Config, error) {
 
 	// Set up leader election if enabled.
 	var leaderElectionConfig *leaderelection.LeaderElectionConfig
-	if c.LeaderElectionConfiguration.LeaderElect {
-		leaderElectionConfig, err = makeLeaderElectionConfig(c.LeaderElectionConfiguration, leaderElectionClient, leaderElectionRecorder)
+	if c.ComponentConfig.LeaderElection.LeaderElect {
+		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, leaderElectionRecorder)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +150,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerconfig.Config, error) {
 
 // makeLeaderElectionConfig builds a leader election configuration. It will
 // create a new resource lock associated with the configuration.
-func makeLeaderElectionConfig(config componentbaseconfig.LeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder) (*leaderelection.LeaderElectionConfig, error) {
+func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder) (*leaderelection.LeaderElectionConfig, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
@@ -125,8 +159,8 @@ func makeLeaderElectionConfig(config componentbaseconfig.LeaderElectionConfigura
 	id := hostname + "_" + string(uuid.NewUUID())
 
 	rl, err := resourcelock.New(config.ResourceLock,
-		config.ResourceNamespace,
-		config.ResourceName,
+		config.LockObjectNamespace,
+		config.LockObjectName,
 		client.CoreV1(),
 		client.CoordinationV1(),
 		resourcelock.ResourceLockConfig{

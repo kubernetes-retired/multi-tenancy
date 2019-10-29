@@ -22,9 +22,9 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -35,7 +35,7 @@ const (
 var DefaultDeletionPolicy = v1.DeletePropagationBackground
 
 func ToSuperMasterNamespace(cluster, ns string) string {
-	targetNamespace := strings.Join([]string{cluster, ns}, "-");
+	targetNamespace := strings.Join([]string{cluster, ns}, "-")
 	if len(targetNamespace) > validation.DNS1123SubdomainMaxLength {
 		digest := sha256.Sum256([]byte(targetNamespace))
 		return targetNamespace[0:57] + "-" + hex.EncodeToString(digest[0:])[0:5]

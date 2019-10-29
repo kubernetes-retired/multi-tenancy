@@ -18,19 +18,19 @@ package syncer
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/informers"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"k8s.io/klog"
 
-	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )

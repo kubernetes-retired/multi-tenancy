@@ -22,17 +22,16 @@ import (
 	"os"
 
 	"k8s.io/apiserver/pkg/util/term"
+	"k8s.io/client-go/tools/leaderelection"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
-	"k8s.io/component-base/version/verflag"
-	"k8s.io/client-go/tools/leaderelection"
 
 	"k8s.io/klog"
 
 	"github.com/spf13/cobra"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
+	"github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer"
 )
 
@@ -49,8 +48,6 @@ keep tenant requests are synchronized to super master by creating corresponding
 custom resources on behalf of the tenant users in super master, following the
 resource isolation policy specified in Tenant CRD.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			verflag.PrintAndExitIfRequested()
-
 			c, err := s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -66,7 +63,6 @@ resource isolation policy specified in Tenant CRD.`,
 
 	fs := cmd.Flags()
 	namedFlagSets := s.Flags()
-	verflag.AddFlags(namedFlagSets.FlagSet("global"))
 	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
 
 	for _, f := range namedFlagSets.FlagSets {
