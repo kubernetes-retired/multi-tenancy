@@ -22,16 +22,16 @@ import (
 	"os"
 
 	"k8s.io/apiserver/pkg/util/term"
+	"k8s.io/client-go/tools/leaderelection"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
-	"k8s.io/client-go/tools/leaderelection"
 
 	"k8s.io/klog"
 
 	"github.com/spf13/cobra"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
+	"github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer"
 )
 

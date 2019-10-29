@@ -17,14 +17,14 @@ limitations under the License.
 package controllers
 
 import (
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/pod"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/configmap"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/namespace"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/pod"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/secret"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/namespace"
 )
 
 func Register(client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {

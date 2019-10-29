@@ -20,24 +20,24 @@ import (
 	"fmt"
 
 	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 	clientset "k8s.io/client-go/kubernetes"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	sc "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	sc "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {

@@ -21,8 +21,8 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/component-base/logs"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/component-base/logs"
 
 	"github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app"
 )

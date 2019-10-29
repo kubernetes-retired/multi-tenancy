@@ -21,16 +21,16 @@ import (
 	"sync"
 	"time"
 
-	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
+	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // MultiClusterController implements the controller pattern.
