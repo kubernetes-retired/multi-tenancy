@@ -16,11 +16,22 @@ limitations under the License.
 package kubectl
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
+
+//flagValues struct stores name of namespaces against type of flag passed
+type flagValues struct {
+	root             bool
+	parent           string
+	requiredChildren []string
+	optionalChild    string
+}
 
 var setCmd = &cobra.Command{
 	Use:     "set",
@@ -29,87 +40,118 @@ var setCmd = &cobra.Command{
 	Args:    cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
-		hc := getHierarchy(nnm)
-		oldpnm := hc.Spec.Parent
 		flags := cmd.Flags()
-		numChanges := 0
+		parent, _ := flags.GetString("parent")
+		requiredChildren, _ := flags.GetStringArray("requiredChild")
+		optionalChild, _ := flags.GetString("optionalChild")
 
-		if flags.Changed("root") && flags.Changed("parent") {
-			fmt.Println("Cannot set both --root and --parent at the same time")
+		flagValues := flagValues{
+			root:             flags.Changed("root"),
+			parent:           parent,
+			requiredChildren: requiredChildren,
+			optionalChild:    optionalChild,
+		}
+
+		err := setCmdFunc(client, flagValues, nnm)
+		if err != nil {
+			fmt.Println(err.Error())
 			os.Exit(1)
 		}
-
-		if flags.Changed("root") {
-			if oldpnm == "" {
-				fmt.Printf("%s is already a root namespace; unchanged", nnm)
-			} else {
-				hc.Spec.Parent = ""
-				fmt.Printf("Unsetting the parent of %s (was previously %s)\n", nnm, oldpnm)
-				numChanges++
-			}
-		}
-
-		if flags.Changed("parent") {
-			pnm, _ := flags.GetString("parent")
-			if oldpnm == pnm {
-				fmt.Printf("Parent of %s is already %s; unchanged\n", nnm, pnm)
-			} else {
-				hc.Spec.Parent = pnm
-				if oldpnm == "" {
-					fmt.Printf("Setting the parent of %s to %s\n", nnm, pnm)
-				} else {
-					fmt.Printf("Changing the parent of %s from %s to %s\n", nnm, oldpnm, pnm)
-				}
-				numChanges++
-			}
-		}
-
-		if flags.Changed("requiredChild") {
-			rcns, _ := flags.GetStringArray("requiredChild")
-
-			for _, rcn := range rcns {
-				if childNamespaceExists(hc, rcn) {
-					fmt.Printf("Required child %s already present in %s\n", rcn, nnm)
-					continue
-				}
-				hc.Spec.RequiredChildren = append(hc.Spec.RequiredChildren, rcn)
-				fmt.Printf("Adding required child %s\n", rcn)
-				numChanges++
-			}
-		}
-
-		if flags.Changed("optionalChild") {
-			cnm, _ := flags.GetString("optionalChild")
-			found := false
-			newRCs := []string{}
-			for _, rc := range hc.Spec.RequiredChildren {
-				if rc == cnm {
-					found = true
-					continue
-				}
-				newRCs = append(newRCs, rc)
-			}
-
-			if !found {
-				fmt.Printf("%s is not a required child of %s\n", cnm, nnm)
-			} else {
-				fmt.Printf("Making required child %s optional\n", cnm)
-				hc.Spec.RequiredChildren = newRCs
-				numChanges++
-			}
-		}
-
-		if numChanges > 0 {
-			updateHierarchy(hc, fmt.Sprintf("setting hierarchical configuration of %s", nnm))
-			word := "property"
-			if numChanges > 1 {
-				word = "properties"
-			}
-			fmt.Printf("Succesfully updated %d %s of the hierarchical configuration of %s\n", numChanges, word, nnm)
-		} else {
-			fmt.Printf("No changes made\n")
-		}
 	},
+}
+
+func setCmdFunc(cl Client, flagValues flagValues, nnm string) error {
+	hc := cl.getHierarchy(nnm)
+	oldpnm := hc.Spec.Parent
+	numChanges := 0
+
+	if flagValues.root && flagValues.parent != "" {
+		return errors.New("Cannot set both --root and --parent at the same time \n")
+	}
+
+	if flagValues.root {
+		setRoot(hc, oldpnm, nnm, &numChanges)
+	}
+
+	if flagValues.parent != "" {
+		setParent(hc, oldpnm, flagValues.parent, nnm, &numChanges)
+	}
+
+	if len(flagValues.requiredChildren) != 0 {
+		setRequiredChildren(hc, flagValues.requiredChildren, nnm, &numChanges)
+	}
+
+	if flagValues.optionalChild != "" {
+		setOptionalChild(hc, flagValues.optionalChild, nnm, &numChanges)
+	}
+
+	if numChanges > 0 {
+		cl.updateHierarchy(hc, fmt.Sprintf("setting hierarchical configuration of %s", nnm))
+		word := "property"
+		if numChanges > 1 {
+			word = "properties"
+		}
+		fmt.Printf("Succesfully updated %d %s of the hierarchical configuration of %s\n", numChanges, word, nnm)
+	} else {
+		fmt.Printf("No changes made\n")
+	}
+	return nil
+}
+
+func setRoot(hc *api.HierarchyConfiguration, oldpnm, nnm string, numChanges *int) {
+	if oldpnm == "" {
+		fmt.Printf("%s is already a root namespace; unchanged \n", nnm)
+	} else {
+		hc.Spec.Parent = ""
+		fmt.Printf("Unsetting the parent of %s (was previously %s)\n", nnm, oldpnm)
+		*numChanges++
+	}
+}
+
+func setParent(hc *api.HierarchyConfiguration, oldpnm, pnm, nnm string, numChanges *int) {
+	if oldpnm == pnm {
+		fmt.Printf("Parent of %s is already %s; unchanged\n", nnm, pnm)
+	} else {
+		hc.Spec.Parent = pnm
+		if oldpnm == "" {
+			fmt.Printf("Setting the parent of %s to %s\n", nnm, pnm)
+		} else {
+			fmt.Printf("Changing the parent of %s from %s to %s\n", nnm, oldpnm, pnm)
+		}
+		*numChanges++
+	}
+}
+
+func setRequiredChildren(hc *api.HierarchyConfiguration, rcns []string, nnm string, numChanges *int) {
+	for _, rcn := range rcns {
+		if childNamespaceExists(hc, rcn) {
+			fmt.Printf("Required child %s already present in %s\n", rcn, nnm)
+			continue
+		}
+		hc.Spec.RequiredChildren = append(hc.Spec.RequiredChildren, rcn)
+		fmt.Printf("Adding required child %s\n", rcn)
+		*numChanges++
+	}
+}
+
+func setOptionalChild(hc *api.HierarchyConfiguration, cnm, nnm string, numChanges *int) {
+	found := false
+	newRCs := []string{}
+	for _, rc := range hc.Spec.RequiredChildren {
+		if rc == cnm {
+			found = true
+			continue
+		}
+		newRCs = append(newRCs, rc)
+	}
+
+	if !found {
+		fmt.Printf("%s is not a required child of %s\n", cnm, nnm)
+	} else {
+		fmt.Printf("Making required child %s optional\n", cnm)
+		hc.Spec.RequiredChildren = newRCs
+		*numChanges++
+	}
 }
 
 func newSetCmd() *cobra.Command {

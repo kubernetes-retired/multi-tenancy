@@ -50,7 +50,7 @@ var treeCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		for _, nnm := range nsList {
-			hier := getHierarchy(nnm)
+			hier := client.getHierarchy(nnm)
 			//If we're showing the default list, skip all non-root namespaces since they'll be displayed as part of another namespace's tree.
 			if defaultList && hier.Spec.Parent != "" {
 				continue
@@ -70,7 +70,7 @@ var treeCmd = &cobra.Command{
 
 func printSubtree(prefix string, hier *api.HierarchyConfiguration) {
 	for i, cn := range hier.Status.Children {
-		ch := getHierarchy(cn)
+		ch := client.getHierarchy(cn)
 		tx := nameAndFootnotes(ch)
 		if i < len(hier.Status.Children)-1 {
 			fmt.Printf("%s├── %s\n", prefix, tx)

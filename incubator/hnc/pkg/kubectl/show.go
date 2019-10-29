@@ -30,7 +30,7 @@ var showCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
 		fmt.Printf("Hierarchy configuration for namespace %s\n", nnm)
-		hier := getHierarchy(nnm)
+		hier := client.getHierarchy(nnm)
 
 		// Parent
 		if hier.Spec.Parent != "" {

@@ -14,8 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package handler
+package listener
 
-type Queue interface {
-	Add(item interface{})
+import "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+
+var Listeners []ClusterChangeListener
+
+type ClusterChangeListener interface {
+	AddCluster(cluster *cluster.Cluster)
+	RemoveCluster(cluster *cluster.Cluster)
+}
+
+func AddListener(listener ClusterChangeListener) {
+	Listeners = append(Listeners, listener)
 }

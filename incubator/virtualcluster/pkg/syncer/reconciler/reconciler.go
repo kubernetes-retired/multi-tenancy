@@ -19,7 +19,7 @@ package reconciler
 import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	
+
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -48,8 +48,8 @@ const (
 type Request struct {
 	Cluster *ClusterInfo
 	types.NamespacedName
-	Event   EventType
-	Obj     interface{}
+	Event EventType
+	Obj   interface{}
 }
 
 // Result is the return type of a Reconciler's Reconcile method.

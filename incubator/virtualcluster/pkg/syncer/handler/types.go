@@ -14,20 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package app
+package handler
 
-import (
-	"github.com/spf13/cobra"
-)
-
-func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:  "syncer",
-		Long: ``,
-		Run: func(cmd *cobra.Command, args []string) {
-
-		},
-	}
-
-	return cmd
+type Queue interface {
+	Add(item interface{})
 }

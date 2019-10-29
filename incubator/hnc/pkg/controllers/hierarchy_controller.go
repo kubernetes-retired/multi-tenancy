@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -263,12 +264,22 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 		return
 	}
 
+	// Pre-define label depth suffix
+	labelDepthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
+
+	// Remove all existing depth labels.
+	for k := range nsInst.Labels {
+		if strings.HasSuffix(k, labelDepthSuffix) {
+			delete(nsInst.Labels, k)
+		}
+	}
+
 	// AncestoryNames includes the namespace itself.
 	ancestors := ns.AncestoryNames(nil)
 	for i, ancestor := range ancestors {
-		labelDepthSuffix := ancestor + ".tree." + api.MetaGroup + "/depth"
+		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
-		setLabel(nsInst, labelDepthSuffix, dist)
+		setLabel(nsInst, l, dist)
 	}
 
 	// All namespaces in its subtree should update the labels as well.
@@ -296,8 +307,8 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 		cns := r.Forest.Get(cn)
 		if _, isRequired := reqSet[cn]; isRequired {
 			// This is a required child of this namespace
-			cns.RequiredChildOf = ns.Name()         // mark in in the forest
-			delete(reqSet, cn)                      // remove so we know we found it
+			cns.RequiredChildOf = ns.Name() // mark in in the forest
+			delete(reqSet, cn)              // remove so we know we found it
 			if cns.Exists() && cns.Parent() != ns { // condition if it's assigned elsewhere
 				msg := fmt.Sprintf("required subnamespace %s exists but has parent %s", cn, cns.Parent().Name())
 				ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
@@ -320,7 +331,7 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 	// child of this namespace. There could be one of two reasons: either the namespace hasn't been
 	// created (yet), in which case we just need to enqueue it for reconciliation, or else it *also*
 	// is claimed by another namespace.
-	for cn, _ := range reqSet {
+	for cn := range reqSet {
 		log.Info("Required child is missing", "child", cn)
 		cns := r.Forest.Get(cn)
 		// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
