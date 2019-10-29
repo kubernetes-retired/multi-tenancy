@@ -86,9 +86,16 @@ func main() {
 
 	// Create validating admission controllers
 	if !novalidation {
+		// Create webhook for Hierarchy
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
 		mgr.GetWebhookServer().Register(validators.HierarchyServingPath, &webhook.Admission{Handler: &validators.Hierarchy{
 			Log:    ctrl.Log.WithName("validators").WithName("Hierarchy"),
+			Forest: f,
+		}})
+
+		// Create webhooks for managed objects
+		mgr.GetWebhookServer().Register(validators.ObjectsServingPath, &webhook.Admission{Handler: &validators.Object{
+			Log:    ctrl.Log.WithName("validators").WithName("Object"),
 			Forest: f,
 		}})
 	}
