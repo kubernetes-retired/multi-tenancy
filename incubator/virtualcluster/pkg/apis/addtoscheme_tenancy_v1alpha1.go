@@ -17,7 +17,7 @@ limitations under the License.
 package apis
 
 import (
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
 func init() {

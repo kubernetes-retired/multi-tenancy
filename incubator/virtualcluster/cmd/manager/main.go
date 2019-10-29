@@ -20,9 +20,9 @@ import (
 	"flag"
 	"os"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/apis"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/webhook"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"

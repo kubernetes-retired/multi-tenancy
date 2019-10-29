@@ -28,8 +28,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	ctrlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
 )
 
 var log = logf.Log.WithName("clusterversion-controller")

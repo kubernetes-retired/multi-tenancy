@@ -1,4 +1,4 @@
-module github.com/multi-tenancy/incubator/virtualcluster
+module github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
 
 go 1.12
 

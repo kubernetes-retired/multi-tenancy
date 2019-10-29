@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 
-	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 )
 
 const (
