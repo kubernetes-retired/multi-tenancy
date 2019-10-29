@@ -20,7 +20,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/cmd/vcctl/subcmd"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/subcmd"
 	_ "sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 

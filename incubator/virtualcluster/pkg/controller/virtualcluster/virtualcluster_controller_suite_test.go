@@ -23,7 +23,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/apis"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis"
 	"github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"

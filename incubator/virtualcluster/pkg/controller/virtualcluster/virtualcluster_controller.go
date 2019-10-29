@@ -38,11 +38,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	tenancyv1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
-	vcpki "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	ctrlutil "github.com/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
+	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	ctrlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
 )
 
 const (
@@ -107,7 +107,7 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(
 		&cert.Config{
 			CommonName:   "kubernetes",
-			Organization: []string{"kubernetes-sig.multi-tenancy.virtualcluster"},
+			Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
 		})
 	if rootCAErr != nil {
 		return rootCAErr

@@ -14,7 +14,7 @@ COPY pkg/    pkg/
 COPY cmd/    cmd/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/multi-tenancy/incubator/virtualcluster/cmd/manager
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/manager
 
 # Copy the controller-manager into a thin image
 FROM ubuntu:latest
