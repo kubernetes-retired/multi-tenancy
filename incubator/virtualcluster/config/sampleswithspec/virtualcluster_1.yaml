@@ -4,7 +4,7 @@ metadata:
   labels:
     controller-tools.k8s.io: "1.0"
   name: vc-sample-1
-  namespace: default
+  namespace: tenant-1
 spec:
   clusterDomain: cluster.local
   clusterVersionName: cv-sample 

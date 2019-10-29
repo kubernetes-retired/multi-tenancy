@@ -25,13 +25,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -54,11 +54,7 @@ const (
 	DeployTimeOut = 120 * time.Second
 )
 
-var (
-	log = logf.Log.WithName("virtualcluster-controller")
-	// the default nodePort range used by kubernetes
-	nodePortRange = [2]int32{30000, 32767}
-)
+var log = logf.Log.WithName("virtualcluster-controller")
 
 // Add creates a new Virtualcluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
@@ -101,19 +97,6 @@ var _ reconcile.Reconciler = &ReconcileVirtualcluster{}
 type ReconcileVirtualcluster struct {
 	client.Client
 	scheme *runtime.Scheme
-}
-
-// createNamespace creates a namespace for the virtual cluster. Each
-// virtual cluster will have a corresponding namespace whose name
-// is same as the virtual cluster's name
-func (r *ReconcileVirtualcluster) createNamespace(ns string) error {
-	log.Info("creating namespace", "ns", ns)
-	namespace := &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ns,
-		},
-	}
-	return r.Create(context.TODO(), namespace)
 }
 
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
@@ -184,7 +167,7 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	caGroup.ServiceAccountPrivateKey = svcAcctCAPair
 
 	// store ca and kubeconfig into secrets
-	genSrtsErr := r.createPKISecrets(caGroup, vc.Name)
+	genSrtsErr := r.createPKISecrets(caGroup, vc.Namespace)
 	if genSrtsErr != nil {
 		return genSrtsErr
 	}
@@ -211,9 +194,9 @@ func genInitialClusterArgs(replicas int32, stsName, svcName string) (argsVal str
 
 // completmentETCDTemplate completments the ETCD template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentETCDTemplate(vcName string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
-	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcName
-	etcdBdl.Service.ObjectMeta.Namespace = vcName
+func completmentETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcns
+	etcdBdl.Service.ObjectMeta.Namespace = vcns
 	args := etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args
 	icaVal := genInitialClusterArgs(*etcdBdl.StatefulSet.Spec.Replicas,
 		etcdBdl.StatefulSet.Name, etcdBdl.Service.Name)
@@ -223,15 +206,15 @@ func completmentETCDTemplate(vcName string, etcdBdl *tenancyv1alpha1.StatefulSet
 
 // completmentAPIServerTemplate completments the apiserver template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentAPIServerTemplate(vcName string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
-	apiserverBdl.StatefulSet.ObjectMeta.Namespace = vcName
-	apiserverBdl.Service.ObjectMeta.Namespace = vcName
+func completmentAPIServerTemplate(vcns string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	apiserverBdl.StatefulSet.ObjectMeta.Namespace = vcns
+	apiserverBdl.Service.ObjectMeta.Namespace = vcns
 }
 
 // completmentCtrlMgrTemplate completments the controller manager template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentCtrlMgrTemplate(vcName string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
-	ctrlMgrBdl.StatefulSet.ObjectMeta.Namespace = vcName
+func completmentCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+	ctrlMgrBdl.StatefulSet.ObjectMeta.Namespace = vcns
 }
 
 // deployComponent deploys master component in namespace vcName based on the given StatefulSet
@@ -242,11 +225,11 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 
 	switch ssBdl.Name {
 	case "etcd":
-		completmentETCDTemplate(vc.Name, ssBdl)
+		completmentETCDTemplate(vc.Namespace, ssBdl)
 	case "apiserver":
-		completmentAPIServerTemplate(vc.Name, ssBdl)
+		completmentAPIServerTemplate(vc.Namespace, ssBdl)
 	case "controller-manager":
-		completmentCtrlMgrTemplate(vc.Name, ssBdl)
+		completmentCtrlMgrTemplate(vc.Namespace, ssBdl)
 	default:
 		return fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
 	}
@@ -256,10 +239,19 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 		return err
 	}
 
+	err = controllerutil.SetControllerReference(vc, ssBdl.StatefulSet, r.scheme)
+	if err != nil {
+		return err
+	}
+
 	if ssBdl.Service != nil {
 		log.Info("deploying Service for master component", "component",
 			ssBdl.Name)
 		err = r.Create(context.TODO(), ssBdl.Service)
+		if err != nil {
+			return err
+		}
+		err := controllerutil.SetControllerReference(vc, ssBdl.Service, r.scheme)
 		if err != nil {
 			return err
 		}
@@ -276,7 +268,7 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 		case <-period:
 			sts := &appsv1.StatefulSet{}
 			if err := r.Get(context.TODO(), types.NamespacedName{
-				Namespace: vc.Name,
+				Namespace: vc.Namespace,
 				Name:      ssBdl.Name},
 				sts); err != nil {
 				return err
@@ -338,31 +330,25 @@ func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtu
 		}
 	}()
 
-	// 1. create ns
-	err = r.createNamespace(vc.Name)
-	if err != nil {
-		return
-	}
-
-	// 2. create PKI
+	// 1. create PKI
 	err = r.createPKI(vc, cv)
 	if err != nil {
 		return
 	}
 
-	// 4. deploy etcd
+	// 2. deploy etcd
 	err = r.deployComponent(vc, cv.Spec.ETCD)
 	if err != nil {
 		return
 	}
 
-	// 5. deploy apiserver
+	// 3. deploy apiserver
 	err = r.deployComponent(vc, cv.Spec.APIServer)
 	if err != nil {
 		return
 	}
 
-	// 6. deploy controller-manager
+	// 4. deploy controller-manager
 	err = r.deployComponent(vc, cv.Spec.ControllerManager)
 	if err != nil {
 		return
@@ -375,8 +361,6 @@ func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtu
 // and what is in the Virtualcluster.Spec
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=namespaces/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
@@ -392,6 +376,8 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
 	}
+
+	// TODO implement on delete logic (finalizer)
 
 	cvs := &tenancyv1alpha1.ClusterVersionList{}
 	if err := r.List(context.TODO(), cvs, client.InNamespace("")); err != nil {

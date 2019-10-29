@@ -34,14 +34,16 @@ the virtualcluster controller will run as a deployment, which is binded to the
 _output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1.yaml
 ```
 
-7. If using minikube, create virtualcluster using following command 
+7. By default, each virtualcluster will be created in a tenant's namespace, in this demo, we assume that a tenant namespace has already been created.
+
+8. If using minikube, create the tenant namespace and virtualcluster by using following command 
 ```bash
-_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg v1.kubeconfig -minikube
+kubectl create ns tenant-1 && _output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg v1.kubeconfig -minikube
 ```
 
-8. Once the tenant master is created, a kubeconfig file `vc1.kubeconfig` will be created
+9. Once the tenant master is created, a kubeconfig file `vc1.kubeconfig` will be created
 
-9. Check if tenant master is up and running by command 
+10. Check if tenant master is up and running by command 
 
 ```bash
 kubectl cluster-info --kubeconfig vc1.kubeconfig
@@ -54,15 +56,15 @@ Kubernetes master is running at https://XXX.XXX.XX.XXX:XXXXX
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
 ```
 
-10. There can be multiple virtualclusters running simultaneously on the meta cluster, you 
+11. There can be multiple virtualclusters running simultaneously on the meta cluster, you 
 can create a second virtual cluster by using other virtualcluster yaml, for example
 ```bash
-_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_2.yaml -vckbcfg v2.kubeconfig -minikube
+# same as before, we manully creat a tenant namespace
+kubectl create ns tenant-2 && _output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_2.yaml -vckbcfg v2.kubeconfig -minikube
 ```
+12. As previously, `v2.kubeconfig` will be generated once the second virtualcluster is up and running. 
 
-11. Same as before, `v2.kubeconfig` will be generated once the second virtualcluster is up and running. 
-
-12. You can delete existing virtualclusters by typing command
+13. You can delete existing virtualclusters by typing command
 ```bash
 _output/bin/vcctl delete -yaml config/sampleswithspec/virtualcluster_2.yaml 
 ```

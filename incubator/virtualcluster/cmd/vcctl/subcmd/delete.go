@@ -19,8 +19,6 @@ import (
 	"context"
 	"errors"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -53,17 +51,6 @@ func Delete(yaml string) error {
 	vc, ok := ro.(*tenancyv1alpha1.Virtualcluster)
 	if !ok {
 		return errors.New("please specify a virtualcluster yaml")
-	}
-
-	// delete the namespace and all resources of the virtualcluster
-	err = mgr.GetClient().Delete(context.TODO(),
-		&corev1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: vc.Name,
-			},
-		})
-	if err != nil {
-		return err
 	}
 
 	// delete the virtualcluster object

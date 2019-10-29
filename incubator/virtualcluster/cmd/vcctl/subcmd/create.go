@@ -108,27 +108,27 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 	}
 
 	// poll etcd StatefulSet
-	err = pollStatefulSet("etcd", vc.Name, cli)
+	err = pollStatefulSet("etcd", vc.Namespace, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("etcd is ready")
 
 	// poll apiserver StatefulSet
-	err = pollStatefulSet("apiserver", vc.Name, cli)
+	err = pollStatefulSet("apiserver", vc.Namespace, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("apiserver is ready")
 
 	// poll controller-manager StatefulSet
-	err = pollStatefulSet("apiserver", vc.Name, cli)
+	err = pollStatefulSet("apiserver", vc.Namespace, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("controller-manager is ready")
 
-	return genKubeConfig(vc.Name, vcKbCfg, cli, minikube)
+	return genKubeConfig(vc.Namespace, vcKbCfg, cli, minikube)
 }
 
 // pollStatefulSet keeps checking if the StatefulSet in `namespace` with `name` is
@@ -163,12 +163,12 @@ func pollStatefulSet(name, namespace string, cli client.Client) error {
 }
 
 // getVcKubeConfig gets the kubeconfig of the virtual cluster
-func getVcKubeConfig(cli client.Client, clusterName, srtName string) ([]byte, error) {
+func getVcKubeConfig(cli client.Client, clusterNamespace, srtName string) ([]byte, error) {
 	// kubeconfig of the tenant cluster is stored in meta cluster as a secret
 	srt := &corev1.Secret{}
 	err := cli.Get(context.TODO(),
 		types.NamespacedName{
-			Namespace: clusterName,
+			Namespace: clusterNamespace,
 			Name:      srtName,
 		}, srt)
 	if err != nil {
@@ -183,19 +183,19 @@ func getVcKubeConfig(cli client.Client, clusterName, srtName string) ([]byte, er
 }
 
 // genKubeConfig generates the kubeconfig file for accessing the virtual cluster
-func genKubeConfig(clusterName, vcKbCfg string, cli client.Client, minikube bool) error {
+func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, minikube bool) error {
 	// get the content of admin.kubeconfig and write to vcKbCfg
 	fn, err := os.OpenFile(vcKbCfg, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return err
 	}
-	kbCfgBytes, err := getVcKubeConfig(cli, clusterName, "admin-kubeconfig")
+	kbCfgBytes, err := getVcKubeConfig(cli, clusterNamespace, "admin-kubeconfig")
 	if err != nil {
 		return err
 	}
 	// replace the server address in kubeconfig if using minikube
 	if minikube == true {
-		kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterName)
+		kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterNamespace)
 		if err != nil {
 			return err
 		}
@@ -212,12 +212,12 @@ func genKubeConfig(clusterName, vcKbCfg string, cli client.Client, minikube bool
 
 // replaceServerAddr replace api server IP with the minikube gateway IP, and
 // disable TLS varification by removing the server CA
-func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterName string) ([]byte, error) {
+func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterNamespace string) ([]byte, error) {
 	minikubeIP, err := getMinikubeIP()
 	if err != nil {
 		return nil, err
 	}
-	svcNodePort, err := netutil.GetSvcNodePort(APIServerSvcName, clusterName, cli)
+	svcNodePort, err := netutil.GetSvcNodePort(APIServerSvcName, clusterNamespace, cli)
 	if err != nil {
 		return nil, err
 	}
