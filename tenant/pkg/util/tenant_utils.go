@@ -17,7 +17,7 @@ limitations under the License.
 package tenantnamespace
 
 import (
-	tenancyv1alpha1 "github.com/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 )
 
 // GetTenantNamespaceName returns the tenant namespace name based on following conditions:
