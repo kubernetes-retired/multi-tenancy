@@ -73,6 +73,6 @@ build_binaries() {
   cd ${VC_BIN_DIR}
   for binary in "${binaries[@]}"; do
     echo "Building ${binary}"
-    GOOS=linux go build -ldflags "${goldflags:-}" -gcflags "${gcflags:-}" ${goflags} ${binary}
+    GOOS=${GOOS:-linux} go build -ldflags "${goldflags:-}" -gcflags "${gcflags:-}" ${goflags} ${binary}
   done
 }

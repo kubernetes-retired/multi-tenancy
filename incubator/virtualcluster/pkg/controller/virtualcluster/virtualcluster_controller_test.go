@@ -43,7 +43,8 @@ func TestReconcile(t *testing.T) {
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
-	mgr, err := manager.New(cfg, manager.Options{})
+	// NOTE: use a random free port ":0"
+	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: ":0"})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
 

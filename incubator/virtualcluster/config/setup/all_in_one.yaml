@@ -1,3 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vc-manager
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -155,3 +160,48 @@ rules:
   - update
   - patch
   - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: vc-manager
+  namespace: vc-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-manager
+  namespace: vc-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vc-manager
+  namespace: vc-manager
+  labels:
+    app: vc-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-manager 
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: vc-manager
+    spec:
+      serviceAccountName: vc-manager
+      containers:
+      - command:
+        - manager
+        image: virtualcluster/manager-amd64 
+        imagePullPolicy: Always
+        name: vc-manager

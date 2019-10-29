@@ -24,3 +24,19 @@ wait-for-jobs() {
   done
   return ${fail}
 }
+
+# Replaces the `conditions: null` and `storedVersions: null` to 
+# `conditions: []` and `storedVersions: []`
+# 
+# NOTE: this is a hack. controller-gen@0.1.1 uses null to 
+# represent empty array in yaml, which will cause `kubectl apply -f` 
+# to fail. Due to dependencies issue, we will stick with this version 
+# of controller-gen for now. 
+# TODO replace controller-gen, and remove this hack 
+replace-null() {
+  for f in config/crds/*; do
+    tac $f \
+      | awk -F: 'NR==1, NR==2{$2="[]"}1' OFS='\: ' \
+      | tac > $f.tmp && mv $f.tmp $f
+  done
+}

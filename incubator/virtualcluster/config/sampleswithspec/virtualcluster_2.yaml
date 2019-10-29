@@ -3,7 +3,8 @@ kind: Virtualcluster
 metadata: 
   labels:
     controller-tools.k8s.io: "1.0"
-  name: vc-sample
+  name: vc-sample-2
+  namespace: tenant-2
 spec:
   clusterDomain: cluster.local
   clusterVersionName: cv-sample 
