@@ -39,10 +39,10 @@ import (
 
 	"k8s.io/klog"
 
-	syncerappconfig "github.com/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
-	vcclient "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
-	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
-	syncerconfig "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	syncerappconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
+	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
+	syncerconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/spf13/pflag"
 )
 

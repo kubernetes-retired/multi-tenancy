@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // Cluster stores a Kubernetes client, cache, and other cluster-scoped dependencies.

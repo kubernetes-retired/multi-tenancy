@@ -29,8 +29,8 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // MultiClusterController implements the controller pattern.

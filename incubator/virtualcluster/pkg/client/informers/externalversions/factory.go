@@ -23,9 +23,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/internalinterfaces"
-	tenancy "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy"
+	versioned "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/internalinterfaces"
+	tenancy "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

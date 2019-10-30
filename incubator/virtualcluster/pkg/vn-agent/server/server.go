@@ -23,7 +23,7 @@ import (
 	"github.com/emicklei/go-restful"
 	"github.com/pkg/errors"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
 // Server is a http.Handler which exposes vn-agent functionality over HTTP.

@@ -19,7 +19,7 @@ package handler
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type EnqueueRequestForObject struct {

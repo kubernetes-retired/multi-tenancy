@@ -16,7 +16,7 @@ limitations under the License.
 
 package listener
 
-import "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+import "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 
 var Listeners []ClusterChangeListener
 

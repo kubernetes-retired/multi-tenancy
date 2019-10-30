@@ -29,9 +29,9 @@ import (
 	"github.com/spf13/pflag"
 	certutil "k8s.io/client-go/util/cert"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/server"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/server"
 )
 
 func main() {
