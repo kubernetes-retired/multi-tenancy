@@ -22,13 +22,13 @@ const (
 // Note: the validating webhook FAILS OPEN. This means that if the webhook goes down, all further
 // changes to the objects are allowed.
 //
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=secrets,verbs=create;update,versions=v1,name=secrets
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rols,verbs=create;update,versions=v1,name=roles.rbac.authorization.k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=create;update,versions=v1,name=rolebindings.rbac.authorization.k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="networking.k8s.io",resources=networkpolicies,verbs=create;update,versions=v1,name=networkpolicies.networking.k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=resourcequotas,verbs=create;update,versions=v1,name=resourcesquotas
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=limitranges,verbs=create;update,versions=v1,name=limitranges
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=configmaps,verbs=create;update,versions=v1,name=configmaps
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=secrets,verbs=create;update,versions=v1,name=secrets.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rols,verbs=create;update,versions=v1,name=roles.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=create;update,versions=v1,name=rolebindings.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="networking.k8s.io",resources=networkpolicies,verbs=create;update,versions=v1,name=networkpolicies.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=resourcequotas,verbs=create;update,versions=v1,name=resourcesquotas.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=limitranges,verbs=create;update,versions=v1,name=limitranges.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=configmaps,verbs=create;update,versions=v1,name=configmaps.objects.hnc.x-k8s.io
 
 type Object struct {
 	Log     logr.Logger
