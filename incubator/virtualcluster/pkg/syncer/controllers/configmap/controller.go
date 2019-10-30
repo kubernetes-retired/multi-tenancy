@@ -28,12 +28,12 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
-	sc "github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {

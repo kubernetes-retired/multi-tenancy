@@ -19,8 +19,8 @@ limitations under the License.
 package tenancy
 
 import (
-	internalinterfaces "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	internalinterfaces "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

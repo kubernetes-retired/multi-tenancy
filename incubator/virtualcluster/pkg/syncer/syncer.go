@@ -26,12 +26,12 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	vcinformers "github.com/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
-	"github.com/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
