@@ -30,7 +30,7 @@ func TestStructure(t *testing.T) {
 		fail bool
 	}{
 		{name: "ok", nnm: "foo", pnm: "baz"},
-		{name: "missing parent", nnm: "foo", pnm: "brumpf"},
+		{name: "missing parent", nnm: "foo", pnm: "brumpf", fail: true},
 		{name: "self-cycle", nnm: "foo", pnm: "foo", fail: true},
 		{name: "other cycle", nnm: "foo", pnm: "bar", fail: true},
 		{name: "rc ok", rcm: []string{"bar-baz"}, nnm: "foo"},

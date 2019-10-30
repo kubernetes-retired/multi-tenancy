@@ -140,6 +140,11 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 		return nil, allow("parent unchanged")
 	}
 
+	// non existence of parent namespace -> not allowed
+	if newParent != nil && !newParent.Exists() {
+		return nil, deny(metav1.StatusReasonForbidden, "The requested parent "+hc.Spec.Parent+" does not yet exist")
+	}
+
 	// Is this change structurally legal? Note that this can "leak" information about the hierarchy
 	// since we haven't done our authz checks yet. However, the fact that they've gotten this far
 	// means that the user has permission to update the _current_ namespace, which means they also
