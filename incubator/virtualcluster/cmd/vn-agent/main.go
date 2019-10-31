@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	certutil "k8s.io/client-go/util/cert"
+	"k8s.io/component-base/logs"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
@@ -78,35 +79,42 @@ func run(c *config.Flags) error {
 
 	handler, err := server.NewServer(&config.Config{
 		KubeletClientCert: kubeletClientCertPair,
-		KubeletServerHost: fmt.Sprintf("127.0.0.1:%v", c.KubeletConfig.Port),
+		KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", c.KubeletConfig.Port),
 	})
 	if err != nil {
 		return errors.Wrapf(err, "create server")
 	}
 
-	clientCAs, err := certutil.CertsFromFile(c.ClientCAFile)
-	if err != nil {
-		return errors.Wrapf(err, "unable to load client CA file")
-	}
-
-	certPool := x509.NewCertPool()
-	for _, cert := range clientCAs {
-		certPool.AddCert(cert)
-	}
-
 	s := &http.Server{
-		Addr:    fmt.Sprintf("localhost:%d", c.Port),
+		Addr:    fmt.Sprintf(":%d", c.Port),
 		Handler: handler,
 		TLSConfig: &tls.Config{
-			ClientCAs:  certPool,
-			ClientAuth: tls.RequireAndVerifyClientCert,
+			ClientAuth: tls.RequestClientCert,
 		},
+	}
+
+	if c.ClientCAFile != "" {
+		clientCAs, err := certutil.CertsFromFile(c.ClientCAFile)
+		if err != nil {
+			return errors.Wrapf(err, "unable to load client CA file")
+		}
+
+		certPool := x509.NewCertPool()
+		for _, cert := range clientCAs {
+			certPool.AddCert(cert)
+		}
+
+		s.TLSConfig.ClientCAs = certPool
+		s.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
 	tlsConfig, err := certificate.InitializeTLS(c)
 	if err != nil {
 		return errors.Wrapf(err, "failed to initial tls config")
 	}
+
+	logs.InitLogs()
+	defer logs.FlushLogs()
 
 	klog.Infof("server listen on %s", s.Addr)
 	klog.Infof("config %+v", c)
