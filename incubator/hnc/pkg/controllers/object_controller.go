@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -228,6 +229,11 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 		}
 	}
 
+	// Object with nonempty finalizer list is not propagated
+	if !isObjectFinalizerEmpty(inst) {
+		return fmt.Errorf("Object %+v has nonempty finalizer list", *inst)
+	}
+
 	// Propagate the object to all destination namespaces.
 	for _, dst := range dests {
 		// Create an in-memory canonical version, and set the new properties.
@@ -250,6 +256,14 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	}
 
 	return nil
+}
+
+// isObjectFinalizerEmpty checks if object has nil value in finalizer or not
+func isObjectFinalizerEmpty(inst *unstructured.Unstructured) bool {
+	if inst != nil && inst.GetFinalizers() != nil {
+		return false
+	}
+	return true
 }
 
 // onDelete explicitly deletes the children that were propagated from this object.
