@@ -11,6 +11,8 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 - [Benchmark Types](documentation/types.md)
 - [Benchmark Categories](documentation/catagories.md)
 - [Running the Multi-Tenancy Validation](documentation/run.md)
+- [Roadmap](documentation/roadmap.md)
+- [Contributing](documentation/contributing.md)
 
 ## Benchmarks
 
@@ -52,10 +54,3 @@ This profile extends the "Level 2" profile. Items in this profile exhibit one or
 
 |  Type             |  Category                      | Check                                              |
 |-------------------|--------------------------------|----------------------------------------------------|
-
-
-## License
-
-## Roadmap
-
-## Contributing
