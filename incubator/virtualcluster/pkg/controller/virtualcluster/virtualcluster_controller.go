@@ -133,7 +133,7 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	caGroup.ETCD = etcdCAPair
 
 	// create crt, key for apiserver
-	apiserverDomain := cv.GetAPIServerDomain()
+	apiserverDomain := cv.GetAPIServerDomain(vc.Namespace)
 	apiserverCAPair, apiserverCrtErr :=
 		vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
 	if apiserverCrtErr != nil {
