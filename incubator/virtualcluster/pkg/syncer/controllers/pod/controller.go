@@ -97,8 +97,10 @@ func (c *controller) backPopulate(obj interface{}) {
 	if len(clusterName) == 0 {
 		return
 	}
+	klog.Infof("back populate pod %s/%s in cluster %s", pod.Name, namespace, clusterName)
 	vPodObj, err := c.multiClusterPodController.Get(clusterName, namespace, pod.Name)
 	if err != nil {
+		klog.Errorf("could not find pod %s/%s pod in controller cache %v", pod.Name, namespace, err)
 		return
 	}
 	var client *clientset.Clientset
@@ -120,6 +122,9 @@ func (c *controller) backPopulate(obj interface{}) {
 				APIVersion: "v1",
 			},
 		})
+		if err != nil {
+			klog.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pod.Spec.NodeName, err)
+		}
 	}
 	if !equality.Semantic.DeepEqual(vPod.Status, pod.Status) {
 		newPod := vPod.DeepCopy()
@@ -137,17 +142,20 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.AddEvent:
 		err := c.reconcilePodCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
 		if err != nil {
+			klog.Errorf("failed reconcile pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.UpdateEvent:
 		err := c.reconcilePodUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
 		if err != nil {
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.DeleteEvent:
 		err := c.reconcilePodRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
 		if err != nil {
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			return reconciler.Result{Requeue: true}, err
 		}
 	}
 	return reconciler.Result{}, nil
@@ -155,7 +163,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1.Pod) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	newObj, err := conversion.BuildMetadata(targetNamespace, pod)
+	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, pod)
 	if err != nil {
 		return err
 	}
@@ -163,12 +171,11 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 	pPod := newObj.(*v1.Pod)
 	conversion.MutatePod(targetNamespace, pPod)
 
-	innerCluster := c.multiClusterPodController.GetCluster(cluster)
-	client, err := clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return err
+	_, err = c.podClient.Pods(targetNamespace).Create(pPod)
+	if errors.IsAlreadyExists(err) {
+		klog.Infof("pod %s/%s of cluster %s already exist in super master", namespace, name, cluster)
+		return nil
 	}
-	_, err = client.CoreV1().Pods(targetNamespace).Create(pod)
 	return err
 }
 
@@ -183,12 +190,14 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1
 	}
 	err := c.podClient.Pods(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
+		klog.Warningf("pod %s/%s of cluster not found in super master", namespace, name, cluster)
 		return nil
 	}
 	return err
 }
 
 func (c *controller) AddCluster(cluster *cluster.Cluster) {
+	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.Name)
 	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s pod event", cluster.Name)
