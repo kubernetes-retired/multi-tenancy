@@ -21,27 +21,34 @@ make all WHAT=cmd/vcctl
 kubectl apply -f config/crds
 ```
 
-5. Setup virtualcluster controller
+5. Setup kubelet-client secret
+```bash
+kubectl create ns vc-manager
+kubectl create secret generic vc-kubelet-client --from-file=./kubelet-client.crt --from-file=./kubelet-client.key --namespace vc-manager
+```
+put the kubelet-client cert from super master apiserver into a secret, which would be mounted into the vn-agent.
+
+6. Setup virtualcluster control plane
 ```bash
 kubectl apply -f config/setup/all_in_one.yaml
 ```
-the virtualcluster controller will run as a deployment, which is binded to the 
-`vc-manager` service account and run in an independent namespace `vc-manager`. 
+the virtualcluster controller `vc-manager` will run as a deployment, which is binded to the 
+`vc-manager` service account and run in an independent namespace `vc-manager`.
 
+ `syncer` running in a normal deployment.
+ `vn-agent` running as a daemonset using hostNetwork mode.
 
-6. Create clusterversion once `vc-manager` is ready
+7. Create clusterversion once `vc-manager` is ready
 ```bash 
 _output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1.yaml
 ```
-
-7. By default, each virtualcluster will be created in a tenant's namespace, in this demo, we assume that a tenant namespace has already been created.
 
 8. If using minikube, create the tenant namespace and virtualcluster by using following command 
 ```bash
 kubectl create ns tenant-1 && _output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg v1.kubeconfig -minikube
 ```
 
-9. Once the tenant master is created, a kubeconfig file `vc1.kubeconfig` will be created
+9. Once the tenant master is created, a kubeconfig file `v1.kubeconfig` will be created
 
 10. Check if tenant master is up and running by command 
 
@@ -68,8 +75,3 @@ kubectl create ns tenant-2 && _output/bin/vcctl create -yaml config/sampleswiths
 ```bash
 _output/bin/vcctl delete -yaml config/sampleswithspec/virtualcluster_2.yaml 
 ```
-
-## Setup vn-agent
-
-## Setup syncer
-
