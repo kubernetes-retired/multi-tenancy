@@ -142,7 +142,7 @@ func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-configmap-controller watch cluster %s for configmap resource", cluster.Name)
 	err := c.multiClusterConfigMapController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s configmap event", cluster.Name)
+		klog.Errorf("failed to watch cluster %s configmap event: %v", cluster.Name, err)
 	}
 }
 

@@ -142,7 +142,7 @@ func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-secret-controller watch cluster %s for secret resource", cluster.Name)
 	err := c.multiClusterSecretController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s secret event", cluster.Name)
+		klog.Errorf("failed to watch cluster %s secret event: %v", cluster.Name, err)
 	}
 }
 

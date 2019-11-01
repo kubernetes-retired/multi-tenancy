@@ -143,7 +143,7 @@ func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.Name)
 	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s namespace event", cluster.Name)
+		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.Name, err)
 	}
 }
 

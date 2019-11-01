@@ -203,5 +203,50 @@ spec:
       - command:
         - manager
         image: virtualcluster/manager-amd64 
-        imagePullPolicy: Always
+        imagePullPolicy: Never
         name: vc-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vc-syncer-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: vc-syncer
+    namespace: vc-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-syncer
+  namespace: vc-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vc-syncer
+  namespace: vc-manager
+  labels:
+    app: vc-syncer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-syncer
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: vc-syncer
+    spec:
+      serviceAccountName: vc-syncer
+      containers:
+        - command:
+            - syncer
+          image: virtualcluster/syncer-amd64
+          imagePullPolicy: Never
+          name: vc-syncer
