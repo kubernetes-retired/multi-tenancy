@@ -19,6 +19,15 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# Set default version tag for krew build (unless version is set)
+ifeq (,${VERSION})
+VERSION=v0.1.0
+endif
+
+# Get check sum value of krew archive
+KREW_CKSM=$(shell sha256sum bin/kubectl-hnc.tar.gz | cut -d " " -f 1)
+
+
 all: test docker-build
 
 ###################### LOCAL ARTIFACTS #########################
@@ -30,16 +39,37 @@ test: build
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests
 	go build -o bin/manager ./cmd/manager/main.go
-	go build -o bin/kubectl-hnc ./cmd/kubectl/main.go
+	go build -o bin/kubectl/kubectl-hnc ./cmd/kubectl/main.go
 
+# Clean all binaries (manager and kubectl)
+clean:
+	rm -r bin/kubectl/kubectl-hnc
+	rm -f bin/manager
+	
 # Install kubectl plugin
 kubectl: build
-	go build -o ${GOPATH}/bin/kubectl-hnc ./cmd/kubectl/main.go
+	cp bin/kubectl/kubectl-hnc ${GOPATH}/bin/kubectl-hnc
 	@echo "Installed kubectl-hnc to GOPATH/bin"
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: build
 	go run ./cmd/manager/main.go --novalidation
+
+# Install kubectl plugin locally using krew.
+krew-build: build tar
+	sed -i 's/^\(\s*sha256\s*:\s*\).*/\1"$(KREW_CKSM)"/' \
+		hack/hnc.yaml
+	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(VERSION)"/' \
+		hack/hnc.yaml
+	kubectl krew install --manifest=hack/hnc.yaml --archive=bin/kubectl-hnc.tar.gz
+
+# Make krew archive and put into /hack
+tar:
+	tar -zcvf bin/kubectl-hnc.tar.gz bin/kubectl
+
+# Uninstall krew
+krew-uninstall: 
+	kubectl krew uninstall hnc
 
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
