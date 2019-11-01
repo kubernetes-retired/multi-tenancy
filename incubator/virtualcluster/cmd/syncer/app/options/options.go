@@ -21,6 +21,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
@@ -35,14 +36,12 @@ import (
 	"k8s.io/client-go/tools/record"
 	cliflag "k8s.io/component-base/cli/flag"
 	componentbaseconfig "k8s.io/component-base/config"
-
 	"k8s.io/klog"
 
 	syncerappconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
 	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 	syncerconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"github.com/spf13/pflag"
 )
 
 const (
@@ -114,7 +113,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	c.ComponentConfig = o.ComponentConfig
 
 	// Prepare kube clients
-	superMasterClient, leaderElectionClient, virtualClusterClient, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
+	leaderElectionClient, virtualClusterClient, superMasterClient, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +133,6 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 		}
 	}
 
-	c.Client = superMasterClient
 	c.SecretClient = superMasterClient.CoreV1()
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().Virtualclusters()
 	c.SuperMasterClient = superMasterClient
@@ -182,42 +180,52 @@ func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfigurat
 
 // createClients creates a meta cluster kube client and a super master custer client from the given config and masterOverride.
 func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface,
-	clientset.Interface, vcclient.Interface, error) {
+	vcclient.Interface, clientset.Interface, error) {
 	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
-		klog.Warningf("Neither --kubeconfig nor --master was specified. Using default API client. This might not work.")
+		klog.Warningf("Neither --kubeconfig nor --master was specified. Using in-cluster API client.")
 	}
 
 	// This creates a client, first loading any specified kubeconfig
 	// file, and then overriding the Master flag, if non-empty.
-	superMasterKubeConfig, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.Kubeconfig},
-		&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterOverride}}).ClientConfig()
+	var restConfig *restclient.Config
+	var err error
+	if len(config.Kubeconfig) == 0 {
+		restConfig, err = restclient.InClusterConfig()
+	} else {
+		var overrideConfig *clientcmd.ConfigOverrides
+		if len(masterOverride) != 0 {
+			overrideConfig = &clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterOverride}}
+		}
+
+		restConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.Kubeconfig}, overrideConfig).ClientConfig()
+	}
+
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	superMasterKubeConfig.ContentConfig.ContentType = config.AcceptContentTypes
-	superMasterKubeConfig.QPS = config.QPS
-	superMasterKubeConfig.Burst = int(config.Burst)
+	restConfig.ContentConfig.ContentType = config.AcceptContentTypes
+	restConfig.QPS = config.QPS
+	restConfig.Burst = int(config.Burst)
 
-	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(superMasterKubeConfig, ResourceSyncerUserAgent))
+	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, ResourceSyncerUserAgent))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	// creates the virtual cluster client
-	virtualClusterClient, err := vcclient.NewForConfig(superMasterKubeConfig)
+	virtualClusterClient, err := vcclient.NewForConfig(restConfig)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// shallow copy, do not modify the kubeConfig.Timeout.
-	restConfig := *superMasterKubeConfig
+	leaderElectionRestConfig := *restConfig
 	restConfig.Timeout = timeout
-	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&restConfig, "leader-election"))
+	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&leaderElectionRestConfig, "leader-election"))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	return superMasterClient, leaderElectionClient, virtualClusterClient, nil
+	return leaderElectionClient, virtualClusterClient, superMasterClient, nil
 }

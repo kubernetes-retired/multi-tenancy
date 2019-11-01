@@ -34,7 +34,6 @@ type Config struct {
 	ComponentConfig syncerconfig.SyncerConfiguration
 
 	// the general kube client
-	Client                 clientset.Interface
 	SecretClient           corev1.SecretsGetter
 	VirtualClusterInformer vcinformers.VirtualclusterInformer
 

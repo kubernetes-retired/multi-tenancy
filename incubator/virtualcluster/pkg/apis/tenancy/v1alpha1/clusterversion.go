@@ -41,6 +41,6 @@ func (cv *ClusterVersion) GetEtcdServers() (etcdServers []string) {
 //
 // TODO support NodePort and ClusterIP for accessing apiserver from
 // outside the cluster
-func (cv *ClusterVersion) GetAPIServerDomain() string {
-	return cv.Spec.APIServer.Service.Name
+func (cv *ClusterVersion) GetAPIServerDomain(namespace string) string {
+	return cv.Spec.APIServer.Service.Name + "." + namespace
 }

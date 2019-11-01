@@ -29,11 +29,11 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/node"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -41,17 +41,17 @@ import (
 )
 
 type controller struct {
-	podClient                 v1core.PodsGetter
+	client                    v1core.CoreV1Interface
 	multiClusterPodController *sc.MultiClusterController
 }
 
 func Register(
-	podClient v1core.PodsGetter,
+	client v1core.CoreV1Interface,
 	podInformer coreinformers.PodInformer,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		podClient: podClient,
+		client: client,
 	}
 
 	// Create the multi cluster pod controller
@@ -83,6 +83,17 @@ func Register(
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
 				AddFunc: c.backPopulate,
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					newPod := newObj.(*v1.Pod)
+					oldPod := oldObj.(*v1.Pod)
+					if newPod.ResourceVersion == oldPod.ResourceVersion {
+						// Periodic resync will send update events for all known Deployments.
+						// Two different versions of the same Deployment will always have different RVs.
+						return
+					}
+
+					c.backPopulate(newObj)
+				},
 			},
 		},
 	)
@@ -104,13 +115,25 @@ func (c *controller) backPopulate(obj interface{}) {
 		return
 	}
 	var client *clientset.Clientset
+	innerCluster := c.multiClusterPodController.GetCluster(clusterName)
+	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
+	if err != nil {
+		return
+	}
+
 	vPod := vPodObj.(*v1.Pod)
 	if vPod.Spec.NodeName != pod.Spec.NodeName {
-		innerCluster := c.multiClusterPodController.GetCluster(clusterName)
-		client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
+		n, err := c.client.Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
+			klog.Errorf("failed to get node %s from super master: %v", pod.Spec.NodeName, err)
 			return
 		}
+
+		_, err = client.CoreV1().Nodes().Create(node.NewVirtualNode(n))
+		if errors.IsAlreadyExists(err) {
+			klog.Warningf("virtual node %s already exists", vPod.Spec.NodeName)
+		}
+
 		err = client.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vPod.Name,
@@ -125,6 +148,7 @@ func (c *controller) backPopulate(obj interface{}) {
 		if err != nil {
 			klog.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pod.Spec.NodeName, err)
 		}
+		return
 	}
 	if !equality.Semantic.DeepEqual(vPod.Status, pod.Status) {
 		newPod := vPod.DeepCopy()
@@ -171,7 +195,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 	pPod := newObj.(*v1.Pod)
 	conversion.MutatePod(targetNamespace, pPod)
 
-	_, err = c.podClient.Pods(targetNamespace).Create(pPod)
+	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
 		klog.Infof("pod %s/%s of cluster %s already exist in super master", namespace, name, cluster)
 		return nil
@@ -188,7 +212,7 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &conversion.DefaultDeletionPolicy,
 	}
-	err := c.podClient.Pods(targetNamespace).Delete(name, opts)
+	err := c.client.Pods(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("pod %s/%s of cluster not found in super master", namespace, name, cluster)
 		return nil
@@ -200,7 +224,7 @@ func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.Name)
 	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s pod event", cluster.Name)
+		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.Name, err)
 	}
 }
 

@@ -70,7 +70,7 @@ func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.Virtualcluster, a
 	}
 
 	config := &cert.Config{
-		CommonName: "kube-apiserver",
+		CommonName: vc.Name,
 		AltNames:   *altNames,
 		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}

@@ -90,12 +90,12 @@ func (s *Syncer) onVirtualClusterAdd(obj interface{}) {
 	// Build cluster admin client based on admin.kubeconfig secret
 	adminKubeconfigSecret, err := s.secretClient.Secrets(vc.Namespace).Get(KubeconfigAdmin, metav1.GetOptions{})
 	if err != nil {
-		klog.Errorf("failed to get admin.kubeconfig secret for virtual cluster %s", vc.Name)
+		klog.Errorf("failed to get admin.kubeconfig secret for virtual cluster %s: %v", vc.Name, err)
 		return
 	}
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(adminKubeconfigSecret.Data[KubeconfigAdmin])
 	if err != nil {
-		klog.Errorf("failed to build rest config for virtual cluster %s", vc.Name)
+		klog.Errorf("failed to build rest config for virtual cluster %s: %v", vc.Name, err)
 		return
 	}
 
