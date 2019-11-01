@@ -24,10 +24,6 @@ github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 h1:d+Bc7a5rLufV
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/Rican7/retry v0.1.0 h1:FqK94z34ly8Baa6K+G8Mmza9rYWTKOJk+yckIBB5qVk=
 github.com/Rican7/retry v0.1.0/go.mod h1:FgOROf8P5bebcC1DS0PdOQiqGUridaZvikzUmkFW6gg=
-github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 h1:JYp7IbQjafoB+tBA3gMyHYHrpOtNuDiK/uB5uXxq5wM=
-github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
-github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d h1:UQZhZ2O0vMHr2cI+DC1Mbh0TJxzA3RcLoMsFw+aXw7E=
-github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d/go.mod h1:rBZYJk541a8SKzHPHnH3zbiI+7dagKZ0cgpgrD7Fyho=
 github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e/go.mod h1:3U/XgcO3hCbHZ8TKRvWD2dDTCfh9M9ya+I9JpbB7O8o=
 github.com/asaskevich/govalidator v0.0.0-20180720115003-f9ffefc3facf/go.mod h1:lB+ZfQJz7igIIfQNfa7Ml4HSf2uFQQRzpGGRXenZAgY=
 github.com/auth0/go-jwt-middleware v0.0.0-20170425171159-5493cabe49f7/go.mod h1:LWMyo4iOLWXHGdBki7NIht1kHru/0wM179h+d3g8ATM=
@@ -446,8 +442,6 @@ google.golang.org/genproto v0.0.0-20170731182057-09f6ed296fc6 h1:72GtwBPfq6av9X0
 google.golang.org/genproto v0.0.0-20170731182057-09f6ed296fc6/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
 google.golang.org/grpc v1.13.0 h1:bHIbVsCwmvbArgCJmLdgOdHFXlKqTOVjbibbS19cXHc=
 google.golang.org/grpc v1.13.0/go.mod h1:yo6s7OP7yaDglbqo1J04qKzAhqBH6lvTonzMVmEdcZw=
-gopkg.in/alecthomas/kingpin.v2 v2.2.6 h1:jMFz6MfLP0/4fUyZle81rXUoxOBFi19VUFKVDOQfozc=
-gopkg.in/alecthomas/kingpin.v2 v2.2.6/go.mod h1:FMv+mEhP44yOT+4EoQTLFTRgOQ1FBLkstjWtayDeSgw=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 h1:qIbj1fsPNlZgppZ+VLlY7N33q108Sa+fhmuc+sWQYwY=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
@@ -510,8 +504,6 @@ k8s.io/kube-scheduler v0.0.0-20190819144657-d1a724e0828e/go.mod h1:+Fu2yeZ1XbEOO
 k8s.io/kubelet v0.0.0-20190819144524-827174bad5e8/go.mod h1:mhhT68h2N5ntu1gx7RF4kAoDHBCZ/FSVZ46FGesEqiA=
 k8s.io/kubernetes v1.15.3 h1:PqAKiWeebLJQT2/sqTmeezrd2ApvznBVscDt1rBkcV4=
 k8s.io/kubernetes v1.15.3/go.mod h1:4Ggyo4AFgjbIzULOminzUJAvgbzY3j5ysXlW/a0PdcQ=
-k8s.io/kubernetes v1.16.1 h1:5Ys1P0p+OkGMq+/RQWa3/gs2hlGfaNkVPsVY+vyZWqQ=
-k8s.io/kubernetes v1.16.2 h1:k0f/OVp6Yfv+UMTm6VYKhqjRgcvHh4QhN9coanjrito=
 k8s.io/legacy-cloud-providers v0.0.0-20190819145509-592c9a46fd00/go.mod h1:CQf+5lDQk/abK+N/fTW2zb/QEQBI3x8YluF4sFSHSf4=
 k8s.io/metrics v0.0.0-20190819143841-305e1cef1ab1/go.mod h1:oSHDT3CDT9BmVggrIzzU1nfZArYBO5saiR4MvpmZ+3w=
 k8s.io/repo-infra v0.0.0-20181204233714-00fe14e3d1a3/go.mod h1:+G1xBfZDfVFsm1Tj/HNCvg4QqWx8rJ2Fxpqr1rqp/gQ=
