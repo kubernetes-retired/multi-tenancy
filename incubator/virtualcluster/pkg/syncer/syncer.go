@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	KubeconfigAdmin = "admin.kubeconfig"
+	KubeconfigAdmin = "admin-kubeconfig"
 )
 
 type Syncer struct {
@@ -88,7 +88,7 @@ func (s *Syncer) onVirtualClusterAdd(obj interface{}) {
 	klog.Infof("handle virtual cluster %s add event", vc.Name)
 
 	// Build cluster admin client based on admin.kubeconfig secret
-	adminKubeconfigSecret, err := s.secretClient.Secrets(vc.Name).Get(KubeconfigAdmin, metav1.GetOptions{})
+	adminKubeconfigSecret, err := s.secretClient.Secrets(vc.Namespace).Get(KubeconfigAdmin, metav1.GetOptions{})
 	if err != nil {
 		klog.Errorf("failed to get admin.kubeconfig secret for virtual cluster %s", vc.Name)
 		return

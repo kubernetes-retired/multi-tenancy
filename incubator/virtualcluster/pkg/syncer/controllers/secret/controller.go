@@ -21,9 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
@@ -89,17 +87,20 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.AddEvent:
 		err := c.reconcileSecretCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
 		if err != nil {
+			klog.Errorf("failed reconcile secret %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.UpdateEvent:
 		err := c.reconcileSecretUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
 		if err != nil {
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile secret %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.DeleteEvent:
 		err := c.reconcileSecretRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
 		if err != nil {
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile secret %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			return reconciler.Result{Requeue: true}, err
 		}
 	}
 	return reconciler.Result{}, nil
@@ -107,17 +108,16 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 func (c *controller) reconcileSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	newObj, err := conversion.BuildMetadata(targetNamespace, secret)
+	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, secret)
 	if err != nil {
 		return err
 	}
 
-	innerCluster := c.multiClusterSecretController.GetCluster(cluster)
-	client, err := clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return err
+	_, err = c.secretClient.Secrets(targetNamespace).Create(newObj.(*v1.Secret))
+	if errors.IsAlreadyExists(err) {
+		klog.Infof("secret %s/%s of cluster %s already exist in super master", namespace, name, cluster)
+		return nil
 	}
-	_, err = client.CoreV1().Secrets(targetNamespace).Create(newObj.(*v1.Secret))
 	return err
 }
 
@@ -132,12 +132,14 @@ func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secr
 	}
 	err := c.secretClient.Secrets(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
+		klog.Warningf("secret %s/%s of cluster not found in super master", namespace, name, cluster)
 		return nil
 	}
 	return err
 }
 
 func (c *controller) AddCluster(cluster *cluster.Cluster) {
+	klog.Infof("tenant-masters-secret-controller watch cluster %s for secret resource", cluster.Name)
 	err := c.multiClusterSecretController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s secret event", cluster.Name)

@@ -23,9 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
@@ -91,16 +89,19 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.AddEvent:
 		err := c.reconcileNamespaceCreate(request.Cluster.Name, request.Name, request.Obj.(*v1.Namespace))
 		if err != nil {
+			klog.Errorf("failed reconcile namespace %s CREATE of cluster %s %v", request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, nil
 		}
 	case reconciler.UpdateEvent:
 		err := c.reconcileNamespaceUpdate(request.Cluster.Name, request.Name, request.Obj.(*v1.Namespace))
 		if err != nil {
+			klog.Errorf("failed reconcile namespace %s UPDATE of cluster %s %v", request.Name, request.Cluster.Name, err)
 			return reconciler.Result{}, err
 		}
 	case reconciler.DeleteEvent:
 		err := c.reconcileNamespaceRemove(request.Cluster.Name, request.Name)
 		if err != nil {
+			klog.Errorf("failed reconcile namespace %s DELETE of cluster %s %v", request.Name, request.Cluster.Name, err)
 			return reconciler.Result{}, err
 		}
 	}
@@ -112,12 +113,12 @@ func (c *controller) reconcileNamespaceCreate(cluster, name string, namespace *v
 	if err != nil {
 		return err
 	}
-	innerCluster := c.multiClusterNamespaceController.GetCluster(cluster)
-	client, err := clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return err
+
+	_, err = c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
+	if errors.IsAlreadyExists(err) {
+		klog.Infof("namespace %s of cluster %s already exist in super master", name, cluster)
+		return nil
 	}
-	_, err = client.CoreV1().Namespaces().Create(newObj.(*v1.Namespace))
 	return err
 }
 
@@ -132,12 +133,14 @@ func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	}
 	err := c.namespaceClient.Namespaces().Delete(targetName, opts)
 	if errors.IsNotFound(err) {
+		klog.Warningf("namespace %s of cluster %s not found in super master", name, cluster)
 		return nil
 	}
 	return err
 }
 
 func (c *controller) AddCluster(cluster *cluster.Cluster) {
+	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.Name)
 	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s namespace event", cluster.Name)

@@ -29,8 +29,11 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
+	"context"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MultiClusterController implements the controller pattern.
@@ -173,8 +176,22 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 }
 
 // Get returns object with specific cluster, namespace and name.
-func (c *MultiClusterController) Get(cluster, namespace, name string) (interface{}, error) {
-	return nil, nil
+func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
+	for cluster := range c.clusters {
+		if cluster.GetClusterName() == clusterName {
+			clusterCache, err := cluster.GetCache()
+			if err != nil {
+				return nil, err
+			}
+			instance := getTargetObject(c.objectType)
+			err = clusterCache.Get(context.TODO(), client.ObjectKey{
+				Namespace: namespace,
+				Name:      name,
+			}, instance)
+			return instance, err
+		}
+	}
+	return nil, fmt.Errorf("could not find cluster %s", clusterName)
 }
 
 func (c *MultiClusterController) GetCluster(clusterName string) Cluster {
@@ -247,4 +264,11 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 
 	// Return true, don't take a break
 	return true
+}
+
+func getTargetObject(objectType runtime.Object) runtime.Object {
+	if _, ok := objectType.(*v1.ConfigMap); ok {
+		return &v1.ConfigMap{}
+	}
+	return &v1.Pod{}
 }

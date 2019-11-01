@@ -30,6 +30,8 @@ import (
 
 const (
 	LabelCluster = "tenancy.x-k8s.io/cluster"
+
+	DefaultSAMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 )
 
 var DefaultDeletionPolicy = v1.DeletePropagationBackground
@@ -54,7 +56,7 @@ func GetOwner(obj runtime.Object) (cluster, namespace string) {
 	return cluster, namespace
 }
 
-func BuildMetadata(targetNamespace string, obj runtime.Object) (runtime.Object, error) {
+func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {
 	target := obj.DeepCopyObject()
 	m, err := meta.Accessor(target)
 	if err != nil {
@@ -65,6 +67,13 @@ func BuildMetadata(targetNamespace string, obj runtime.Object) (runtime.Object, 
 	if len(targetNamespace) > 0 {
 		m.SetNamespace(targetNamespace)
 	}
+
+	anno := m.GetAnnotations()
+	if anno == nil {
+		anno = map[string]string{}
+	}
+	anno[LabelCluster] = cluster
+	m.SetAnnotations(anno)
 
 	return target, nil
 }
@@ -103,6 +112,7 @@ func MutatePod(namespace string, pod *corev1.Pod) {
 	pod.Spec.NodeName = ""
 	pod.Spec.ServiceAccountName = ""
 
+	var saSecret string
 	for i := range pod.Spec.Containers {
 		for j, env := range pod.Spec.Containers[i].Env {
 			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
@@ -114,5 +124,24 @@ func MutatePod(namespace string, pod *corev1.Pod) {
 				pod.Spec.Containers[i].Env[j].Value = namespace
 			}
 		}
+		// remove serviceaccount volume mount
+		// TODO: add SA volume mount back once we figure out network issue
+		var volumeMounts []corev1.VolumeMount
+		for _, volumeMount := range pod.Spec.Containers[i].VolumeMounts {
+			if volumeMount.MountPath != DefaultSAMountPath {
+				volumeMounts = append(volumeMounts, volumeMount)
+			} else {
+				saSecret = volumeMount.Name
+			}
+		}
+		pod.Spec.Containers[i].VolumeMounts = volumeMounts
 	}
+
+	var volumes []corev1.Volume
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name != saSecret {
+			volumes = append(volumes, volume)
+		}
+	}
+	pod.Spec.Volumes = volumes
 }
