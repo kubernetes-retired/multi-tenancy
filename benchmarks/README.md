@@ -22,15 +22,15 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 #### Configuration Checks
 
-| # | Benchmark                                                                                                      | Test  |
-|----------------------------------------------------------------------------------------------------------------|-------|
-| MTB-PL1-C1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)|  |
+| Test       | Benchmark                                                                                            | Code  |
+|------------|------------------------------------------------------------------------------------------------------|-------|
+| MTB-PL1-C1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
 
 
 #### Behavioral Checks
 
-| # | Benchmark                                                                      | Test                            |
-|--------------------------------------------------------------------------------|---------------------------------|
+| Test | Benchmark                                                                      | Code                            |
+|------|--------------------------------------------------------------------------------|---------------------------------|
 | MTB-PL1-B1 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/README.go) | [done](e2e/tests/tenantaccess/tenantaccess.go) |
 | MTB-PL1-B2 | [Tenants cannot list namespaced resources from other tenants](e2e/tests/tenantprotection) | |
 | MTB-PL1-B3 | [Tenants cannot modify their resource quotas](e2e/tests/modify_resourcequotas) | |
