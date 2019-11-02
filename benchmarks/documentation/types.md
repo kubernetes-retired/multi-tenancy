@@ -10,3 +10,6 @@ Configuration checks will audit the configuration of Kubernetes components and r
 ## Behavioral Checks (BC)
 
 Behavioral checks will verify runtime compliance for a desired outcome. These checks will involve running automated tests in configured namespaces that are being tested for multi-tenancy.
+
+<br/><br/>
+*Read Next >> [Benchmark Categories](catagories.md)*
