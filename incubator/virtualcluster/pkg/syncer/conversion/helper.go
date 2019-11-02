@@ -145,3 +145,11 @@ func MutatePod(namespace string, pod *corev1.Pod) {
 	}
 	pod.Spec.Volumes = volumes
 }
+
+func MutateService(newService *corev1.Service) {
+	newService.Spec.Selector = nil
+	newService.Spec.ClusterIP = ""
+	for i := range newService.Spec.Ports {
+		newService.Spec.Ports[i].NodePort = 0
+	}
+}
