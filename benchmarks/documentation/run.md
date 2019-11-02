@@ -1,4 +1,4 @@
-# Running Benchmark Tests
+# Running Validation Tests
 
 ## Configure Test Parameters
 To set up the test configuration, edit this [config file](../config.yaml). 
