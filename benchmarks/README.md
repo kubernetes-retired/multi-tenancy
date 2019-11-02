@@ -22,23 +22,23 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 #### Configuration Checks
 
-| Test       | Benchmark                                                                                            | Code  |
-|------------|------------------------------------------------------------------------------------------------------|-------|
-| MTB-PL1-C1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
+| Test        | Benchmark                                                                                            | Code  |
+|-------------|------------------------------------------------------------------------------------------------------|-------|
+| MTB-PL1-CC1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
 
 
 #### Behavioral Checks
 
 | Test | Benchmark                                                                      | Code                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-B1 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/README.go) | [done](e2e/tests/tenantaccess/tenantaccess.go) |
-| MTB-PL1-B2 | [Tenants cannot list namespaced resources from other tenants](e2e/tests/tenantprotection) | |
-| MTB-PL1-B3 | [Tenants cannot modify their resource quotas](e2e/tests/modify_resourcequotas) | |
-| MTB-PL1-B4 | [Tenants cannot modify multi-tenancy resources in their namespaces](e2e/tests/modify_admin_resource/README.md)| |
-| MTB-PL1-B5 | [Tenants cannot create network connections to other tenant's pods](e2e/tests/network_isolation)| |
-| MTB-PL1-B6 | [Tenants cannot use bind mounts](e2e/tests/deny_hostpaths) | |
-| MTB-PL1-B7 | [Tenants cannot use NodePorts](e2e/tests/deny_nodeports) | |
-| MTB-PL1-B8 | [Tenants annot use host networking ](e2e/tests/deny_hostports/README.md) | |
+| MTB-PL1-BC1 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/README.go) | [done](e2e/tests/tenantaccess/tenantaccess.go) |
+| MTB-PL1-BC2 | [Tenants cannot list namespaced resources from other tenants](e2e/tests/tenantprotection) | |
+| MTB-PL1-BC3 | [Tenants cannot modify their resource quotas](e2e/tests/modify_resourcequotas) | |
+| MTB-PL1-BC4 | [Tenants cannot modify multi-tenancy resources in their namespaces](e2e/tests/modify_admin_resource/README.md)| |
+| MTB-PL1-BC5 | [Tenants cannot create network connections to other tenant's pods](e2e/tests/network_isolation)| |
+| MTB-PL1-BC6 | [Tenants cannot use bind mounts](e2e/tests/deny_hostpaths) | |
+| MTB-PL1-BC7 | [Tenants cannot use NodePorts](e2e/tests/deny_nodeports) | |
+| MTB-PL1-BC8 | [Tenants annot use host networking ](e2e/tests/deny_hostports/README.md) | |
 
 ### Multi-Tenancy Profile Level 2
 
