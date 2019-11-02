@@ -11,7 +11,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 - [Multi-Tenancy Definitions](documentation/definitions.md)
 - [Benchmark Types](documentation/types.md)
 - [Benchmark Categories](documentation/catagories.md)
-- [Running the Validation Tests](documentation/run.md)
+- [Running Validation Tests](documentation/run.md)
 - [Contributing](documentation/contributing.md)
 
 ## Benchmarks
