@@ -35,4 +35,7 @@ This profile extends the "Level 1" profile. Items in this profile exhibit one or
 ## Level 3
 This profile extends the "Level 2" profile. Items in this profile exhibit one or more of the following characteristics:
 - are intended for environments or use cases where a higher-level of multi-tenancy is paramount
-- allows of all Kubernetes features. For example, a tenant can install their own CRD and different tenants may have different versions
+- allows of all Kubernetes features. For example, a tenant can install their own CRD and different tenants may have different versions.
+
+<br/><br/>
+*Read Next >> [Benchmark Types](types.md)*
