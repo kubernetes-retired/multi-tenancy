@@ -25,7 +25,7 @@ Items in this profile intend to:
 
 | Type              | Category                       | Benchmark                                          |
 |-------------------|--------------------------------|----------------------------------------------------|
-|     Behavioral    |  Control Plane Protection  |  [Ensure that Tenant A cannot list non namespaced resources](e2e/tests/tenantaccess)|
+|     Behavioral    |  Control Plane Protection  |  [Ensure that a tenant cannot list cluster-wide resources](e2e/tests/tenantaccess)|
 |     Behavioral    |  Tenant Protection  |  [Ensure that Tenant A cannot list namespaced resources from Tenant B](e2e/tests/tenantprotection)|
 |     Configuration |  Fairness  |  [Ensure that Tenant A cannot starve other tenants from cluster wide resources](e2e/tests/resourcequotas)|
 |     Behavioral    |  Tenant Isolation  |  [Ensure that users of Tenant A cannot modify Resource Quotas](e2e/tests/modify_resourcequotas)|
