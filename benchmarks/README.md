@@ -1,8 +1,9 @@
-# Multi-tenancy-benchmarks
+# Multi-Tenancy Benchmarks
 
 This repository contains a set of Multi-Tenancy Benchmarks published by the 
-[Multi-Tenancy Working Group](https://github.com/kubernetes-sigs/multi-tenancy). These benchmarks can be used to validate 
-if a Kubernetes cluster is properly configured for multi-tenancy. An e2e validation tool, which can be used to check your clusters for complaince to the benchmarks, is also provided.
+[Multi-Tenancy Working Group](https://github.com/kubernetes-sigs/multi-tenancy). The benchmarks can be used to validate if a Kubernetes cluster is properly configured for multi-tenancy. An e2e test tool that can be used to validate if your clusters are multi-tenant, is also provided.
+
+The multi-tenancy benchmarks are meant to be used as guidelines and best practices and as part of a comprehensive security strategy. In other words they are not a substitute for a other security benchmarks, guidelines, or best practices.
 
 For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com/document/d/1O-G8jEpiJxOeYx9Pd2OuOSb8859dTRNmgBC5gJv0krE/edit?usp=sharing).
 
