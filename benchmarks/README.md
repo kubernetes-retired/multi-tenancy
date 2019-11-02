@@ -2,7 +2,7 @@
 
 This repository contains a set of Multi-Tenancy Benchmarks published by the 
 [Multi-Tenancy Working Group](https://github.com/kubernetes-sigs/multi-tenancy). These benchmarks can be used to validate 
-if a Kubernetes cluster is properly configured for multi-tenancy. A e2e validation tool is also provided.
+if a Kubernetes cluster is properly configured for multi-tenancy. An e2e validation tool, which can be used to check your clusters for complaince to the benchmarks, is also provided.
 
 For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com/document/d/1O-G8jEpiJxOeYx9Pd2OuOSb8859dTRNmgBC5gJv0krE/edit?usp=sharing).
 
@@ -17,7 +17,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 ### Multi-Tenancy Profile Level 1
 
-*[see definition](documentation/definitions.md#level-1)*
+*[see profile definitions](documentation/definitions.md#level-1)*
 
 #### Configuration Checks
 
@@ -41,10 +41,10 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 ### Multi-Tenancy Profile Level 2
 
-*[see definition](documentation/definitions.md#level-2)*
+*[see profile definitions](documentation/definitions.md#level-2)*
 
 
 ### Multi-Tenancy Profile Level 3
 
-*[see definition](documentation/definitions.md#level-3)*
+*[see profile definitions](documentation/definitions.md#level-3)*
 
