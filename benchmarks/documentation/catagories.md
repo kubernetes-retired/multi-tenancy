@@ -32,3 +32,7 @@ Checks to ensure fair usage of shared resources.
 ## Self-Service Operations
 
 Checks to verify if a tenant administrator can create new namespaces and manage tenant-specific resources for these namespaces e.g. adding new network policies. 
+
+
+<br/><br/>
+*Read Next >> [Running validation tests](run.md)*
