@@ -9,4 +9,5 @@ To set up the test configuration, edit this [config file](../config.yaml).
 go test e2e/tests
 ```
 
-
+<br/><br/>
+*Read Next >> [Contributing](contributing.md)*
