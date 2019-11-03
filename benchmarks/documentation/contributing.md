@@ -19,7 +19,7 @@ Thanks for your interest in contributing to the multi-tenancy benchmarks. There 
 4. Submit a new benchmark and validation test:
     - Pick the right benchmark type and category and make sure a similar test does not exist which can be improved to cover your needs.
     - Create a new directory in [e2e/tests/](../e2e/tests)
-    - Add a README.md with using the template provided (below)[benchmark-template].
+    - Add a README.md with using the template provided [below](#benchmark-template).
     - add the test manifest in [e2e.go](../e2e/tests/e2e.go#L12) to pre-compile the resource
     - once your benchmark is accepted, the maintainers will assign a test suite ID and update the main index.
     
@@ -58,13 +58,13 @@ Run the following commands to retrieve the list of non namespaced resources:
 
   	kubectl --kubeconfig cluster-admin api-resources --namespaced=false
 
-For all non namespaced resources,  issue the following command
-	
-	kubectl --kubeconfig tenant-a get <resource>
+For all non namespaced resources,  issue the following command:
+
+        kubectl --kubeconfig tenant-a get <resource>
 
 Each command must return 403 FORBIDDEN
-````
 
+````
 
 
 <br/><br/>
