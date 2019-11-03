@@ -1,24 +1,14 @@
 # Block cluster resources
 
-**Profile Applicability:** 
+**Profile Applicability:**  Level 1
 
-Level 1
+**Type:** Behavioral Check
 
-**Type:**
+**Category:** Control Plane Isolation
 
-Behavioral
+**Description:** Tenants should not be able to manage cluster (non-namespaced) resources such Node, ClusterRole, ClusterRoleBinding, etc. 
 
-**Category:**
-
-Control Plane Protection
-
-**Description:**
-
-Tenants should not be able to manage cluster (non-namespaced) resources such Node, ClusterRole, ClusterRoleBinding, etc. 
-
-**Rationale:**
-
-Access controls should be configured for tenants so that one tenant cannot list, create, modify or delete non namespaced resources
+**Rationale:** Access controls should be configured for tenants so that one tenant cannot list, create, modify or delete non namespaced resources
 
 **Audit:**
 
