@@ -10,7 +10,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 ## Documentation
 - [Multi-Tenancy Definitions](documentation/definitions.md)
 - [Benchmark Types](documentation/types.md)
-- [Benchmark Categories](documentation/catagories.md)
+- [Benchmark Categories](documentation/categories.md)
 - [Running Validation Tests](documentation/run.md)
 - [Contributing](documentation/contributing.md)
 
