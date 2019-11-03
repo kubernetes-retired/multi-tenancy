@@ -12,4 +12,4 @@ Configuration checks will audit the configuration of Kubernetes components and r
 Behavioral checks will verify runtime compliance for a desired outcome. These checks will involve running automated tests in configured namespaces that are being tested for multi-tenancy.
 
 <br/><br/>
-*Read Next >> [Benchmark Categories](catagories.md)*
+*Read Next >> [Benchmark Categories](categories.md)*
