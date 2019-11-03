@@ -16,36 +16,36 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 ## Benchmarks
 
-### Multi-Tenancy Profile Level 1
+### Multi-Tenancy Benchmarks Profile Level 1 (MTB-PL1)
 
-*[see profile definitions](documentation/definitions.md#level-1)*
+*[see profile definitions](documentation/definitions.md#level-1) and [categories](documentation/categories.md).*
 
-#### Configuration Checks
+#### Configuration Checks (CC)
 
-| Test        | Benchmark                                                                                            | Code  |
-|-------------|------------------------------------------------------------------------------------------------------|-------|
-| MTB-PL1-CC1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
+| Test             | Benchmark                                                                                            | Code  |
+|------------------|------------------------------------------------------------------------------------------------------|-------|
+| MTB-PL1-CC-CPI-1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
 
 
 #### Behavioral Checks
 
 | Test | Benchmark                                                                      | Code                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC1 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/) | [src](e2e/tests/tenantaccess/tenantaccess.go) |
-| MTB-PL1-BC2 | [Tenants cannot list namespaced resources from other tenants](e2e/tests/tenantprotection/README.md) | |
-| MTB-PL1-BC3 | [Tenants cannot modify their resource quotas](e2e/tests/modify_resourcequotas/README.md) | |
-| MTB-PL1-BC4 | [Tenants cannot modify multi-tenancy resources in their namespaces](e2e/tests/modify_admin_resource/README.md)| |
-| MTB-PL1-BC5 | [Tenants cannot create network connections to other tenant's pods](e2e/tests/network_isolation/README.md)| |
-| MTB-PL1-BC6 | [Tenants cannot use bind mounts](e2e/tests/deny_hostpaths/README.md) | |
-| MTB-PL1-BC7 | [Tenants cannot use NodePorts](e2e/tests/deny_nodeports/README.md) | |
-| MTB-PL1-BC8 | [Tenants cannot use host networking ](e2e/tests/deny_hostports/README.md) | |
+| MTB-PL1-BC-CPI-2 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/) | [src](e2e/tests/tenantaccess/tenantaccess.go) |
+| MTB-PL1-BC-CPI-3 | [Tenants cannot modify multi-tenancy resources in their namespaces](e2e/tests/modify_admin_resource/README.md)| |
+| MTB-PL1-BC-TI-1 | [Tenants cannot list namespaced resources from other tenants](e2e/tests/tenantprotection/README.md) | |
+| MTB-PL1-BC-TI-2 | [Tenants cannot modify their resource quotas](e2e/tests/modify_resourcequotas/README.md) | |
+| MTB-PL1-BC-NI-1 | [Tenants cannot create network connections to other tenant's pods](e2e/tests/network_isolation/README.md)| |
+| MTB-PL1-BC-HI-1 | [Tenants cannot use bind mounts](e2e/tests/deny_hostpaths/README.md) | |
+| MTB-PL1-BC-HI-2 | [Tenants cannot use NodePorts](e2e/tests/deny_nodeports/README.md) | |
+| MTB-PL1-BC-HI-3 | [Tenants cannot use host networking ](e2e/tests/deny_hostports/README.md) | |
 
 ### Multi-Tenancy Profile Level 2
 
-*[see profile definitions](documentation/definitions.md#level-2)*
+*[see profile definitions](documentation/definitions.md#level-2) and [categories](documentation/categories.md).*
 
 
 ### Multi-Tenancy Profile Level 3
 
-*[see profile definitions](documentation/definitions.md#level-3)*
+*[see profile definitions](documentation/definitions.md#level-3) and [categories](documentation/categories.md).*
 
