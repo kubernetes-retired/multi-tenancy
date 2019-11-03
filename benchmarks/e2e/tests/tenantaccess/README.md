@@ -1,6 +1,6 @@
-# Ensure that Tenant A cannot list non namespaced resources
+# Block cluster resources
 
-**Profile Applicability:**
+**Profile Applicability:** 
 
 Level 1
 
@@ -14,7 +14,7 @@ Control Plane Protection
 
 **Description:**
 
-Tenants should not be able to interact with non namespaced resources such Node, ClusterRole, ClusterRoleBinding, etc. 
+Tenants should not be able to manage cluster (non-namespaced) resources such Node, ClusterRole, ClusterRoleBinding, etc. 
 
 **Rationale:**
 
