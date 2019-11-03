@@ -351,6 +351,10 @@ func (r *ObjectReconciler) isExcluded(log logr.Logger, inst *unstructured.Unstru
 		}
 		return false
 
+	// Object with nonempty finalizer list is not propagated
+	case inst != nil && len(inst.GetFinalizers()) != 0:
+		return true
+
 	default:
 		return false
 	}
