@@ -6,9 +6,13 @@
 
 **Category:** Control Plane Isolation
 
-**Description:** Tenants should not be able to manage cluster (non-namespaced) resources such Node, ClusterRole, ClusterRoleBinding, etc. 
+**Description:** 
 
-**Rationale:** Access controls should be configured for tenants so that one tenant cannot list, create, modify or delete non namespaced resources
+Tenants should not be able to manage cluster (non-namespaced) resources such Node, ClusterRole, ClusterRoleBinding, etc. 
+
+**Rationale:** 
+
+Access controls should be configured for tenants so that one tenant cannot list, create, modify or delete non namespaced resources
 
 **Audit:**
 
