@@ -1,10 +1,8 @@
 # Contributing Guidelines
 
-The overall Kubernetes contributing guidelines can be found [here](../../CONTRIBUTING.md).
+Thanks for your interest in contributing to the multi-tenancy benchmarks. The overall Kubernetes contributing guidelines can be found [here](../../CONTRIBUTING.md).
 
-## Getting Started
-
-Thanks for your interest in contributing to the multi-tenancy benchmarks. There are several ways you can help! 
+There are several ways you can help! 
 
 1. To request a new benchmark and validation test, submit an issue using the [template](../.github/ISSUE_TEMPLATE/new-benchmark-test.md)
 
