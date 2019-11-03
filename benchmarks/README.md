@@ -22,14 +22,14 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 #### Configuration Checks (CC)
 
-| Test             | Benchmark                                                                                            | Test  |
+| ID             | Benchmark                                                                                            | Test  |
 |------------------|------------------------------------------------------------------------------------------------------|-------|
 | MTB-PL1-CC-CPI-1 | [Namespace resource quotas are configured for each resource type](e2e/tests/resourcequotas/README.md)| --    |
 
 
 #### Behavioral Checks
 
-| Test | Benchmark                                                                      | Test                            |
+| ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
 | MTB-PL1-BC-CPI-2 | [Tenants cannot list cluster-wide resources](e2e/tests/tenantaccess/) | [src](e2e/tests/tenantaccess/tenantaccess.go) |
 | MTB-PL1-BC-CPI-3 | [Tenants cannot modify multi-tenancy resources in their namespaces](e2e/tests/modify_admin_resource/README.md)| |
