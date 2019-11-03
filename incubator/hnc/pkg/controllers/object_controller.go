@@ -255,6 +255,14 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	return nil
 }
 
+// isObjectFinalizerEmpty checks if object has nil value in finalizer or not
+func isObjectFinalizerEmpty(inst *unstructured.Unstructured) bool {
+	if inst != nil && inst.GetFinalizers() != nil {
+		return false
+	}
+	return true
+}
+
 // onDelete explicitly deletes the children that were propagated from this object.
 func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm types.NamespacedName) error {
 	// Delete the children. This *should* trigger the reconciler to run on each of them in turn
