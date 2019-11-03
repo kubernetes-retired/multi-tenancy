@@ -17,7 +17,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -229,41 +228,31 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 		}
 	}
 
-	// Object with nonempty finalizer list is not propagated
-	if !isObjectFinalizerEmpty(inst) {
-		return fmt.Errorf("Object %+v has nonempty finalizer list", *inst)
-	}
+	//check if object's finalizer field is empty or not
+	if !r.isExcluded(log, inst) {
+		// Propagate the object to all destination namespaces.
+		for _, dst := range dests {
+			// Create an in-memory canonical version, and set the new properties.
+			propagated := canonical(inst)
+			propagated.SetNamespace(dst)
+			labels := propagated.GetLabels()
+			labels[api.LabelInheritedFrom] = srcNS
+			propagated.SetLabels(labels)
 
-	// Propagate the object to all destination namespaces.
-	for _, dst := range dests {
-		// Create an in-memory canonical version, and set the new properties.
-		propagated := canonical(inst)
-		propagated.SetNamespace(dst)
-		labels := propagated.GetLabels()
-		labels[api.LabelInheritedFrom] = srcNS
-		propagated.SetLabels(labels)
-
-		// Push to the apiserver
-		log.Info("Propagating", "dst", dst, "origin", labels[api.LabelInheritedFrom])
-		err := r.Update(ctx, propagated)
-		if err != nil && errors.IsNotFound(err) {
-			err = r.Create(ctx, propagated)
-		}
-		if err != nil {
-			log.Error(err, "Couldn't propagate", "object", propagated)
-			return err
+			// Push to the apiserver
+			log.Info("Propagating", "dst", dst, "origin", labels[api.LabelInheritedFrom])
+			err := r.Update(ctx, propagated)
+			if err != nil && errors.IsNotFound(err) {
+				err = r.Create(ctx, propagated)
+			}
+			if err != nil {
+				log.Error(err, "Couldn't propagate", "object", propagated)
+				return err
+			}
 		}
 	}
 
 	return nil
-}
-
-// isObjectFinalizerEmpty checks if object has nil value in finalizer or not
-func isObjectFinalizerEmpty(inst *unstructured.Unstructured) bool {
-	if inst != nil && inst.GetFinalizers() != nil {
-		return false
-	}
-	return true
 }
 
 // onDelete explicitly deletes the children that were propagated from this object.
@@ -364,6 +353,10 @@ func (r *ObjectReconciler) isExcluded(log logr.Logger, inst *unstructured.Unstru
 			return true
 		}
 		return false
+
+	// Object with nonempty finalizer list is not propagated
+	case inst != nil && len(inst.GetFinalizers()) != 0:
+		return true
 
 	default:
 		return false
