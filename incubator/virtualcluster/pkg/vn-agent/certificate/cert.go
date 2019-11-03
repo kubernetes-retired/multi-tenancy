@@ -30,12 +30,12 @@ import (
 
 // InitializeTLS checks for a configured TLSCertFile and TLSPrivateKeyFile: if unspecified a new self-signed
 // certificate and key file are generated.
-func InitializeTLS(f *config.Flags) (*config.TLSOptions, error) {
-	if f.TLSCertFile == "" && f.TLSPrivateKeyFile == "" {
-		f.TLSCertFile = path.Join(f.CertDirectory, "vn.crt")
-		f.TLSPrivateKeyFile = path.Join(f.CertDirectory, "vn.key")
+func InitializeTLS(certDirectory, certFile, privateKeyFile, suffix string) (*config.TLSOptions, error) {
+	if certFile == "" && privateKeyFile == "" {
+		certFile = path.Join(certDirectory, fmt.Sprintf("%s.crt", suffix))
+		privateKeyFile = path.Join(certDirectory, fmt.Sprintf("%s.key", suffix))
 
-		canReadCertAndKey, err := certutil.CanReadCertAndKey(f.TLSCertFile, f.TLSPrivateKeyFile)
+		canReadCertAndKey, err := certutil.CanReadCertAndKey(certFile, privateKeyFile)
 		if err != nil {
 			return nil, err
 		}
@@ -50,21 +50,21 @@ func InitializeTLS(f *config.Flags) (*config.TLSOptions, error) {
 				return nil, fmt.Errorf("unable to generate self signed cert: %v", err)
 			}
 
-			if err := certutil.WriteCert(f.TLSCertFile, cert); err != nil {
+			if err := certutil.WriteCert(certFile, cert); err != nil {
 				return nil, err
 			}
 
-			if err := keyutil.WriteKey(f.TLSPrivateKeyFile, key); err != nil {
+			if err := keyutil.WriteKey(privateKeyFile, key); err != nil {
 				return nil, err
 			}
 
-			klog.Infof("Using self-signed cert (%s, %s)", f.TLSCertFile, f.TLSPrivateKeyFile)
+			klog.Infof("Using self-signed cert (%s, %s)", certFile, privateKeyFile)
 		}
 	}
 
 	tlsOptions := &config.TLSOptions{
-		CertFile: f.TLSCertFile,
-		KeyFile:  f.TLSPrivateKeyFile,
+		CertFile: certFile,
+		KeyFile:  privateKeyFile,
 	}
 
 	return tlsOptions, nil
