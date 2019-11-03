@@ -19,7 +19,7 @@ package namespace
 import (
 	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -139,12 +139,14 @@ func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
+func (c *controller) AddCluster(cluster *cluster.Cluster) error {
 	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.Name)
 	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.Name, err)
+		return err
 	}
+	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

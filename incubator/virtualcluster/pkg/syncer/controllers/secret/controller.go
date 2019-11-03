@@ -17,7 +17,7 @@ limitations under the License.
 package secret
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -132,18 +132,20 @@ func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secr
 	}
 	err := c.secretClient.Secrets(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("secret %s/%s of cluster not found in super master", namespace, name, cluster)
+		klog.Warningf("secret %s/%s of cluster is not found in super master", namespace, name)
 		return nil
 	}
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
+func (c *controller) AddCluster(cluster *cluster.Cluster) error {
 	klog.Infof("tenant-masters-secret-controller watch cluster %s for secret resource", cluster.Name)
 	err := c.multiClusterSecretController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s secret event: %v", cluster.Name, err)
+		return err
 	}
+	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

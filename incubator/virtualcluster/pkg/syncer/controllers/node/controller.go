@@ -190,12 +190,14 @@ func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.N
 	return nil
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
+func (c *controller) AddCluster(cluster *cluster.Cluster) error {
 	klog.Infof("tenant-masters-node-controller watch cluster %s for pod resource", cluster.Name)
 	err := c.multiClusterNodeController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s node event: %v", cluster.Name, err)
+		return err
 	}
+	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

@@ -323,10 +323,11 @@ func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup
 }
 
 // createVirtualcluster creates a new Virtualcluster based on the specified ClusterVersion
-func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (rcleRst reconcile.Result, err error) {
+func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (err error) {
 	defer func() {
 		if err != nil {
-			log.Error(err, "fail to create virtualcluster, remove namespace for deleting related resources")
+			log.Error(err,
+				"fail to create virtualcluster, remove namespace for deleting related resources")
 		}
 	}()
 
@@ -369,28 +370,61 @@ func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtu
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get
-func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRslt reconcile.Result, err error) {
 	log.Info("reconciling Virtualcluster...")
 	vc := &tenancyv1alpha1.Virtualcluster{}
-	err := r.Get(context.TODO(), request.NamespacedName, vc)
-	if err != nil {
-		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
+	err = r.Get(context.TODO(), request.NamespacedName, vc)
+	if ctrlutil.IgnoreNotFound(err) != nil {
+		return
 	}
 
-	// TODO implement on delete logic (finalizer)
+	// TODO implement the delete logic (finalizer)
 
-	cvs := &tenancyv1alpha1.ClusterVersionList{}
-	if err := r.List(context.TODO(), cvs, client.InNamespace("")); err != nil {
-		return reconcile.Result{}, err
-	}
+	// reconcile Virtualcluster (vc) based on vc status
+	// NOTE: vc status is required by other components (e.g. syncer need to
+	// know the vc status in order to setup connection to tenant master)
+	switch vc.Status.Phase {
+	case "":
+		// set vc status as ClusterPending if no status is set
+		log.Info("will create a Virtualcluster", "vc", vc.Name)
+		vc.Status.Phase = tenancyv1alpha1.ClusterPending
+		vc.Status.Message = "creating virtual cluster..."
+		vc.Status.Reason = "ClusterCreating"
+		err = r.Update(context.TODO(), vc)
+		return
+	case tenancyv1alpha1.ClusterPending:
+		// create new virtualcluster when vc is pending
+		log.Info("Virtualcluster is pending", "vc", vc.Name)
+		cvs := &tenancyv1alpha1.ClusterVersionList{}
+		err = r.List(context.TODO(), cvs, client.InNamespace(""))
+		if err != nil {
+			return
+		}
 
-	cv := getClusterVersion(cvs, vc.Spec.ClusterVersionName)
-	if cv == nil {
-		return reconcile.Result{},
-			fmt.Errorf("desired ClusterVersion %s not found",
+		cv := getClusterVersion(cvs, vc.Spec.ClusterVersionName)
+		if cv == nil {
+			err = fmt.Errorf("desired ClusterVersion %s not found",
 				vc.Spec.ClusterVersionName)
+			return
+
+		}
+		err = r.createVirtualcluster(vc, cv)
+		if err != nil {
+			return
+		}
+		// all components are ready, update vc status
+		vc.Status.Phase = "Running"
+		vc.Status.Message = "tenant master is running"
+		vc.Status.Reason = "TenantMasterRunning"
+		err = r.Update(context.TODO(), vc)
+		return
+	case tenancyv1alpha1.ClusterRunning:
+		log.Info("Virtualcluster is running", "vc", vc.Name)
+		return
+	default:
+		err = fmt.Errorf("unknown vc phase: %s", vc.Status.Phase)
+		return
 	}
-	return r.createVirtualcluster(vc, cv)
 }
 
 func getClusterVersion(cvl *tenancyv1alpha1.ClusterVersionList, cvn string) *tenancyv1alpha1.ClusterVersion {

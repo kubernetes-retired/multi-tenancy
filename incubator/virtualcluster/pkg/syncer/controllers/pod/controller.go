@@ -19,7 +19,7 @@ package pod
 import (
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -214,18 +214,20 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1
 	}
 	err := c.client.Pods(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("pod %s/%s of cluster not found in super master", namespace, name, cluster)
+		klog.Warningf("pod %s/%s of cluster (%s) is not found in super master", namespace, name, cluster)
 		return nil
 	}
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
+func (c *controller) AddCluster(cluster *cluster.Cluster) error {
 	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.Name)
 	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.Name, err)
+		return err
 	}
+	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

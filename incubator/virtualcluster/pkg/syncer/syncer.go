@@ -17,6 +17,8 @@ limitations under the License.
 package syncer
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
@@ -36,12 +38,15 @@ import (
 )
 
 const (
-	KubeconfigAdmin = "admin-kubeconfig"
+	KubeconfigAdmin       = "admin-kubeconfig"
+	TLSTimeoutRetryPeriod = 1 * time.Second
 )
 
 type Syncer struct {
 	secretClient      v1core.SecretsGetter
 	controllerManager *manager.ControllerManager
+	// if this channel is closed, syncer will stop
+	stopChan <-chan struct{}
 }
 
 func New(
@@ -52,12 +57,14 @@ func New(
 ) *Syncer {
 	syncer := &Syncer{
 		secretClient: secretClient,
+		stopChan:     signals.SetupSignalHandler(),
 	}
 
 	// Handle VirtualCluster add&delete
 	virtualClusterInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    syncer.onVirtualClusterAdd,
+			UpdateFunc: syncer.onVirtualClusterUpdate,
 			DeleteFunc: syncer.onVirtualClusterDelete,
 		},
 	)
@@ -74,37 +81,91 @@ func New(
 // Run begins watching and downward&upward syncing.
 func (s *Syncer) Run() {
 	go func() {
-		s.controllerManager.Start(signals.SetupSignalHandler())
+		s.controllerManager.Start(s.stopChan)
 	}()
 }
 
+// registerInformerCache registers and start an informer cache for the
+// given Virtualcluster
+func (s *Syncer) registerInformerCache(vc *v1alpha1.Virtualcluster) (err error) {
+	// if a Virtualcluster is starting to run, build a cluster admin client
+	// based on the admin-kubeconfig secret of the Virtualcluster.
+	klog.Infof("Virtualcluster(%s) is running", vc.Name)
+	adminKubeconfigSecret, err :=
+		s.secretClient.Secrets(vc.Namespace).Get(KubeconfigAdmin, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("failed to get secret (%s) for virtual cluster %s: %v",
+			KubeconfigAdmin, vc.Name, err)
+		return
+	}
+	clusterRestConfig, err :=
+		clientcmd.RESTConfigFromKubeConfig(adminKubeconfigSecret.Data[KubeconfigAdmin])
+	if err != nil {
+		klog.Errorf("failed to build rest config for virtual cluster %s: %v", vc.Name, err)
+		return
+	}
+	innerCluster := &cluster.Cluster{
+		Name:   vc.Name,
+		Config: clusterRestConfig,
+	}
+
+	// for each resource type of the newly added Virtualcluster, we add a listener
+	for _, clusterChangeListener := range listener.Listeners {
+		clusterChangeListener.AddCluster(innerCluster)
+	}
+
+	// start the informer cach of the newly added Virtualcluster
+	klog.Errorf("starting informer cache for Virtualcluster(%s)", innerCluster.Name)
+	err = innerCluster.Start(s.stopChan)
+	if err != nil {
+		klog.Errorf("fail to start Virtualcluster(%s) cache", innerCluster.Name)
+	}
+	return
+}
+
+// onVirtualClusterAdd sets up informer for existing Virtualclusters
 func (s *Syncer) onVirtualClusterAdd(obj interface{}) {
 	vc, ok := obj.(*v1alpha1.Virtualcluster)
 	if !ok {
 		klog.Errorf("cannot convert to *v1alpha1.VirtualCluster: %v", obj)
 		return
 	}
+	// only register informer cache for Virtualcluster that is running
+	if vc.Status.Phase == v1alpha1.ClusterRunning {
+		if err := s.registerInformerCache(vc); err != nil {
+			klog.Errorf("fail to register informer cache for Virtualcluster(%s): %s", vc.Name, err)
+			return
+		}
+	}
+}
 
-	klog.Infof("handle virtual cluster %s add event", vc.Name)
-
-	// Build cluster admin client based on admin.kubeconfig secret
-	adminKubeconfigSecret, err := s.secretClient.Secrets(vc.Namespace).Get(KubeconfigAdmin, metav1.GetOptions{})
-	if err != nil {
-		klog.Errorf("failed to get admin.kubeconfig secret for virtual cluster %s: %v", vc.Name, err)
+// onVirtualClusterUpdate checks if a Virtualcluster is starting to run. For a
+// newly started Virtualcluster, we will register it with all resources
+// controllers (e.g. pod, node, etc.).
+func (s *Syncer) onVirtualClusterUpdate(old, new interface{}) {
+	oldVc, ok := old.(*v1alpha1.Virtualcluster)
+	if !ok {
+		klog.Errorf("cannot convert to *v1alpha1.VirtualCluster: %v", old)
 		return
 	}
-	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(adminKubeconfigSecret.Data[KubeconfigAdmin])
-	if err != nil {
-		klog.Errorf("failed to build rest config for virtual cluster %s: %v", vc.Name, err)
+	vc, ok := new.(*v1alpha1.Virtualcluster)
+	if !ok {
+		klog.Errorf("cannot convert to *v1alpha1.VirtualCluster: %v", new)
 		return
 	}
 
-	innerCluster := &cluster.Cluster{
-		Name:   vc.Name,
-		Config: clusterRestConfig,
-	}
-	for _, clusterChangeListener := range listener.Listeners {
-		clusterChangeListener.AddCluster(innerCluster)
+	switch {
+	case vc.Status.Phase == v1alpha1.ClusterPending:
+		klog.Infof("Virtualcluster(%s) is pending", vc.Name)
+	case vc.Status.Phase == v1alpha1.ClusterRunning &&
+		oldVc.Status.Phase != v1alpha1.ClusterRunning:
+		if err := s.registerInformerCache(vc); err != nil {
+			klog.Errorf("fail to register informer cache for Virtualcluster(%s): %s", vc.Name, err)
+			return
+		}
+	default:
+		klog.Errorf("unknown Virtualcluster(%s) phase: %s",
+			vc.Name, vc.Status.Phase)
 	}
 }
 

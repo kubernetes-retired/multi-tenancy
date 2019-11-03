@@ -273,8 +273,8 @@ spec:
         - command:
           - vn-agent
           - --cert-dir=/etc/vn-agent/
-          - --kubelet-client-certificate=/etc/vn-agent/pki/kubelet-client.crt
-          - --kubelet-client-key=/etc/vn-agent/pki/kubelet-client.key
+          - --kubelet-client-certificate=/etc/vn-agent/pki/client.crt
+          - --kubelet-client-key=/etc/vn-agent/pki/client.key
           image: virtualcluster/vn-agent-amd64
           imagePullPolicy: Always
           name: vn-agent

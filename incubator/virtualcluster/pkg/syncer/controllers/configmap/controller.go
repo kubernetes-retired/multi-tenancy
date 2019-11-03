@@ -17,7 +17,7 @@ limitations under the License.
 package configmap
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -138,12 +138,14 @@ func (c *controller) reconcileConfigMapRemove(cluster, namespace, name string) e
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
+func (c *controller) AddCluster(cluster *cluster.Cluster) error {
 	klog.Infof("tenant-masters-configmap-controller watch cluster %s for configmap resource", cluster.Name)
 	err := c.multiClusterConfigMapController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s configmap event: %v", cluster.Name, err)
+		return err
 	}
+	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {
