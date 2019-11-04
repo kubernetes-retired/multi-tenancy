@@ -1,5 +1,4 @@
-# Ensure that users of Tenant A cannot modify Resource Quotas
-
+# Block Resource Quotas
 
 **Profile Applicability:**
 
@@ -15,11 +14,11 @@ Tenant Isolation
 
 **Description:**
 
-Users should not be able to modify the Resource Quotas defined in their Namespaces
+Tenants should not be able to modify the resource quotas defined in their namespaces
 
 **Rationale:**
 
-Resource Quotas must be configured to guarantee isolation between tenants. Furthermore, it should be impossible for a tenant administrator to modify an existing Resource Quota.
+Resource Quotas must be configured to guarantee isolation between tenants. Furthermore, it should not be impossible for a tenant administrator to modify an existing resource quota as they may over-allocate resources and impact other tenants.
 
 **Audit:**
 

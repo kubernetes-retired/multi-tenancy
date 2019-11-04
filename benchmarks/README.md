@@ -24,21 +24,26 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID             | Benchmark                                                                                            | Test  |
 |------------------|------------------------------------------------------------------------------------------------------|-------|
-| MTB-PL1-CC-CPI-1 | [Configure namespace quotas](e2e/tests/resourcequotas/README.md)| --    |
+| MTB-PL1-CC-CPI-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
 
 
 #### Behavioral Checks
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-2 | [Block cluster resources](e2e/tests/block_cluster_resources/README.md) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
-| MTB-PL1-BC-CPI-3 | [Block multi-tenancy resources](e2e/tests/modify_admin_resource/README.md)| |
-| MTB-PL1-BC-TI-1 | [Block other tenant resources](e2e/tests/tenantprotection/README.md) | |
-| MTB-PL1-BC-TI-2 | [Block modify resource quotas](e2e/tests/modify_resourcequotas/README.md) | |
-| MTB-PL1-BC-NI-1 | [Block cross-tenant network connections](e2e/tests/network_isolation/README.md)| |
-| MTB-PL1-BC-HI-1 | [Block bind mounts](e2e/tests/deny_hostpaths/README.md) | |
-| MTB-PL1-BC-HI-2 | [Block NodePorts](e2e/tests/deny_nodeports/README.md) | |
-| MTB-PL1-BC-HI-3 | [Block host networking ](e2e/tests/deny_hostports/README.md) | |
+| MTB-PL1-BC-CPI-2 | [Block cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+| MTB-PL1-BC-CPI-3 | [Block multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
+| MTB-PL1-BC-CPI-4 | Block docker socket bind mount  | |
+| MTB-PL1-BC-CPI-5 | Block add capabilities  | |
+| MTB-PL1-BC-CPI-6 | Require non-root user  | |
+| MTB-PL1-BC-TI-1 | [Block other tenant resources](e2e/tests/block_other_tenants/) | |
+| MTB-PL1-BC-TI-2 | [Block modify resource quotas](e2e/tests/block_ns_quotas/) | |
+| MTB-PL1-BC-NI-1 | [Block network connections across tenants](e2e/tests/block_network_connections/)| |
+| MTB-PL1-BC-HI-1 | [Block bind mounts](e2e/tests/block_bind_mounts/) | |
+| MTB-PL1-BC-HI-2 | [Block NodePort services](e2e/tests/block_nodeports/) | |
+| MTB-PL1-BC-HI-3 | [Block host networking and ports ](e2e/tests/block_host_net_ports/) | |
+| MTB-PL1-BC-HI-4 | Block host PID  | |
+| MTB-PL1-BC-HI-5 | Block host IPC  | |
 
 ### Multi-Tenancy Profile Level 2
 

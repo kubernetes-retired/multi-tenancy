@@ -15,7 +15,7 @@ const (
 	expectedVal = "Error from server (Forbidden)"
 )
 
-var _ = framework.KubeDescribe("A tenant cannot starve other tenants from cluster wide resources", func() {
+var _ = framework.KubeDescribe("A tenant namespace must have resource quotas", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
@@ -29,14 +29,14 @@ var _ = framework.KubeDescribe("A tenant cannot starve other tenants from cluste
 		user = configutil.GetContextFromKubeconfig(tenantA.Kubeconfig)
 	})
 
-	ginkgo.It("valiate resourcequotas configuration", func() {
-		ginkgo.By(fmt.Sprintf("tenant %s must have resourcequotas configured same with the cluster administrator", user))
+	ginkgo.It("validate resource quotas are configured", func() {
+		ginkgo.By(fmt.Sprintf("tenant %s namespace must have resource quotas configured", user))
 		resourceNameList := getResourceNameList(config.Adminkubeconfig)
 		tenantResourcequotas := getTenantResoureQuotas(tenantA)
 		expectedVal := strings.Join(tenantResourcequotas, " ")
 		for _, r := range resourceNameList {
 			if !strings.Contains(expectedVal, r) {
-				framework.Failf("%s must be configured in tenant %s resourcequotas", r, user)
+				framework.Failf("%s must be configured in tenant %s namespace resource quotas", r, user)
 			}
 		}
 	})

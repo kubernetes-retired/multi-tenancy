@@ -1,4 +1,4 @@
-## Ensure that Tenant A cannot list namespaced resources from Tenant B
+## Block other tenant resources
 
 **Profile Applicability:**
 
@@ -14,11 +14,11 @@ Tenant Protection
 
 **Description:**
 
-Tenants should not be able to interact with any of the namespaced resources belonging to another Tenant
+Access controls should be configured so that a tenant cannot view, edit, create, or delete namespaced resources belonging to another tenant.
 
 **Rationale:**
 
-Access controls should be configured for tenants so that one tenant cannot list, create, modify or delete namespaced resources in another tenant.
+Tenant resources should be isolated from other tenants.
 
 **Audit:**
 
