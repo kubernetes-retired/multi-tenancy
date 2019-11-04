@@ -1,4 +1,4 @@
-# Block host networking and ports
+# Block use of host networking and ports
 
 **Profile Applicability:**
 

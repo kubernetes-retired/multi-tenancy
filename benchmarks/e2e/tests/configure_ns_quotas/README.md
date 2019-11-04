@@ -14,7 +14,7 @@ Fairness
 
 **Description:**
 
-Namespace resource quotas should be used to allocate and limit a tenant's use of shared resources.
+Namespace resource quotas should be used to allocate, track, and limit a tenant's use of shared resources.
 
 Tenants 
 

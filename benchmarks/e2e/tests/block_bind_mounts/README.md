@@ -1,4 +1,4 @@
-# Block bind mounts
+# Block use of bind mounts (`hostPath` volumes)
 
 **Profile Applicability:**
 

@@ -1,4 +1,4 @@
-# Block Resource Quotas
+# Block modification of resource quotas
 
 **Profile Applicability:**
 

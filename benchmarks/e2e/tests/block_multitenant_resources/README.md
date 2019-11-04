@@ -1,4 +1,4 @@
-# Block modification of multi-tenant resources
+# Block modification of multi-tenancy resources
 
 **Profile Applicability:**
 

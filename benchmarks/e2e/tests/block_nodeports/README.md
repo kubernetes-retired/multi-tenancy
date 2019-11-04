@@ -1,4 +1,4 @@
-# Block NodePort services
+# Block use of NodePort services
 
 **Profile Applicability:**
 

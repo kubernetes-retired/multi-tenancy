@@ -1,4 +1,4 @@
-# Block network connections across tenants
+# Default deny network connections across tenants
 
 **Profile Applicability:**
 

@@ -31,19 +31,19 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-1 | [Block cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
-| MTB-PL1-BC-CPI-2 | [Block multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
-| MTB-PL1-BC-CPI-3 | Block docker socket bind mount  | |
+| MTB-PL1-BC-CPI-1 | [Block use of cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+| MTB-PL1-BC-CPI-2 | [Block modification of multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
+| MTB-PL1-BC-CPI-3 | Block use of docker socket bind mount  | |
 | MTB-PL1-BC-CPI-4 | Block add capabilities  | |
-| MTB-PL1-BC-CPI-5 | Require non-root user  | |
-| MTB-PL1-BC-TI-1 | [Block other tenant resources](e2e/tests/block_other_tenants/) | |
-| MTB-PL1-BC-TI-2 | [Block resource quotas](e2e/tests/block_ns_quotas/) | |
-| MTB-PL1-BC-NI-1 | [Block network connections across tenants](e2e/tests/block_network_connections/)| |
-| MTB-PL1-BC-HI-1 | [Block bind mounts](e2e/tests/block_bind_mounts/) | |
-| MTB-PL1-BC-HI-2 | [Block NodePort services](e2e/tests/block_nodeports/) | |
-| MTB-PL1-BC-HI-3 | [Block host networking and ports ](e2e/tests/block_host_net_ports/) | |
-| MTB-PL1-BC-HI-4 | Block host PID  | |
-| MTB-PL1-BC-HI-5 | Block host IPC  | |
+| MTB-PL1-BC-CPI-5 | Require running as non-root user  | |
+| MTB-PL1-BC-TI-1 | [Block access to other tenant resources](e2e/tests/block_other_tenants/) | |
+| MTB-PL1-BC-TI-2 | [Block modification of resource quotas](e2e/tests/block_ns_quotas/) | |
+| MTB-PL1-BC-NI-1 | [Default deny network connections across tenants](e2e/tests/default_deny_net_conn/)| |
+| MTB-PL1-BC-HI-1 | [Block use of bind mounts](e2e/tests/block_bind_mounts/) | |
+| MTB-PL1-BC-HI-2 | [Block use of NodePort services](e2e/tests/block_nodeports/) | |
+| MTB-PL1-BC-HI-3 | [Block use of host networking and ports ](e2e/tests/block_host_net_ports/) | |
+| MTB-PL1-BC-HI-4 | Block use of host PID  | |
+| MTB-PL1-BC-HI-5 | Block use of host IPC  | |
 
 ### Multi-Tenancy Profile Level 2
 

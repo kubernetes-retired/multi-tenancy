@@ -1,4 +1,4 @@
-## Block other tenant resources
+## Block access to other tenant resources
 
 **Profile Applicability:**
 
