@@ -307,8 +307,8 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 		cns := r.Forest.Get(cn)
 		if _, isRequired := reqSet[cn]; isRequired {
 			// This is a required child of this namespace
-			cns.RequiredChildOf = ns.Name() // mark in in the forest
-			delete(reqSet, cn)              // remove so we know we found it
+			cns.RequiredChildOf = ns.Name()         // mark in in the forest
+			delete(reqSet, cn)                      // remove so we know we found it
 			if cns.Exists() && cns.Parent() != ns { // condition if it's assigned elsewhere
 				msg := fmt.Sprintf("required subnamespace %s exists but has parent %s", cn, cns.Parent().Name())
 				ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
