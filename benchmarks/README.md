@@ -27,7 +27,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 | MTB-PL1-CC-FNS-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
 
 
-#### Behavioral Checks
+#### Behavioral Checks (BC)
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
