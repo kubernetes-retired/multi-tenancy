@@ -10,10 +10,11 @@ import (
 	ginkgowrapper "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 
 	// test sources
+	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/resourcequotas"
-	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/tenantaccess"
 )
 
+// RunE2ETests runs the multi-tenancy benchmark tests
 func RunE2ETests(t *testing.T) {
 	logs.InitLogs()
 	defer logs.FlushLogs()
