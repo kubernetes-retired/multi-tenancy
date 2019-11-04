@@ -24,20 +24,20 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID             | Benchmark                                                                                            | Test  |
 |------------------|------------------------------------------------------------------------------------------------------|-------|
-| MTB-PL1-CC-CPI-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
+| MTB-PL1-CC-FNS-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
 
 
 #### Behavioral Checks
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-2 | [Block cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
-| MTB-PL1-BC-CPI-3 | [Block multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
-| MTB-PL1-BC-CPI-4 | Block docker socket bind mount  | |
-| MTB-PL1-BC-CPI-5 | Block add capabilities  | |
-| MTB-PL1-BC-CPI-6 | Require non-root user  | |
+| MTB-PL1-BC-CPI-1 | [Block cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+| MTB-PL1-BC-CPI-2 | [Block multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
+| MTB-PL1-BC-CPI-3 | Block docker socket bind mount  | |
+| MTB-PL1-BC-CPI-4 | Block add capabilities  | |
+| MTB-PL1-BC-CPI-5 | Require non-root user  | |
 | MTB-PL1-BC-TI-1 | [Block other tenant resources](e2e/tests/block_other_tenants/) | |
-| MTB-PL1-BC-TI-2 | [Block modify resource quotas](e2e/tests/block_ns_quotas/) | |
+| MTB-PL1-BC-TI-2 | [Block resource quotas](e2e/tests/block_ns_quotas/) | |
 | MTB-PL1-BC-NI-1 | [Block network connections across tenants](e2e/tests/block_network_connections/)| |
 | MTB-PL1-BC-HI-1 | [Block bind mounts](e2e/tests/block_bind_mounts/) | |
 | MTB-PL1-BC-HI-2 | [Block NodePort services](e2e/tests/block_nodeports/) | |

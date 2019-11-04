@@ -1,4 +1,4 @@
-# Ensure that users of Tenant A cannot modify Resource Quotas 
+# Configure namespace resource quotas 
 
 **Profile Applicability:**
 
@@ -10,15 +10,17 @@ Behavioral
 
 **Category:**
 
-Tenant Isolation
+Fairness
 
 **Description:**
 
-Users should not be able to modify the Resource Quotas defined in their Namespaces
+Namespace resource quotas should be used to allocate and limit a tenant's use of shared resources.
+
+Tenants 
 
 **Rationale:**
 
-Resource Quotas must be configured to guarantee isolation between tenants. Furthermore, it should be impossible for a tenant administrator to modify an existing Resource Quota.
+Resource quotas must be configured for each tenant namespace, to guarantee isolation and fairness across tenants. 
 
 **Audit:**
 
