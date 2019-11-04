@@ -335,8 +335,14 @@ func (r *ObjectReconciler) getChildNamespaces(nm string) []string {
 }
 
 // isExcluded returns true if the object shouldn't be handled by the HNC. Eventually, this may be
-// user-configurable, but right now it's only used for Service Account token secrets.
+// user-configurable, but right now it's used for Service Account token secrets and to decide object
+// propagation based on finalizer field.
 func (r *ObjectReconciler) isExcluded(log logr.Logger, inst *unstructured.Unstructured) bool {
+	// Object with nonempty finalizer list is not propagated
+	if len(inst.GetFinalizers()) != 0 {
+		return true
+	}
+
 	switch {
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":
 		// These are reaped by a builtin K8s controller so there's no point copying them.
