@@ -26,11 +26,8 @@ const (
 	CritParentInvalid         Code = "CRIT_PARENT_INVALID"
 	CritRequiredChildConflict Code = "CRIT_REQUIRED_CHILD_CONFLICT"
 	CritAncestor              Code = "CRIT_ANCESTOR"
-	ObjectOverridden          Code = "OBJECT_OVERRIDDEN"
-	ObjectDescendantOverriden Code = "OBJECT_DESCENDANT_OVERRIDDEN"
 	MetaGroup                      = "hnc.x-k8s.io"
 	LabelInheritedFrom             = MetaGroup + "/inheritedFrom"
-	AnnotationModified             = MetaGroup + "/modified"
 )
 
 var (
@@ -88,7 +85,7 @@ type HierarchyConfigurationList struct {
 }
 
 // Code is a machine-readable string value summarizing the condition.
-// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR;OBJECT_OVERRIDDEN;OBJECT_DESCENDANT_OVERRIDDEN
+// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR
 type Code string
 
 // Condition specifies the condition and the affected objects.
@@ -103,10 +100,6 @@ type Condition struct {
 	// - "CRIT_REQUIRED_CHILD_CONFLICT": there's a conflict (ie in between parent's RequiredChildren spec and child's Parent spec)
 	//
 	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no longer being updated
-	//
-	// - "OBJECT_OVERRIDDEN": an object in this namespace has been overridden from its parent and will no longer be updated
-	//
-	// - "OBJECT_DESCENDANT_OVERRIDDEN": an object in this namespace is no longer being propagated because a propagated copy has been modified
 	Code Code   `json:"code,omitempty"`
 	Msg  string `json:"msg,omitempty"`
 
