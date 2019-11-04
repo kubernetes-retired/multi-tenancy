@@ -31,7 +31,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-1 | [Block use of cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+| MTB-PL1-BC-CPI-1 | [Block access to cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
 | MTB-PL1-BC-CPI-2 | [Block modification of multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
 | MTB-PL1-BC-CPI-3 | Block use of docker socket bind mount  | |
 | MTB-PL1-BC-CPI-4 | Block add capabilities  | |

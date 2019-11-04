@@ -1,4 +1,4 @@
-# Block use of cluster resources
+# Block access to cluster resources
 
 **Profile Applicability:** 
 
