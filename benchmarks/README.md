@@ -31,7 +31,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-2 | [Block cluster resources](e2e/tests/tenantaccess/) | [src](e2e/tests/tenantaccess/tenantaccess.go) |
+| MTB-PL1-BC-CPI-2 | [Block cluster resources](e2e/tests/block_cluster_resources/README.md) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
 | MTB-PL1-BC-CPI-3 | [Block multi-tenancy resources](e2e/tests/modify_admin_resource/README.md)| |
 | MTB-PL1-BC-TI-1 | [Block other tenant resources](e2e/tests/tenantprotection/README.md) | |
 | MTB-PL1-BC-TI-2 | [Block modify resource quotas](e2e/tests/modify_resourcequotas/README.md) | |
