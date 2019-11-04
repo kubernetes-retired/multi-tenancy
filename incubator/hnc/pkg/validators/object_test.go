@@ -10,6 +10,7 @@ import (
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 )
 
 func TestInheritedFromLabel(t *testing.T) {
@@ -52,9 +53,9 @@ func TestInheritedFromLabel(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
 			oldInst := &unstructured.Unstructured{}
-			setLabel(oldInst, tc.oldLabel, tc.oldValue)
+			metadata.SetLabel(oldInst, tc.oldLabel, tc.oldValue)
 			inst := &unstructured.Unstructured{}
-			setLabel(inst, tc.newLabel, tc.newValue)
+			metadata.SetLabel(inst, tc.newLabel, tc.newValue)
 
 			// Test
 			got := o.handle(context.Background(), l, inst, oldInst)

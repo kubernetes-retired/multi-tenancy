@@ -11,6 +11,7 @@ import (
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 )
 
 // ObjectsServingPath is where the validator will run. Must be kept in sync with the
@@ -68,8 +69,8 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
 func (o *Object) handle(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured, oldInst *unstructured.Unstructured) admission.Response {
-	oldValue, oldExists := getLabel(oldInst, api.LabelInheritedFrom)
-	newValue, newExists := getLabel(inst, api.LabelInheritedFrom)
+	oldValue, oldExists := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
+	newValue, newExists := metadata.GetLabel(inst, api.LabelInheritedFrom)
 	// If old object holds the label but the new one doesn't, reject it. Vice versa.
 	if oldExists != newExists {
 		verb := "add"
@@ -93,27 +94,4 @@ func (o *Object) InjectClient(c client.Client) error {
 func (o *Object) InjectDecoder(d *admission.Decoder) error {
 	o.decoder = d
 	return nil
-}
-
-type apiInstances interface {
-	GetLabels() map[string]string
-	SetLabels(labels map[string]string)
-}
-
-func setLabel(inst apiInstances, label string, value string) {
-	labels := inst.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	labels[label] = value
-	inst.SetLabels(labels)
-}
-
-func getLabel(inst apiInstances, label string) (string, bool) {
-	labels := inst.GetLabels()
-	if labels == nil {
-		return "", false
-	}
-	value, ok := labels[label]
-	return value, ok
 }

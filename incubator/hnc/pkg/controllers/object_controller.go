@@ -30,6 +30,7 @@ import (
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 )
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
@@ -233,12 +234,10 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 		// Create an in-memory canonical version, and set the new properties.
 		propagated := canonical(inst)
 		propagated.SetNamespace(dst)
-		labels := propagated.GetLabels()
-		labels[api.LabelInheritedFrom] = srcNS
-		propagated.SetLabels(labels)
+		metadata.SetLabel(propagated, api.LabelInheritedFrom, srcNS)
 
 		// Push to the apiserver
-		log.Info("Propagating", "dst", dst, "origin", labels[api.LabelInheritedFrom])
+		log.Info("Propagating", "dst", dst, "origin", srcNS)
 		err := r.Update(ctx, propagated)
 		if err != nil && errors.IsNotFound(err) {
 			err = r.Create(ctx, propagated)
@@ -366,18 +365,4 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	target := &unstructured.Unstructured{}
 	target.SetGroupVersionKind(r.GVK)
 	return ctrl.NewControllerManagedBy(mgr).For(target).Complete(r)
-}
-
-type apiInstances interface {
-	GetLabels() map[string]string
-	SetLabels(labels map[string]string)
-}
-
-func setLabel(inst apiInstances, label string, value string) {
-	labels := inst.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	labels[label] = value
-	inst.SetLabels(labels)
 }
