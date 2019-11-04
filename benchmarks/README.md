@@ -43,7 +43,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 | MTB-PL1-BC-CPI-4 | Block add capabilities  | |
 | MTB-PL1-BC-CPI-5 | Require running as non-root user  | |
 | MTB-PL1-BC-CPI-4 | Block privileged containers  | |
-| MTB-PL1-BC-CPI-4 | Block privileged escalation  | |
+| MTB-PL1-BC-CPI-4 | Block privilege escalation  | |
 | MTB-PL1-BC-NI-1 | [Default deny network connections across tenants](e2e/tests/default_deny_net_conn/)| |
 | MTB-PL1-BC-HI-1 | [Block use of bind mounts](e2e/tests/block_bind_mounts/) | |
 | MTB-PL1-BC-HI-2 | [Block use of NodePort services](e2e/tests/block_nodeports/) | |
