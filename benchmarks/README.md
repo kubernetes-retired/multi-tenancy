@@ -30,7 +30,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 | ID             | Benchmark                                                                                            | Test  |
 |------------------|------------------------------------------------------------------------------------------------------|-------|
 | MTB-PL1-CC-CPI-1 | [Block access to cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
-| MTB-PL1-CC-TI-2 | [Block access to other tenant resources](e2e/tests/block_other_tenants/) | |
+| MTB-PL1-CC-TI-2 | [Block access to other tenant resources](e2e/tests/block_other_tenant_resources/) | |
 | MTB-PL1-CC-FNS-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
 | MTB-PL1-CC-TI-1 | [Block modification of resource quotas](e2e/tests/block_ns_quotas/) | |
 
