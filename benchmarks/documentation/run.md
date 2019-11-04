@@ -1,5 +1,13 @@
 # Running Validation Tests
 
+
+To test your cluster, first clone the repo:
+
+```shell
+git clone https://github.com/kubernetes-sigs/multi-tenancy.git
+cd multi-tenancy/benchmarks
+```
+
 ## Configure Test Parameters
 To set up the test configuration, edit this [config file](../config.yaml). 
 
@@ -17,13 +25,6 @@ tenantA:
 ````
 
 ## Run The Tests
-
-To test your cluster, first clone the repo:
-
-```shell
-git clone https://github.com/kubernetes-sigs/multi-tenancy.git
-cd multi-tenancy/benchmarks
-```
 
 ### Test locally
 
