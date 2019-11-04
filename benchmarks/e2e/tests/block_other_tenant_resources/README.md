@@ -26,8 +26,8 @@ Run the following commands to retrieve the list of namespaced resources availabl
 
   	kubectl --kubeconfig cluster-admin api-resources --namespaced=true
 
-For each namespaced resource, issue the following command
+For each namespaced resource, and each verb (get, list, create, update, patch, watch, delete, and deletecollection) issue the following command
 	
-	kubectl --kubeconfig tenant-a -n b1 get <resource>
+	kubectl --kubeconfig tenant-a -n b1 <verb> <resource>
 
-Each command must return 403 FORBIDDEN
+Each command must return 'no'

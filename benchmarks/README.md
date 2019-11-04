@@ -7,6 +7,11 @@ The multi-tenancy benchmarks are meant to be used as guidelines and best practic
 
 For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com/document/d/1O-G8jEpiJxOeYx9Pd2OuOSb8859dTRNmgBC5gJv0krE/edit?usp=sharing).
 
+
+## Status
+
+***The multi-tenancy benchmarks are in development and not ready for usage.***
+
 ## Documentation
 - [Multi-Tenancy Definitions](documentation/definitions.md)
 - [Benchmark Types](documentation/types.md)
@@ -24,20 +29,22 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 
 | ID             | Benchmark                                                                                            | Test  |
 |------------------|------------------------------------------------------------------------------------------------------|-------|
+| MTB-PL1-CC-CPI-1 | [Block access to cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+| MTB-PL1-CC-TI-2 | [Block access to other tenant resources](e2e/tests/block_other_tenants/) | |
 | MTB-PL1-CC-FNS-1 | [Configure namespace resource quotas](e2e/tests/configure_ns_quotas/)|  [src](e2e/tests/configure_ns_quotas/configure_ns_quotas.go) |
-
+| MTB-PL1-CC-TI-1 | [Block modification of resource quotas](e2e/tests/block_ns_quotas/) | |
 
 #### Behavioral Checks (BC)
 
 | ID | Benchmark                                                                      | Test                            |
 |------|--------------------------------------------------------------------------------|---------------------------------|
-| MTB-PL1-BC-CPI-1 | [Block access to cluster resources](e2e/tests/block_cluster_resources/) | [src](e2e/tests/block_cluster_resources/block_cluster_resources.go) |
+
 | MTB-PL1-BC-CPI-2 | [Block modification of multi-tenancy resources](e2e/tests/block_multitenant_resources/)| |
 | MTB-PL1-BC-CPI-3 | Block use of docker socket bind mount  | |
 | MTB-PL1-BC-CPI-4 | Block add capabilities  | |
 | MTB-PL1-BC-CPI-5 | Require running as non-root user  | |
-| MTB-PL1-BC-TI-1 | [Block access to other tenant resources](e2e/tests/block_other_tenants/) | |
-| MTB-PL1-BC-TI-2 | [Block modification of resource quotas](e2e/tests/block_ns_quotas/) | |
+| MTB-PL1-BC-CPI-4 | Block privileged containers  | |
+| MTB-PL1-BC-CPI-4 | Block privileged escalation  | |
 | MTB-PL1-BC-NI-1 | [Default deny network connections across tenants](e2e/tests/default_deny_net_conn/)| |
 | MTB-PL1-BC-HI-1 | [Block use of bind mounts](e2e/tests/block_bind_mounts/) | |
 | MTB-PL1-BC-HI-2 | [Block use of NodePort services](e2e/tests/block_nodeports/) | |

@@ -18,16 +18,17 @@ Tenants should not be able to modify the resource quotas defined in their namesp
 
 **Rationale:**
 
-Resource Quotas must be configured to guarantee isolation between tenants. Furthermore, it should not be impossible for a tenant administrator to modify an existing resource quota as they may over-allocate resources and impact other tenants.
+Resource quotas must be configured for isolation and fairness between tenants. Tenants should not be able to modify existing resource quotas as they may exhaust cluster resources and impact other tenants.
 
 **Audit:**
 
-Run the following commands to retrieve the list of Resource Quotas configured in Tenant A:
+Run the folling command to check for permissions to manage quotas in the tenant namespace:
 
-  	kubectl --kubeconfig=tenant-a -n a1 ResourceQuota
+	kubectl --kubeconfig=tenant-a -n a1 auth can-i create quota
+	kubectl --kubeconfig=tenant-a -n a1 auth can-i update quota
+	kubectl --kubeconfig=tenant-a -n a1 auth can-i patch quota
+	kubectl --kubeconfig=tenant-a -n a1 auth can-i delete quota
+	kubectl --kubeconfig=tenant-a -n a1 auth can-i deletecollection quota
 
-For each Resource Quota returned run the following command:
-	
-	kubectl --kubeconfig=tenant-a -n a1 annotate ResourceQuota <resource-quota>  key1=value1 --dry-run
+Each command must return 'no'
 
-Each command must return 403 FORBIDDEN

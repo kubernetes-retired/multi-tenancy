@@ -24,12 +24,6 @@ Resource quotas must be configured for each tenant namespace, to guarantee isola
 
 **Audit:**
 
-Run the following commands to retrieve the list of Resource Quotas configured in Tenant A:
+Run the following command to show configured quotas. Make sure that a quota is configured for CPU, memory, and storage resources.
 
-  	kubectl --kubeconfig=tenant-a -n a1 ResourceQuota
-
-For each Resource Quota returned run the following command:
-	
-	kubectl --kubeconfig=tenant-a -n a1 annotate ResourceQuota <resource-quota>  key1=value1 --dry-run
-
-Each command must return 403 FORBIDDEN
+    kubectl --kubeconfig=tenant-a -n a1 describe quota
