@@ -18,29 +18,7 @@ package config
 
 import (
 	"crypto/tls"
-
-	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 )
-
-// Flags holds the config from command line.
-type Flags struct {
-	// ClientCAFile is the path to a PEM-encoded certificate bundle. If set, any request presenting a client certificate
-	// signed by one of the authorities in the bundle is authenticated with a username corresponding to the CommonName,
-	// and groups corresponding to the Organization in the client certificate.
-	ClientCAFile string
-	// CertDirectory is the directory where the TLS certs are located
-	CertDirectory string
-	// TLSCertFile is the file containing x509 Certificate for HTTPS
-	TLSCertFile string
-	// TLSPrivateKeyFile is the file containing x509 private key matching tlsCertFile
-	TLSPrivateKeyFile string
-
-	// Port is the vn-agent server listening on.
-	Port uint
-
-	// KubeletConfig
-	KubeletConfig kubeletclient.KubeletClientConfig
-}
 
 // TLSOptions holds the TLS options.
 type TLSOptions struct {
