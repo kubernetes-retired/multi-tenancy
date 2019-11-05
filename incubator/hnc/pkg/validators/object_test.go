@@ -68,3 +68,143 @@ func TestInheritedFromLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestUserChanges(t *testing.T) {
+
+	f := forest.NewForest()
+	o := &Object{Forest: f}
+	l := zap.Logger(false)
+
+	tests := []struct {
+		name    string
+		oldInst *unstructured.Unstructured
+		inst    *unstructured.Unstructured
+		fail    bool
+	}{{
+		name: "Allow changes to original objects",
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]string{
+						"testLabel": "1",
+					},
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]string{
+						"testLabel": "2",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny metadata changes to propagated objects",
+		fail: true,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+						"testLabel":            "1",
+					},
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+						"testLabel":            "2",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny spec changes to propagated objects",
+		fail: true,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+				"spec": map[string]interface{}{
+					"hostname": "hello.com",
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+				"spec": map[string]interface{}{
+					"hostname": "world.com",
+				},
+			},
+		},
+	}, {
+		name: "Allow status changes to propagated objects",
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+				"status": map[string]interface{}{
+					"message": "hello",
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+				"status": map[string]interface{}{
+					"message": "example",
+				},
+			},
+		},
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewGomegaWithT(t)
+			// Test
+			got := o.handle(context.Background(), l, tc.inst, tc.oldInst)
+			// Report
+			reason := got.AdmissionResponse.Result.Reason
+			code := got.AdmissionResponse.Result.Code
+			t.Logf("Got reason %q, code %d", reason, code)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+}

@@ -2,6 +2,7 @@ package validators
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,6 +13,7 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
 )
 
 // ObjectsServingPath is where the validator will run. Must be kept in sync with the
@@ -69,6 +71,7 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
 func (o *Object) handle(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured, oldInst *unstructured.Unstructured) admission.Response {
+	// Prevent users from changing the InheritedFrom label
 	oldValue, oldExists := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newValue, newExists := metadata.GetLabel(inst, api.LabelInheritedFrom)
 	// If old object holds the label but the new one doesn't, reject it. Vice versa.
@@ -83,6 +86,14 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, inst *unstructured
 	if newExists && newValue != oldValue {
 		return deny(metav1.StatusReasonForbidden, "Users should not change the value of label "+api.LabelInheritedFrom)
 	}
+
+	// If the existing object has an inheritedFrom label, it's a propagated object.
+	// Any user changes should be rejected.
+	if newExists && !reflect.DeepEqual(object.Canonical(inst), object.Canonical(oldInst)) {
+		return deny(metav1.StatusReasonForbidden,
+			"Illegal modification to an object propagated by the Hierarchical Namespace Controller")
+	}
+
 	return allow("")
 }
 
