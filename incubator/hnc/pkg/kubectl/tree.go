@@ -74,7 +74,7 @@ func printSubtree(prefix string, hier *api.HierarchyConfiguration) {
 		tx := nameAndFootnotes(ch)
 		if i < len(hier.Status.Children)-1 {
 			fmt.Printf("%s├── %s\n", prefix, tx)
-			printSubtree(prefix+"|   ", ch)
+			printSubtree(prefix+"│   ", ch)
 		} else {
 			fmt.Printf("%s└── %s\n", prefix, tx)
 			printSubtree(prefix+"    ", ch)
