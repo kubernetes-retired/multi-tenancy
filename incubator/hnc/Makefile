@@ -158,3 +158,10 @@ kind-reset: kind-reboot deploy-prereq
 # Convenience target to deploy specifically for kind
 kind-deploy:
 	CONFIG=kind $(MAKE) deploy
+
+###################### RELEASE ACTIONS #########################
+
+# Generate release YAML that can easily install HNC via `kubectl apply -f`
+release: manifests
+	mkdir -p releases
+	kustomize build config/default > releases/manifests.yaml

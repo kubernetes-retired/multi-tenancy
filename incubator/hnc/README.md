@@ -34,6 +34,7 @@ accessible from your `PATH`:
   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
   - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
   - [kubebuilder](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) (_Github issue_). You will most likely encounter this issue when running the tests or any other command.
+  - [cert-manager](https://github.com/jetstack/cert-manager)
 
 ### Deploying to a cluster
 
