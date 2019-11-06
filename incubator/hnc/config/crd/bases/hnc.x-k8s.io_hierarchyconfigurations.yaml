@@ -85,18 +85,12 @@ spec:
                       there's a conflict (ie in between parent's RequiredChildren
                       spec and child's Parent spec) \n - \"CRIT_ANCESTOR\": a critical
                       error exists in an ancestor namespace, so this namespace is
-                      no longer being updated \n - \"OBJECT_OVERRIDDEN\": an object
-                      in this namespace has been overridden from its parent and will
-                      no longer be updated \n - \"OBJECT_DESCENDANT_OVERRIDDEN\":
-                      an object in this namespace is no longer being propagated because
-                      a propagated copy has been modified"
+                      no longer being updated"
                     enum:
                     - CRIT_PARENT_MISSING
                     - CRIT_PARENT_INVALID
                     - CRIT_REQUIRED_CHILD_CONFLICT
                     - CRIT_ANCESTOR
-                    - OBJECT_OVERRIDDEN
-                    - OBJECT_DESCENDANT_OVERRIDDEN
                     type: string
                   msg:
                     type: string
