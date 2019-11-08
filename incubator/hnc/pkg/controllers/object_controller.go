@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"reflect"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +30,7 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
 )
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
@@ -138,7 +138,7 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	}
 
 	// If the object has been modified, alert the users and don't propagate it further
-	if !reflect.DeepEqual(canonical(inst), canonical(srcInst)) {
+	if !reflect.DeepEqual(object.Canonical(inst), object.Canonical(srcInst)) {
 		// TODO add object condition
 		log.Info("Modified from the source", "inheritedFrom", srcInst.GetNamespace())
 		return nil, true
@@ -232,7 +232,7 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 	// Propagate the object to all destination namespaces.
 	for _, dst := range dests {
 		// Create an in-memory canonical version, and set the new properties.
-		propagated := canonical(inst)
+		propagated := object.Canonical(inst)
 		propagated.SetNamespace(dst)
 		metadata.SetLabel(propagated, api.LabelInheritedFrom, srcNS)
 
@@ -284,42 +284,6 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 	}
 
 	return nil
-}
-
-// canonical returns a canonicalized version of the object - that is, one that has the same name,
-// spec and non-HNC labels and annotations, but with the status and all other metadata cleared
-// (including, notably, the namespace). The resulting object is suitable to be copied into a new
-// namespace, or two canonicalized objects are suitable for being compared via reflect.DeepEqual.
-//
-// As a side effect, the label and annotation maps are always initialized in the returned value.
-func canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
-	// Start with a copy and clear the status and metadata
-	c := inst.DeepCopy()
-	delete(c.Object, "status")
-	delete(c.Object, "metadata")
-
-	// Restore the whitelisted metadata. Name:
-	c.SetName(inst.GetName())
-
-	// Non-HNC annotations:
-	newAnnots := map[string]string{}
-	for k, v := range inst.GetAnnotations() {
-		if !strings.HasPrefix(k, api.MetaGroup) {
-			newAnnots[k] = v
-		}
-	}
-	c.SetAnnotations(newAnnots)
-
-	// Non-HNC labels:
-	newLabels := map[string]string{}
-	for k, v := range inst.GetLabels() {
-		if !strings.HasPrefix(k, api.MetaGroup) {
-			newLabels[k] = v
-		}
-	}
-	c.SetLabels(newLabels)
-
-	return c
 }
 
 func (r *ObjectReconciler) getChildNamespaces(nm string) []string {
