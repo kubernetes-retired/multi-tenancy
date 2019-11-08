@@ -15,8 +15,13 @@ import (
 
 func TestStructure(t *testing.T) {
 	f := forest.NewForest()
+	// Create the following forest:
+	// foo -> bar
+	//     |
+	//     -> fooRC (RequiredChild of foo)
 	foo := createNS(f, "foo", nil)
 	bar := createNS(f, "bar", nil)
+	createRCNS(f, "fooRC", foo)
 	createNS(f, "baz", nil)
 	bar.SetParent(foo)
 	h := &Hierarchy{Forest: f}
@@ -40,6 +45,12 @@ func TestStructure(t *testing.T) {
 		{name: "rc char invalid", rcm: []string{"bar.baz"}, nnm: "foo", fail: true},
 		{name: "rc max str len", rcm: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nnm: "foo"},
 		{name: "rc over max str len", rcm: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, nnm: "foo", fail: true},
+		{name: "rc ok", rcm: []string{"bar"}, nnm: "foo"},
+		{name: "rc invalid - is an rc of another NS", rcm: []string{"fooRC"}, nnm: "bar", fail: true},
+		{name: "rc invalid - is a child of another NS", rcm: []string{"bar"}, nnm: "fooRC", fail: true},
+		{name: "rc invalid - is a root", rcm: []string{"foo"}, nnm: "bar", fail: true},
+		{name: "parent ok", nnm: "bar", pnm: "fooRC"},
+		{name: "parent invalid - is an rc of another NS", nnm: "fooRC", pnm: "bar", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -147,6 +158,16 @@ func createNS(f *forest.Forest, nnm string, ue []string) *forest.Namespace {
 			return ns
 		}
 	}
+	ns.SetExists()
+	return ns
+}
+
+// createRCNS creates rc (requiredChild) and sets its parent and requiredChildOf to nm and sets it
+// to existing.
+func createRCNS(f *forest.Forest, rc string, p *forest.Namespace) *forest.Namespace {
+	ns := f.Get(rc)
+	ns.SetParent(p)
+	ns.RequiredChildOf = p.Name()
 	ns.SetExists()
 	return ns
 }

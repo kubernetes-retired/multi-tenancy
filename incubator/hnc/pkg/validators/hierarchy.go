@@ -135,14 +135,29 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 	curParent := ns.Parent()
 	newParent := v.Forest.Get(hc.Spec.Parent)
 
-	// No change -> no problem
+	resp := v.checkParent(ns, curParent, newParent)
+	if !resp.Allowed {
+		return nil, resp
+	}
+
+	resp = v.checkRequiredChildren(ns, hc.Spec.RequiredChildren)
+	if !resp.Allowed {
+		return nil, resp
+	}
+
+	// The structure looks good. Get the list of namespaces we need authz checks on.
+	return v.needAuthzOn(curParent, newParent), allow("")
+}
+
+// checkParent validates if the parent is legal based on the current in-memory state of the forest.
+func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if curParent == newParent {
-		return nil, allow("parent unchanged")
+		return allow("parent unchanged")
 	}
 
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
-		return nil, deny(metav1.StatusReasonForbidden, "The requested parent "+hc.Spec.Parent+" does not yet exist")
+		return deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
 	}
 
 	// Is this change structurally legal? Note that this can "leak" information about the hierarchy
@@ -151,13 +166,34 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 	// have visibility into its ancestry and descendents, and this check can only fail if the new
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
-		return nil, deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
-	// TODO: requiredChild check: https://github.com/kubernetes-sigs/multi-tenancy/issues/99
+	// Prevent changing parent of a required child
+	if ns.RequiredChildOf != "" && ns.RequiredChildOf != newParent.Name() {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a required child of %q", ns.Name(), newParent.Name(), ns.RequiredChildOf)
+		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+	}
 
-	// The structure looks good. Get the list of namespaces we need authz checks on.
-	return v.needAuthzOn(curParent, newParent), allow("")
+	return allow("")
+}
+
+func (v *Hierarchy) checkRequiredChildren(ns *forest.Namespace, requiredChildren []string) admission.Response {
+	for _, child := range requiredChildren {
+		cns := v.Forest.Get(child)
+		// A newly-created requiredChild is always valid.
+		if !cns.Exists() {
+			continue
+		}
+		// If this is already a child, or is about to be, no problem.
+		if cns.Parent() == ns || (cns.Parent() == nil && cns.RequiredChildOf == ns.Name()) {
+			continue
+		}
+		reason := fmt.Sprintf("Cannot set %q as the required child of %q because it already exists and is not a child of %q", cns.Name(), ns.Name(), ns.Name())
+		return deny(metav1.StatusReasonConflict, "Illegal requiredChild: "+reason)
+	}
+
+	return allow("")
 }
 
 // authzReq represents a request for authorization
