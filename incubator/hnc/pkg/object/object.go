@@ -8,6 +8,16 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
+// metaPrefix returns the prefix (if any) of a label key.
+// Reference https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+func metaPrefix(s string) string {
+	p := strings.Split(s, "/")
+	if len(p) == 1 {
+		return ""
+	}
+	return p[0]
+}
+
 // Canonical returns a canonicalized version of the object - that is, one that has the same name,
 // spec and non-HNC labels and annotations, but with the status and all other metadata cleared
 // (including, notably, the namespace). The resulting object is suitable to be copied into a new
@@ -26,7 +36,7 @@ func Canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	// Non-HNC annotations:
 	newAnnots := map[string]string{}
 	for k, v := range inst.GetAnnotations() {
-		if !strings.HasPrefix(k, api.MetaGroup) {
+		if !strings.HasSuffix(metaPrefix(k), api.MetaGroup) {
 			newAnnots[k] = v
 		}
 	}
@@ -35,7 +45,7 @@ func Canonical(inst *unstructured.Unstructured) *unstructured.Unstructured {
 	// Non-HNC labels:
 	newLabels := map[string]string{}
 	for k, v := range inst.GetLabels() {
-		if !strings.HasPrefix(k, api.MetaGroup) {
+		if !strings.HasSuffix(metaPrefix(k), api.MetaGroup) {
 			newLabels[k] = v
 		}
 	}
