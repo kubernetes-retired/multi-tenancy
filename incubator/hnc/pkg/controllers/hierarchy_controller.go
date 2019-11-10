@@ -275,8 +275,8 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 		}
 	}
 
-	// AncestoryNames includes the namespace itself.
-	ancestors := ns.AncestoryNames(nil)
+	// AncestryNames includes the namespace itself.
+	ancestors := ns.AncestryNames(nil)
 	for i, ancestor := range ancestors {
 		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
