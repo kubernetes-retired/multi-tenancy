@@ -14,6 +14,26 @@ rules:
   - watch
   - create
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+- apiGroups:
   - tenancy.x-k8s.io
   resources:
   - tenants

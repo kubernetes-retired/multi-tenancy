@@ -22,6 +22,19 @@ rules:
   - watch
   - create
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+  - watch
+  - delete
+- apiGroups:
   - tenancy.x-k8s.io
   resources:
   - tenants
@@ -197,7 +210,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: multitenancy/tenant:latest
+        image: vrgf2003/tenant:latest
         imagePullPolicy: Always
         name: manager
         env:

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,6 +35,9 @@ type TenantSpec struct {
 	// is not required.
 	// +optional
 	RequireNamespacePrefix bool `json:"requireNamespacePrefix,omitempty"`
+	// TenantAdmins are the identities with admin privilege for tenant resources.
+	// +optional
+	TenantAdmins []rbacv1.Subject `json:"tenantAdmins,omitempty"`
 }
 
 // TenantStatus defines the observed state of Tenant
