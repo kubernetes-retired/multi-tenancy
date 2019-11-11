@@ -29,7 +29,7 @@ type TenantSpec struct {
 	// all tenant related policy objects and custom resources.
 	// +optional
 	TenantAdminNamespaceName string `json:"tenantAdminNamespaceName,omitempty"`
-	// If set to True, all the namespaces belong to the tenant are requried to
+	// If set to True, all the namespaces belong to the tenant are required to
 	// have TenantAdminNamespaceName as name prefix. By default, namespace prefix
 	// is not required.
 	// +optional
