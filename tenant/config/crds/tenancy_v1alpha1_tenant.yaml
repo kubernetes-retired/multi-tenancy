@@ -37,6 +37,12 @@ spec:
               description: The name of tenant administration namespace, which is used
                 to create all tenant related policy objects and custom resources.
               type: string
+            tenantAdmins:
+              description: TenantAdmins are the identities with admin privilege for
+                tenant resources.
+              items:
+                type: object
+              type: array
           type: object
         status:
           type: object
