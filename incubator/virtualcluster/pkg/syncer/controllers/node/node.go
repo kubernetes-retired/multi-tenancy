@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
-	"time"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,6 +57,7 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 		}
 	}
 	n.Status.Addresses = addresses
+	n.Status.NodeInfo = superMasterNode.Status.NodeInfo
 
 	return n
 }
@@ -105,35 +105,6 @@ func nodeConditions() []v1.NodeCondition {
 			Message:            "RouteController created a route",
 		},
 	}
-}
-
-func updateNodeStatusHeartbeat(n *v1.Node) {
-	now := metav1.NewTime(time.Now())
-	n.Status.Conditions = nodeConditions()
-	for i := range n.Status.Conditions {
-		n.Status.Conditions[i].LastHeartbeatTime = now
-	}
-}
-
-func updateNodeStatus(nodes v1core.NodeInterface, n *v1.Node) (_ *v1.Node, retErr error) {
-	var node *v1.Node
-
-	oldNode, err := nodes.Get(n.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	node = oldNode.DeepCopy()
-	node.ResourceVersion = ""
-	node.Status = n.Status
-
-	// Patch the node status to merge other changes on the node.
-	updated, _, err := patchNodeStatus(nodes, types.NodeName(n.Name), oldNode, node)
-	if err != nil {
-		return nil, err
-	}
-
-	return updated, nil
 }
 
 // patchNodeStatus patches node status.

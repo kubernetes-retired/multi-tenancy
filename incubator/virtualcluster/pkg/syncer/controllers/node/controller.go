@@ -18,13 +18,15 @@ package node
 
 import (
 	"sync"
-	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
@@ -34,11 +36,10 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
-const DefaultStatusUpdateInterval = 1 * time.Minute
-
 type controller struct {
 	sync.Mutex
-	clusterToNodeSet           map[string]map[string]*v1.Node
+	// map node name in super master to tenant cluster name it belongs to.
+	nodeNameToCluster          map[string]map[string]struct{}
 	nodeClient                 v1core.NodesGetter
 	multiClusterNodeController *sc.MultiClusterController
 }
@@ -49,8 +50,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		clusterToNodeSet: make(map[string]map[string]*v1.Node),
-		nodeClient:       client,
+		nodeNameToCluster: make(map[string]map[string]struct{}),
+		nodeClient:        client,
 	}
 
 	// Create the multi cluster node controller
@@ -63,38 +64,46 @@ func Register(
 	c.multiClusterNodeController = multiClusterNodeController
 	controllerManager.AddController(multiClusterNodeController)
 
-	go c.updateNodeStatusLoop()
+	nodeInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: c.backPopulate,
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				newNode := newObj.(*v1.Pod)
+				oldNode := oldObj.(*v1.Pod)
+				if newNode.ResourceVersion == oldNode.ResourceVersion {
+					return
+				}
+
+				c.backPopulate(newObj)
+			},
+		},
+	)
 
 	// Register the controller as cluster change listener
 	listener.AddListener(c)
 }
 
-func (c *controller) updateNodeStatusLoop() {
-	statusTimer := time.NewTimer(DefaultStatusUpdateInterval)
-	defer statusTimer.Stop()
+func (c *controller) backPopulate(obj interface{}) {
+	node := obj.(*v1.Node)
 
-	c.doUpdateNodeStatus()
-	for {
-		select {
-		case <-statusTimer.C:
-			c.doUpdateNodeStatus()
-			statusTimer.Reset(DefaultStatusUpdateInterval)
-		}
-	}
-}
-
-func (c *controller) doUpdateNodeStatus() {
+	klog.Infof("back populate node %s/%s", node.Name, node.Namespace)
 	c.Lock()
+	clusterList := c.nodeNameToCluster[node.Name]
+	c.Unlock()
+
+	if len(clusterList) == 0 {
+		return
+	}
+
 	var wg sync.WaitGroup
-	wg.Add(len(c.clusterToNodeSet))
-	for clusterName, _ := range c.clusterToNodeSet {
-		c.updateClusterNodeStatus(clusterName, c.clusterToNodeSet[clusterName], &wg)
+	wg.Add(len(clusterList))
+	for clusterName, _ := range clusterList {
+		c.updateClusterNodeStatus(clusterName, node, &wg)
 	}
 	wg.Wait()
-	c.Unlock()
 }
 
-func (c *controller) updateClusterNodeStatus(cluster string, nodeSet map[string]*v1.Node, wg *sync.WaitGroup) {
+func (c *controller) updateClusterNodeStatus(cluster string, node *v1.Node, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	innerCluster := c.multiClusterNodeController.GetCluster(cluster)
@@ -104,17 +113,19 @@ func (c *controller) updateClusterNodeStatus(cluster string, nodeSet map[string]
 		return
 	}
 
-	for nodeName, n := range nodeSet {
-		klog.V(4).Infof("updating cluster %s node %s heartbeats", cluster, nodeName)
-		updateNodeStatusHeartbeat(n)
+	vNode, err := client.CoreV1().Nodes().Get(node.Name, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("could not find node %s/%s: %v", cluster, node.Name, err)
+		return
+	}
 
-		newNode, err := updateNodeStatus(client.CoreV1().Nodes(), n)
-		if err != nil {
-			klog.Errorf("failed to update cluster %s node %s's heartbeats: %v", cluster, nodeName, err)
-			continue
-		}
+	newVNode := vNode.DeepCopy()
+	newVNode.Status.Conditions = node.Status.Conditions
 
-		nodeSet[nodeName] = newNode
+	_, _, err = patchNodeStatus(client.CoreV1().Nodes(), types.NodeName(node.Name), vNode, newVNode)
+	if err != nil {
+		klog.Errorf("failed to update node %s/%s's heartbeats: %v", cluster, node.Name, err)
+		return
 	}
 }
 
@@ -125,7 +136,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.AddEvent:
 		err := c.reconcileCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
 		if err != nil {
-			klog.Errorf("failed reconcile pod %s/%s in cluster as %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile node %s/%s in cluster %s as %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.UpdateEvent:
@@ -146,10 +157,10 @@ func (c *controller) reconcileCreate(cluster, namespace, name string, node *v1.N
 	c.Lock()
 	defer c.Unlock()
 
-	if _, exist := c.clusterToNodeSet[cluster]; !exist {
-		c.clusterToNodeSet[cluster] = make(map[string]*v1.Node)
+	if _, exist := c.nodeNameToCluster[name]; !exist {
+		c.nodeNameToCluster[name] = make(map[string]struct{})
 	}
-	c.clusterToNodeSet[cluster][name] = node
+	c.nodeNameToCluster[name][cluster] = struct{}{}
 
 	return nil
 }
@@ -158,10 +169,10 @@ func (c *controller) reconcileUpdate(cluster, namespace, name string, node *v1.N
 	c.Lock()
 	defer c.Unlock()
 
-	if _, exist := c.clusterToNodeSet[cluster]; !exist {
-		c.clusterToNodeSet[cluster] = make(map[string]*v1.Node)
+	if _, exist := c.nodeNameToCluster[name]; !exist {
+		c.nodeNameToCluster[name] = make(map[string]struct{})
 	}
-	c.clusterToNodeSet[cluster][name] = node
+	c.nodeNameToCluster[name][cluster] = struct{}{}
 
 	return nil
 }
@@ -170,15 +181,11 @@ func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.N
 	c.Lock()
 	defer c.Unlock()
 
-	if _, exists := c.clusterToNodeSet[cluster]; !exists {
+	if _, exists := c.nodeNameToCluster[name]; !exists {
 		return nil
 	}
 
-	delete(c.clusterToNodeSet[cluster], name)
-
-	if len(c.clusterToNodeSet[cluster]) == 0 {
-		delete(c.clusterToNodeSet, cluster)
-	}
+	delete(c.nodeNameToCluster[name], cluster)
 
 	return nil
 }
