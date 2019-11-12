@@ -25,9 +25,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -42,7 +44,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
 	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	ctrlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
 )
 
 const (
@@ -374,7 +375,11 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 	log.Info("reconciling Virtualcluster...")
 	vc := &tenancyv1alpha1.Virtualcluster{}
 	err = r.Get(context.TODO(), request.NamespacedName, vc)
-	if ctrlutil.IgnoreNotFound(err) != nil {
+	if err != nil {
+		// set NotFound error as nil
+		if apierrors.IsNotFound(err) {
+			err = nil
+		}
 		return
 	}
 
@@ -387,10 +392,16 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 	case "":
 		// set vc status as ClusterPending if no status is set
 		log.Info("will create a Virtualcluster", "vc", vc.Name)
-		vc.Status.Phase = tenancyv1alpha1.ClusterPending
-		vc.Status.Message = "creating virtual cluster..."
-		vc.Status.Reason = "ClusterCreating"
-		err = r.Update(context.TODO(), vc)
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			vc.Status.Phase = tenancyv1alpha1.ClusterPending
+			vc.Status.Message = "creating virtual cluster..."
+			vc.Status.Reason = "ClusterCreating"
+			updateErr := r.Update(context.TODO(), vc)
+			if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+				log.Info("fail to get vc on update failure", "error", err.Error())
+			}
+			return updateErr
+		})
 		return
 	case tenancyv1alpha1.ClusterPending:
 		// create new virtualcluster when vc is pending
@@ -413,10 +424,16 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			return
 		}
 		// all components are ready, update vc status
-		vc.Status.Phase = "Running"
-		vc.Status.Message = "tenant master is running"
-		vc.Status.Reason = "TenantMasterRunning"
-		err = r.Update(context.TODO(), vc)
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			vc.Status.Phase = "Running"
+			vc.Status.Message = "tenant master is running"
+			vc.Status.Reason = "TenantMasterRunning"
+			updateErr := r.Update(context.TODO(), vc)
+			if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+				log.Info("fail to get vc on update failure", "error", err.Error())
+			}
+			return updateErr
+		})
 		return
 	case tenancyv1alpha1.ClusterRunning:
 		log.Info("Virtualcluster is running", "vc", vc.Name)

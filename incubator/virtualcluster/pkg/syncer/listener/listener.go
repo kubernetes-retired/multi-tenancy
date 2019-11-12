@@ -21,7 +21,7 @@ import "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/sy
 var Listeners []ClusterChangeListener
 
 type ClusterChangeListener interface {
-	AddCluster(cluster *cluster.Cluster) error
+	AddCluster(cluster *cluster.Cluster)
 	RemoveCluster(cluster *cluster.Cluster)
 }
 

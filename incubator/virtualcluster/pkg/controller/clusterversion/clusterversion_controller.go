@@ -19,6 +19,7 @@ package clusterversion
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -82,7 +83,10 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 	err := r.Get(context.TODO(), request.NamespacedName, cv)
 	if err != nil {
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, ctrlutil.IgnoreNotFound(err)
+		if apierrors.IsNotFound(err) {
+			err = nil
+		}
+		return reconcile.Result{}, err
 	}
 	log.Info("new ClusterVersion event", "ClusterVersionName", cv.Name)
 

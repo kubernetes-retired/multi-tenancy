@@ -138,14 +138,12 @@ func (c *controller) reconcileConfigMapRemove(cluster, namespace, name string) e
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) error {
+func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-configmap-controller watch cluster %s for configmap resource", cluster.Name)
 	err := c.multiClusterConfigMapController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s configmap event: %v", cluster.Name, err)
-		return err
 	}
-	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

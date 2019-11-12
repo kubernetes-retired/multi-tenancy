@@ -139,14 +139,12 @@ func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) error {
+func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.Name)
 	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.Name, err)
-		return err
 	}
-	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {

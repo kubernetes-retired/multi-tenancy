@@ -220,14 +220,12 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) error {
+func (c *controller) AddCluster(cluster *cluster.Cluster) {
 	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.Name)
 	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.Name, err)
-		return err
 	}
-	return nil
 }
 
 func (c *controller) RemoveCluster(cluster *cluster.Cluster) {
