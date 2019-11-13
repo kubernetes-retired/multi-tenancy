@@ -1,3 +1,6 @@
+# Adding .PHONY to hold command shortcuts.
+.PHONY: release
+
 # If CONFIG is `kind`, various defaults will be optimized for deploying locally to Kind
 CONFIG ?= "default"
 # Image URL to use all building/pushing image targets
@@ -160,8 +163,6 @@ kind-deploy:
 	CONFIG=kind $(MAKE) deploy
 
 ###################### RELEASE ACTIONS #########################
-
-# Generate release YAML that can easily install HNC via `kubectl apply -f`
+# Build the container image by Cloud Build and build YAMLs locally
 release: manifests
-	mkdir -p releases
-	kustomize build config/default > releases/manifests.yaml
+	gcloud builds submit --config cloudbuild.yaml .
