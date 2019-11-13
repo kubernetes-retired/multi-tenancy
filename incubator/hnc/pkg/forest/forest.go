@@ -155,7 +155,7 @@ func (ns *Namespace) CanSetParent(p *Namespace) string {
 		if p == ns {
 			return fmt.Sprintf("%q cannot be set as its own parent", p.name)
 		}
-		if chain := p.AncestoryNames(ns); chain != nil {
+		if chain := p.AncestryNames(ns); chain != nil {
 			return fmt.Sprintf("cycle when making %q the parent of %q: current ancestry is %q",
 				p.name, ns.name, strings.Join(chain, " <- "))
 		}
@@ -201,12 +201,12 @@ func (ns *Namespace) RelativesNames() []string {
 	return a
 }
 
-// AncestoryNames returns a slice of strings like ["grandparent", "parent", "child"] if there is
+// AncestryNames returns a slice of strings like ["grandparent", "parent", "child"] if there is
 // a path from `other` to the current namespace (if `other` is nil, the first element of the slice
 // will be the root of the tree, *not* the empty string).
-func (ns *Namespace) AncestoryNames(other *Namespace) []string {
+func (ns *Namespace) AncestryNames(other *Namespace) []string {
 	if ns == nil {
-		// Nil forest has nil ancestory
+		// Nil forest has nil ancestry
 		return nil
 	}
 	if ns == other || (ns.parent == nil && other == nil) {
@@ -214,17 +214,17 @@ func (ns *Namespace) AncestoryNames(other *Namespace) []string {
 		return []string{ns.name}
 	}
 	if ns.parent == nil {
-		// Ancestory to `other` doesn't exist
+		// Ancestry to `other` doesn't exist
 		return nil
 	}
-	ancestory := ns.parent.AncestoryNames(other)
-	if ancestory == nil {
-		// Ancestory to `other` wasn't found
+	ancestry := ns.parent.AncestryNames(other)
+	if ancestry == nil {
+		// Ancestry to `other` wasn't found
 		return nil
 	}
 
-	// Add ourselves to the ancestory
-	return append(ancestory, ns.name)
+	// Add ourselves to the ancestry
+	return append(ancestry, ns.name)
 }
 
 func (ns *Namespace) IsAncestor(other *Namespace) bool {

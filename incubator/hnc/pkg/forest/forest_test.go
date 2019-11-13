@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestAncestoryNames(t *testing.T) {
+func TestAncestryNames(t *testing.T) {
 	tests := []struct {
 		name  string
 		chain []string
@@ -33,7 +33,7 @@ func TestAncestoryNames(t *testing.T) {
 				last.SetParent(parent)
 			}
 			to := f.Get(tc.to)
-			g.Expect(last.AncestoryNames(to)).Should(Equal(tc.want))
+			g.Expect(last.AncestryNames(to)).Should(Equal(tc.want))
 		})
 	}
 }
@@ -63,11 +63,11 @@ func TestSetParent(t *testing.T) {
 				last.SetParent(parent)
 			}
 			child := f.Get(tc.child)
-			t.Logf("Old ancestry is: %v", child.AncestoryNames(nil))
+			t.Logf("Old ancestry is: %v", child.AncestryNames(nil))
 			parent := f.Get(tc.parent)
 			err := child.SetParent(parent)
 			if err == nil {
-				t.Logf("New ancestry is: %v", child.AncestoryNames(nil))
+				t.Logf("New ancestry is: %v", child.AncestryNames(nil))
 				if tc.fail {
 					t.Error("got success, want failure")
 				}

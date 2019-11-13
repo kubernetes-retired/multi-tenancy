@@ -271,7 +271,7 @@ func (v *Hierarchy) needAuthzOn(curParent, newParent *forest.Namespace) []authzR
 //
 // We can solve both of these cases by simply filtering out the missing namespaces.
 func (v *Hierarchy) getExistingAncestry(ns *forest.Namespace) []string {
-	chain := ns.AncestoryNames(nil) // Returns empty slice if ns is nil.
+	chain := ns.AncestryNames(nil) // Returns empty slice if ns is nil.
 	existing := []string{}
 	for _, anm := range chain {
 		if v.Forest.Get(anm).Exists() {
