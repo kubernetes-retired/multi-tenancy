@@ -30,7 +30,7 @@ spec:
           properties:
             requireNamespacePrefix:
               description: If set to True, all the namespaces belong to the tenant
-                are requried to have TenantAdminNamespaceName as name prefix. By default,
+                are required to have TenantAdminNamespaceName as name prefix. By default,
                 namespace prefix is not required.
               type: boolean
             tenantAdminNamespaceName:
