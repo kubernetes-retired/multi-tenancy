@@ -189,7 +189,9 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			if !isOwner {
 				log.Info("Namespace has been created without TenantNamespace owner", "namespace", each.Name)
 				// Obtain namespace ownership by setting ownerReference, and add annotation
-				err = r.updateNamespace(&each, &instance.Namespace, &expectedOwnerRef)
+				if err = r.updateNamespace(&each, &instance.Namespace, &expectedOwnerRef); err != nil {
+					return reconcile.Result{}, err
+				}
 			}
 			break
 		}
@@ -260,6 +262,9 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			}
 			return updateErr
 		})
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
-	return reconcile.Result{}, err
+	return reconcile.Result{}, nil
 }
