@@ -221,7 +221,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 	cr = cr.DeepCopy()
-	log.Info("FEI GUO original cr", "clusterrole", fmt.Sprintf("%v", cr))
 	foundNsRule := false
 	needUpdate := true
 	for i, each := range cr.Rules {
@@ -248,8 +247,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		err = fmt.Errorf("Cluster Role %s-tenant-admin-role does not have rules for namespaces.", tenantName)
 		return reconcile.Result{}, err
 	}
-	log.Info("FEI GUO add namespace to clusterrole", "needUpdate", needUpdate, "clusterrole", fmt.Sprintf("%v", cr))
-
 	if needUpdate {
 		crClone := cr.DeepCopy()
 		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
