@@ -23,6 +23,7 @@ import (
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 	tenantutil "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/util"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -146,10 +147,12 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	// Find the tenant of this instance
 	requireNamespacePrefix := false
 	foundTenant := false
+	var tenantName string
 	for _, each := range tenantList.Items {
 		if each.Spec.TenantAdminNamespaceName == instance.Namespace {
 			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
 			foundTenant = true
+			tenantName = each.Name
 			break
 		}
 	}
@@ -167,13 +170,15 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		UID:        instance.UID,
 	}
 
+	found := false
 	for _, each := range nsList.Items {
 		if each.Name == tenantNsName {
+			found = true
 			// Check OwnerReference
-			found := false
+			isOwner := false
 			for _, ownerRef := range each.OwnerReferences {
 				if ownerRef == expectedOwnerRef {
-					found = true
+					isOwner = true
 					break
 				} else if ownerRef.APIVersion == expectedOwnerRef.APIVersion && ownerRef.Kind == expectedOwnerRef.Kind {
 					// The namespace is owned by another TenantNamespace CR, fail the reconcile
@@ -181,31 +186,85 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 					return reconcile.Result{}, err
 				}
 			}
-			if !found {
+			if !isOwner {
 				log.Info("Namespace has been created without TenantNamespace owner", "namespace", each.Name)
 				// Obtain namespace ownership by setting ownerReference, and add annotation
-				err = r.updateNamespace(&each, &instance.Namespace, &expectedOwnerRef)
+				if err = r.updateNamespace(&each, &instance.Namespace, &expectedOwnerRef); err != nil {
+					return reconcile.Result{}, err
+				}
 			}
-			return reconcile.Result{}, err
+			break
 		}
 	}
 
 	// In case a new namespace needs to be created
-	tenantNs := &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Namespace",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: tenantNsName,
-			Annotations: map[string]string{
-				TenantAdminNamespaceAnnotation: instance.Namespace,
+	if !found {
+		tenantNs := &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: corev1.SchemeGroupVersion.String(),
+				Kind:       "Namespace",
 			},
-			OwnerReferences: []metav1.OwnerReference{expectedOwnerRef},
-		},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: tenantNsName,
+				Annotations: map[string]string{
+					TenantAdminNamespaceAnnotation: instance.Namespace,
+				},
+				OwnerReferences: []metav1.OwnerReference{expectedOwnerRef},
+			},
+		}
+		if err = r.Client.Create(context.TODO(), tenantNs); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
-	if err = r.Client.Create(context.TODO(), tenantNs); err != nil {
+
+	// Update tenant clusterrule to allow tenant admins to access the tenant namespace.
+	cr := &rbacv1.ClusterRole{}
+	if err = r.Get(context.TODO(), types.NamespacedName{Name: fmt.Sprintf("%s-tenant-admin-role", tenantName)}, cr); err != nil {
 		return reconcile.Result{}, err
+	}
+	cr = cr.DeepCopy()
+	foundNsRule := false
+	needUpdate := true
+	for i, each := range cr.Rules {
+		for _, resource := range each.Resources {
+			if resource == "namespaces" {
+				foundNsRule = true
+				break
+			}
+		}
+		if foundNsRule {
+			for _, resourceName := range each.ResourceNames {
+				if resourceName == tenantNsName {
+					needUpdate = false
+					break
+				}
+			}
+			if needUpdate {
+				cr.Rules[i].ResourceNames = append(cr.Rules[i].ResourceNames, tenantNsName)
+			}
+			break
+		}
+	}
+	if !foundNsRule {
+		err = fmt.Errorf("Cluster Role %s-tenant-admin-role does not have rules for namespaces.", tenantName)
+		return reconcile.Result{}, err
+	}
+	if needUpdate {
+		crClone := cr.DeepCopy()
+		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			crClone.Rules = cr.Rules
+			updateErr := r.Update(context.TODO(), crClone)
+			if updateErr == nil {
+				return nil
+			}
+			if err := r.Get(context.TODO(), types.NamespacedName{Name: crClone.Name}, crClone); err != nil {
+				log.Info("Fail to fetch clusterrole on update", "clusterrole", crClone.Name)
+			}
+			return updateErr
+		})
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 	return reconcile.Result{}, nil
 }

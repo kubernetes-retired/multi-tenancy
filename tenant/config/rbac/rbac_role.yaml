@@ -34,6 +34,26 @@ rules:
   - update
   - patch
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+- apiGroups:
   - tenancy.x-k8s.io
   resources:
   - tenants
