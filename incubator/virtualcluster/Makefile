@@ -2,7 +2,7 @@
 export GO111MODULE=on
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= virtualcluster/manager-amd64 virtualcluster/vn-agent-amd64 virtualcluster/syncer-amd64 
 
 # Build code.
 #
@@ -66,17 +66,23 @@ ifndef GOPATH
 endif
 	go generate ./pkg/... ./cmd/...
 
+# Build release image.
+#
+# 1. run tests
+# 2. build docker image
+.PHONY: release-images
+release-images: test build-images
+
 # Build docker image.
 #
 # 1. build all binaries.
 # 2. copy binaries to the corresponding docker image.
-.PHONY: release-images
-release-images: test
+build-images:
 	hack/make-rules/release-images.sh
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}
+	$(foreach i,$(IMG),docker push $i;)
 
 # find or download controller-gen
 # download controller-gen if necessary

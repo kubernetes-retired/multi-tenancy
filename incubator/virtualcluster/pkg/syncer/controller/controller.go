@@ -30,9 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
 	"context"
+
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -148,6 +149,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 			}
 		}(cl)
 
+		klog.Infof("sync cache for cluster %s", cl.GetClusterName())
 		go func(cl Cluster) {
 			defer wg.Done()
 
@@ -155,6 +157,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 				errCh <- fmt.Errorf("failed to wait for caches to sync")
 			}
 		}(cl)
+		klog.Infof("successfully sync cache for cluster %s", cl.GetClusterName())
 	}
 
 	wg.Wait()

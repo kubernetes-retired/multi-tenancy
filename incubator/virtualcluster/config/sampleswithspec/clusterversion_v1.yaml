@@ -60,10 +60,23 @@ spec:
               - --data-dir=/var/lib/etcd/data
               # --initial-cluster option will be set during runtime based on the number of replicas
               livenessProbe:
-                tcpSocket:
-                  port: 2379
+                exec:
+                  command: 
+                  - sh
+                  - -c
+                  - ETCDCTL_API=3 etcdctl --endpoints=https://etcd:2379 --cacert=/etc/kubernetes/pki/root/tls.crt --cert=/etc/kubernetes/pki/etcd/tls.crt --key=/etc/kubernetes/pki/etcd/tls.key endpoint health
                 failureThreshold: 8
                 initialDelaySeconds: 60
+                timeoutSeconds: 15
+              readinessProbe:
+                exec:
+                  command: 
+                  - sh
+                  - -c
+                  - ETCDCTL_API=3 etcdctl --endpoints=https://etcd:2379 --cacert=/etc/kubernetes/pki/root/tls.crt --cert=/etc/kubernetes/pki/etcd/tls.crt --key=/etc/kubernetes/pki/etcd/tls.key endpoint health
+                failureThreshold: 8
+                initialDelaySeconds: 15
+                periodSeconds: 2
                 timeoutSeconds: 15
               volumeMounts:
               - mountPath: /etc/kubernetes/pki/etcd
@@ -126,7 +139,7 @@ spec:
               args:
               - --bind-address=0.0.0.0
               - --allow-privileged=true
-              - --anonymous-auth=false
+              - --anonymous-auth=true
               - --client-ca-file=/etc/kubernetes/pki/root/tls.crt
               - --tls-cert-file=/etc/kubernetes/pki/apiserver/tls.crt
               - --tls-private-key-file=/etc/kubernetes/pki/apiserver/tls.key
@@ -158,6 +171,15 @@ spec:
                 initialDelaySeconds: 15
                 periodSeconds: 10
                 timeoutSeconds: 15
+              readinessProbe:
+                httpGet:
+                  port: 6443
+                  path: /healthz
+                  scheme: HTTPS
+                failureThreshold: 8
+                initialDelaySeconds: 5
+                periodSeconds: 2
+                timeoutSeconds: 30
               volumeMounts:
               - mountPath: /etc/kubernetes/pki/apiserver
                 name: apiserver-ca
@@ -248,6 +270,15 @@ spec:
                 failureThreshold: 8
                 initialDelaySeconds: 15
                 periodSeconds: 10
+                timeoutSeconds: 15
+              readinessProbe:
+                httpGet:
+                  port: 10252
+                  path: /healthz
+                  scheme: HTTP
+                failureThreshold: 8
+                initialDelaySeconds: 15
+                periodSeconds: 2
                 timeoutSeconds: 15
               volumeMounts:
               - mountPath: /etc/kubernetes/pki/root

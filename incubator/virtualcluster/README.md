@@ -1,77 +1,150 @@
 # Virtual Cluster
 
-## Setup tenant master
+## How to use
 
-1. Build manager
+1. Install tenant and tenantnamespace crd
 ```bash
-make all WHAT=cmd/manager
-
+kubectl apply -f ../../tenant/config/crds/
 ```
+<br />
+<br />
 
-2. Build vcctl
+2. Start the tenant controller
+```bash
+kubectl apply -f ../../tenant/config/manager/all_in_one.yaml
+```
+<br />
+<br />
+
+3. Create a tenant CR
+```bash
+kubectl apply -f ../../tenant/config/samples/tenancy_v1alpha1_tenant.yaml
+```
+a tenant admin namespace `tenant1admin` will be created.
+<br />
+<br />
+
+4. Build vcctl
 ```bash
 # on osx
 make vcctl-osx
 # on linux 
 make all WHAT=cmd/vcctl
 ```
+<br />
+<br />
 
-4. Install crd
+5. Install Virtualcluster and ClusterVersion crd
 ```bash
 kubectl apply -f config/crds
 ```
+<br />
+<br />
 
-5. Setup kubelet-client secret
+6. Create an independent namespace for running management controllers (i.e. 
+vc-manager, vn-agent and syncer).
 ```bash
 kubectl create ns vc-manager
-kubectl create secret generic vc-kubelet-client --from-file=./kubelet-client.crt --from-file=./kubelet-client.key --namespace vc-manager
 ```
-put the kubelet-client cert from super master apiserver into a secret, which would be mounted into the vn-agent.
+<br />
+<br />
 
-6. Setup virtualcluster control plane
+7. when communicating with kubelets, vn-agents will act like the supert master, thus
+we need to pass the kubelet client ca of the supert master to vn-agents. 
+We achieve this by serializing the ca into a secret that will be mounted on 
+vn-agents.
+```bash
+# if using minikube, the client CA (i.e. client.crt and client.key) is located in ~/.minikube/
+cp ~/.minikube/client.crt ~/.minikube/client.key .
+# create secret
+kubectl create secret generic vc-kubelet-client --from-file=./client.crt --from-file=./client.key --namespace vc-manager
+```
+<br />
+<br />
+
+8. Setup the three management controllers
 ```bash
 kubectl apply -f config/setup/all_in_one.yaml
 ```
-the virtualcluster controller `vc-manager` will run as a deployment, which is binded to the 
-`vc-manager` service account and run in an independent namespace `vc-manager`.
+<br />
+<br />
 
- `syncer` running in a normal deployment.
- `vn-agent` running as a daemonset using hostNetwork mode.
-
-7. Create clusterversion once `vc-manager` is ready
+9. Create the clusterversion (e.g. cv-sample), once the management 
+controllers are ready.
 ```bash 
 _output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1.yaml
 ```
+<br />
+<br />
 
-8. If using minikube, create the tenant namespace and virtualcluster by using following command 
+10. If using minikube, create the tenant namespace and virtualcluster
 ```bash
-kubectl create ns tenant-1 && _output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg v1.kubeconfig -minikube
+_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg vc-1.kubeconfig -minikube
 ```
+Once the tenant master is created, a kubeconfig file `vc-1.kubeconfig` will 
+be created
+<br />
+<br />
 
-9. Once the tenant master is created, a kubeconfig file `v1.kubeconfig` will be created
-
-10. Check if tenant master is up and running by command 
-
+11. Check if tenant master is up and running
 ```bash
-kubectl cluster-info --kubeconfig vc1.kubeconfig
-```
-if all goes well, the output will look like following
-
-```bash
+$ kubectl cluster-info --kubeconfig vc-1.kubeconfig
 Kubernetes master is running at https://XXX.XXX.XX.XXX:XXXXX
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
 ```
+<br />
+<br />
 
-11. There can be multiple virtualclusters running simultaneously on the meta cluster, you 
-can create a second virtual cluster by using other virtualcluster yaml, for example
+12. There is no node registered with the Virtualcluster
 ```bash
-# same as before, we manully creat a tenant namespace
-kubectl create ns tenant-2 && _output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_2.yaml -vckbcfg v2.kubeconfig -minikube
+$ kubectl get node --kubeconfig vc-1.kubeconfig
+No resources found in default namespace.
 ```
-12. As previously, `v2.kubeconfig` will be generated once the second virtualcluster is up and running. 
+<br />
+<br />
 
-13. You can delete existing virtualclusters by typing command
+13. Let's create a test deployment
 ```bash
-_output/bin/vcctl delete -yaml config/sampleswithspec/virtualcluster_2.yaml 
+kubectl apply --kubeconfig vc-1.kubeconfig -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deploy
+  labels:
+    app: vc-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-test
+  template:
+    metadata:
+      labels:
+        app: vc-test
+    spec:
+      containers:
+      - name: poc
+        image: busybox
+        command:
+        - top
+EOF
+```
+up to successful creation, we will see the newly created pod in 
+views of both Virtualcluster and Metacluster 
+```bash
+$ kubectl get po --kubeconfig vc-1.kubeconfig
+NAME                          READY   STATUS    RESTARTS   AGE
+test-deploy-f5dbf6b69-vcwf6   1/1     Running   0          10s
+$ kubectl get po -A
+NAMESPACE             NAME                               READY   STATUS    RESTARTS   AGE
+...
+vc-sample-1-default   test-deploy-f5dbf6b69-vcwf6        1/1     Running   0          35s
+```
+also, if the pod is run on a node that was previously unkonwn 
+to the Virtualcluster, the node will be registered with the Virtualcluster
+```bash
+$ kubectl get node --kubeconfig vc-1.kubeconfig 
+NAME       STATUS   ROLES    AGE     VERSION
+minikube   Ready    <none>   2m14s
 ```

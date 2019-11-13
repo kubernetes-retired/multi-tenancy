@@ -44,14 +44,6 @@ create_docker_image() {
   local binary_name
   local binaries=($(get_docker_wrapped_binaries "${arch}"))
 
-  local -r docker_registry="${VC_DOCKER_REGISTRY}"
-  # Docker tags cannot contain '+'
-  local docker_tag="${VC_GIT_VERSION/+/_}"
-  if [[ -z "${docker_tag}" ]]; then
-    echo "git version information missing; cannot create Docker tag"
-    return 1
-  fi
-
   for wrappable in "${binaries[@]}"; do
 
     local oldifs=$IFS
@@ -64,7 +56,7 @@ create_docker_image() {
     local docker_build_path="${binary_dir}/${binary_name}.dockerbuild"
     local docker_file_path="${docker_build_path}/Dockerfile"
     local binary_file_path="${binary_dir}/${binary_name}"
-    local docker_image_tag="${docker_registry}/${binary_name}-${arch}:${docker_tag}"
+    local docker_image_tag="${VC_DOCKER_REGISTRY}/${binary_name}-${arch}:latest"
 
     echo "Starting docker build for image: ${binary_name}-${arch}"
     (
@@ -75,16 +67,7 @@ create_docker_image() {
 FROM ${base_image}
 COPY ${binary_name} /usr/local/bin/${binary_name}
 EOF
-
       "${DOCKER[@]}" build -q -t "${docker_image_tag}" "${docker_build_path}" >/dev/null
-      # If we are building an official/alpha/beta release we want to keep
-      # docker images and tag them appropriately.
-      local -r release_docker_image_tag="${VC_DOCKER_REGISTRY-$docker_registry}/${binary_name}-${arch}:${VC_DOCKER_IMAGE_TAG-$docker_tag}"
-      if [[ "${release_docker_image_tag}" != "${docker_image_tag}" ]]; then
-        echo "Tagging docker image ${docker_image_tag} as ${release_docker_image_tag}"
-        "${DOCKER[@]}" rmi "${release_docker_image_tag}" 2>/dev/null || true
-        "${DOCKER[@]}" tag "${docker_image_tag}" "${release_docker_image_tag}" 2>/dev/null
-      fi
     ) &
   done
 

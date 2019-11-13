@@ -16,15 +16,6 @@ limitations under the License.
 
 package util
 
-import apierrors "k8s.io/apimachinery/pkg/api/errors"
-
-func IgnoreNotFound(err error) error {
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	return err
-}
-
 func ContainString(sli []string, s string) bool {
 	for _, str := range sli {
 		if str == s {
