@@ -43,6 +43,8 @@ var log = logf.Log.WithName("controller")
 const (
 	// TenantAdminNamespaceAnnotation is the key for tenantAdminNamespace annotation
 	TenantAdminNamespaceAnnotation = "x-k8s.io/tenantAdminNamespace"
+
+	TenantNamespaceFinalizer = "tenantnamespace.finalizer.x-k8s.io"
 )
 
 // Add creates a new TenantNamespace Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -146,19 +148,33 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 
 	// Find the tenant of this instance
 	requireNamespacePrefix := false
-	foundTenant := false
 	var tenantName string
 	for _, each := range tenantList.Items {
 		if each.Spec.TenantAdminNamespaceName == instance.Namespace {
 			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
-			foundTenant = true
 			tenantName = each.Name
 			break
 		}
 	}
-	if !foundTenant {
+	if tenantName == "" {
 		err = fmt.Errorf("TenantNamespace CR %v does not belong to any tenant", instance)
 		return reconcile.Result{}, err
+
+	}
+
+	// Handle tenantNamespace CR deletion
+	if instance.DeletionTimestamp != nil {
+		// Remove namespace from tenant clusterrole
+		if err = r.updateTenantClusterRole(tenantName, instance.Status.OwnedNamespace, false); err != nil {
+			return reconcile.Result{}, err
+		} else {
+			instanceClone := instance.DeepCopy()
+			if containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
+				instanceClone.Finalizers = removeString(instanceClone.Finalizers, TenantNamespaceFinalizer)
+			}
+			err = r.Update(context.TODO(), instanceClone)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// In case namespace already exists
@@ -220,6 +236,9 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	// Update status
 	instanceClone := instance.DeepCopy()
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		if !containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
+			instanceClone.Finalizers = append(instanceClone.Finalizers, TenantNamespaceFinalizer)
+		}
 		instanceClone.Status.OwnedNamespace = tenantNsName
 		updateErr := r.Update(context.TODO(), instanceClone)
 		if updateErr == nil {
@@ -234,14 +253,21 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Update tenant clusterrule to allow tenant admins to access the tenant namespace.
+	// Add namespace to tenant clusterrule to allow tenant admins to access it.
+	err = r.updateTenantClusterRole(tenantName, tenantNsName, true)
+	return reconcile.Result{}, err
+}
+
+// This method updates tenant clusterrule to add or remove the tenant namespace.
+func (r *ReconcileTenantNamespace) updateTenantClusterRole(tenantName, tenantNsName string, add bool) error {
+	var err error
 	cr := &rbacv1.ClusterRole{}
 	if err = r.Get(context.TODO(), types.NamespacedName{Name: fmt.Sprintf("%s-tenant-admin-role", tenantName)}, cr); err != nil {
-		return reconcile.Result{}, err
+		return err
 	}
 	cr = cr.DeepCopy()
 	foundNsRule := false
-	needUpdate := true
+	needUpdate := add
 	for i, each := range cr.Rules {
 		for _, resource := range each.Resources {
 			if resource == "namespaces" {
@@ -250,21 +276,25 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			}
 		}
 		if foundNsRule {
-			for _, resourceName := range each.ResourceNames {
-				if resourceName == tenantNsName {
-					needUpdate = false
+			idx := 0
+			for ; idx < len(each.ResourceNames); idx++ {
+				if each.ResourceNames[idx] == tenantNsName {
+					needUpdate = !add
 					break
 				}
 			}
 			if needUpdate {
-				cr.Rules[i].ResourceNames = append(cr.Rules[i].ResourceNames, tenantNsName)
+				if add {
+					cr.Rules[i].ResourceNames = append(cr.Rules[i].ResourceNames, tenantNsName)
+				} else {
+					cr.Rules[i].ResourceNames = append(cr.Rules[i].ResourceNames[:idx], cr.Rules[i].ResourceNames[idx+1:]...)
+				}
 			}
 			break
 		}
 	}
 	if !foundNsRule {
-		err = fmt.Errorf("Cluster Role %s-tenant-admin-role does not have rules for namespaces.", tenantName)
-		return reconcile.Result{}, err
+		return fmt.Errorf("Cluster Role %s-tenant-admin-role does not have rules for namespaces.", tenantName)
 	}
 	if needUpdate {
 		crClone := cr.DeepCopy()
@@ -279,9 +309,26 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			}
 			return updateErr
 		})
-		if err != nil {
-			return reconcile.Result{}, err
+	}
+	return err
+}
+
+// Helper functions to check and remove string from a slice of strings.
+func containsString(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
 		}
 	}
-	return reconcile.Result{}, nil
+	return false
+}
+
+func removeString(slice []string, s string) (result []string) {
+	for _, item := range slice {
+		if item == s {
+			continue
+		}
+		result = append(result, item)
+	}
+	return
 }
