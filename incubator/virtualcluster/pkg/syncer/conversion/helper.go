@@ -30,6 +30,7 @@ import (
 
 const (
 	LabelCluster = "tenancy.x-k8s.io/cluster"
+	LabelUID     = "tenancy.x-k8s.io/uid"
 
 	DefaultSAMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 )
@@ -63,6 +64,8 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		return nil, err
 	}
 
+	uid := m.GetUID()
+
 	resetMetadata(m)
 	if len(targetNamespace) > 0 {
 		m.SetNamespace(targetNamespace)
@@ -73,6 +76,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		anno = map[string]string{}
 	}
 	anno[LabelCluster] = cluster
+	anno[LabelUID] = string(uid)
 	m.SetAnnotations(anno)
 
 	return target, nil
