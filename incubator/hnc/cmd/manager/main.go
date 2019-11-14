@@ -55,12 +55,14 @@ func main() {
 		enableLeaderElection bool
 		novalidation         bool
 		debugLogs            bool
+		newObjectController  bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
+	flag.BoolVar(&newObjectController, "enable-new-object-controller", false, "Enables new object controller.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.Parse()
 
@@ -79,7 +81,7 @@ func main() {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := controllers.Create(mgr, f, maxReconciles); err != nil {
+	if err := controllers.Create(mgr, f, maxReconciles, newObjectController); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
