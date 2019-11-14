@@ -270,8 +270,16 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 }
 
 func getTargetObject(objectType runtime.Object) runtime.Object {
-	if _, ok := objectType.(*v1.ConfigMap); ok {
+	switch objectType.(type) {
+	case *v1.ConfigMap:
 		return &v1.ConfigMap{}
+	case *v1.Pod:
+		return &v1.Pod{}
+	case *v1.Secret:
+		return &v1.Secret{}
+	case *v1.ServiceAccount:
+		return &v1.ServiceAccount{}
+	default:
+		return nil
 	}
-	return &v1.Pod{}
 }

@@ -38,6 +38,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 type controller struct {
@@ -193,7 +194,35 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 	}
 
 	pPod := newObj.(*v1.Pod)
-	conversion.MutatePod(targetNamespace, pPod)
+
+	// check if the secret in super master is ready
+	// we must create pod after sync the secret.
+	saName := "default"
+	if pPod.Spec.ServiceAccountName != "" {
+		saName = pPod.Spec.ServiceAccountName
+	}
+
+	secret, err := utils.GetSecret(c.client, targetNamespace, saName)
+	if err != nil {
+		return fmt.Errorf("failed to get secret: %v", err)
+	}
+
+	if secret.Labels[conversion.SecretSyncStatusKey] != conversion.SecretSyncStatusReady {
+		return fmt.Errorf("secret for pod is not ready")
+	}
+
+	var client *clientset.Clientset
+	innerCluster := c.multiClusterPodController.GetCluster(cluster)
+	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
+	if err != nil {
+		return err
+	}
+	vSecret, err := utils.GetSecret(client.CoreV1(), namespace, saName)
+	if err != nil {
+		return fmt.Errorf("failed to get secret: %v", err)
+	}
+
+	conversion.MutatePod(targetNamespace, pPod, vSecret, secret)
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {

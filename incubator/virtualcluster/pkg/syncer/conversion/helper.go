@@ -22,8 +22,9 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
@@ -32,10 +33,12 @@ const (
 	LabelCluster = "tenancy.x-k8s.io/cluster"
 	LabelUID     = "tenancy.x-k8s.io/uid"
 
-	DefaultSAMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
+	SecretSyncStatusKey      = "tenancy.x-k8s.io/secret.sync.status"
+	SecretSyncStatusNotReady = "NotReady"
+	SecretSyncStatusReady    = "Ready"
 )
 
-var DefaultDeletionPolicy = v1.DeletePropagationBackground
+var DefaultDeletionPolicy = metav1.DeletePropagationBackground
 
 func ToSuperMasterNamespace(cluster, ns string) string {
 	targetNamespace := strings.Join([]string{cluster, ns}, "-")
@@ -96,13 +99,13 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 	return target, nil
 }
 
-func resetMetadata(obj v1.Object) {
+func resetMetadata(obj metav1.Object) {
 	obj.SetGenerateName("")
 	obj.SetSelfLink("")
 	obj.SetUID("")
 	obj.SetResourceVersion("")
 	obj.SetGeneration(0)
-	obj.SetCreationTimestamp(v1.Time{})
+	obj.SetCreationTimestamp(metav1.Time{})
 	obj.SetDeletionTimestamp(nil)
 	obj.SetDeletionGracePeriodSeconds(nil)
 	obj.SetOwnerReferences(nil)
@@ -111,12 +114,12 @@ func resetMetadata(obj v1.Object) {
 	obj.SetInitializers(nil)
 }
 
-func MutatePod(namespace string, pod *corev1.Pod) {
+// MutatePod convert the meta data of containers to super master namespace.
+// replace the service account token volume mounts to super master side one.
+func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret) {
 	pod.Status = corev1.PodStatus{}
 	pod.Spec.NodeName = ""
-	pod.Spec.ServiceAccountName = ""
 
-	var saSecret string
 	for i := range pod.Spec.Containers {
 		for j, env := range pod.Spec.Containers[i].Env {
 			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
@@ -128,26 +131,20 @@ func MutatePod(namespace string, pod *corev1.Pod) {
 				pod.Spec.Containers[i].Env[j].Value = namespace
 			}
 		}
-		// remove serviceaccount volume mount
-		// TODO: add SA volume mount back once we figure out network issue
-		var volumeMounts []corev1.VolumeMount
-		for _, volumeMount := range pod.Spec.Containers[i].VolumeMounts {
-			if volumeMount.MountPath != DefaultSAMountPath {
-				volumeMounts = append(volumeMounts, volumeMount)
-			} else {
-				saSecret = volumeMount.Name
+
+		for j, volumeMount := range pod.Spec.Containers[i].VolumeMounts {
+			if volumeMount.Name == vSASecret.Name {
+				pod.Spec.Containers[i].VolumeMounts[j].Name = SASecret.Name
 			}
 		}
-		pod.Spec.Containers[i].VolumeMounts = volumeMounts
 	}
 
-	var volumes []corev1.Volume
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name != saSecret {
-			volumes = append(volumes, volume)
+	for i, volume := range pod.Spec.Volumes {
+		if volume.Name == vSASecret.Name {
+			pod.Spec.Volumes[i].Name = SASecret.Name
+			pod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
 		}
 	}
-	pod.Spec.Volumes = volumes
 }
 
 func MutateService(newService *corev1.Service) {
