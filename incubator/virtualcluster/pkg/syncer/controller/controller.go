@@ -277,6 +277,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.Pod{}
 	case *v1.Secret:
 		return &v1.Secret{}
+	case *v1.Service:
+		return &v1.Service{}
 	case *v1.ServiceAccount:
 		return &v1.ServiceAccount{}
 	default:
