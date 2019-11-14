@@ -30,8 +30,9 @@ type TenantNamespaceSpec struct {
 
 // TenantNamespaceStatus defines the observed state of TenantNamespace
 type TenantNamespaceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// The namespace that the tenantnamespace CR owns.
+	// +optional
+	OwnedNamespace string `json:"ownedNamespace,omitempty"`
 }
 
 // +genclient

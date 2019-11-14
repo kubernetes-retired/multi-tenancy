@@ -217,6 +217,23 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		}
 	}
 
+	// Update status
+	instanceClone := instance.DeepCopy()
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		instanceClone.Status.OwnedNamespace = tenantNsName
+		updateErr := r.Update(context.TODO(), instanceClone)
+		if updateErr == nil {
+			return nil
+		}
+		if err := r.Get(context.TODO(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, instanceClone); err != nil {
+			log.Info("Fail to fetch tenantNamespace CR on update", "tenantNamespace", instance.Name)
+		}
+		return updateErr
+	})
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Update tenant clusterrule to allow tenant admins to access the tenant namespace.
 	cr := &rbacv1.ClusterRole{}
 	if err = r.Get(context.TODO(), types.NamespacedName{Name: fmt.Sprintf("%s-tenant-admin-role", tenantName)}, cr); err != nil {

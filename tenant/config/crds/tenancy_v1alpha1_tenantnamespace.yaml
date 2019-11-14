@@ -34,6 +34,10 @@ spec:
               type: string
           type: object
         status:
+          properties:
+            ownedNamespace:
+              description: The namespace that the tenantnamespace CR owns.
+              type: string
           type: object
   version: v1alpha1
 status:
