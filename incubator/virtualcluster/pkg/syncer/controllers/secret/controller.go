@@ -18,11 +18,11 @@ package secret
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
 
@@ -32,20 +32,23 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 type controller struct {
-	secretClient                 v1core.SecretsGetter
+	client                       v1core.CoreV1Interface
+	secretInformer               coreinformers.SecretInformer
 	multiClusterSecretController *sc.MultiClusterController
 }
 
 func Register(
-	secretClient v1core.SecretsGetter,
+	secretClient v1core.CoreV1Interface,
 	secretInformer coreinformers.SecretInformer,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		secretClient: secretClient,
+		client:         secretClient,
+		secretInformer: secretInformer,
 	}
 
 	// Create the multi cluster secret controller
@@ -58,26 +61,8 @@ func Register(
 	c.multiClusterSecretController = multiClusterSecretController
 	controllerManager.AddController(multiClusterSecretController)
 
-	secretInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.backPopulate,
-		},
-	)
-
 	// Register the controller as cluster change listener
 	listener.AddListener(c)
-}
-
-func (c *controller) backPopulate(obj interface{}) {
-	secret := obj.(*v1.Secret)
-	clusterName, namespace := conversion.GetOwner(secret)
-	if len(clusterName) == 0 {
-		return
-	}
-	_, err := c.multiClusterSecretController.Get(clusterName, namespace, secret.Name)
-	if errors.IsNotFound(err) {
-		return
-	}
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -107,21 +92,77 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
+	switch secret.Type {
+	case v1.SecretTypeServiceAccountToken:
+		return c.reconcileServiceAccountSecretUpdate(cluster, namespace, name, secret)
+	default:
+		return c.reconcileNormalSecretCreate(cluster, namespace, name, secret)
+	}
+}
+
+func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+
+	saName := secret.Annotations[v1.ServiceAccountNameKey]
+
+	pSecret, err := utils.GetSecret(c.client, targetNamespace, saName)
+	if err != nil {
+		return err
+	}
+
+	needUpdate := false
+
+	if pSecret.Labels[conversion.SecretSyncStatusKey] != conversion.SecretSyncStatusReady {
+		needUpdate = true
+		if len(pSecret.Labels) == 0 {
+			pSecret.Labels = make(map[string]string)
+		}
+		pSecret.Labels[conversion.SecretSyncStatusKey] = conversion.SecretSyncStatusReady
+	}
+
+	if !equality.Semantic.DeepEqual(secret.Data, pSecret.Data) {
+		needUpdate = true
+		pSecret.Data = secret.Data
+	}
+
+	if !needUpdate {
+		return nil
+	}
+
+	_, err = c.client.Secrets(targetNamespace).Update(pSecret)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *controller) reconcileNormalSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, secret)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.secretClient.Secrets(targetNamespace).Create(newObj.(*v1.Secret))
+	_, err = c.client.Secrets(targetNamespace).Create(newObj.(*v1.Secret))
 	if errors.IsAlreadyExists(err) {
 		klog.Infof("secret %s/%s of cluster %s already exist in super master", namespace, name, cluster)
 		return nil
 	}
+
 	return err
 }
 
 func (c *controller) reconcileSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
+	switch secret.Type {
+	case v1.SecretTypeServiceAccountToken:
+		return c.reconcileServiceAccountSecretUpdate(cluster, namespace, name, secret)
+	default:
+		return c.reconcileNormalSecretUpdate(cluster, namespace, name, secret)
+	}
+}
+
+func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
+	// TODO: calculate the diff excluding the metadata diff and update the super master one.
 	return nil
 }
 
@@ -130,7 +171,7 @@ func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secr
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &conversion.DefaultDeletionPolicy,
 	}
-	err := c.secretClient.Secrets(targetNamespace).Delete(name, opts)
+	err := c.client.Secrets(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("secret %s/%s of cluster is not found in super master", namespace, name)
 		return nil

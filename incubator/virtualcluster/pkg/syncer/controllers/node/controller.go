@@ -68,8 +68,8 @@ func Register(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.backPopulate,
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				newNode := newObj.(*v1.Pod)
-				oldNode := oldObj.(*v1.Pod)
+				newNode := newObj.(*v1.Node)
+				oldNode := oldObj.(*v1.Node)
 				if newNode.ResourceVersion == oldNode.ResourceVersion {
 					return
 				}

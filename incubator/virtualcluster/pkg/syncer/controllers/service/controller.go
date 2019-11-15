@@ -96,6 +96,9 @@ func (c *controller) backPopulate(obj interface{}) {
 	}
 	var client *clientset.Clientset
 	innerCluster := c.multiClusterServiceController.GetCluster(clusterName)
+	if innerCluster == nil {
+		return
+	}
 	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
 	if err != nil {
 		return
@@ -111,6 +114,7 @@ func (c *controller) backPopulate(obj interface{}) {
 			klog.Errorf("failed to update service %s/%s of cluster %s %v", vService.Namespace, vService.Name, clusterName, err)
 			return
 		}
+		return
 	}
 
 	if !equality.Semantic.DeepEqual(vService.Status, service.Status) {

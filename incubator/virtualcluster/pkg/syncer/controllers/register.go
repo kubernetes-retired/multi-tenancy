@@ -26,6 +26,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/pod"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/secret"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/service"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/serviceaccount"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 )
 
@@ -34,6 +35,7 @@ func Register(client clientset.Interface, informerFactory informers.SharedInform
 	pod.Register(client.CoreV1(), informerFactory.Core().V1().Pods(), controllerManager)
 	configmap.Register(client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
 	secret.Register(client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)
+	serviceaccount.Register(client.CoreV1(), informerFactory.Core().V1().ServiceAccounts(), controllerManager)
 	node.Register(client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
 	service.Register(client.CoreV1(), informerFactory.Core().V1().Services(), controllerManager)
 }
