@@ -21,12 +21,42 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy
 
 ## Basic Usage
 
-Use the following cmd to create a tenant CR. A tenant admin namespace `tenant1admin` will be created.
+As a cluster admin, use the following cmd to create a tenant CR. A tenant admin namespace `tenant1admin` will be created.
 ```
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
 ```
 
-Use the following cmd to create a tenantnamespace CR. A tenant namespace `t1-ns1` will be created.
+Create a testing service account, say `t1-admin1` in any namespace, to mimic a tenant admin. (This [script]( https://gist.github.com/innovia/fbba8259042f71db98ea8d4ad19bd708) helps to create SA with corresponding KubeConfig file)
+
+Then you can edit the tenant CR and add `t1-admin1` to the tenantAdmins list
 ```
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
+kubectl edit tenant tenant-sample
 ```
+
+```
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: Tenant
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: tenant-sample
+spec:
+  # Add fields here
+  tenantAdminNamespaceName: "tenant1admin"
+  tenantAdmins:
+    - kind: ServiceAccount
+      name: t1-admin1
+      namespace: XXXXX
+``` 
+
+Once `t1-admin1` is added, tenant controller will generate the following RBAC settings:
+* `tenant-sample-tenant-admin-role` cluster role and `tenant-sample-tenant-admins-rolebinding` cluster rolebindings, which allow `t1-admin1` to access `tenant-sample` CR and `tenant1admin` namespace.
+* `tenant-admin-role` role and `tenant-admins-rolebinding` rolebinding in `tenant1admin` namespace, which allow `t1-admin1` to create/update/delete tenantnamespace CR in `tenant1admin` namespace. 
+
+`t1-admin1` can do self service namespace creation by creating a tenantnamespace CR in `tenant1admin` namespace:
+```
+KUBECONFIG=$PATH_TO_T1_ADMIN1_KUBECONFIG kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
+```
+Tenantnamespace controller will create a `t1-ns1` namespace and update `tenant-sample-tenant-admin-role` cluster role to allow all cluster admins to access `t1-ns1` namespace.
+
+
