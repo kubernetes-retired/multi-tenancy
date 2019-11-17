@@ -26,7 +26,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
+	"k8s.io/kubernetes/pkg/kubelet/envvars"
 )
 
 const (
@@ -36,9 +39,14 @@ const (
 	SecretSyncStatusKey      = "tenancy.x-k8s.io/secret.sync.status"
 	SecretSyncStatusNotReady = "NotReady"
 	SecretSyncStatusReady    = "Ready"
+
+	masterServiceNamespace = metav1.NamespaceDefault
 )
 
-var DefaultDeletionPolicy = metav1.DeletePropagationBackground
+var (
+	DefaultDeletionPolicy = metav1.DeletePropagationBackground
+	masterServices        = sets.NewString("kubernetes")
+)
 
 func ToSuperMasterNamespace(cluster, ns string) string {
 	targetNamespace := strings.Join([]string{cluster, ns}, "-")
@@ -116,11 +124,18 @@ func resetMetadata(obj metav1.Object) {
 
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret) {
+func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []v1.Service) {
 	pod.Status = corev1.PodStatus{}
 	pod.Spec.NodeName = ""
 
+	// setup env var map
+	serviceEnv := getServiceEnvVarMap(pod.Namespace, *pod.Spec.EnableServiceLinks, services)
+
 	for i := range pod.Spec.Containers {
+		// Inject env var from service
+		// 1. Do nothing if it conflicts with user-defined one.
+		// 2. Add remaining service environment vars
+		envNameMap := make(map[string]struct{})
 		for j, env := range pod.Spec.Containers[i].Env {
 			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
 				pod.Spec.Containers[i].Env[j].ValueFrom = nil
@@ -129,6 +144,12 @@ func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret
 			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.namespace" {
 				pod.Spec.Containers[i].Env[j].ValueFrom = nil
 				pod.Spec.Containers[i].Env[j].Value = namespace
+			}
+			envNameMap[env.Name] = struct{}{}
+		}
+		for k, v := range serviceEnv {
+			if _, exists := envNameMap[k]; !exists {
+				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, v1.EnvVar{Name: k, Value: v})
 			}
 		}
 
@@ -145,6 +166,45 @@ func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret
 			pod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
 		}
 	}
+}
+
+func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []v1.Service) map[string]string {
+	var (
+		serviceMap = make(map[string]*v1.Service)
+		m          = make(map[string]string)
+	)
+
+	// project the services in namespace ns onto the master services
+	for i := range services {
+		service := services[i]
+		// ignore services where ClusterIP is "None" or empty
+		if !v1helper.IsServiceIPSet(&service) {
+			continue
+		}
+		serviceName := service.Name
+
+		// We always want to add environment variabled for master services
+		// from the master service namespace, even if enableServiceLinks is false.
+		// We also add environment variables for other services in the same
+		// namespace, if enableServiceLinks is true.
+		if service.Namespace == masterServiceNamespace && masterServices.Has(serviceName) {
+			if _, exists := serviceMap[serviceName]; !exists {
+				serviceMap[serviceName] = &service
+			}
+		} else if service.Namespace == ns && enableServiceLinks {
+			serviceMap[serviceName] = &service
+		}
+	}
+
+	var mappedServices []*v1.Service
+	for key := range serviceMap {
+		mappedServices = append(mappedServices, serviceMap[key])
+	}
+
+	for _, e := range envvars.FromServices(mappedServices) {
+		m[e.Name] = e.Value
+	}
+	return m
 }
 
 func MutateService(newService *corev1.Service) {
