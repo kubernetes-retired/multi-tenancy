@@ -70,9 +70,15 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 		}(co)
 	}
 
-	wg.Wait()
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
 
 	select {
+	case <-doneCh:
+		return nil
 	case <-stop:
 		return nil
 	case err := <-errCh:
