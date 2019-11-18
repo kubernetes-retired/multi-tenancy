@@ -17,7 +17,6 @@ package subcmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,6 +49,9 @@ const (
 
 // Create creates an object based on the file yamlPath
 func Create(yamlPath, vcKbCfg string, minikube bool) error {
+	if _, err := os.Stat(vcKbCfg); err == nil {
+		return errors.Wrapf(err, "--vckbcfg %s file exists")
+	}
 	if yamlPath == "" {
 		return errors.New("please specify the path of the virtualcluster yaml file")
 	}
@@ -122,7 +125,7 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 	log.Println("apiserver is ready")
 
 	// poll controller-manager StatefulSet
-	err = pollStatefulSet("apiserver", vc.Namespace, cli)
+	err = pollStatefulSet("controller-manager", vc.Namespace, cli)
 	if err != nil {
 		return err
 	}
