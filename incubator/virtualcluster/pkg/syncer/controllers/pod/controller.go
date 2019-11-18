@@ -21,22 +21,21 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/node"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
@@ -45,6 +44,11 @@ import (
 type controller struct {
 	client                    v1core.CoreV1Interface
 	multiClusterPodController *sc.MultiClusterController
+
+	workers   int
+	podLister listersv1.PodLister
+	queue     workqueue.RateLimitingInterface
+	podSynced cache.InformerSynced
 }
 
 func Register(
@@ -53,7 +57,9 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client: client,
+		client:  client,
+		queue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
+		workers: 1,
 	}
 
 	// Create the multi cluster pod controller
@@ -64,8 +70,9 @@ func Register(
 		return
 	}
 	c.multiClusterPodController = multiClusterPodController
-	controllerManager.AddController(multiClusterPodController)
 
+	c.podLister = podInformer.Lister()
+	c.podSynced = podInformer.Informer().HasSynced
 	podInformer.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -84,7 +91,7 @@ func Register(
 				}
 			},
 			Handler: cache.ResourceEventHandlerFuncs{
-				AddFunc: c.backPopulate,
+				AddFunc: c.enqueuePod,
 				UpdateFunc: func(oldObj, newObj interface{}) {
 					newPod := newObj.(*v1.Pod)
 					oldPod := oldObj.(*v1.Pod)
@@ -94,71 +101,27 @@ func Register(
 						return
 					}
 
-					c.backPopulate(newObj)
+					c.enqueuePod(newObj)
 				},
 			},
 		},
 	)
 
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
 }
 
-func (c *controller) backPopulate(obj interface{}) {
-	pod := obj.(*v1.Pod)
-	clusterName, namespace := conversion.GetOwner(pod)
-	if len(clusterName) == 0 {
+func (c *controller) enqueuePod(obj interface{}) {
+	var key string
+	var err error
+	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+		utilruntime.HandleError(err)
 		return
 	}
-	klog.Infof("back populate pod %s/%s in cluster %s", pod.Name, namespace, clusterName)
-	vPodObj, err := c.multiClusterPodController.Get(clusterName, namespace, pod.Name)
-	if err != nil {
-		klog.Errorf("could not find pod %s/%s pod in controller cache %v", pod.Name, namespace, err)
-		return
-	}
-	var client *clientset.Clientset
-	innerCluster := c.multiClusterPodController.GetCluster(clusterName)
-	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return
-	}
+	c.queue.Add(key)
+}
 
-	vPod := vPodObj.(*v1.Pod)
-	if vPod.Spec.NodeName != pod.Spec.NodeName {
-		n, err := c.client.Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
-		if err != nil {
-			klog.Errorf("failed to get node %s from super master: %v", pod.Spec.NodeName, err)
-			return
-		}
-
-		_, err = client.CoreV1().Nodes().Create(node.NewVirtualNode(n))
-		if errors.IsAlreadyExists(err) {
-			klog.Warningf("virtual node %s already exists", vPod.Spec.NodeName)
-		}
-
-		err = client.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      vPod.Name,
-				Namespace: vPod.Namespace,
-			},
-			Target: v1.ObjectReference{
-				Kind:       "Node",
-				Name:       pod.Spec.NodeName,
-				APIVersion: "v1",
-			},
-		})
-		if err != nil {
-			klog.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pod.Spec.NodeName, err)
-		}
-		return
-	}
-	if !equality.Semantic.DeepEqual(vPod.Status, pod.Status) {
-		newPod := vPod.DeepCopy()
-		newPod.Status = pod.Status
-		if _, err = client.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
-			klog.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
-		}
-	}
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterPodController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {

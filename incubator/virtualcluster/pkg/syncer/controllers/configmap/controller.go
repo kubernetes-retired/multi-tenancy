@@ -22,14 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
-
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -56,28 +53,16 @@ func Register(
 		return
 	}
 	c.multiClusterConfigMapController = multiClusterConfigMapController
-	controllerManager.AddController(multiClusterConfigMapController)
 
-	configMapInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.backPopulate,
-		},
-	)
-
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
 }
 
-func (c *controller) backPopulate(obj interface{}) {
-	configMap := obj.(*v1.ConfigMap)
-	clusterName, namespace := conversion.GetOwner(configMap)
-	if len(clusterName) == 0 {
-		return
-	}
-	_, err := c.multiClusterConfigMapController.Get(clusterName, namespace, configMap.Name)
-	if errors.IsNotFound(err) {
-		return
-	}
+func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterConfigMapController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
