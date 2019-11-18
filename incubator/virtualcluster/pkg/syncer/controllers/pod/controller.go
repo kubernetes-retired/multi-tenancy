@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -222,7 +223,18 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return fmt.Errorf("failed to get secret: %v", err)
 	}
 
-	conversion.MutatePod(targetNamespace, pPod, vSecret, secret)
+	// list service in tenant ns and inject them into the pod
+	ca, err := innerCluster.GetCache()
+	if err != nil {
+		return fmt.Errorf("failed to get cluster %s cache: %v", cluster, err)
+	}
+	services := v1.ServiceList{}
+	err = ca.List(context.Background(), &services)
+	if err != nil {
+		return fmt.Errorf("failed to list services from cluster %s cache: %v", cluster, err)
+	}
+
+	conversion.MutatePod(targetNamespace, pPod, vSecret, secret, services.Items)
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
