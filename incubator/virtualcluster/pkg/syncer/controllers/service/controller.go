@@ -30,6 +30,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -153,7 +154,7 @@ func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, ser
 func (c *controller) reconcileServiceRemove(cluster, namespace, name string, service *v1.Service) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {

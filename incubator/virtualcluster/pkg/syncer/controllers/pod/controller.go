@@ -34,6 +34,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -59,7 +60,7 @@ func Register(
 	c := &controller{
 		client:  client,
 		queue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers: 1,
+		workers: constants.DefaultControllerWorkers,
 	}
 
 	// Create the multi cluster pod controller
@@ -171,7 +172,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return fmt.Errorf("failed to get secret: %v", err)
 	}
 
-	if secret.Labels[conversion.SecretSyncStatusKey] != conversion.SecretSyncStatusReady {
+	if secret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
 		return fmt.Errorf("secret for pod is not ready")
 	}
 
@@ -214,7 +215,7 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1
 func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1.Pod) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.client.Pods(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {

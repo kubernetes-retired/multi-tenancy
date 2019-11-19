@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -113,7 +114,7 @@ func (c *controller) reconcileNamespaceUpdate(cluster, name string, namespace *v
 func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	targetName := strings.Join([]string{cluster, name}, "-")
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.namespaceClient.Namespaces().Delete(targetName, opts)
 	if errors.IsNotFound(err) {
