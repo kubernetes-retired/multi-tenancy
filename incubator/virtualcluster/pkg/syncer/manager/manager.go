@@ -16,7 +16,10 @@ limitations under the License.
 
 package manager
 
-import "sync"
+import (
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	"sync"
+)
 
 // ControllerManager manages number of controllers. It starts their caches, waits for those to sync,
 // then starts the controllers.
@@ -32,12 +35,15 @@ func New() *ControllerManager {
 
 // Controller is the interface used by ControllerManager to start the controllers and get their caches (beforehand).
 type Controller interface {
-	Start(stop <-chan struct{}) error
+	listener.ClusterChangeListener
+	StartUWS(stopCh <-chan struct{}) error
+	StartDWS(stopCh <-chan struct{}) error
 }
 
 // AddController adds a controller to the ControllerManager.
 func (m *ControllerManager) AddController(c Controller) {
 	m.controllers[c] = struct{}{}
+	listener.AddListener(c)
 }
 
 // Start gets all the unique caches of the controllers it manages, starts them,
@@ -47,20 +53,32 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 	errCh := make(chan error)
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(m.controllers))
+	wg.Add(len(m.controllers) * 2)
 
 	for co := range m.controllers {
 		go func(co Controller) {
 			defer wg.Done()
-			if err := co.Start(stop); err != nil {
+			if err := co.StartDWS(stop); err != nil {
+				errCh <- err
+			}
+		}(co)
+		go func(co Controller) {
+			defer wg.Done()
+			if err := co.StartUWS(stop); err != nil {
 				errCh <- err
 			}
 		}(co)
 	}
 
-	wg.Wait()
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
 
 	select {
+	case <-doneCh:
+		return nil
 	case <-stop:
 		return nil
 	case err := <-errCh:

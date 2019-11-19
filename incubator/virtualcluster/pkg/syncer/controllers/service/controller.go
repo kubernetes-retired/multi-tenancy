@@ -20,26 +20,31 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	restclient "k8s.io/client-go/rest"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"k8s.io/apimachinery/pkg/api/equality"
 )
 
 type controller struct {
 	serviceClient                 v1core.ServicesGetter
 	multiClusterServiceController *sc.MultiClusterController
+
+	workers       int
+	serviceLister listersv1.ServiceLister
+	queue         workqueue.RateLimitingInterface
+	serviceSynced cache.InformerSynced
 }
 
 func Register(
@@ -49,6 +54,8 @@ func Register(
 ) {
 	c := &controller{
 		serviceClient: serviceClient,
+		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_service"),
+		workers:       constants.DefaultControllerWorkers,
 	}
 
 	// Create the multi cluster service controller
@@ -59,11 +66,12 @@ func Register(
 		return
 	}
 	c.multiClusterServiceController = multiClusterServiceController
-	controllerManager.AddController(multiClusterServiceController)
 
+	c.serviceLister = serviceInformer.Lister()
+	c.serviceSynced = serviceInformer.Informer().HasSynced
 	serviceInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.backPopulate,
+			AddFunc: c.enqueueService,
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				newService := newObj.(*v1.Service)
 				oldService := oldObj.(*v1.Service)
@@ -73,59 +81,26 @@ func Register(
 					return
 				}
 
-				c.backPopulate(newObj)
+				c.enqueueService(newObj)
 			},
 		},
 	)
 
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
 }
 
-func (c *controller) backPopulate(obj interface{}) {
-	service := obj.(*v1.Service)
-	clusterName, namespace := conversion.GetOwner(service)
-	if len(clusterName) == 0 {
+func (c *controller) enqueueService(obj interface{}) {
+	var key string
+	var err error
+	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+		utilruntime.HandleError(err)
 		return
 	}
-	klog.Infof("back populate service %s/%s in cluster %s", service.Name, namespace, clusterName)
-	vServiceObj, err := c.multiClusterServiceController.Get(clusterName, namespace, service.Name)
-	if errors.IsNotFound(err) {
-		klog.Errorf("could not find service %s/%s pod in controller cache %v", service.Name, namespace, err)
-		return
-	}
-	var client *clientset.Clientset
-	innerCluster := c.multiClusterServiceController.GetCluster(clusterName)
-	if innerCluster == nil {
-		return
-	}
-	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return
-	}
+	c.queue.Add(key)
+}
 
-	vService := vServiceObj.(*v1.Service)
-	if vService.Spec.ClusterIP != service.Spec.ClusterIP || !equality.Semantic.DeepEqual(vService.Spec.Ports, service.Spec.Ports) {
-		newService := vService.DeepCopy()
-		newService.Spec.ClusterIP = service.Spec.ClusterIP
-		newService.Spec.Ports = service.Spec.Ports
-		_, err = client.CoreV1().Services(vService.Namespace).Update(newService)
-		if err != nil {
-			klog.Errorf("failed to update service %s/%s of cluster %s %v", vService.Namespace, vService.Name, clusterName, err)
-			return
-		}
-		return
-	}
-
-	if !equality.Semantic.DeepEqual(vService.Status, service.Status) {
-		newService := vService.DeepCopy()
-		newService.Status = service.Status
-		_, err = client.CoreV1().Services(vService.Namespace).UpdateStatus(newService)
-		if err != nil {
-			klog.Errorf("failed to update service %s/%s of cluster %s %v", vService.Namespace, vService.Name, clusterName, err)
-			return
-		}
-	}
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterServiceController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -179,7 +154,7 @@ func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, ser
 func (c *controller) reconcileServiceRemove(cluster, namespace, name string, service *v1.Service) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {

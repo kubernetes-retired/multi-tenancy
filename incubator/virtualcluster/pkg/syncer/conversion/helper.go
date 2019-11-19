@@ -30,23 +30,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
+
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 const (
-	LabelCluster = "tenancy.x-k8s.io/cluster"
-	LabelUID     = "tenancy.x-k8s.io/uid"
-
-	SecretSyncStatusKey      = "tenancy.x-k8s.io/secret.sync.status"
-	SecretSyncStatusNotReady = "NotReady"
-	SecretSyncStatusReady    = "Ready"
-
 	masterServiceNamespace = metav1.NamespaceDefault
 )
 
-var (
-	DefaultDeletionPolicy = metav1.DeletePropagationBackground
-	masterServices        = sets.NewString("kubernetes")
-)
+var masterServices = sets.NewString("kubernetes")
 
 func ToSuperMasterNamespace(cluster, ns string) string {
 	targetNamespace := strings.Join([]string{cluster, ns}, "-")
@@ -63,7 +55,7 @@ func GetOwner(obj runtime.Object) (cluster, namespace string) {
 		return "", ""
 	}
 
-	cluster = meta.GetAnnotations()[LabelCluster]
+	cluster = meta.GetAnnotations()[constants.LabelCluster]
 	namespace = strings.TrimPrefix(meta.GetNamespace(), cluster+"-")
 	return cluster, namespace
 }
@@ -86,8 +78,8 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 	if anno == nil {
 		anno = map[string]string{}
 	}
-	anno[LabelCluster] = cluster
-	anno[LabelUID] = string(uid)
+	anno[constants.LabelCluster] = cluster
+	anno[constants.LabelUID] = string(uid)
 	m.SetAnnotations(anno)
 
 	return target, nil

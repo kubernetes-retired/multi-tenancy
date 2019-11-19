@@ -81,7 +81,9 @@ func New(
 // Run begins watching and downward&upward syncing.
 func (s *Syncer) Run() {
 	go func() {
-		s.controllerManager.Start(s.stopChan)
+		if err := s.controllerManager.Start(s.stopChan); err != nil {
+			klog.V(1).Infof("controller manager exit: %v", err)
+		}
 	}()
 }
 

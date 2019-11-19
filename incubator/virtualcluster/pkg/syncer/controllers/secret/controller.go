@@ -27,9 +27,9 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
@@ -59,10 +59,16 @@ func Register(
 		return
 	}
 	c.multiClusterSecretController = multiClusterSecretController
-	controllerManager.AddController(multiClusterSecretController)
 
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
+}
+
+func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterSecretController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -112,12 +118,12 @@ func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, nam
 
 	needUpdate := false
 
-	if pSecret.Labels[conversion.SecretSyncStatusKey] != conversion.SecretSyncStatusReady {
+	if pSecret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
 		needUpdate = true
 		if len(pSecret.Labels) == 0 {
 			pSecret.Labels = make(map[string]string)
 		}
-		pSecret.Labels[conversion.SecretSyncStatusKey] = conversion.SecretSyncStatusReady
+		pSecret.Labels[constants.SyncStatusKey] = constants.SyncStatusReady
 	}
 
 	if !equality.Semantic.DeepEqual(secret.Data, pSecret.Data) {
@@ -169,7 +175,7 @@ func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string
 func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.client.Secrets(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {

@@ -24,14 +24,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
-
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -58,28 +56,15 @@ func Register(
 		return
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
-	controllerManager.AddController(multiClusterNamespaceController)
-
-	namespaceInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.backPopulate,
-		},
-	)
-
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
 }
 
-func (c *controller) backPopulate(obj interface{}) {
-	ns := obj.(*v1.Namespace)
-	clusterName, namespace := conversion.GetOwner(ns)
-	if len(clusterName) == 0 {
-		return
-	}
-	_, err := c.multiClusterNamespaceController.Get(clusterName, namespace, ns.Name)
-	if errors.IsNotFound(err) {
-		return
-	}
+func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterNamespaceController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -129,7 +114,7 @@ func (c *controller) reconcileNamespaceUpdate(cluster, name string, namespace *v
 func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	targetName := strings.Join([]string{cluster, name}, "-")
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.namespaceClient.Namespaces().Delete(targetName, opts)
 	if errors.IsNotFound(err) {

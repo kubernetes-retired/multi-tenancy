@@ -25,9 +25,9 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -55,10 +55,16 @@ func Register(
 		return
 	}
 	c.multiClusterServiceAccountController = multiClusterSecretController
-	controllerManager.AddController(multiClusterSecretController)
 
-	// Register the controller as cluster change listener
-	listener.AddListener(c)
+	controllerManager.AddController(c)
+}
+
+func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	return c.multiClusterServiceAccountController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -101,7 +107,7 @@ func (c *controller) reconcileServiceAccountCreate(cluster, namespace, name stri
 		if len(sa.Annotations) == 0 {
 			sa.Annotations = make(map[string]string)
 		}
-		sa.Annotations[conversion.LabelCluster] = cluster
+		sa.Annotations[constants.LabelCluster] = cluster
 		_, err = c.client.ServiceAccounts(targetNamespace).Update(sa)
 		return err
 	}
@@ -130,7 +136,7 @@ func (c *controller) reconcileServiceAccountUpdate(cluster, namespace, name stri
 func (c *controller) reconcileServiceAccountRemove(cluster, namespace, name string, secret *v1.ServiceAccount) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &conversion.DefaultDeletionPolicy,
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.client.ServiceAccounts(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
