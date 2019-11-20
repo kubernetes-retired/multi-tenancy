@@ -78,8 +78,13 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, bazName, barName)
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
 
-		// Make sure the bad one wasn't copied.
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+		// Make sure the bad one wasn't copied by the default(old) object controller
+		// and got overwritten by the new object controller.
+		if !newObjectController {
+			Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+		} else {
+			Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		}
 	})
 
 	It("should be removed if the source no longer exists", func() {
@@ -89,8 +94,29 @@ var _ = Describe("Secret", func() {
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
 
 		removeSecret(ctx, fooName, "foo-sec")
+		// Wait 1 second to make sure the propagated objects are removed.
+		time.Sleep(1 * time.Second)
+		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeFalse())
 		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeFalse())
 		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+	})
+
+	It("should overwrite the propagated ones if the source is updated", func() {
+		if !newObjectController {
+			return
+		}
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeFalse())
+		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeFalse())
+		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeFalse())
+
+		modifySecret(ctx, fooName, "foo-sec")
+		// Wait 1 second to make sure the updated source get propagated.
+		time.Sleep(1 * time.Second)
+		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeTrue())
+		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeTrue())
+		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeTrue())
 	})
 })
 
@@ -167,6 +193,16 @@ func modifySecret(ctx context.Context, nsName, secretName string) {
 	labels["modify"] = "make-a-change"
 	sec.SetLabels(labels)
 	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
+}
+
+func isModified(ctx context.Context, nsName, secretName string) bool {
+	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
+	sec := &corev1.Secret{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+
+	labels := sec.GetLabels()
+	_, ok := labels["modify"]
+	return ok
 }
 
 func removeSecret(ctx context.Context, nsName, secretName string) {

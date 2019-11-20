@@ -43,12 +43,14 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, newObjectCont
 func createObjectReconciler(newObjectController bool, mgr ctrl.Manager, f *forest.Forest, gvk schema.GroupVersionKind) (NamespaceSyncer, error) {
 	if newObjectController {
 		or := &ObjectReconcilerNew{
-			Client: mgr.GetClient(),
-			Log:    ctrl.Log.WithName("controllers").WithName(gvk.Kind),
-			Forest: f,
-			GVK:    gvk,
+			Client:   mgr.GetClient(),
+			Log:      ctrl.Log.WithName("controllers").WithName(gvk.Kind),
+			Forest:   f,
+			GVK:      gvk,
+			Affected: make(chan event.GenericEvent),
 		}
-		return or, or.SetupWithManager(mgr)
+		// TODO figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
+		return or, or.SetupWithManager(mgr, 10)
 	}
 
 	or := &ObjectReconciler{

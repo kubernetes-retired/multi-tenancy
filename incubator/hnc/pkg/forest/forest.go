@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
@@ -51,16 +53,20 @@ func (f *Forest) Get(nm string) *Namespace {
 		return ns
 	}
 	ns = &Namespace{
-		forest:     f,
-		name:       nm,
-		children:   namedNamespaces{},
-		conditions: conditions{},
+		forest:          f,
+		name:            nm,
+		children:        namedNamespaces{},
+		conditions:      conditions{},
+		originalObjects: objects{},
 	}
 	f.namespaces[nm] = ns
 	return ns
 }
 
 type namedNamespaces map[string]*Namespace
+
+// TODO Store source objects by GK in the forest - https://github.com/kubernetes-sigs/multi-tenancy/issues/281
+type objects map[schema.GroupVersionKind]map[string]*unstructured.Unstructured
 type conditions map[string][]condition
 
 // Local represents conditions that originated from this namespace
@@ -74,6 +80,10 @@ type Namespace struct {
 	parent   *Namespace
 	children namedNamespaces
 	exists   bool
+
+	// originalObjects store the objects created by users, identified by GVK and name.
+	// It serves as the source of truth for object controllers to propagate objects.
+	originalObjects objects
 
 	// conditions store conditions so that object propagation can be disabled if there's a problem
 	// on this namespace.
@@ -225,6 +235,71 @@ func (ns *Namespace) AncestryNames(other *Namespace) []string {
 
 	// Add ourselves to the ancestry
 	return append(ancestry, ns.name)
+}
+
+// SetOriginalObject updates or creates the original object in the namespace in the forest.
+func (ns *Namespace) SetOriginalObject(obj *unstructured.Unstructured) {
+	gvk := obj.GroupVersionKind()
+	name := obj.GetName()
+	_, ok := ns.originalObjects[gvk]
+	if !ok {
+		ns.originalObjects[gvk] = map[string]*unstructured.Unstructured{}
+	}
+	ns.originalObjects[gvk][name] = obj
+}
+
+// GetOriginalObject gets an original object from a key string. It returns nil, if the key doesn't exist.
+func (ns *Namespace) GetOriginalObject(gvk schema.GroupVersionKind, key string) *unstructured.Unstructured {
+	return ns.originalObjects[gvk][key]
+}
+
+// HasOriginalObject returns if the namespace has an original object.
+func (ns *Namespace) HasOriginalObject(gvk schema.GroupVersionKind, oo string) bool {
+	return ns.GetOriginalObject(gvk, oo) != nil
+}
+
+// DeleteOriginalObject deletes an original object from a key string.
+func (ns *Namespace) DeleteOriginalObject(gvk schema.GroupVersionKind, key string) {
+	delete(ns.originalObjects[gvk], key)
+	// Garbage collection
+	if len(ns.originalObjects[gvk]) == 0 {
+		delete(ns.originalObjects, gvk)
+	}
+}
+
+// GetOriginalObjects returns all original objects in the namespace.
+func (ns *Namespace) GetOriginalObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
+	o := []*unstructured.Unstructured{}
+	for _, obj := range ns.originalObjects[gvk] {
+		o = append(o, obj)
+	}
+	return o
+}
+
+// GetPropagatedObjects returns all original copies in the ancestors.
+func (ns *Namespace) GetPropagatedObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
+	o := []*unstructured.Unstructured{}
+	ans := ns.AncestryNames(nil)
+	for _, n := range ans {
+		// Exclude the original objects in this namespace
+		if n == ns.name {
+			continue
+		}
+		o = append(o, ns.forest.Get(n).GetOriginalObjects(gvk)...)
+	}
+	return o
+}
+
+// GetSource returns the original copy in the ancestors if it exists.
+// Otherwise, return nil.
+func (ns *Namespace) GetSource(gvk schema.GroupVersionKind, name string) *unstructured.Unstructured {
+	pos := ns.GetPropagatedObjects(gvk)
+	for _, po := range pos {
+		if po.GetName() == name {
+			return po
+		}
+	}
+	return nil
 }
 
 func (ns *Namespace) IsAncestor(other *Namespace) bool {
