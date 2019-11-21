@@ -51,7 +51,7 @@ func getTenantResoureQuotas(t configutil.TenantSpec) []string {
 	framework.ExpectNoError(err)
 
 	for _, resourcequota := range resourcequotaList.Items {
-		for name, _ := range resourcequota.Spec.Hard {
+		for name := range resourcequota.Spec.Hard {
 			if strings.Contains(tmpList, name.String()) {
 				continue
 			}
@@ -76,7 +76,7 @@ func getResourcequotaFromNodes(nodeList corev1.NodeList) []string {
 	var resourceNameList []string
 	var tmpList string
 	for _, node := range nodeList.Items {
-		for resourceName, _ := range node.Status.Capacity {
+		for resourceName := range node.Status.Capacity {
 			if strings.Contains(tmpList, resourceName.String()) {
 				continue
 			}
