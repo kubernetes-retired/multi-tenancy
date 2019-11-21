@@ -20,13 +20,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	listersv1 "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
-
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
@@ -40,11 +35,6 @@ import (
 type controller struct {
 	serviceClient                 v1core.ServicesGetter
 	multiClusterServiceController *sc.MultiClusterController
-
-	workers       int
-	serviceLister listersv1.ServiceLister
-	queue         workqueue.RateLimitingInterface
-	serviceSynced cache.InformerSynced
 }
 
 func Register(
@@ -54,8 +44,6 @@ func Register(
 ) {
 	c := &controller{
 		serviceClient: serviceClient,
-		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_service"),
-		workers:       constants.DefaultControllerWorkers,
 	}
 
 	// Create the multi cluster service controller
@@ -67,36 +55,11 @@ func Register(
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
-	c.serviceLister = serviceInformer.Lister()
-	c.serviceSynced = serviceInformer.Informer().HasSynced
-	serviceInformer.Informer().AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: c.enqueueService,
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				newService := newObj.(*v1.Service)
-				oldService := oldObj.(*v1.Service)
-				if newService.ResourceVersion == oldService.ResourceVersion {
-					// Periodic resync will send update events for all known Deployments.
-					// Two different versions of the same Deployment will always have different RVs.
-					return
-				}
-
-				c.enqueueService(newObj)
-			},
-		},
-	)
-
 	controllerManager.AddController(c)
 }
 
-func (c *controller) enqueueService(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
-	c.queue.Add(key)
+func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

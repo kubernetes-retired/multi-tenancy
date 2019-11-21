@@ -127,7 +127,7 @@ func resetMetadata(obj metav1.Object) {
 
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []v1.Service) {
+func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service) {
 	pod.Status = corev1.PodStatus{}
 	pod.Spec.NodeName = ""
 
@@ -171,7 +171,7 @@ func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret
 	}
 }
 
-func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []v1.Service) map[string]string {
+func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []*v1.Service) map[string]string {
 	var (
 		serviceMap = make(map[string]*v1.Service)
 		m          = make(map[string]string)
@@ -181,7 +181,7 @@ func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []v1.Servi
 	for i := range services {
 		service := services[i]
 		// ignore services where ClusterIP is "None" or empty
-		if !v1helper.IsServiceIPSet(&service) {
+		if !v1helper.IsServiceIPSet(service) {
 			continue
 		}
 		serviceName := service.Name
@@ -192,10 +192,10 @@ func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []v1.Servi
 		// namespace, if enableServiceLinks is true.
 		if service.Namespace == masterServiceNamespace && masterServices.Has(serviceName) {
 			if _, exists := serviceMap[serviceName]; !exists {
-				serviceMap[serviceName] = &service
+				serviceMap[serviceName] = service
 			}
 		} else if service.Namespace == ns && enableServiceLinks {
-			serviceMap[serviceName] = &service
+			serviceMap[serviceName] = service
 		}
 	}
 

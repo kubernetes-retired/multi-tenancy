@@ -43,7 +43,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 	klog.Infof("starting pod upward syncer")
 
-	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 

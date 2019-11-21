@@ -33,7 +33,7 @@ import (
 
 func Register(client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
 	namespace.Register(client.CoreV1(), informerFactory.Core().V1().Namespaces(), controllerManager)
-	pod.Register(client.CoreV1(), informerFactory.Core().V1().Pods(), controllerManager)
+	pod.Register(client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	configmap.Register(client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
 	secret.Register(client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)
 	serviceaccount.Register(client.CoreV1(), informerFactory.Core().V1().ServiceAccounts(), controllerManager)

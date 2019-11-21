@@ -17,12 +17,12 @@ limitations under the License.
 package pod
 
 import (
-	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -45,22 +45,25 @@ import (
 type controller struct {
 	client                    v1core.CoreV1Interface
 	multiClusterPodController *sc.MultiClusterController
+	informer                  coreinformers.Interface
 
-	workers   int
-	podLister listersv1.PodLister
-	queue     workqueue.RateLimitingInterface
-	podSynced cache.InformerSynced
+	workers       int
+	podLister     listersv1.PodLister
+	queue         workqueue.RateLimitingInterface
+	podSynced     cache.InformerSynced
+	serviceSynced cache.InformerSynced
 }
 
 func Register(
 	client v1core.CoreV1Interface,
-	podInformer coreinformers.PodInformer,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:  client,
-		queue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers: constants.DefaultControllerWorkers,
+		client:   client,
+		informer: informer,
+		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
+		workers:  constants.DefaultControllerWorkers,
 	}
 
 	// Create the multi cluster pod controller
@@ -72,9 +75,10 @@ func Register(
 	}
 	c.multiClusterPodController = multiClusterPodController
 
-	c.podLister = podInformer.Lister()
-	c.podSynced = podInformer.Informer().HasSynced
-	podInformer.Informer().AddEventHandler(
+	c.podLister = informer.Pods().Lister()
+	c.podSynced = informer.Pods().Informer().HasSynced
+	c.serviceSynced = informer.Services().Informer().HasSynced
+	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
@@ -187,18 +191,16 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return fmt.Errorf("failed to get secret: %v", err)
 	}
 
-	// list service in tenant ns and inject them into the pod
-	ca, err := innerCluster.GetCache()
-	if err != nil {
-		return fmt.Errorf("failed to get cluster %s cache: %v", cluster, err)
-	}
-	services := v1.ServiceList{}
-	err = ca.List(context.Background(), &services)
+	services, err := c.getPodRelatedServices(cluster, pPod)
 	if err != nil {
 		return fmt.Errorf("failed to list services from cluster %s cache: %v", cluster, err)
 	}
 
-	conversion.MutatePod(targetNamespace, pPod, vSecret, secret, services.Items)
+	if len(services) == 0 {
+		return fmt.Errorf("service is not ready")
+	}
+
+	conversion.MutatePod(targetNamespace, pPod, vSecret, secret, services)
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
@@ -206,6 +208,23 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return nil
 	}
 	return err
+}
+
+func (c *controller) getPodRelatedServices(cluster string, pod *v1.Pod) ([]*v1.Service, error) {
+	var services []*v1.Service
+	list, err := c.informer.Services().Lister().Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	services = append(services, list...)
+
+	list, err = c.informer.Services().Lister().Services(pod.Namespace).List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	services = append(services, list...)
+
+	return services, nil
 }
 
 func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1.Pod) error {
