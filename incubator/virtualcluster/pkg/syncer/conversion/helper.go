@@ -31,6 +31,7 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
@@ -39,6 +40,16 @@ const (
 )
 
 var masterServices = sets.NewString("kubernetes")
+
+// ToClusterKey make a unique id for a virtual cluster object.
+// The key uses the format <namespace>-<name> unless <namespace> is empty, then
+// it's just <name>.
+func ToClusterKey(vc *v1alpha1.Virtualcluster) string {
+	if len(vc.GetNamespace()) > 0 {
+		return vc.GetNamespace() + "-" + vc.GetName()
+	}
+	return vc.GetName()
+}
 
 func ToSuperMasterNamespace(cluster, ns string) string {
 	targetNamespace := strings.Join([]string{cluster, ns}, "-")

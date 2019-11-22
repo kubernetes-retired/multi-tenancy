@@ -43,6 +43,7 @@ import (
 // A MultiClusterController can watch multiple resources in multiple clusters. It saves those clusters in a set,
 // so the ControllerManager knows which caches to start and sync before starting the Controller.
 type MultiClusterController struct {
+	sync.Mutex
 	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
 	name string
 
@@ -129,6 +130,8 @@ type WatchOptions struct {
 // in the specified cluster, generating reconcile Requests from the Cluster's context
 // and the watched objects' namespaces and names.
 func (c *MultiClusterController) WatchClusterResource(cluster Cluster, o WatchOptions) error {
+	c.Lock()
+	defer c.Unlock()
 	c.clusters[cluster] = struct{}{}
 	h := &handler.EnqueueRequestForObject{Cluster: cluster.GetClientInfo(), Queue: c.Queue}
 	return cluster.AddEventHandler(c.objectType, h)
@@ -137,6 +140,7 @@ func (c *MultiClusterController) WatchClusterResource(cluster Cluster, o WatchOp
 // Start starts the ClustersController's control loops (as many as MaxConcurrentReconciles) in separate channels
 // and blocks until an empty struct is sent to the stop channel.
 func (c *MultiClusterController) Start(stop <-chan struct{}) error {
+	c.Lock()
 	// pre start all the cluster caches
 	wg := &sync.WaitGroup{}
 	wg.Add(len(c.clusters))
@@ -159,6 +163,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 		}(cl)
 		klog.Infof("successfully sync cache for cluster %s", cl.GetClusterName())
 	}
+	c.Unlock()
 
 	wg.Wait()
 
@@ -180,6 +185,8 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
 	for cluster := range c.clusters {
 		if cluster.GetClusterName() == clusterName {
 			clusterCache, err := cluster.GetCache()
@@ -198,6 +205,8 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 }
 
 func (c *MultiClusterController) GetCluster(clusterName string) Cluster {
+	c.Lock()
+	defer c.Unlock()
 	for cluster, _ := range c.clusters {
 		if cluster.GetClusterName() == clusterName {
 			return cluster
