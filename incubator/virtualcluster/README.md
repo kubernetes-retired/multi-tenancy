@@ -1,5 +1,11 @@
 # Virtual Cluster
 
+## A Short Demo
+
+Following is a short demo by [@zhuangqh](https://github.com/zhuangqh).
+
+[![](http://img.youtube.com/vi/QvpNehTNRyk/0.jpg)](http://www.youtube.com/watch?v=QvpNehTNRyk "vc-demo")
+
 ## How to use
 
 1. Install tenant and tenantnamespace crd
