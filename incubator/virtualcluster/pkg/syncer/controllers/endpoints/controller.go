@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package service
+package endpoints
 
 import (
 	v1 "k8s.io/api/core/v1"
@@ -33,27 +33,26 @@ import (
 )
 
 type controller struct {
-	serviceClient                 v1core.ServicesGetter
-	multiClusterServiceController *sc.MultiClusterController
+	endpointClient                  v1core.EndpointsGetter
+	multiClusterEndpointsController *sc.MultiClusterController
 }
 
 func Register(
-	serviceClient v1core.ServicesGetter,
-	serviceInformer coreinformers.ServiceInformer,
+	endpointsClient v1core.EndpointsGetter,
+	endpointsInformer coreinformers.EndpointsInformer,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		serviceClient: serviceClient,
+		endpointClient: endpointsClient,
 	}
 
-	// Create the multi cluster service controller
 	options := sc.Options{Reconciler: c}
-	multiClusterServiceController, err := sc.NewController("tenant-masters-service-controller", &v1.Service{}, options)
+	multiClusterEndpointsController, err := sc.NewController("tenant-masters-endpoints-controller", &v1.Endpoints{}, options)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster service controller %v", err)
+		klog.Errorf("failed to create multi cluster endpoints controller %v", err)
 		return
 	}
-	c.multiClusterServiceController = multiClusterServiceController
+	c.multiClusterEndpointsController = multiClusterEndpointsController
 
 	controllerManager.AddController(c)
 }
@@ -63,75 +62,74 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterServiceController.Start(stopCh)
+	return c.multiClusterEndpointsController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile service %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.Infof("reconcile endpoints %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
 
 	switch request.Event {
 	case reconciler.AddEvent:
-		err := c.reconcileServiceCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+		err := c.reconcileEndpointsCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.UpdateEvent:
-		err := c.reconcileServiceUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+		err := c.reconcileEndpointsUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.DeleteEvent:
-		err := c.reconcileServiceRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+		err := c.reconcileEndpointsRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	}
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileServiceCreate(cluster, namespace, name string, service *v1.Service) error {
+func (c *controller) reconcileEndpointsCreate(cluster, namespace, name string, ep *v1.Endpoints) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, service)
+	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, ep)
 	if err != nil {
 		return err
 	}
 
-	pService := newObj.(*v1.Service)
-	conversion.MutateService(pService)
+	pEndpoints := newObj.(*v1.Endpoints)
 
-	_, err = c.serviceClient.Services(targetNamespace).Create(pService)
+	_, err = c.endpointClient.Endpoints(targetNamespace).Create(pEndpoints)
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("service %s/%s of cluster %s already exist in super master", namespace, name, cluster)
+		klog.Infof("endpoints %s/%s of cluster %s already exist in super master", namespace, name, cluster)
 		return nil
 	}
 	return err
 }
 
-func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, service *v1.Service) error {
+func (c *controller) reconcileEndpointsUpdate(cluster, namespace, name string, ep *v1.Endpoints) error {
 	return nil
 }
 
-func (c *controller) reconcileServiceRemove(cluster, namespace, name string, service *v1.Service) error {
+func (c *controller) reconcileEndpointsRemove(cluster, namespace, name string, ep *v1.Endpoints) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
+	err := c.endpointClient.Endpoints(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("service %s/%s of cluster not found in super master", namespace, name)
+		klog.Warningf("endpoints %s/%s of cluster not found in super master", namespace, name)
 		return nil
 	}
 	return err
 }
 
 func (c *controller) AddCluster(cluster *cluster.Cluster) {
-	klog.Infof("tenant-masters-service-controller watch cluster %s for service resource", cluster.Name)
-	err := c.multiClusterServiceController.WatchClusterResource(cluster, sc.WatchOptions{})
+	klog.Infof("tenant-masters-endpoints-controller watch cluster %s for endpoints resource", cluster.Name)
+	err := c.multiClusterEndpointsController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s service event: %v", cluster.Name, err)
+		klog.Errorf("failed to watch cluster %s endpoints event: %v", cluster.Name, err)
 	}
 }
 
