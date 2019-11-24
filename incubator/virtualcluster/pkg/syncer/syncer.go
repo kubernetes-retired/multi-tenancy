@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
@@ -40,6 +39,7 @@ import (
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
@@ -60,9 +60,9 @@ type Syncer struct {
 	// virtual cluster that have been queued up for processing by workers
 	queue   workqueue.RateLimitingInterface
 	workers int
-	// clusterSet holds the cluster name collection in which cluster is running.
+	// clusterSet holds the cluster collection in which cluster is running.
 	mu         sync.Mutex
-	clusterSet sets.String
+	clusterSet map[string]controller.ClusterInterface
 	// if this channel is closed, syncer will stop
 	stopChan <-chan struct{}
 }
@@ -77,7 +77,7 @@ func New(
 		secretClient: secretClient,
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
 		workers:      constants.DefaultControllerWorkers,
-		clusterSet:   sets.NewString(),
+		clusterSet:   make(map[string]controller.ClusterInterface),
 		stopChan:     signals.SetupSignalHandler(),
 	}
 
@@ -216,19 +216,19 @@ func (s *Syncer) removeCluster(key string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.clusterSet.Has(key) {
+	vc, exist := s.clusterSet[key]
+	if !exist {
 		// already deleted
 		return
 	}
 
-	innerCluster := &cluster.Cluster{
-		Name: key,
-	}
+	vc.Stop()
+
 	for _, clusterChangeListener := range listener.Listeners {
-		clusterChangeListener.RemoveCluster(innerCluster)
+		clusterChangeListener.RemoveCluster(vc)
 	}
 
-	s.clusterSet.Delete(key)
+	delete(s.clusterSet, key)
 }
 
 // addCluster registers and start an informer cache for the given VirtualCluster
@@ -236,7 +236,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	klog.Infof("Add cluster %s", key)
 
 	s.mu.Lock()
-	if s.clusterSet.Has(key) {
+	if _, exist := s.clusterSet[key]; exist {
 		s.mu.Unlock()
 		return nil
 	}
@@ -250,13 +250,10 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to build rest config for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
-	innerCluster := &cluster.Cluster{
-		Name:   conversion.ToClusterKey(vc),
-		Config: clusterRestConfig,
-	}
+	innerCluster := cluster.New(conversion.ToClusterKey(vc), clusterRestConfig, cluster.Options{})
 
 	s.mu.Lock()
-	if s.clusterSet.Has(key) {
+	if _, exist := s.clusterSet[key]; exist {
 		s.mu.Unlock()
 		return nil
 	}
@@ -265,16 +262,25 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	for _, clusterChangeListener := range listener.Listeners {
 		clusterChangeListener.AddCluster(innerCluster)
 	}
-	s.clusterSet.Insert(key)
+
+	s.clusterSet[key] = innerCluster
 	s.mu.Unlock()
 
-	go func() {
-		if err = innerCluster.Start(s.stopChan); err != nil {
-			s.removeCluster(key)
-			// retry if start cluster fails.
-			s.queue.AddAfter(key, 5*time.Second)
-		}
-	}()
+	go s.runCluster(innerCluster)
 
 	return nil
+}
+
+func (s *Syncer) runCluster(cluster controller.ClusterInterface) {
+	go func() {
+		err := cluster.Start()
+		klog.Infof("cluster %s shutdown: %v", cluster.GetClusterName(), err)
+	}()
+
+	if !cluster.WaitForCacheSync() {
+		klog.Warningf("failed to sync cache for cluster %s, retry", cluster.GetClusterName())
+		s.removeCluster(cluster.GetClusterName())
+		s.queue.AddAfter(cluster.GetClusterName(), 5*time.Second)
+		return
+	}
 }

@@ -26,8 +26,8 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -124,14 +124,15 @@ func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
-	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.Name)
+func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.GetClusterName())
 	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.Name, err)
+		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster *cluster.Cluster) {
-	klog.Warningf("not implemented yet")
+func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-namespace-controller stop watching cluster %s for namespace resource", cluster.GetClusterName())
+	c.multiClusterNamespaceController.TeardownClusterResource(cluster)
 }

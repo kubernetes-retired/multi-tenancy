@@ -33,6 +33,7 @@ import (
 
 // Cluster stores a Kubernetes client, cache, and other cluster-scoped dependencies.
 // The dependencies are lazily created in getters and cached for reuse.
+// It is not thread safe.
 type Cluster struct {
 	// Name is used to uniquely identify a Cluster in tracing, logging and monitoring.  Name is required.
 	Name string
@@ -50,6 +51,8 @@ type Cluster struct {
 	cache  cache.Cache
 	client *client.DelegatingClient
 	Options
+
+	stopCh chan struct{}
 }
 
 // Options are the arguments for creating a new Cluster.
@@ -70,7 +73,7 @@ type CacheOptions struct {
 
 // New creates a new Cluster.
 func New(name string, config *rest.Config, o Options) *Cluster {
-	return &Cluster{Name: name, Config: config, Options: o}
+	return &Cluster{Name: name, Config: config, Options: o, stopCh: make(chan struct{})}
 }
 
 // GetClusterName returns the name given when Cluster c was created.
@@ -190,20 +193,25 @@ func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocac
 
 // Start starts the Cluster's cache and blocks,
 // until an empty struct is sent to the stop channel.
-func (c *Cluster) Start(stop <-chan struct{}) error {
+func (c *Cluster) Start() error {
 	ca, err := c.GetCache()
 	if err != nil {
 		return err
 	}
-	return ca.Start(stop)
+	return ca.Start(c.stopCh)
 }
 
 // WaitForCacheSync waits for the Cluster's cache to sync,
 // OR until an empty struct is sent to the stop channel.
-func (c *Cluster) WaitForCacheSync(stop <-chan struct{}) bool {
+func (c *Cluster) WaitForCacheSync() bool {
 	ca, err := c.GetCache()
 	if err != nil {
 		return false
 	}
-	return ca.WaitForCacheSync(stop)
+	return ca.WaitForCacheSync(c.stopCh)
+}
+
+// Stop send a msg to stopCh, stop the cache.
+func (c *Cluster) Stop() {
+	close(c.stopCh)
 }
