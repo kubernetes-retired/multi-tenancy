@@ -33,8 +33,8 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -244,16 +244,17 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1
 	return err
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
-	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.Name)
+func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.GetClusterName())
 	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.Name, err)
+		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster *cluster.Cluster) {
-	klog.Warningf("not implemented yet")
+func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-pod-controller stop watching cluster %s for pod resource", cluster.GetClusterName())
+	c.multiClusterPodController.TeardownClusterResource(cluster)
 }
 
 // assignedPod selects pods that are assigned (scheduled and running).

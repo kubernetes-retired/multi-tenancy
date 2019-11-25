@@ -16,13 +16,15 @@ limitations under the License.
 
 package listener
 
-import "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+import (
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
+)
 
 var Listeners []ClusterChangeListener
 
 type ClusterChangeListener interface {
-	AddCluster(cluster *cluster.Cluster)
-	RemoveCluster(cluster *cluster.Cluster)
+	AddCluster(cluster controller.ClusterInterface)
+	RemoveCluster(cluster controller.ClusterInterface)
 }
 
 func AddListener(listener ClusterChangeListener) {

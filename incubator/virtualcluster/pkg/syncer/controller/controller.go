@@ -51,7 +51,7 @@ type MultiClusterController struct {
 	objectType runtime.Object
 
 	// clusters is the internal cluster set this controller watches.
-	clusters map[Cluster]struct{}
+	clusters map[string]ClusterInterface
 
 	Options
 }
@@ -76,12 +76,13 @@ type Options struct {
 
 // Cache is the interface used by Controller to start and wait for caches to sync.
 type Cache interface {
-	Start(stop <-chan struct{}) error
-	WaitForCacheSync(stop <-chan struct{}) bool
+	Start() error
+	WaitForCacheSync() bool
+	Stop()
 }
 
-// Cluster decouples the controller package from the cluster package.
-type Cluster interface {
+// ClusterInterface decouples the controller package from the cluster package.
+type ClusterInterface interface {
 	GetClusterName() string
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetCache() (cache.Cache, error)
@@ -102,7 +103,7 @@ func NewController(name string, objectType runtime.Object, options Options) (*Mu
 	c := &MultiClusterController{
 		name:       name,
 		objectType: objectType,
-		clusters:   make(map[Cluster]struct{}),
+		clusters:   make(map[string]ClusterInterface),
 		Options:    options,
 	}
 
@@ -127,14 +128,25 @@ type WatchOptions struct {
 }
 
 // WatchClusterResource configures the Controller to watch resources of the same Kind as objectType,
-// in the specified cluster, generating reconcile Requests from the Cluster's context
+// in the specified cluster, generating reconcile Requests from the ClusterInterface's context
 // and the watched objects' namespaces and names.
-func (c *MultiClusterController) WatchClusterResource(cluster Cluster, o WatchOptions) error {
+func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, o WatchOptions) error {
 	c.Lock()
 	defer c.Unlock()
-	c.clusters[cluster] = struct{}{}
+	if _, exist := c.clusters[cluster.GetClusterName()]; exist {
+		return nil
+	}
+	c.clusters[cluster.GetClusterName()] = cluster
 	h := &handler.EnqueueRequestForObject{Cluster: cluster.GetClientInfo(), Queue: c.Queue}
 	return cluster.AddEventHandler(c.objectType, h)
+}
+
+// TeardownClusterResource forget the cluster it watches.
+// The cluster informer should stop together.
+func (c *MultiClusterController) TeardownClusterResource(cluster ClusterInterface) {
+	c.Lock()
+	delete(c.clusters, cluster.GetClusterName())
+	c.Unlock()
 }
 
 // Start starts the ClustersController's control loops (as many as MaxConcurrentReconciles) in separate channels
@@ -146,18 +158,18 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 	wg.Add(len(c.clusters))
 
 	errCh := make(chan error)
-	for cl := range c.clusters {
-		go func(cl Cluster) {
-			if err := cl.Start(stop); err != nil {
+	for _, cl := range c.clusters {
+		go func(cl ClusterInterface) {
+			if err := cl.Start(); err != nil {
 				errCh <- err
 			}
 		}(cl)
 
 		klog.Infof("sync cache for cluster %s", cl.GetClusterName())
-		go func(cl Cluster) {
+		go func(cl ClusterInterface) {
 			defer wg.Done()
 
-			if ok := cl.WaitForCacheSync(stop); !ok {
+			if ok := cl.WaitForCacheSync(); !ok {
 				errCh <- fmt.Errorf("failed to wait for caches to sync")
 			}
 		}(cl)
@@ -187,7 +199,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
 	c.Lock()
 	defer c.Unlock()
-	for cluster := range c.clusters {
+	for _, cluster := range c.clusters {
 		if cluster.GetClusterName() == clusterName {
 			clusterCache, err := cluster.GetCache()
 			if err != nil {
@@ -204,10 +216,10 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 	return nil, fmt.Errorf("could not find cluster %s", clusterName)
 }
 
-func (c *MultiClusterController) GetCluster(clusterName string) Cluster {
+func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface {
 	c.Lock()
 	defer c.Unlock()
-	for cluster, _ := range c.clusters {
+	for _, cluster := range c.clusters {
 		if cluster.GetClusterName() == clusterName {
 			return cluster
 		}

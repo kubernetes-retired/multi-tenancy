@@ -27,8 +27,8 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -154,14 +154,15 @@ func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.N
 	return nil
 }
 
-func (c *controller) AddCluster(cluster *cluster.Cluster) {
-	klog.Infof("tenant-masters-node-controller watch cluster %s for pod resource", cluster.Name)
+func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-node-controller watch cluster %s for node resource", cluster.GetClusterName())
 	err := c.multiClusterNodeController.WatchClusterResource(cluster, sc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s node event: %v", cluster.Name, err)
+		klog.Errorf("failed to watch cluster %s node event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster *cluster.Cluster) {
-	klog.Warningf("not implemented yet")
+func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+	klog.Infof("tenant-masters-node-controller stop watching cluster %s for node resource", cluster.GetClusterName())
+	c.multiClusterNodeController.TeardownClusterResource(cluster)
 }
