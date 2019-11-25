@@ -24,6 +24,11 @@ ifeq (,${VERSION})
 VERSION=v0.1.0
 endif
 
+# Set default object controller to the old one
+ifeq (,${NOC})
+NOC=0
+endif
+
 # Get check sum value of krew archive
 KREW_CKSM=$(shell sha256sum bin/kubectl-hnc.tar.gz | cut -d " " -f 1)
 
@@ -34,7 +39,12 @@ all: test docker-build
 
 # Run tests
 test: build
-	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
+	# run tests in all directories except ./pkg/controllers/
+	go test ./api/... ./cmd/... `go list ./pkg/... | grep -v controllers` -coverprofile cover.out
+	# separately run tests in ./pkg/controllers/
+	# by default it will use the old object controller
+	# with NOC=1 it will use the new object controller
+	go test ./pkg/controllers/... -enable-new-object-controller=${NOC} -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests

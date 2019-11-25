@@ -16,6 +16,7 @@ limitations under the License.
 package controllers_test
 
 import (
+	"flag"
 	"path/filepath"
 	"testing"
 	"time"
@@ -41,11 +42,19 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg        *rest.Config
-	k8sClient  client.Client
-	testEnv    *envtest.Environment
-	k8sManager ctrl.Manager
+	cfg                 *rest.Config
+	k8sClient           client.Client
+	testEnv             *envtest.Environment
+	k8sManager          ctrl.Manager
+	newObjectController bool
 )
+
+func init() {
+	// This is a temporary flag to toggle the new/old object controller for testing. It will be removed
+	// after the GitHub issue "restructure object controller to allow explicit enqueuing" is resolved
+	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/195)
+	flag.BoolVar(&newObjectController, "enable-new-object-controller", false, "Enables new object controller.")
+}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -83,7 +92,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = controllers.Create(k8sManager, forest.NewForest(), 100)
+	err = controllers.Create(k8sManager, forest.NewForest(), 100, newObjectController)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
