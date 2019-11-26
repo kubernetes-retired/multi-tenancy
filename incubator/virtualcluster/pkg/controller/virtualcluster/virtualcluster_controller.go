@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
@@ -44,6 +45,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
 	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 const (
@@ -103,6 +105,7 @@ type ReconcileVirtualcluster struct {
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
 // virtual clusters, and store them as secrets in the meta cluster
 func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
+	ns := conversion.ToClusterKey(vc)
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
 	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(
@@ -134,41 +137,40 @@ func (r *ReconcileVirtualcluster) createPKI(vc *tenancyv1alpha1.Virtualcluster, 
 	caGroup.ETCD = etcdCAPair
 
 	// create crt, key for apiserver
-	apiserverDomain := cv.GetAPIServerDomain(vc.Namespace)
-	apiserverCAPair, apiserverCrtErr :=
-		vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
-	if apiserverCrtErr != nil {
-		return apiserverCrtErr
+	apiserverDomain := cv.GetAPIServerDomain(ns)
+	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
+	if err != nil {
+		return err
 	}
 	caGroup.APIServer = apiserverCAPair
 
 	// create kubeconfig for controller-manager
-	ctrlmgrKbCfg, cmKbCfgErr := kubeconfig.GenerateKubeconfig(
+	ctrlmgrKbCfg, err := kubeconfig.GenerateKubeconfig(
 		"system:kube-controller-manager",
 		vc.Name, apiserverDomain, []string{}, rootCAPair)
-	if cmKbCfgErr != nil {
-		return cmKbCfgErr
+	if err != nil {
+		return err
 	}
 	caGroup.CtrlMgrKbCfg = ctrlmgrKbCfg
 
 	// create kubeconfig for admin user
-	adminKbCfg, adminKbCfgErr := kubeconfig.GenerateKubeconfig(
+	adminKbCfg, err := kubeconfig.GenerateKubeconfig(
 		"admin", vc.Name, apiserverDomain,
 		[]string{"system:masters"}, rootCAPair)
-	if adminKbCfgErr != nil {
-		return adminKbCfgErr
+	if err != nil {
+		return err
 	}
 	caGroup.AdminKbCfg = adminKbCfg
 
 	// create rsa key for service-account
-	svcAcctCAPair, saCrtErr := vcpki.NewServiceAccountSigningKey()
-	if saCrtErr != nil {
-		return saCrtErr
+	svcAcctCAPair, err := vcpki.NewServiceAccountSigningKey()
+	if err != nil {
+		return err
 	}
 	caGroup.ServiceAccountPrivateKey = svcAcctCAPair
 
 	// store ca and kubeconfig into secrets
-	genSrtsErr := r.createPKISecrets(caGroup, vc.Namespace)
+	genSrtsErr := r.createPKISecrets(caGroup, ns)
 	if genSrtsErr != nil {
 		return genSrtsErr
 	}
@@ -221,16 +223,17 @@ func completmentCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.Statefu
 // deployComponent deploys master component in namespace vcName based on the given StatefulSet
 // and Service Bundle ssBdl
 func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualcluster, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
-	log.Info("deploying StatefulSet for master component", "component",
-		ssBdl.Name)
+	log.Info("deploying StatefulSet for master component", "component", ssBdl.Name)
+
+	ns := conversion.ToClusterKey(vc)
 
 	switch ssBdl.Name {
 	case "etcd":
-		completmentETCDTemplate(vc.Namespace, ssBdl)
+		completmentETCDTemplate(ns, ssBdl)
 	case "apiserver":
-		completmentAPIServerTemplate(vc.Namespace, ssBdl)
+		completmentAPIServerTemplate(ns, ssBdl)
 	case "controller-manager":
-		completmentCtrlMgrTemplate(vc.Namespace, ssBdl)
+		completmentCtrlMgrTemplate(ns, ssBdl)
 	default:
 		return fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
 	}
@@ -246,8 +249,7 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 	}
 
 	if ssBdl.Service != nil {
-		log.Info("deploying Service for master component", "component",
-			ssBdl.Name)
+		log.Info("deploying Service for master component", "component", ssBdl.Name)
 		err = r.Create(context.TODO(), ssBdl.Service)
 		if err != nil {
 			return err
@@ -269,7 +271,7 @@ func (r *ReconcileVirtualcluster) deployComponent(vc *tenancyv1alpha1.Virtualclu
 		case <-period:
 			sts := &appsv1.StatefulSet{}
 			if err := r.Get(context.TODO(), types.NamespacedName{
-				Namespace: vc.Namespace,
+				Namespace: ns,
 				Name:      ssBdl.Name},
 				sts); err != nil {
 				return err
@@ -323,34 +325,51 @@ func (r *ReconcileVirtualcluster) createPKISecrets(caGroup *vcpki.ClusterCAGroup
 	return nil
 }
 
+func (r *ReconcileVirtualcluster) createNS(vc *tenancyv1alpha1.Virtualcluster) error {
+	err := r.Create(context.TODO(), &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: conversion.ToClusterKey(vc),
+		},
+	})
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
+}
+
 // createVirtualcluster creates a new Virtualcluster based on the specified ClusterVersion
 func (r *ReconcileVirtualcluster) createVirtualcluster(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (err error) {
 	defer func() {
 		if err != nil {
-			log.Error(err,
-				"fail to create virtualcluster, remove namespace for deleting related resources")
+			log.Error(err, "fail to create virtualcluster, remove namespace for deleting related resources")
 		}
 	}()
 
-	// 1. create PKI
+	// 1. create ns
+	err = r.createNS(vc)
+	if err != nil {
+		return
+	}
+
+	// 2. create PKI
 	err = r.createPKI(vc, cv)
 	if err != nil {
 		return
 	}
 
-	// 2. deploy etcd
+	// 3. deploy etcd
 	err = r.deployComponent(vc, cv.Spec.ETCD)
 	if err != nil {
 		return
 	}
 
-	// 3. deploy apiserver
+	// 4. deploy apiserver
 	err = r.deployComponent(vc, cv.Spec.APIServer)
 	if err != nil {
 		return
 	}
 
-	// 4. deploy controller-manager
+	// 5. deploy controller-manager
 	err = r.deployComponent(vc, cv.Spec.ControllerManager)
 	if err != nil {
 		return
@@ -417,7 +436,6 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			err = fmt.Errorf("desired ClusterVersion %s not found",
 				vc.Spec.ClusterVersionName)
 			return
-
 		}
 		err = r.createVirtualcluster(vc, cv)
 		if err != nil {

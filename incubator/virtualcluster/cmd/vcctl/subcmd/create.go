@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	vcctlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	netutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
@@ -50,7 +51,7 @@ const (
 // Create creates an object based on the file yamlPath
 func Create(yamlPath, vcKbCfg string, minikube bool) error {
 	if _, err := os.Stat(vcKbCfg); err == nil {
-		return errors.Wrapf(err, "--vckbcfg %s file exists")
+		return fmt.Errorf("--vckbcfg %s file exists", vcKbCfg)
 	}
 	if yamlPath == "" {
 		return errors.New("please specify the path of the virtualcluster yaml file")
@@ -110,28 +111,30 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 		return err
 	}
 
+	ns := conversion.ToClusterKey(vc)
+
 	// poll etcd StatefulSet
-	err = pollStatefulSet("etcd", vc.Namespace, cli)
+	err = pollStatefulSet("etcd", ns, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("etcd is ready")
 
 	// poll apiserver StatefulSet
-	err = pollStatefulSet("apiserver", vc.Namespace, cli)
+	err = pollStatefulSet("apiserver", ns, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("apiserver is ready")
 
 	// poll controller-manager StatefulSet
-	err = pollStatefulSet("controller-manager", vc.Namespace, cli)
+	err = pollStatefulSet("controller-manager", ns, cli)
 	if err != nil {
 		return err
 	}
 	log.Println("controller-manager is ready")
 
-	return genKubeConfig(vc.Namespace, vcKbCfg, cli, minikube)
+	return genKubeConfig(ns, vcKbCfg, cli, minikube)
 }
 
 // pollStatefulSet keeps checking if the StatefulSet in `namespace` with `name` is
