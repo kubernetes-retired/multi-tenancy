@@ -242,7 +242,9 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	}
 	s.mu.Unlock()
 
-	adminKubeConfigSecret, err := s.secretClient.Secrets(vc.Namespace).Get(KubeconfigAdmin, metav1.GetOptions{})
+	clusterName := conversion.ToClusterKey(vc)
+
+	adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get secret (%s) for virtual cluster %s/%s: %v", KubeconfigAdmin, vc.Namespace, vc.Name, err)
 	}
@@ -250,7 +252,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to build rest config for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
-	innerCluster := cluster.New(conversion.ToClusterKey(vc), clusterRestConfig, cluster.Options{})
+	innerCluster := cluster.New(clusterName, clusterRestConfig, cluster.Options{})
 
 	s.mu.Lock()
 	if _, exist := s.clusterSet[key]; exist {

@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 const (
@@ -70,7 +71,7 @@ func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.Virtualcluster, a
 	}
 
 	config := &cert.Config{
-		CommonName: vc.Name,
+		CommonName: conversion.ToClusterKey(vc),
 		AltNames:   *altNames,
 		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 	}
