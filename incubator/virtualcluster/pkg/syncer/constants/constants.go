@@ -35,6 +35,9 @@ const (
 
 	// DefaultControllerWorkers is the quantity of the worker routine for a controller.
 	DefaultControllerWorkers = 3
+
+	// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
+	ResourceSyncerUserAgent = "resource-syncer"
 )
 
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground

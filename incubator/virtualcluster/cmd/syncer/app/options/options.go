@@ -42,11 +42,7 @@ import (
 	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 	syncerconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-)
-
-const (
-	// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
-	ResourceSyncerUserAgent = "resource-syncer"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 // ResourceSyncerOptions is the main context object for the resource syncer.
@@ -120,9 +116,9 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 
 	// Prepare event clients.
 	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: superMasterClient.EventsV1beta1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(clientgokubescheme.Scheme, ResourceSyncerUserAgent)
+	recorder := eventBroadcaster.NewRecorder(clientgokubescheme.Scheme, constants.ResourceSyncerUserAgent)
 	leaderElectionBroadcaster := record.NewBroadcaster()
-	leaderElectionRecorder := leaderElectionBroadcaster.NewRecorder(clientgokubescheme.Scheme, corev1.EventSource{Component: ResourceSyncerUserAgent})
+	leaderElectionRecorder := leaderElectionBroadcaster.NewRecorder(clientgokubescheme.Scheme, corev1.EventSource{Component: constants.ResourceSyncerUserAgent})
 
 	// Set up leader election if enabled.
 	var leaderElectionConfig *leaderelection.LeaderElectionConfig
@@ -174,7 +170,7 @@ func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfigurat
 		RenewDeadline: config.RenewDeadline.Duration,
 		RetryPeriod:   config.RetryPeriod.Duration,
 		WatchDog:      leaderelection.NewLeaderHealthzAdaptor(time.Second * 20),
-		Name:          ResourceSyncerUserAgent,
+		Name:          constants.ResourceSyncerUserAgent,
 	}, nil
 }
 
@@ -209,7 +205,7 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 	restConfig.QPS = config.QPS
 	restConfig.Burst = int(config.Burst)
 
-	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, ResourceSyncerUserAgent))
+	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, constants.ResourceSyncerUserAgent))
 	if err != nil {
 		return nil, nil, nil, err
 	}

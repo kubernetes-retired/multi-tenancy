@@ -27,12 +27,10 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/node"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // StartUWS starts the upward syncer
@@ -57,6 +55,19 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	return nil
 }
 
+// podQueueKey holds information we need to sync a pod.
+// It contains enough information to look up the cluster resource.
+type podQueueKey struct {
+	// clusterName is the cluster this pod belongs to.
+	clusterName string
+	// vNamespace is the namespace this pod on tenant namespaces.
+	vNamespace string
+	// namespace is the namespace this pod on super master namespaces.
+	namespace string
+	// name is the pod name.
+	name string
+}
+
 // run runs a run thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
 func (c *controller) run() {
@@ -71,7 +82,8 @@ func (c *controller) processNextWorkItem() bool {
 	}
 	defer c.queue.Done(key)
 
-	err := c.backPopulate(key.(string))
+	klog.Infof("back populate pod %+v", key)
+	err := c.backPopulate(key)
 	if err == nil {
 		c.queue.Forget(key)
 		return true
@@ -82,14 +94,24 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(key string) error {
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
+func (c *controller) backPopulate(key interface{}) error {
+	podInfo, ok := key.(podQueueKey)
+	if !ok {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
 		return nil
 	}
 
-	pod, err := c.podLister.Pods(namespace).Get(name)
+	var client *clientset.Clientset
+	innerCluster := c.multiClusterPodController.GetCluster(podInfo.clusterName)
+	if innerCluster == nil {
+		return fmt.Errorf("cluster %s not found", podInfo.clusterName)
+	}
+	client, err := innerCluster.GetClient()
+	if err != nil {
+		return fmt.Errorf("failed to create client from cluster %s config: %v", podInfo.clusterName, err)
+	}
+
+	pod, err := c.podLister.Pods(podInfo.namespace).Get(podInfo.name)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -97,28 +119,16 @@ func (c *controller) backPopulate(key string) error {
 		return err
 	}
 
-	clusterName, vNamespace := conversion.GetOwner(pod)
-	if len(clusterName) == 0 {
-		return nil
-	}
-
-	klog.Infof("back populate pod %s/%s in cluster %s", vNamespace, pod.Name, clusterName)
-	vPodObj, err := c.multiClusterPodController.Get(clusterName, vNamespace, pod.Name)
+	vPodObj, err := c.multiClusterPodController.Get(podInfo.clusterName, podInfo.vNamespace, podInfo.name)
 	if err != nil {
-		return fmt.Errorf("could not find pod %s/%s pod in controller cache %v", vNamespace, pod.Name, err)
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("could not find pod %s/%s pod in controller cache %v", podInfo.vNamespace, pod.Name, err)
 	}
-	var client *clientset.Clientset
-	innerCluster := c.multiClusterPodController.GetCluster(clusterName)
-	if innerCluster == nil {
-		// virtual cluster is gone.
-		return nil
-	}
-	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
-	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
-	}
-
 	vPod := vPodObj.(*v1.Pod)
+
+	// first check whether tenant pod has assigned.
 	if vPod.Spec.NodeName != pod.Spec.NodeName {
 		n, err := c.client.Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
@@ -144,14 +154,33 @@ func (c *controller) backPopulate(key string) error {
 		if err != nil {
 			return fmt.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pod.Spec.NodeName, err)
 		}
-		// pod has been updated, return and waiting for next loop.
+		// virtual pod has been updated, return and waiting for next loop.
+		c.queue.AddAfter(key, 1*time.Second)
 		return nil
 	}
+
 	if !equality.Semantic.DeepEqual(vPod.Status, pod.Status) {
 		newPod := vPod.DeepCopy()
 		newPod.Status = pod.Status
 		if _, err = client.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
-			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, podInfo.clusterName, err)
+		}
+		c.queue.Add(key)
+		return nil
+	}
+
+	// pod on super master is under deletion.
+	if pod.DeletionTimestamp != nil {
+		if vPod.DeletionTimestamp == nil {
+			klog.V(4).Infof("pod %s/%s is under deletion accidentally", pod.Namespace, pod.Name)
+			// waiting for periodic check to recreate a pod on super master.
+			return nil
+		}
+		if *vPod.DeletionGracePeriodSeconds != *pod.DeletionGracePeriodSeconds {
+			klog.V(4).Infof("delete virtual pod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pod.DeletionGracePeriodSeconds)
+			deleteOptions := metav1.NewDeleteOptions(*pod.DeletionGracePeriodSeconds)
+			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
+			return client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions)
 		}
 	}
 

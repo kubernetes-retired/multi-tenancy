@@ -17,19 +17,18 @@ limitations under the License.
 package controller
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	clientset "k8s.io/client-go/kubernetes"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-
-	"context"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -87,6 +86,7 @@ type ClusterInterface interface {
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetCache() (cache.Cache, error)
 	GetClientInfo() *reconciler.ClusterInfo
+	GetClient() (*clientset.Clientset, error)
 	Cache
 }
 

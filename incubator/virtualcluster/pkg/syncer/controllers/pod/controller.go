@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -28,7 +29,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -108,6 +108,7 @@ func Register(
 
 					c.enqueuePod(newObj)
 				},
+				DeleteFunc: c.enqueuePod,
 			},
 		},
 	)
@@ -116,13 +117,22 @@ func Register(
 }
 
 func (c *controller) enqueuePod(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
+	pod, ok := obj.(*v1.Pod)
+	if !ok {
 		return
 	}
-	c.queue.Add(key)
+
+	clusterName, vNamespace := conversion.GetOwner(pod)
+	if clusterName == "" {
+		return
+	}
+
+	c.queue.Add(podQueueKey{
+		clusterName: clusterName,
+		vNamespace:  vNamespace,
+		namespace:   pod.Namespace,
+		name:        pod.Name,
+	})
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -156,7 +166,19 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1.Pod) error {
+	// load deleting pod, don't create any pod on super master.
+	if pod.DeletionTimestamp != nil {
+		return c.reconcilePodUpdate(cluster, namespace, name, pod)
+	}
+
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	_, err := c.podLister.Pods(targetNamespace).Get(name)
+	if err == nil {
+		// pod is up-to-date.
+		// TODO: check pod template hash and update
+		return nil
+	}
+
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, pod)
 	if err != nil {
 		return err
@@ -182,7 +204,11 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 
 	var client *clientset.Clientset
 	innerCluster := c.multiClusterPodController.GetCluster(cluster)
-	client, err = clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
+	if innerCluster == nil {
+		klog.Infof("cluster %s is gone", cluster)
+		return nil
+	}
+	client, err = innerCluster.GetClient()
 	if err != nil {
 		return err
 	}
@@ -228,6 +254,39 @@ func (c *controller) getPodRelatedServices(cluster string, pod *v1.Pod) ([]*v1.S
 }
 
 func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1.Pod) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	pPod, err := c.podLister.Pods(targetNamespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// if the pod on super master has been deleted and syncer has not
+			// deleted virtual pod with 0 grace period second successfully.
+			// we depends on periodic check to do gc.
+			return nil
+		}
+		return err
+	}
+
+	if pod.DeletionTimestamp != nil {
+		if pPod.DeletionTimestamp != nil {
+			// pPod is under deletion, waiting for UWS bock populate the pod status.
+			return nil
+		}
+		deleteOptions := metav1.NewDeleteOptions(*pod.DeletionGracePeriodSeconds)
+		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
+		err = c.client.Pods(targetNamespace).Delete(name, deleteOptions)
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	// pod has been updated by tenant controller
+	if !equality.Semantic.DeepEqual(pod.Status, pPod.Status) {
+		c.enqueuePod(pPod)
+	}
+
+	// TODO: observe pod template hash and update
+
 	return nil
 }
 
