@@ -21,13 +21,16 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	restclient "k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -90,6 +93,10 @@ func (c *Cluster) GetScheme() *runtime.Scheme {
 // GetClientInfo returns the cluster client info.
 func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
 	return reconciler.NewClusterInfo(c.Name, c.Config)
+}
+
+func (c *Cluster) GetClient() (*clientset.Clientset, error) {
+	return clientset.NewForConfig(restclient.AddUserAgent(c.Config, constants.ResourceSyncerUserAgent))
 }
 
 // GetMapper returns a lazily created apimachinery RESTMapper.
