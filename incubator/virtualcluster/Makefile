@@ -97,3 +97,20 @@ endif
 # build vcctl on osx
 vcctl-osx:
 	GOOS=darwin hack/make-rules/build.sh cmd/vcctl 
+
+# Build and run kubernetes e2e tests.
+#
+# Args:
+#  KUBECONFIG: kubeconfig to virtual cluster. If empty, create a virtual cluster.
+#    Defaults to "".
+#  FOCUS: Regexp that matches the tests to be run.  Defaults to "\[Conformance\]".
+#  SKIP: Regexp that matches the tests that needs to be skipped.
+#    Defaults to "\[Flaky\]|\[Slow\]|\[Serial\]"
+#  BUILD_DEPENDENCIES: if true, build dependencies related to e2e test.
+#    Defaults to true.
+#
+# Example:
+#   make test-e2e-k8s KUBECONFIG=/path/to/vc-kubeconfig
+.PHONY: test-e2e-k8s
+test-e2e-k8s:
+	hack/make-rules/test-e2e-k8s.sh
