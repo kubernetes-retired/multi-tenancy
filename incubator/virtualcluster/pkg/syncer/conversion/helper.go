@@ -135,38 +135,46 @@ func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret
 	serviceEnv := getServiceEnvVarMap(pod.Namespace, *pod.Spec.EnableServiceLinks, services)
 
 	for i := range pod.Spec.Containers {
-		// Inject env var from service
-		// 1. Do nothing if it conflicts with user-defined one.
-		// 2. Add remaining service environment vars
-		envNameMap := make(map[string]struct{})
-		for j, env := range pod.Spec.Containers[i].Env {
-			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
-				pod.Spec.Containers[i].Env[j].ValueFrom = nil
-				pod.Spec.Containers[i].Env[j].Value = pod.Name
-			}
-			if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.namespace" {
-				pod.Spec.Containers[i].Env[j].ValueFrom = nil
-				pod.Spec.Containers[i].Env[j].Value = namespace
-			}
-			envNameMap[env.Name] = struct{}{}
-		}
-		for k, v := range serviceEnv {
-			if _, exists := envNameMap[k]; !exists {
-				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, v1.EnvVar{Name: k, Value: v})
-			}
-		}
+		mutateContainer(&pod.Spec.Containers[i], pod, vSASecret, SASecret, serviceEnv)
+	}
 
-		for j, volumeMount := range pod.Spec.Containers[i].VolumeMounts {
-			if volumeMount.Name == vSASecret.Name {
-				pod.Spec.Containers[i].VolumeMounts[j].Name = SASecret.Name
-			}
-		}
+	for i := range pod.Spec.InitContainers {
+		mutateContainer(&pod.Spec.InitContainers[i], pod, vSASecret, SASecret, serviceEnv)
 	}
 
 	for i, volume := range pod.Spec.Volumes {
 		if volume.Name == vSASecret.Name {
 			pod.Spec.Volumes[i].Name = SASecret.Name
 			pod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
+		}
+	}
+}
+
+func mutateContainer(c *v1.Container, pod *v1.Pod, vSASecret, SASecret *v1.Secret, serviceEnvMap map[string]string) {
+	// Inject env var from service
+	// 1. Do nothing if it conflicts with user-defined one.
+	// 2. Add remaining service environment vars
+	envNameMap := make(map[string]struct{})
+	for j, env := range c.Env {
+		if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
+			c.Env[j].ValueFrom = nil
+			c.Env[j].Value = pod.Name
+		}
+		if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.namespace" {
+			c.Env[j].ValueFrom = nil
+			c.Env[j].Value = pod.Namespace
+		}
+		envNameMap[env.Name] = struct{}{}
+	}
+	for k, v := range serviceEnvMap {
+		if _, exists := envNameMap[k]; !exists {
+			c.Env = append(c.Env, v1.EnvVar{Name: k, Value: v})
+		}
+	}
+
+	for j, volumeMount := range c.VolumeMounts {
+		if volumeMount.Name == vSASecret.Name {
+			c.VolumeMounts[j].Name = SASecret.Name
 		}
 	}
 }
