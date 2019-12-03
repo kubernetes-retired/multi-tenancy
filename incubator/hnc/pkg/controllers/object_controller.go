@@ -46,7 +46,7 @@ type ObjectReconciler struct {
 	GVK schema.GroupVersionKind
 }
 
-// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete;deletecollection;use;impersonate
 
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	resp := ctrl.Result{}
