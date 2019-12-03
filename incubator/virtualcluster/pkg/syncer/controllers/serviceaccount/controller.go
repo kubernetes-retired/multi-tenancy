@@ -140,7 +140,7 @@ func (c *controller) reconcileServiceAccountRemove(cluster, namespace, name stri
 	}
 	err := c.client.ServiceAccounts(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("service account %s/%s of cluster not found in super master", namespace, name, cluster)
+		klog.Warningf("service account %s/%s of cluster %s not found in super master", namespace, name, cluster)
 		return nil
 	}
 	return err
