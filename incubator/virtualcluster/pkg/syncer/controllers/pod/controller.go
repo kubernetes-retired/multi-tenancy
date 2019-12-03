@@ -165,10 +165,10 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1.Pod) error {
+func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v1.Pod) error {
 	// load deleting pod, don't create any pod on super master.
-	if pod.DeletionTimestamp != nil {
-		return c.reconcilePodUpdate(cluster, namespace, name, pod)
+	if vPod.DeletionTimestamp != nil {
+		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
 	}
 
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
@@ -179,7 +179,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return nil
 	}
 
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, pod)
+	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, vPod)
 	if err != nil {
 		return err
 	}
@@ -193,12 +193,12 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		saName = pPod.Spec.ServiceAccountName
 	}
 
-	secret, err := utils.GetSecret(c.client, targetNamespace, saName)
+	pSecret, err := utils.GetSecret(c.client, targetNamespace, saName)
 	if err != nil {
 		return fmt.Errorf("failed to get secret: %v", err)
 	}
 
-	if secret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
+	if pSecret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
 		return fmt.Errorf("secret for pod is not ready")
 	}
 
@@ -226,7 +226,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 		return fmt.Errorf("service is not ready")
 	}
 
-	conversion.MutatePod(targetNamespace, pPod, vSecret, secret, services)
+	conversion.MutatePod(vPod, pPod, vSecret, pSecret, services)
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
@@ -236,7 +236,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, pod *v1
 	return err
 }
 
-func (c *controller) getPodRelatedServices(cluster string, pod *v1.Pod) ([]*v1.Service, error) {
+func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.Service, error) {
 	var services []*v1.Service
 	list, err := c.informer.Services().Lister().Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
 	if err != nil {
@@ -244,7 +244,7 @@ func (c *controller) getPodRelatedServices(cluster string, pod *v1.Pod) ([]*v1.S
 	}
 	services = append(services, list...)
 
-	list, err = c.informer.Services().Lister().Services(pod.Namespace).List(labels.Everything())
+	list, err = c.informer.Services().Lister().Services(pPod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func (c *controller) getPodRelatedServices(cluster string, pod *v1.Pod) ([]*v1.S
 	return services, nil
 }
 
-func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1.Pod) error {
+func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v1.Pod) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	pPod, err := c.podLister.Pods(targetNamespace).Get(name)
 	if err != nil {
@@ -266,12 +266,12 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1
 		return err
 	}
 
-	if pod.DeletionTimestamp != nil {
+	if vPod.DeletionTimestamp != nil {
 		if pPod.DeletionTimestamp != nil {
 			// pPod is under deletion, waiting for UWS bock populate the pod status.
 			return nil
 		}
-		deleteOptions := metav1.NewDeleteOptions(*pod.DeletionGracePeriodSeconds)
+		deleteOptions := metav1.NewDeleteOptions(*vPod.DeletionGracePeriodSeconds)
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
 		err = c.client.Pods(targetNamespace).Delete(name, deleteOptions)
 		if errors.IsNotFound(err) {
@@ -281,7 +281,7 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1
 	}
 
 	// pod has been updated by tenant controller
-	if !equality.Semantic.DeepEqual(pod.Status, pPod.Status) {
+	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 		c.enqueuePod(pPod)
 	}
 
@@ -290,7 +290,7 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, pod *v1
 	return nil
 }
 
-func (c *controller) reconcilePodRemove(cluster, namespace, name string, pod *v1.Pod) error {
+func (c *controller) reconcilePodRemove(cluster, namespace, name string, vPod *v1.Pod) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,

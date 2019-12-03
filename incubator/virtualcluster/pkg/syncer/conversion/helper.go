@@ -127,43 +127,38 @@ func resetMetadata(obj metav1.Object) {
 
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func MutatePod(namespace string, pod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service) {
-	pod.Status = corev1.PodStatus{}
-	pod.Spec.NodeName = ""
+func MutatePod(vPod, pPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service) {
+	pPod.Status = corev1.PodStatus{}
+	pPod.Spec.NodeName = ""
 
 	// setup env var map
-	serviceEnv := getServiceEnvVarMap(pod.Namespace, *pod.Spec.EnableServiceLinks, services)
+	serviceEnv := getServiceEnvVarMap(pPod.Namespace, *pPod.Spec.EnableServiceLinks, services)
 
-	for i := range pod.Spec.Containers {
-		mutateContainer(&pod.Spec.Containers[i], pod, vSASecret, SASecret, serviceEnv)
+	for i := range pPod.Spec.Containers {
+		mutateContainerEnv(&pPod.Spec.Containers[i], vPod, serviceEnv)
+		mutateContainerSecret(&pPod.Spec.Containers[i], vSASecret, SASecret)
 	}
 
-	for i := range pod.Spec.InitContainers {
-		mutateContainer(&pod.Spec.InitContainers[i], pod, vSASecret, SASecret, serviceEnv)
+	for i := range pPod.Spec.InitContainers {
+		mutateContainerEnv(&pPod.Spec.InitContainers[i], vPod, serviceEnv)
+		mutateContainerSecret(&pPod.Spec.InitContainers[i], vSASecret, SASecret)
 	}
 
-	for i, volume := range pod.Spec.Volumes {
+	for i, volume := range pPod.Spec.Volumes {
 		if volume.Name == vSASecret.Name {
-			pod.Spec.Volumes[i].Name = SASecret.Name
-			pod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
+			pPod.Spec.Volumes[i].Name = SASecret.Name
+			pPod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
 		}
 	}
 }
 
-func mutateContainer(c *v1.Container, pod *v1.Pod, vSASecret, SASecret *v1.Secret, serviceEnvMap map[string]string) {
+func mutateContainerEnv(c *v1.Container, vPod *v1.Pod, serviceEnvMap map[string]string) {
 	// Inject env var from service
 	// 1. Do nothing if it conflicts with user-defined one.
 	// 2. Add remaining service environment vars
 	envNameMap := make(map[string]struct{})
 	for j, env := range c.Env {
-		if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.name" {
-			c.Env[j].ValueFrom = nil
-			c.Env[j].Value = pod.Name
-		}
-		if env.ValueFrom != nil && env.ValueFrom.FieldRef != nil && env.ValueFrom.FieldRef.FieldPath == "metadata.namespace" {
-			c.Env[j].ValueFrom = nil
-			c.Env[j].Value = pod.Namespace
-		}
+		mutateDownwardAPIField(&c.Env[j], vPod)
 		envNameMap[env.Name] = struct{}{}
 	}
 	for k, v := range serviceEnvMap {
@@ -171,12 +166,35 @@ func mutateContainer(c *v1.Container, pod *v1.Pod, vSASecret, SASecret *v1.Secre
 			c.Env = append(c.Env, v1.EnvVar{Name: k, Value: v})
 		}
 	}
+}
 
+func mutateContainerSecret(c *v1.Container, vSASecret, SASecret *v1.Secret) {
 	for j, volumeMount := range c.VolumeMounts {
 		if volumeMount.Name == vSASecret.Name {
 			c.VolumeMounts[j].Name = SASecret.Name
 		}
 	}
+}
+
+func mutateDownwardAPIField(env *v1.EnvVar, vPod *v1.Pod) {
+	if env.ValueFrom == nil {
+		return
+	}
+	if env.ValueFrom.FieldRef == nil {
+		return
+	}
+	if !strings.HasPrefix(env.ValueFrom.FieldRef.FieldPath, "metadata") {
+		return
+	}
+	switch env.ValueFrom.FieldRef.FieldPath {
+	case "metadata.name":
+		env.Value = vPod.Name
+	case "metadata.namespace":
+		env.Value = vPod.Namespace
+	case "metadata.uid":
+		env.Value = string(vPod.UID)
+	}
+	env.ValueFrom = nil
 }
 
 func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []*v1.Service) map[string]string {
