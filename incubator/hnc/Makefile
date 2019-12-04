@@ -138,7 +138,7 @@ deploy-watch:
 deploy-prereq:
 	@kubectl cluster-info
 	-kubectl create namespace cert-manager
-	kubectl label namespace cert-manager certmanager.k8s.io/disable-validation=true --overwrite
+	kubectl label namespace cert-manager cert-manager.io/disable-validation=true --overwrite
 	kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 
 # Push the docker image
