@@ -111,7 +111,7 @@ func (c *controller) backPopulate(key interface{}) error {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", podInfo.clusterName, err)
 	}
 
-	pod, err := c.podLister.Pods(podInfo.namespace).Get(podInfo.name)
+	pPod, err := c.podLister.Pods(podInfo.namespace).Get(podInfo.name)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -124,15 +124,15 @@ func (c *controller) backPopulate(key interface{}) error {
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("could not find pod %s/%s pod in controller cache %v", podInfo.vNamespace, pod.Name, err)
+		return fmt.Errorf("could not find pPod %s/%s pPod in controller cache %v", podInfo.vNamespace, pPod.Name, err)
 	}
 	vPod := vPodObj.(*v1.Pod)
 
 	// first check whether tenant pod has assigned.
-	if vPod.Spec.NodeName != pod.Spec.NodeName {
-		n, err := c.client.Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
+	if vPod.Spec.NodeName != pPod.Spec.NodeName {
+		n, err := c.client.Nodes().Get(pPod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to get node %s from super master: %v", pod.Spec.NodeName, err)
+			return fmt.Errorf("failed to get node %s from super master: %v", pPod.Spec.NodeName, err)
 		}
 
 		_, err = client.CoreV1().Nodes().Create(node.NewVirtualNode(n))
@@ -147,21 +147,21 @@ func (c *controller) backPopulate(key interface{}) error {
 			},
 			Target: v1.ObjectReference{
 				Kind:       "Node",
-				Name:       pod.Spec.NodeName,
+				Name:       pPod.Spec.NodeName,
 				APIVersion: "v1",
 			},
 		})
 		if err != nil {
-			return fmt.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pod.Spec.NodeName, err)
+			return fmt.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pPod.Spec.NodeName, err)
 		}
 		// virtual pod has been updated, return and waiting for next loop.
 		c.queue.AddAfter(key, 1*time.Second)
 		return nil
 	}
 
-	if !equality.Semantic.DeepEqual(vPod.Status, pod.Status) {
+	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 		newPod := vPod.DeepCopy()
-		newPod.Status = pod.Status
+		newPod.Status = pPod.Status
 		if _, err = client.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, podInfo.clusterName, err)
 		}
@@ -169,16 +169,16 @@ func (c *controller) backPopulate(key interface{}) error {
 		return nil
 	}
 
-	// pod on super master is under deletion.
-	if pod.DeletionTimestamp != nil {
+	// pPod is under deletion.
+	if pPod.DeletionTimestamp != nil {
 		if vPod.DeletionTimestamp == nil {
-			klog.V(4).Infof("pod %s/%s is under deletion accidentally", pod.Namespace, pod.Name)
-			// waiting for periodic check to recreate a pod on super master.
+			klog.V(4).Infof("pPod %s/%s is under deletion accidentally", pPod.Namespace, pPod.Name)
+			// waiting for periodic check to recreate a pPod on super master.
 			return nil
 		}
-		if *vPod.DeletionGracePeriodSeconds != *pod.DeletionGracePeriodSeconds {
-			klog.V(4).Infof("delete virtual pod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pod.DeletionGracePeriodSeconds)
-			deleteOptions := metav1.NewDeleteOptions(*pod.DeletionGracePeriodSeconds)
+		if *vPod.DeletionGracePeriodSeconds != *pPod.DeletionGracePeriodSeconds {
+			klog.V(4).Infof("delete virtual pPod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pPod.DeletionGracePeriodSeconds)
+			deleteOptions := metav1.NewDeleteOptions(*pPod.DeletionGracePeriodSeconds)
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
 			return client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions)
 		}
