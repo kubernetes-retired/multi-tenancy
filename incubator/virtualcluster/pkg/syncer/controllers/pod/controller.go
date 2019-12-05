@@ -174,9 +174,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	_, err := c.podLister.Pods(targetNamespace).Get(name)
 	if err == nil {
-		// pod is up-to-date.
-		// TODO: check pod template hash and update
-		return nil
+		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
 	}
 
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, vPod)
@@ -280,12 +278,18 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v
 		return err
 	}
 
+	updatedPod := conversion.CheckPodEquality(pPod, vPod)
+	if updatedPod != nil {
+		pPod, err = c.client.Pods(targetNamespace).Update(updatedPod)
+		if err != nil {
+			return err
+		}
+	}
+
 	// pod has been updated by tenant controller
 	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 		c.enqueuePod(pPod)
 	}
-
-	// TODO: observe pod template hash and update
 
 	return nil
 }
