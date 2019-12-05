@@ -108,7 +108,9 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeFalse())
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeFalse())
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
 		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeFalse())
 
 		modifySecret(ctx, fooName, "foo-sec")
