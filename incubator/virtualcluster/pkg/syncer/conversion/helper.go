@@ -111,7 +111,6 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 }
 
 func resetMetadata(obj metav1.Object) {
-	obj.SetGenerateName("")
 	obj.SetSelfLink("")
 	obj.SetUID("")
 	obj.SetResourceVersion("")
