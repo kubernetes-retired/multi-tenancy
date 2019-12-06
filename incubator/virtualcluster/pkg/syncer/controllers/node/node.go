@@ -58,6 +58,8 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 	}
 	n.Status.Addresses = addresses
 	n.Status.NodeInfo = superMasterNode.Status.NodeInfo
+	n.Status.Capacity = superMasterNode.Status.Capacity
+	n.Status.Allocatable = superMasterNode.Status.Allocatable
 
 	return n
 }
