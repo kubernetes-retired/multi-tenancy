@@ -290,3 +290,37 @@ func CheckBinaryDataEquality(pObj, vObj map[string][]byte) map[string][]byte {
 
 	return updated
 }
+
+func CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
+	var updated *v1.Secret
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	// ignore service account token type secret.
+	if vObj.Type == v1.SecretTypeServiceAccountToken {
+		return updated
+	}
+
+	updatedData := CheckMapEquality(pObj.StringData, vObj.StringData)
+	if len(updatedData) != 0 {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.StringData = updatedData
+	}
+
+	updateBinaryData := CheckBinaryDataEquality(pObj.Data, vObj.Data)
+	if len(updateBinaryData) != 0 {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Data = updateBinaryData
+	}
+
+	return updated
+}
