@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 )
@@ -224,4 +225,68 @@ func CheckInt64Equality(pObj, vObj *int64) (bool, *int64) {
 	}
 
 	return false, updated
+}
+
+func CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigMap {
+	var updated *v1.ConfigMap
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	updatedData := CheckMapEquality(pObj.Data, vObj.Data)
+	if len(updatedData) != 0 {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Data = updatedData
+	}
+
+	updateBinaryData := CheckBinaryDataEquality(pObj.BinaryData, vObj.BinaryData)
+	if len(updateBinaryData) != 0 {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.BinaryData = updateBinaryData
+	}
+
+	return updated
+}
+
+func CheckMapEquality(pObj, vObj map[string]string) map[string]string {
+	if equality.Semantic.DeepEqual(pObj, vObj) {
+		return nil
+	}
+
+	// deep copy
+	updated := make(map[string]string, len(vObj))
+	for k, v := range vObj {
+		updated[k] = v
+	}
+
+	return updated
+}
+
+func CheckBinaryDataEquality(pObj, vObj map[string][]byte) map[string][]byte {
+	if equality.Semantic.DeepEqual(pObj, vObj) {
+		return nil
+	}
+
+	// deep copy
+	updated := make(map[string][]byte, len(vObj))
+	for k, v := range vObj {
+		if v == nil {
+			updated[k] = nil
+			continue
+		}
+
+		arr := make([]byte, len(v))
+		copy(arr, v)
+		updated[k] = arr
+	}
+
+	return updated
 }
