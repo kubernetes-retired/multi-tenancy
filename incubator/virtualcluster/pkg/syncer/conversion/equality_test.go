@@ -29,12 +29,14 @@ func TestCheckKVEquality(t *testing.T) {
 		name     string
 		super    map[string]string
 		virtual  map[string]string
+		isEqual  bool
 		expected map[string]string
 	}{
 		{
 			name:     "both empty",
 			super:    nil,
 			virtual:  nil,
+			isEqual:  true,
 			expected: nil,
 		},
 		{
@@ -43,6 +45,7 @@ func TestCheckKVEquality(t *testing.T) {
 			virtual: map[string]string{
 				"a": "b",
 			},
+			isEqual: false,
 			expected: map[string]string{
 				"a": "b",
 			},
@@ -55,6 +58,7 @@ func TestCheckKVEquality(t *testing.T) {
 			virtual: map[string]string{
 				"a": "b",
 			},
+			isEqual:  true,
 			expected: nil,
 		},
 		{
@@ -66,6 +70,7 @@ func TestCheckKVEquality(t *testing.T) {
 				"b": "c",
 				"a": "c",
 			},
+			isEqual: false,
 			expected: map[string]string{
 				"a": "c",
 				"b": "c",
@@ -80,9 +85,20 @@ func TestCheckKVEquality(t *testing.T) {
 			virtual: map[string]string{
 				"a": "c",
 			},
+			isEqual: false,
 			expected: map[string]string{
 				"a": "c",
 			},
+		},
+		{
+			name: "empty key",
+			super: map[string]string{
+				"a": "b",
+				"b": "c",
+			},
+			virtual:  nil,
+			isEqual:  false,
+			expected: nil,
 		},
 		{
 			name: "limiting key",
@@ -93,6 +109,7 @@ func TestCheckKVEquality(t *testing.T) {
 				"a":                     "b",
 				"tenancy.x-k8s.io/name": "name",
 			},
+			isEqual:  true,
 			expected: nil,
 		},
 		{
@@ -102,15 +119,20 @@ func TestCheckKVEquality(t *testing.T) {
 				"tenancy.x-k8s.io/name": "name",
 			},
 			virtual: nil,
+			isEqual: false,
 			expected: map[string]string{
 				"tenancy.x-k8s.io/name": "name",
 			},
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got := CheckKVEquality(tt.super, tt.virtual)
-			if !equality.Semantic.DeepEqual(got, tt.expected) {
-				tc.Errorf("expected result %+v, got %+v", tt.expected, got)
+			got, equal := CheckKVEquality(tt.super, tt.virtual)
+			if equal != tt.isEqual {
+				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
+			} else {
+				if !equality.Semantic.DeepEqual(got, tt.expected) {
+					tc.Errorf("expected result %+v, got %+v", tt.expected, got)
+				}
 			}
 		})
 	}
@@ -235,7 +257,7 @@ func TestCheckActiveDeadlineSecondsEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			equal, val := CheckInt64Equality(tt.pObj, tt.vObj)
+			val, equal := CheckInt64Equality(tt.pObj, tt.vObj)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			}
