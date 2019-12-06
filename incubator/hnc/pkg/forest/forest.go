@@ -317,20 +317,29 @@ func (ns *Namespace) HasCondition() bool {
 	return len(ns.conditions) > 0
 }
 
-// HasCritCondition returns if the namespace has any critical condition.
-func (ns *Namespace) HasCritCondition() bool {
-	// For now, all the critical conditions are set locally. It may not be true for
-	// future critical conditions. We may not want to just use local conditions.
-	return ns.GetCondition(Local) != nil
+// HasLocalCritCondition returns if the namespace has any local critical condition.
+func (ns *Namespace) HasLocalCritCondition() bool {
+	return ns.GetConditions(Local) != nil
 }
 
-// ClearConditions clears local conditions in the namespace.
-func (ns *Namespace) ClearConditions(key string) {
+// ClearCritConditions clears local Crit conditions and CritAncestor conditions.
+func (ns *Namespace) ClearCritConditions() {
+	ns.clearConditions(Local)
+
+	for key, conds := range ns.conditions {
+		if len(conds) == 1 && conds[0].code == api.CritAncestor {
+			ns.clearConditions(key)
+		}
+	}
+}
+
+// clearConditions clears conditions by key in a namespace.
+func (ns *Namespace) clearConditions(key string) {
 	delete(ns.conditions, key)
 }
 
-// GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
-func (ns *Namespace) GetCondition(key string) []condition {
+// GetConditions gets a condition list from a key string. It returns nil, if the key doesn't exist.
+func (ns *Namespace) GetConditions(key string) []condition {
 	c, _ := ns.conditions[key]
 	return c
 }

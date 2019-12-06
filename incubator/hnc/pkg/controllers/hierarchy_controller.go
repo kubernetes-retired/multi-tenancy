@@ -157,8 +157,8 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	}
 
 	// Clear locally-set conditions in the forest so we can set them to the latest.
-	hadCrit := ns.HasCritCondition()
-	ns.ClearConditions(forest.Local)
+	hadCrit := ns.HasLocalCritCondition()
+	ns.ClearCritConditions()
 
 	r.markExisting(log, ns)
 
@@ -169,6 +169,7 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	r.syncChildren(log, inst, ns)
 
 	r.syncLabel(log, nsInst, ns)
+	r.syncAncestor(log, inst, ns)
 
 	// Sync all conditions. This should be placed at the end after all conditions are updated.
 	r.syncConditions(log, inst, ns, hadCrit)
@@ -357,19 +358,34 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 	}
 }
 
+// syncAncestor sets CritAncestor condition in a namespace in the forest if any ancestor has
+// local critical conditions. The key is the nearest ancestor with the conditions.
+func (r *HierarchyReconciler) syncAncestor(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	ans := ns.Parent()
+	for ans != nil {
+		if !ans.HasLocalCritCondition() {
+			ans = ans.Parent()
+			continue
+		}
+		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
+		msg := fmt.Sprintf("Propagation paused in the subtree of %s due to a critical condition", ans.Name())
+		ns.SetCondition(ans.Name(), api.CritAncestor, msg)
+		return
+	}
+}
+
 func (r *HierarchyReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
 	// Sync critical conditions after all locally-set conditions are updated.
 	r.syncCritConditions(log, ns, hadCrit)
 
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
 	inst.Status.Conditions = ns.Conditions(log)
-	setCritAncestorCondition(log, inst, ns)
 }
 
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
 // namespace are gone or critical conditions are newly found.
 func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
-	hasCrit := ns.HasCritCondition()
+	hasCrit := ns.HasLocalCritCondition()
 
 	// Early exit if there's no need to enqueue relatives.
 	if hadCrit == hasCrit {
@@ -382,25 +398,6 @@ func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Nam
 	}
 	log.Info("Critical conditions are " + msg)
 	r.enqueueAffected(log, "descendant of a namespace with critical conditions "+msg, ns.DescendantNames()...)
-}
-
-func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
-	ans := ns.Parent()
-	for ans != nil {
-		if !ans.HasCritCondition() {
-			ans = ans.Parent()
-			continue
-		}
-		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
-		msg := fmt.Sprintf("Propagation paused in the subtree of %s due to a critical condition", ans.Name())
-		condition := api.Condition{
-			Code:    api.CritAncestor,
-			Msg:     msg,
-			Affects: []api.AffectedObject{{Namespace: ans.Name()}},
-		}
-		inst.Status.Conditions = append(inst.Status.Conditions, condition)
-		return
-	}
 }
 
 // enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
