@@ -17,11 +17,15 @@ limitations under the License.
 package configmap
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -35,6 +39,9 @@ import (
 type controller struct {
 	configMapClient                 v1core.ConfigMapsGetter
 	multiClusterConfigMapController *sc.MultiClusterController
+
+	configMapLister listersv1.ConfigMapLister
+	configMapSynced cache.InformerSynced
 }
 
 func Register(
@@ -55,10 +62,17 @@ func Register(
 	}
 	c.multiClusterConfigMapController = multiClusterConfigMapController
 
+	c.configMapLister = configMapInformer.Lister()
+	c.configMapSynced = configMapInformer.Informer().HasSynced
+
 	controllerManager.AddController(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	if !cache.WaitForCacheSync(stopCh, c.configMapSynced) {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
+
 	return nil
 }
 
@@ -94,6 +108,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 func (c *controller) reconcileConfigMapCreate(cluster, namespace, name string, configMap *v1.ConfigMap) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	_, err := c.configMapLister.ConfigMaps(targetNamespace).Get(name)
+	if err == nil {
+		return c.reconcileConfigMapUpdate(cluster, namespace, name, configMap)
+	}
+
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, configMap)
 	if err != nil {
 		return err
@@ -107,7 +126,24 @@ func (c *controller) reconcileConfigMapCreate(cluster, namespace, name string, c
 	return err
 }
 
-func (c *controller) reconcileConfigMapUpdate(cluster, namespace, name string, configMap *v1.ConfigMap) error {
+func (c *controller) reconcileConfigMapUpdate(cluster, namespace, name string, vConfigMap *v1.ConfigMap) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	pConfigMap, err := c.configMapLister.ConfigMaps(targetNamespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	updatedConfigMap := conversion.CheckConfigMapEquality(pConfigMap, vConfigMap)
+	if updatedConfigMap != nil {
+		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(updatedConfigMap)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
