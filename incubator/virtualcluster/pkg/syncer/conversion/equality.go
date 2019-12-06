@@ -324,3 +324,23 @@ func CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 
 	return updated
 }
+
+func CheckEndpointsEquality(pObj, vObj *v1.Endpoints) *v1.Endpoints {
+	var updated *v1.Endpoints
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	if !equality.Semantic.DeepEqual(pObj.Subsets, vObj.Subsets) {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Subsets = vObj.DeepCopy().Subsets
+	}
+
+	return updated
+}
