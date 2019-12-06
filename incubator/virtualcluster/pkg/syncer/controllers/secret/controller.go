@@ -17,12 +17,16 @@ limitations under the License.
 package secret
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/klog"
 
@@ -39,6 +43,9 @@ type controller struct {
 	client                       v1core.CoreV1Interface
 	secretInformer               coreinformers.SecretInformer
 	multiClusterSecretController *sc.MultiClusterController
+
+	secretLister listersv1.SecretLister
+	secretSynced cache.InformerSynced
 }
 
 func Register(
@@ -60,10 +67,16 @@ func Register(
 	}
 	c.multiClusterSecretController = multiClusterSecretController
 
+	c.secretLister = secretInformer.Lister()
+	c.secretSynced = secretInformer.Informer().HasSynced
+
 	controllerManager.AddController(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
 	return nil
 }
 
@@ -144,6 +157,11 @@ func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, nam
 
 func (c *controller) reconcileNormalSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	_, err := c.secretLister.Secrets(targetNamespace).Get(name)
+	if err == nil {
+		return c.reconcileNormalSecretUpdate(cluster, namespace, name, secret)
+	}
+
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, secret)
 	if err != nil {
 		return err
@@ -167,8 +185,24 @@ func (c *controller) reconcileSecretUpdate(cluster, namespace, name string, secr
 	}
 }
 
-func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
-	// TODO: calculate the diff excluding the metadata diff and update the super master one.
+func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string, vSecret *v1.Secret) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	pSecret, err := c.secretLister.Secrets(targetNamespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	updatedSecret := conversion.CheckSecretEquality(pSecret, vSecret)
+	if updatedSecret != nil {
+		pSecret, err = c.client.Secrets(targetNamespace).Update(updatedSecret)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

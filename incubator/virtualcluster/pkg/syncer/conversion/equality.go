@@ -70,16 +70,16 @@ func CheckObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *metav1.ObjectMeta {
 		updatedObj.GenerateName = vObj.GenerateName
 	}
 
-	labels := CheckKVEquality(pObj.Labels, vObj.Labels)
-	if len(labels) != 0 {
+	labels, equal := CheckKVEquality(pObj.Labels, vObj.Labels)
+	if !equal {
 		if updatedObj == nil {
 			updatedObj = pObj.DeepCopy()
 		}
-		updatedObj.Labels = vObj.Labels
+		updatedObj.Labels = labels
 	}
 
-	annotations := CheckKVEquality(pObj.Annotations, vObj.Annotations)
-	if len(annotations) != 0 {
+	annotations, equal := CheckKVEquality(pObj.Annotations, vObj.Annotations)
+	if !equal {
 		if updatedObj == nil {
 			updatedObj = pObj.DeepCopy()
 		}
@@ -98,7 +98,7 @@ func CheckObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *metav1.ObjectMeta {
 
 // CheckKVEquality check the whether super master object and virtual object
 // is logical equal. return equal or not. if not, return the updated value.
-func CheckKVEquality(pKV, vKV map[string]string) map[string]string {
+func CheckKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	// key in virtual more or diff then super
 	moreOrDiff := make(map[string]string)
 
@@ -127,7 +127,7 @@ func CheckKVEquality(pKV, vKV map[string]string) map[string]string {
 	}
 
 	if len(moreOrDiff) == 0 && len(less) == 0 {
-		return nil
+		return nil, true
 	}
 
 	updated := make(map[string]string)
@@ -141,7 +141,7 @@ func CheckKVEquality(pKV, vKV map[string]string) map[string]string {
 		updated[k] = v
 	}
 
-	return updated
+	return updated, false
 }
 
 // CheckPodSpecEquality check the whether super master object and virtual object
@@ -153,7 +153,7 @@ func CheckKVEquality(pKV, vKV map[string]string) map[string]string {
 func CheckPodSpecEquality(pObj, vObj *v1.PodSpec) *v1.PodSpec {
 	var updatedPodSpec *v1.PodSpec
 
-	equal, val := CheckInt64Equality(pObj.ActiveDeadlineSeconds, vObj.ActiveDeadlineSeconds)
+	val, equal := CheckInt64Equality(pObj.ActiveDeadlineSeconds, vObj.ActiveDeadlineSeconds)
 	if !equal {
 		if updatedPodSpec == nil {
 			updatedPodSpec = pObj.DeepCopy()
@@ -191,8 +191,8 @@ func CheckContainersImageEquality(pObj, vObj []v1.Container) []v1.Container {
 		vNameImageMap[v.Name] = v.Image
 	}
 
-	diff := CheckKVEquality(pNameImageMap, vNameImageMap)
-	if len(diff) == 0 {
+	diff, equal := CheckKVEquality(pNameImageMap, vNameImageMap)
+	if equal {
 		return nil
 	}
 
@@ -210,13 +210,13 @@ func CheckContainersImageEquality(pObj, vObj []v1.Container) []v1.Container {
 
 // CheckInt64Equality check the whether super master object and virtual object
 // is logical equal. return equal or not. if not, return the updated value.
-func CheckInt64Equality(pObj, vObj *int64) (bool, *int64) {
+func CheckInt64Equality(pObj, vObj *int64) (*int64, bool) {
 	if pObj == nil && vObj == nil {
-		return true, nil
+		return nil, true
 	}
 
 	if pObj != nil && vObj != nil {
-		return *pObj == *vObj, pointer.Int64Ptr(*vObj)
+		return pointer.Int64Ptr(*vObj), *pObj == *vObj
 	}
 
 	var updated *int64
@@ -224,7 +224,7 @@ func CheckInt64Equality(pObj, vObj *int64) (bool, *int64) {
 		updated = pointer.Int64Ptr(*vObj)
 	}
 
-	return false, updated
+	return updated, false
 }
 
 func CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigMap {
@@ -237,16 +237,16 @@ func CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigMap {
 		updated.ObjectMeta = *updatedMeta
 	}
 
-	updatedData := CheckMapEquality(pObj.Data, vObj.Data)
-	if len(updatedData) != 0 {
+	updatedData, equal := CheckMapEquality(pObj.Data, vObj.Data)
+	if !equal {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}
 		updated.Data = updatedData
 	}
 
-	updateBinaryData := CheckBinaryDataEquality(pObj.BinaryData, vObj.BinaryData)
-	if len(updateBinaryData) != 0 {
+	updateBinaryData, equal := CheckBinaryDataEquality(pObj.BinaryData, vObj.BinaryData)
+	if !equal {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}
@@ -256,26 +256,32 @@ func CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigMap {
 	return updated
 }
 
-func CheckMapEquality(pObj, vObj map[string]string) map[string]string {
+func CheckMapEquality(pObj, vObj map[string]string) (map[string]string, bool) {
 	if equality.Semantic.DeepEqual(pObj, vObj) {
-		return nil
+		return nil, true
 	}
 
 	// deep copy
+	if vObj == nil {
+		return nil, false
+	}
 	updated := make(map[string]string, len(vObj))
 	for k, v := range vObj {
 		updated[k] = v
 	}
 
-	return updated
+	return updated, false
 }
 
-func CheckBinaryDataEquality(pObj, vObj map[string][]byte) map[string][]byte {
+func CheckBinaryDataEquality(pObj, vObj map[string][]byte) (map[string][]byte, bool) {
 	if equality.Semantic.DeepEqual(pObj, vObj) {
-		return nil
+		return nil, true
 	}
 
 	// deep copy
+	if vObj == nil {
+		return nil, false
+	}
 	updated := make(map[string][]byte, len(vObj))
 	for k, v := range vObj {
 		if v == nil {
@@ -286,6 +292,60 @@ func CheckBinaryDataEquality(pObj, vObj map[string][]byte) map[string][]byte {
 		arr := make([]byte, len(v))
 		copy(arr, v)
 		updated[k] = arr
+	}
+
+	return updated, false
+}
+
+func CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
+	var updated *v1.Secret
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	// ignore service account token type secret.
+	if vObj.Type == v1.SecretTypeServiceAccountToken {
+		return updated
+	}
+
+	updatedData, equal := CheckMapEquality(pObj.StringData, vObj.StringData)
+	if !equal {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.StringData = updatedData
+	}
+
+	updateBinaryData, equal := CheckBinaryDataEquality(pObj.Data, vObj.Data)
+	if !equal {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Data = updateBinaryData
+	}
+
+	return updated
+}
+
+func CheckEndpointsEquality(pObj, vObj *v1.Endpoints) *v1.Endpoints {
+	var updated *v1.Endpoints
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	if !equality.Semantic.DeepEqual(pObj.Subsets, vObj.Subsets) {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Subsets = vObj.DeepCopy().Subsets
 	}
 
 	return updated

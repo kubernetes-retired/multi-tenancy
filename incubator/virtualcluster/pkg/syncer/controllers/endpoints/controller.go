@@ -17,11 +17,15 @@ limitations under the License.
 package endpoints
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -35,6 +39,9 @@ import (
 type controller struct {
 	endpointClient                  v1core.EndpointsGetter
 	multiClusterEndpointsController *sc.MultiClusterController
+
+	endpointsLister listersv1.EndpointsLister
+	endpointsSynced cache.InformerSynced
 }
 
 func Register(
@@ -54,10 +61,17 @@ func Register(
 	}
 	c.multiClusterEndpointsController = multiClusterEndpointsController
 
+	c.endpointsLister = endpointsInformer.Lister()
+	c.endpointsSynced = endpointsInformer.Informer().HasSynced
+
 	controllerManager.AddController(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	if !cache.WaitForCacheSync(stopCh, c.endpointsSynced) {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
+
 	return nil
 }
 
@@ -93,6 +107,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 func (c *controller) reconcileEndpointsCreate(cluster, namespace, name string, ep *v1.Endpoints) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	_, err := c.endpointsLister.Endpoints(targetNamespace).Get(name)
+	if err == nil {
+		return c.reconcileEndpointsUpdate(cluster, namespace, name, ep)
+	}
+
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, ep)
 	if err != nil {
 		return err
@@ -108,7 +127,24 @@ func (c *controller) reconcileEndpointsCreate(cluster, namespace, name string, e
 	return err
 }
 
-func (c *controller) reconcileEndpointsUpdate(cluster, namespace, name string, ep *v1.Endpoints) error {
+func (c *controller) reconcileEndpointsUpdate(cluster, namespace, name string, vEP *v1.Endpoints) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	pEP, err := c.endpointsLister.Endpoints(targetNamespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	updatedEndpoints := conversion.CheckEndpointsEquality(pEP, vEP)
+	if updatedEndpoints != nil {
+		pEP, err = c.endpointClient.Endpoints(targetNamespace).Update(updatedEndpoints)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

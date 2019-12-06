@@ -17,6 +17,7 @@ limitations under the License.
 package namespace
 
 import (
+	"fmt"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -24,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -37,6 +40,9 @@ import (
 type controller struct {
 	namespaceClient                 v1core.NamespacesGetter
 	multiClusterNamespaceController *sc.MultiClusterController
+
+	nsLister listersv1.NamespaceLister
+	nsSynced cache.InformerSynced
 }
 
 func Register(
@@ -56,10 +62,18 @@ func Register(
 		return
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
+
+	c.nsLister = namespaceInformer.Lister()
+	c.nsSynced = namespaceInformer.Informer().HasSynced
+
 	controllerManager.AddController(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	if !cache.WaitForCacheSync(stopCh, c.nsSynced) {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
+
 	return nil
 }
 
@@ -94,6 +108,13 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileNamespaceCreate(cluster, name string, namespace *v1.Namespace) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, name)
+	_, err := c.nsLister.Get(targetNamespace)
+	if err == nil {
+		// namespace is ready.
+		return nil
+	}
+
 	newObj, err := conversion.BuildSuperMasterNamespace(cluster, namespace)
 	if err != nil {
 		return err
