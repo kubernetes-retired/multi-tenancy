@@ -317,11 +317,20 @@ func (ns *Namespace) HasCondition() bool {
 	return len(ns.conditions) > 0
 }
 
+// HasLocalCritCondition returns if the namespace has any local critical condition.
+func (ns *Namespace) HasLocalCritCondition() bool {
+	return ns.GetCondition(Local) != nil
+}
+
 // HasCritCondition returns if the namespace has any critical condition.
 func (ns *Namespace) HasCritCondition() bool {
-	// For now, all the critical conditions are set locally. It may not be true for
-	// future critical conditions. We may not want to just use local conditions.
-	return ns.GetCondition(Local) != nil
+	if ns.HasLocalCritCondition() {
+		return true
+	}
+	if ns.Parent() == nil {
+		return false
+	}
+	return ns.Parent().HasCritCondition()
 }
 
 // ClearConditions clears local conditions in the namespace.

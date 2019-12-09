@@ -117,8 +117,8 @@ func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logge
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
-	// If it's about to be deleted, do nothing, just wait for it to be actually deleted.
-	if !inst.GetDeletionTimestamp().IsZero() {
+	// Early exit if no action is required.
+	if r.ignore(ctx, log, inst) {
 		return ignore, nil
 	}
 
@@ -139,6 +139,27 @@ func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logge
 	}
 
 	return r.syncObject(ctx, log, inst)
+}
+
+func (r *ObjectReconcilerNew) ignore(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) bool {
+	// If it's about to be deleted, do nothing, just wait for it to be actually deleted.
+	if !inst.GetDeletionTimestamp().IsZero() {
+		return true
+	}
+
+	ns := r.Forest.Get(inst.GetNamespace())
+	// If the object is reconciled before the namespace is synced (when start-up), do nothing.
+	if !ns.Exists() {
+		log.Info("Containing namespace hasn't been synced yet")
+		return true
+	}
+	// If the namespace has critical condition, do nothing.
+	if ns.HasCritCondition() {
+		log.Info("Containing namespace has critical condition(s)")
+		return true
+	}
+
+	return false
 }
 
 // syncObject handles a source object and a propagated object differently. If a source object changes,
