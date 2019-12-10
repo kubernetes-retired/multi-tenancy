@@ -157,7 +157,7 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	}
 
 	// Clear locally-set conditions in the forest so we can set them to the latest.
-	hadCrit := ns.HasCritCondition()
+	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearConditions(forest.Local)
 
 	r.markExisting(log, ns)
@@ -369,7 +369,7 @@ func (r *HierarchyReconciler) syncConditions(log logr.Logger, inst *api.Hierarch
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
 // namespace are gone or critical conditions are newly found.
 func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
-	hasCrit := ns.HasCritCondition()
+	hasCrit := ns.HasLocalCritCondition()
 
 	// Early exit if there's no need to enqueue relatives.
 	if hadCrit == hasCrit {
@@ -387,7 +387,7 @@ func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Nam
 func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	ans := ns.Parent()
 	for ans != nil {
-		if !ans.HasCritCondition() {
+		if !ans.HasLocalCritCondition() {
 			ans = ans.Parent()
 			continue
 		}

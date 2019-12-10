@@ -120,6 +120,78 @@ var _ = Describe("Secret", func() {
 		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeTrue())
 		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeTrue())
 	})
+
+	It("shouldn't propagate/delete if the namespace has Crit condition", func() {
+		if !newObjectController {
+			return
+		}
+
+		// Set tree as baz -> bar -> foo(root).
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
+
+		// Set foo's parent to a non-existent namespace.
+		brumpfName := createNSName("brumpf")
+		fooHier := newOrGetHierarchy(ctx, fooName)
+		fooHier.Spec.Parent = brumpfName
+		updateHierarchy(ctx, fooHier)
+		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(true))
+
+		// Set baz's parent to foo and add a new sec in foo.
+		setParent(ctx, bazName, fooName)
+		makeSecret(ctx, fooName, "foo-sec-2")
+
+		// Wait 1 second to make sure any potential actions are done.
+		time.Sleep(1 * time.Second)
+
+		// Since the sync is frozen, baz should still have bar-sec (no deleting).
+		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
+		// baz and bar shouldn't have foo-sec-2 (no propagating).
+		Eventually(hasSecret(ctx, bazName, "foo-sec-2")).Should(BeFalse())
+		Eventually(hasSecret(ctx, barName, "foo-sec-2")).Should(BeFalse())
+
+		// Create the missing parent namespace with one object.
+		brumpfNS := &corev1.Namespace{}
+		brumpfNS.Name = brumpfName
+		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
+		makeSecret(ctx, brumpfName, "brumpf-sec")
+
+		// The Crit conditions should be gone.
+		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(Equal(false))
+		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(false))
+
+		// Everything should be up to date after the Crit conditions are gone.
+		Eventually(hasSecret(ctx, fooName, "brumpf-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, fooName, "brumpf-sec")).Should(Equal(brumpfName))
+
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, barName, "foo-sec-2")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec-2")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, barName, "brumpf-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "brumpf-sec")).Should(Equal(brumpfName))
+
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, bazName, "foo-sec-2")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec-2")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, bazName, "brumpf-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "brumpf-sec")).Should(Equal(brumpfName))
+
+		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeFalse())
+	})
 })
 
 func makeSecret(ctx context.Context, nsName, secretName string) {
