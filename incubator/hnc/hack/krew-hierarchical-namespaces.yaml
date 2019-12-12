@@ -3,11 +3,11 @@
 apiVersion: krew.googlecontainertools.github.com/v1alpha2
 kind: Plugin
 metadata:
-  name: hnc
+  name: hierarchical-namespaces
 spec:
-  shortDescription: Implement hierarchy concept on namespaces.
+  shortDescription: Manipulates hierarchical namespaces.
   description: |
-    Hierarchical Namespace Controller (HNC).
+    Manipulates hierarchical namespaces provided by the Hierarchical Namespace Controller (HNC).
   version: --- will be populated by make krew-build ---
   homepage: https://github.com/kubernetes-sigs/multi-tenancy/incubator/hnc
   platforms:
@@ -18,6 +18,6 @@ spec:
           arch: amd64
       sha256: --- will be populated by make krew-build ---
       files:
-        - from: "bin/kubectl/kubectl-hnc"
+        - from: "bin/kubectl/kubectl-hierarchical_namespaces"
           to: "."
-      bin: "./kubectl-hnc"
+      bin: "./kubectl-hierarchical_namespaces"

@@ -53,8 +53,8 @@ func init() {
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	rootCmd = &cobra.Command{
-		Use:   "kubectl-hnc",
-		Short: "Manipulate the hierarchy",
+		Use:   "kubectl hierarchical-namespaces",
+		Short: "Manipulates hierarchical namespaces provided by HNC",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			config, err := kubecfgFlags.ToRESTConfig()
 			if err != nil {
