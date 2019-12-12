@@ -53,7 +53,7 @@ func init() {
 	// This is a temporary flag to toggle the new/old object controller for testing. It will be removed
 	// after the GitHub issue "restructure object controller to allow explicit enqueuing" is resolved
 	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/195)
-	flag.BoolVar(&newObjectController, "enable-new-object-controller", false, "Enables new object controller.")
+	flag.BoolVar(&newObjectController, "enable-new-object-controller", true, "Enables new object controller.")
 }
 
 func TestAPIs(t *testing.T) {
