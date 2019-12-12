@@ -52,9 +52,9 @@ To deploy to a cluster:
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
       deploy this way, or if we change the recommended version of cert-manager.
-    - This will also install the `kubectl-hnc` plugin into `$GOPATH/bin`, so
-      make sure that's in your path if you want to use commands like `kubectl
-      hnc tree`.
+    - This will also install the `kubectl-hierarchical_namespaces` plugin into
+      `$GOPATH/bin` (as well as its alias, `kubectl-hns`), so make sure that's
+      in your path if you want to use commands like `kubectl hns tree`.
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`

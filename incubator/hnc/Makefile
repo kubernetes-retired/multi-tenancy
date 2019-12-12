@@ -33,7 +33,7 @@ NOC=0
 endif
 
 # Get check sum value of krew archive
-KREW_CKSM=$(shell sha256sum bin/kubectl-hnc.tar.gz | cut -d " " -f 1)
+KREW_CKSM=$(shell sha256sum bin/kubectl-hierarchical_namespaces.tar.gz | cut -d " " -f 1)
 
 
 all: test docker-build
@@ -52,37 +52,44 @@ test: build
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests
 	go build -o bin/manager ./cmd/manager/main.go
-	go build -o bin/kubectl/kubectl-hnc ./cmd/kubectl/main.go
+	go build -o bin/kubectl/kubectl-hierarchical_namespaces ./cmd/kubectl/main.go
 
 # Clean all binaries (manager and kubectl)
-clean:
-	rm -r bin/kubectl/kubectl-hnc
-	rm -f bin/manager
-	
+clean: krew-uninstall
+	-rm -rf bin/*
+	-rm -rf manifests/*
+	-rm -f ${GOPATH}/bin/kubectl-hierarchical_namespaces
+	-rm -f ${GOPATH}/bin/kubectl-hns
+
 # Install kubectl plugin
 kubectl: build
-	cp bin/kubectl/kubectl-hnc ${GOPATH}/bin/kubectl-hnc
-	@echo "Installed kubectl-hnc to GOPATH/bin"
+	cp bin/kubectl/kubectl-hierarchical_namespaces ${GOPATH}/bin/kubectl-hierarchical_namespaces
+	ln -fs ${GOPATH}/bin/kubectl-hierarchical_namespaces ${GOPATH}/bin/kubectl-hns
+	@echo "Installed kubectl-hierarchical_namespaces and kubectl-hns to GOPATH/bin"
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: build
 	go run ./cmd/manager/main.go --novalidation
 
 # Install kubectl plugin locally using krew.
-krew-build: build tar
+krew-build: krew-tar
+	cp hack/krew-hierarchical-namespaces.yaml manifests/krew-hierarchical-namespaces.yaml
 	sed -i 's/^\(\s*sha256\s*:\s*\).*/\1"$(KREW_CKSM)"/' \
-		hack/hnc.yaml
+		manifests/krew-hierarchical-namespaces.yaml
 	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(VERSION)"/' \
-		hack/hnc.yaml
-	kubectl krew install --manifest=hack/hnc.yaml --archive=bin/kubectl-hnc.tar.gz
+		manifests/krew-hierarchical-namespaces.yaml
+
+# Install kubectl plugin locally using krew.
+krew-install: krew-build
+	kubectl krew install --manifest=manifests/krew-hierarchical-namespaces.yaml --archive=bin/kubectl-hierarchical_namespaces.tar.gz
 
 # Make krew archive and put into /hack
-tar:
-	tar -zcvf bin/kubectl-hnc.tar.gz bin/kubectl
+krew-tar: build
+	tar -zcvf bin/kubectl-hierarchical_namespaces.tar.gz bin/kubectl
 
 # Uninstall krew
-krew-uninstall: 
-	kubectl krew uninstall hnc
+krew-uninstall:
+	-kubectl krew uninstall hierarchical-namespaces
 
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
