@@ -84,8 +84,9 @@ func init() {
 	kubecfgFlags.AddFlags(rootCmd.PersistentFlags())
 
 	rootCmd.AddCommand(newSetCmd())
-	rootCmd.AddCommand(newShowCmd())
+	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
+	rootCmd.AddCommand(newCreateCmd())
 }
 
 func Execute() {
@@ -127,7 +128,7 @@ func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason s
 		err = hncClient.Put().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
 	}
 	if err != nil {
-		fmt.Printf("Error %s: %s\n", reason, err)
+		fmt.Printf("\nCould not %s.\nReason: %s\n", reason, err)
 		os.Exit(1)
 	}
 }

@@ -23,8 +23,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var showCmd = &cobra.Command{
-	Use:   "show",
+var describeCmd = &cobra.Command{
+	Use:   "describe",
 	Short: "Displays information about the hierarchy configuration",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -94,6 +94,6 @@ var showCmd = &cobra.Command{
 	},
 }
 
-func newShowCmd() *cobra.Command {
-	return showCmd
+func newDescribeCmd() *cobra.Command {
+	return describeCmd
 }
