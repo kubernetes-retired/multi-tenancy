@@ -7,7 +7,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: manager-role
+  name: vc-manager-role
 rules:
 - apiGroups:
   - tenancy.x-k8s.io
@@ -152,11 +152,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: manager-rolebinding
+  name: vc-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-role
+  name: vc-manager-role
 subjects:
 - kind: ServiceAccount
   name: vc-manager
