@@ -141,12 +141,11 @@ deploy: deploy-prereq docker-push kubectl manifests
 deploy-watch:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
 
-# Installs prerequisites
+# Installs prerequisites. See https://cert-manager.io/docs/installation/kubernetes/ for why we're not validating our YAML.
 deploy-prereq:
 	@kubectl cluster-info
 	-kubectl create namespace cert-manager
-	kubectl label namespace cert-manager cert-manager.io/disable-validation=true --overwrite
-	kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 
 # Push the docker image
 docker-push: docker-build
