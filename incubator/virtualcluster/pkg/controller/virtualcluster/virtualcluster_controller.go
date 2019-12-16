@@ -54,7 +54,7 @@ const (
 	// frequency of polling apiserver for readiness of each component
 	ComponentPollPeriod = 2 * time.Second
 	// timeout for components deployment
-	DeployTimeOut = 120 * time.Second
+	DeployTimeOut = 180 * time.Second
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
