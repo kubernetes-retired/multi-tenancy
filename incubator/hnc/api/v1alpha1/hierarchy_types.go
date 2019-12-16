@@ -19,20 +19,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Any changes here need to also be reflected in the kubebuilder:validation:Enum comment, below.
-// The meanings of all these constants are defined in the comment to Condition.Code, below.
+// Constants for types and well-known names
+const (
+	Singleton = "hierarchy"
+	Resource  = "hierarchyconfigurations"
+)
+
+// Constants for labels and annotations
+const (
+	MetaGroup          = "hnc.x-k8s.io"
+	LabelInheritedFrom = MetaGroup + "/inheritedFrom"
+)
+
+// Condition codes. *All* codes must also be documented in the comment to Condition.Code.
 const (
 	CritParentMissing         Code = "CRIT_PARENT_MISSING"
 	CritParentInvalid         Code = "CRIT_PARENT_INVALID"
 	CritRequiredChildConflict Code = "CRIT_REQUIRED_CHILD_CONFLICT"
 	CritAncestor              Code = "CRIT_ANCESTOR"
-	MetaGroup                      = "hnc.x-k8s.io"
-	LabelInheritedFrom             = MetaGroup + "/inheritedFrom"
-)
-
-var (
-	Singleton = "hierarchy"
-	Resource  = "hierarchyconfigurations"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -84,23 +88,37 @@ type HierarchyConfigurationList struct {
 	Items           []HierarchyConfiguration `json:"items"`
 }
 
-// Code is a machine-readable string value summarizing the condition.
-// +kubebuilder:validation:Enum=CRIT_PARENT_MISSING;CRIT_PARENT_INVALID;CRIT_REQUIRED_CHILD_CONFLICT;CRIT_ANCESTOR
+// Code is the machine-readable, enum-like type of `Condition.code`. See that field for more
+// information.
 type Code string
 
 // Condition specifies the condition and the affected objects.
 type Condition struct {
-	// Defines the conditions in a machine-readable string value.
-	// Valid values are:
+	// Describes the condition in a machine-readable string value. The currently valid values are
+	// shown below, but new values may be added over time. This field is always present in a
+	// condition.
+	//
+	// All codes that begin with the prefix `CRIT_` indicate that all HNC activities (e.g. propagating
+	// objects, updating labels) have been paused in this namespaces. HNC will resume updating the
+	// namespace once the condition has been resolved. Non-critical conditions typically indicate some
+	// kind of error that HNC itself can ignore, but likely indicates that the hierarchical structure
+	// is out-of-sync with the users' expectations.
+	//
+	// If the validation webhooks are working properly, there should typically not be any conditions
+	// on any namespaces, although some may appear transiently when the HNC controller is restarted.
+	// These should quickly resolve themselves (<30s).
+	//
+	// Currently, the supported values are:
 	//
 	// - "CRIT_PARENT_MISSING": the specified parent is missing
 	//
-	// - "CRIT_PARENT_INVALID": the specified parent is invalid (ie would cause a cycle)
+	// - "CRIT_PARENT_INVALID": the specified parent is invalid (e.g., would cause a cycle)
 	//
 	// - "CRIT_REQUIRED_CHILD_CONFLICT": there's a conflict (ie in between parent's RequiredChildren spec and child's Parent spec)
 	//
-	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no longer being updated
-	Code Code   `json:"code,omitempty"`
+	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no
+	// longer being updated either.
+	Code Code   `json:"code"`
 	Msg  string `json:"msg,omitempty"`
 
 	// Affects is a list of group-version-kind-namespace-name that uniquely identifies

@@ -78,22 +78,32 @@ spec:
                       type: object
                     type: array
                   code:
-                    description: "Defines the conditions in a machine-readable string
-                      value. Valid values are: \n - \"CRIT_PARENT_MISSING\": the specified
-                      parent is missing \n - \"CRIT_PARENT_INVALID\": the specified
-                      parent is invalid (ie would cause a cycle) \n - \"CRIT_REQUIRED_CHILD_CONFLICT\":
+                    description: "Describes the condition in a machine-readable string
+                      value. The currently valid values are shown below, but new values
+                      may be added over time. This field is always present in a condition.
+                      \n All codes that begin with the prefix `CRIT_` indicate that
+                      all HNC activities (e.g. propagating objects, updating labels)
+                      have been paused in this namespaces. HNC will resume updating
+                      the namespace once the condition has been resolved. Non-critical
+                      conditions typically indicate some kind of error that HNC itself
+                      can ignore, but likely indicates that the hierarchical structure
+                      is out-of-sync with the users' expectations. \n If the validation
+                      webhooks are working properly, there should typically not be
+                      any conditions on any namespaces, although some may appear transiently
+                      when the HNC controller is restarted. These should quickly resolve
+                      themselves (<30s). \n Currently, the supported values are: \n
+                      - \"CRIT_PARENT_MISSING\": the specified parent is missing \n
+                      - \"CRIT_PARENT_INVALID\": the specified parent is invalid (e.g.,
+                      would cause a cycle) \n - \"CRIT_REQUIRED_CHILD_CONFLICT\":
                       there's a conflict (ie in between parent's RequiredChildren
                       spec and child's Parent spec) \n - \"CRIT_ANCESTOR\": a critical
                       error exists in an ancestor namespace, so this namespace is
-                      no longer being updated"
-                    enum:
-                    - CRIT_PARENT_MISSING
-                    - CRIT_PARENT_INVALID
-                    - CRIT_REQUIRED_CHILD_CONFLICT
-                    - CRIT_ANCESTOR
+                      no longer being updated either."
                     type: string
                   msg:
                     type: string
+                required:
+                - code
                 type: object
               type: array
           type: object
