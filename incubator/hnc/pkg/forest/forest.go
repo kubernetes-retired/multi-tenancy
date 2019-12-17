@@ -15,6 +15,12 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
+var (
+	// OutOfSync is used to report a precondition failure. It's not (currently) returned from this
+	// package but is used externally.
+	OutOfSync = errors.New("The forest is out of sync with itself")
+)
+
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
 // the forest legally (ie, prevent cycles).
 //
@@ -312,17 +318,13 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 	return ns.parent.IsAncestor(other)
 }
 
-// HasCondition returns if the namespace has any local condition.
-func (ns *Namespace) HasCondition() bool {
-	return len(ns.conditions) > 0
-}
-
-// HasLocalCritCondition returns if the namespace has any local critical condition.
+// HasLocalCritCondition returns if the namespace itself has any local critical conditions, ignoring
+// its ancestors.
 func (ns *Namespace) HasLocalCritCondition() bool {
 	return ns.GetCondition(Local) != nil
 }
 
-// HasCritCondition returns if the namespace has any critical condition.
+// HasCritCondition returns if the namespace or any of its ancestors has any critical condition.
 func (ns *Namespace) HasCritCondition() bool {
 	if ns.HasLocalCritCondition() {
 		return true
@@ -333,9 +335,35 @@ func (ns *Namespace) HasCritCondition() bool {
 	return ns.Parent().HasCritCondition()
 }
 
-// ClearConditions clears local conditions in the namespace.
-func (ns *Namespace) ClearConditions(key string) {
-	delete(ns.conditions, key)
+// ClearConditions clears local conditions in the namespace for a single key. If `code` is
+// non-empty, it only clears conditions with that code, otherwise it clears all conditions for that
+// key. It should only be called by the code that also *sets* the conditions.
+func (ns *Namespace) ClearConditions(key string, code api.Code) {
+	// We don't *need* to special-case this here but it's a lot simpler if we do.
+	if code == "" {
+		delete(ns.conditions, key)
+		return
+	}
+
+	updated := []condition{}
+	for _, c := range ns.conditions[key] {
+		if c.code != code {
+			updated = append(updated, c)
+		}
+	}
+	if len(updated) == 0 {
+		delete(ns.conditions, key)
+	} else {
+		ns.conditions[key] = updated
+	}
+}
+
+// ClearAllConditions clears all conditions of a given code from this namespace across all keys. It
+// should only be called by the code that also *sets* the condition.
+func (ns *Namespace) ClearAllConditions(code api.Code) {
+	for k, _ := range ns.conditions {
+		ns.ClearConditions(k, code)
+	}
 }
 
 // GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
@@ -345,7 +373,8 @@ func (ns *Namespace) GetCondition(key string) []condition {
 }
 
 // SetCondition adds a condition into the list of conditions for key string, returning
-// true if it does not exist previously.
+// true if it does not exist previously. The key must either be the constant `forest.Local`, a
+// namespace name, or a string of the form "group/version/kind/namespace/name".
 func (ns *Namespace) SetCondition(key string, code api.Code, msg string) {
 	oldConditions := ns.conditions[key]
 	for _, condition := range oldConditions {
@@ -363,14 +392,17 @@ func (ns *Namespace) Conditions(log logr.Logger) []api.Condition {
 	return flatten(ns.convertConditions(log))
 }
 
+type objectsByMsg map[string][]api.AffectedObject
+type objectsByCodeAndMsg map[api.Code]objectsByMsg
+
 // convertConditions converts string -> condition{code, msg} map into condition{code, msg} -> affected map.
-func (ns *Namespace) convertConditions(log logr.Logger) map[api.Code]map[string][]api.AffectedObject {
-	converted := map[api.Code]map[string][]api.AffectedObject{}
+func (ns *Namespace) convertConditions(log logr.Logger) objectsByCodeAndMsg {
+	converted := objectsByCodeAndMsg{}
 	for key, conditions := range ns.conditions {
 		for _, condition := range conditions {
 			affectedObject := getAffectedObject(key, log)
 			if affected, ok := converted[condition.code][condition.msg]; !ok {
-				converted[condition.code] = map[string][]api.AffectedObject{condition.msg: {affectedObject}}
+				converted[condition.code] = objectsByMsg{condition.msg: {affectedObject}}
 			} else {
 				converted[condition.code][condition.msg] = append(affected, affectedObject)
 			}
@@ -380,7 +412,7 @@ func (ns *Namespace) convertConditions(log logr.Logger) map[api.Code]map[string]
 }
 
 // flatten flattens condition{code, msg} -> affected map into a list of condition{code, msg, []affected}.
-func flatten(m map[api.Code]map[string][]api.AffectedObject) []api.Condition {
+func flatten(m objectsByCodeAndMsg) []api.Condition {
 	flattened := []api.Condition{}
 	for code, msgAffected := range m {
 		for msg, affected := range msgAffected {
@@ -398,7 +430,8 @@ func flatten(m map[api.Code]map[string][]api.AffectedObject) []api.Condition {
 	return nil
 }
 
-// getAffectedObject gets AffectedObject from a namespace or a string of form group/version/kind/namespace/name.
+// getAffectedObject gets AffectedObject from a namespace or a string of the form
+// group/version/kind/namespace/name.
 func getAffectedObject(gvknn string, log logr.Logger) api.AffectedObject {
 	if gvknn == Local {
 		return api.AffectedObject{}
@@ -407,7 +440,7 @@ func getAffectedObject(gvknn string, log logr.Logger) api.AffectedObject {
 	a := strings.Split(gvknn, "/")
 	// The affected is a namespace.
 	if len(a) == 1 {
-		return api.AffectedObject{Namespace: a[0]}
+		return api.AffectedObject{Version: "v1", Kind: "Namespace", Name: a[0]}
 	}
 	// The affected is an object.
 	if len(a) == 5 {
