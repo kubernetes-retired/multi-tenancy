@@ -193,9 +193,9 @@ func (r *HierarchyReconciler) onMissingNamespace(log logr.Logger, ns *forest.Nam
 func (r *HierarchyReconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
-		r.enqueueAffected(log, "relative of newly created namespace", ns.RelativesNames()...)
+		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
 		if ns.RequiredChildOf != "" {
-			r.enqueueAffected(log, "parent of newly created required subnamespace", ns.RequiredChildOf)
+			r.enqueueAffected(log, "parent of newly synced/created required subnamespace", ns.RequiredChildOf)
 		}
 	}
 }
@@ -243,16 +243,21 @@ func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *api.HierarchyCon
 		if err := ns.SetParent(curParent); err != nil {
 			log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
 			ns.SetCondition(forest.Local, api.CritParentInvalid, err.Error())
-		} else {
-			// Only call other parts of the hierarchy recursively if this one was successfully updated;
-			// otherwise, if you get a cycle, this could get into an infinite loop.
-			if oldParent != nil {
-				r.enqueueAffected(log, "removed as parent", oldParent.Name())
-			}
-			if curParent != nil {
-				r.enqueueAffected(log, "set as parent", curParent.Name())
-			}
+			return
 		}
+
+		// Only call other parts of the hierarchy recursively if this one was successfully updated;
+		// otherwise, if you get a cycle, this could get into an infinite loop.
+		if oldParent != nil {
+			r.enqueueAffected(log, "removed as parent", oldParent.Name())
+		}
+		if curParent != nil {
+			r.enqueueAffected(log, "set as parent", curParent.Name())
+		}
+
+		// Also update all descendants so they can update their labels (and in future, annotations) if
+		// necessary.
+		r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
 	}
 }
 
@@ -278,14 +283,6 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
 		metadata.SetLabel(nsInst, l, dist)
-	}
-
-	// All namespaces in its subtree should update the labels as well.
-	//
-	// TODO: only enqueue these when the parent has changed? We don't need to enqueue this every time
-	// the hc is updated for any reason.
-	if descendants := ns.DescendantNames(); descendants != nil {
-		r.enqueueAffected(log, "update depth label", descendants...)
 	}
 }
 
