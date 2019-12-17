@@ -98,7 +98,7 @@ func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	inst.SetName(req.Name)
 	if err := r.Get(ctx, req.NamespacedName, inst); err != nil {
 		if !errors.IsNotFound(err) {
-			log.Info("Couldn't read")
+			log.Error(err, "Couldn't read")
 			return resp, err
 		}
 	}
@@ -150,12 +150,12 @@ func (r *ObjectReconcilerNew) ignore(ctx context.Context, log logr.Logger, inst 
 	ns := r.Forest.Get(inst.GetNamespace())
 	// If the object is reconciled before the namespace is synced (when start-up), do nothing.
 	if !ns.Exists() {
-		log.Info("Containing namespace hasn't been synced yet")
+		log.V(1).Info("Containing namespace hasn't been synced yet")
 		return true
 	}
 	// If the namespace has critical condition, do nothing.
 	if ns.HasCritCondition() {
-		log.Info("Containing namespace has critical condition(s)")
+		log.V(1).Info("Containing namespace has critical condition(s)")
 		return true
 	}
 
@@ -218,7 +218,7 @@ func (r *ObjectReconcilerNew) syncSource(ctx context.Context, log logr.Logger, s
 
 	// Early exit if the source object exists and remains unchanged.
 	if origCopy != nil && reflect.DeepEqual(object.Canonical(src), object.Canonical(origCopy)) {
-		log.Info("Unchanged Source")
+		log.V(1).Info("Unchanged Source")
 		return
 	}
 
@@ -235,7 +235,7 @@ func (r *ObjectReconcilerNew) enqueueDescendants(ctx context.Context, log logr.L
 	for _, ns := range dns {
 		dc := object.Canonical(src)
 		dc.SetNamespace(ns)
-		log.Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", "The source changed")
+		log.V(1).Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", "The source changed")
 		r.Affected <- event.GenericEvent{Meta: dc}
 	}
 }
@@ -253,7 +253,7 @@ func (r *ObjectReconcilerNew) enqueueLocalObjects(ctx context.Context, log logr.
 		// Using canonical copy is the easiest way to get an object with its metadata set.
 		co := object.Canonical(&inst)
 		co.SetNamespace(inst.GetNamespace())
-		log.Info("Enqueuing existing object for reconciliation", "affected", co.GetName())
+		log.V(1).Info("Enqueuing existing object for reconciliation", "affected", co.GetName())
 		r.Affected <- event.GenericEvent{Meta: co}
 	}
 
@@ -272,7 +272,7 @@ func (r *ObjectReconcilerNew) enqueuePropagatedObjects(ctx context.Context, log 
 	for _, obj := range o {
 		lc := object.Canonical(obj)
 		lc.SetNamespace(ns)
-		log.Info("Enqueuing local copy of the ancestor original for reconciliation", "affected", lc.GetName())
+		log.V(1).Info("Enqueuing local copy of the ancestor original for reconciliation", "affected", lc.GetName())
 		r.Affected <- event.GenericEvent{Meta: lc}
 	}
 }
@@ -294,10 +294,10 @@ func (r *ObjectReconcilerNew) operate(ctx context.Context, log logr.Logger, act 
 }
 
 func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
-	log.Info("Deleting obsolete copy")
+	log.V(1).Info("Deleting obsolete copy")
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
-		log.Info("The obsolete copy doesn't exist, no more action needed")
+		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
 		return nil
 	}
 	return err
@@ -310,7 +310,7 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 	inst = object.Canonical(srcInst)
 	inst.SetNamespace(ns)
 	metadata.SetLabel(inst, api.LabelInheritedFrom, srcInst.GetNamespace())
-	log.Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
+	log.V(1).Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
 
 	var err error = nil
 	if exist {
