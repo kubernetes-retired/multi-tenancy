@@ -33,10 +33,10 @@ const (
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
 const (
-	CritParentMissing         Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid         Code = "CRIT_PARENT_INVALID"
-	CritRequiredChildConflict Code = "CRIT_REQUIRED_CHILD_CONFLICT"
-	CritAncestor              Code = "CRIT_ANCESTOR"
+	CritParentMissing     Code = "CRIT_PARENT_MISSING"
+	CritParentInvalid     Code = "CRIT_PARENT_INVALID"
+	CritAncestor          Code = "CRIT_ANCESTOR"
+	RequiredChildConflict Code = "REQUIRED_CHILD_CONFLICT"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -114,12 +114,18 @@ type Condition struct {
 	//
 	// - "CRIT_PARENT_INVALID": the specified parent is invalid (e.g., would cause a cycle)
 	//
-	// - "CRIT_REQUIRED_CHILD_CONFLICT": there's a conflict (ie in between parent's RequiredChildren spec and child's Parent spec)
-	//
 	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
-	Code Code   `json:"code"`
-	Msg  string `json:"msg,omitempty"`
+	//
+	// - "REQUIRED_CHILD_CONFLICT": this namespace has a required child, but a namespace of the same
+	// name already exists and is not a child of this namespace. Note that the condition is _not_
+	// annotated onto the other namespace; it is considered an error _only_ for the would-be parent
+	// namespace.
+	Code Code `json:"code"`
+
+	// A human-readable description of the condition, if the `code` and `affects` fields are not
+	// sufficiently clear on their own.
+	Msg string `json:"msg,omitempty"`
 
 	// Affects is a list of group-version-kind-namespace-name that uniquely identifies
 	// the object(s) affected by the condition.

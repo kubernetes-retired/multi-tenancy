@@ -150,7 +150,7 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 
 	// Clear locally-set conditions in the forest so we can set them to the latest.
 	hadCrit := ns.HasLocalCritCondition()
-	ns.ClearConditions(forest.Local)
+	ns.ClearConditions(forest.Local, "")
 
 	r.markExisting(log, ns)
 
@@ -200,24 +200,29 @@ func (r *HierarchyReconciler) markExisting(log logr.Logger, ns *forest.Namespace
 	}
 }
 
+// syncRequiredChildOf propagates the required child value from the forest to the spec if possible
+// (the spec itself will be synced next), or removes the requiredChildOf value if there's a problem
+// and notifies the would-be parent namespace.
 func (r *HierarchyReconciler) syncRequiredChildOf(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	if ns.RequiredChildOf == "" {
 		return
 	}
 
-	switch {
-	case inst.Spec.Parent == "":
+	switch inst.Spec.Parent {
+	case "":
 		log.Info("Required subnamespace: initializing", "parent", ns.RequiredChildOf)
 		inst.Spec.Parent = ns.RequiredChildOf
-	case inst.Spec.Parent == ns.RequiredChildOf:
+	case ns.RequiredChildOf:
 		// ok
 	default:
-		log.Info("Required subnamespace: assigned to wrong parent", "intended", ns.RequiredChildOf, "actual", inst.Spec.Parent)
-		r.enqueueAffected(log, "incorrect parent of the subnamespace", inst.Spec.Parent)
-		msg := fmt.Sprintf("required child of %s but parent is set to %s", ns.RequiredChildOf, inst.Spec.Parent)
-		r.enqueueAffected(log, "wrong parent set as a parent", inst.Spec.Parent)
-		ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
+		// This should never happen unless there's some crazy race condition.
+		log.Info("Required subnamespace: conflict with existing parent", "requiredChildOf", ns.RequiredChildOf, "actual", inst.Spec.Parent)
+		r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
+		ns.RequiredChildOf = "" // get back in sync with apiserver
 	}
+
+	// TODO(https://github.com/kubernetes-sigs/multi-tenancy/issues/316): prevent a namespace from
+	// stealing this after it's "released" from another parent.
 }
 
 func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
@@ -253,7 +258,7 @@ func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *api.HierarchyCon
 
 func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Depth label only makes sense if there's no error condition.
-	if ns.HasCondition() {
+	if ns.HasCritCondition() {
 		return
 	}
 
@@ -288,64 +293,81 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 // have been marked as required. If any required children are missing, we add them to the in-memory
 // forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
 func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	// Update the most recent list of children from the forest
 	inst.Status.Children = ns.ChildNames()
+
+	// We'll reset any of these conditions if they occur.
+	ns.ClearAllConditions(api.RequiredChildConflict)
+
 	// Make a set to make it easy to look up if a child is required or not
-	reqSet := map[string]bool{}
+	isRequired := map[string]bool{}
 	for _, r := range inst.Spec.RequiredChildren {
-		reqSet[r] = true
+		isRequired[r] = true
 	}
 
 	// Check the list of actual children against the required children
 	for _, cn := range inst.Status.Children {
 		cns := r.Forest.Get(cn)
-		if _, isRequired := reqSet[cn]; isRequired {
-			// This is a required child of this namespace
-			cns.RequiredChildOf = ns.Name()         // mark in in the forest
-			delete(reqSet, cn)                      // remove so we know we found it
-			if cns.Exists() && cns.Parent() != ns { // condition if it's assigned elsewhere
-				msg := fmt.Sprintf("required subnamespace %s exists but has parent %s", cn, cns.Parent().Name())
-				ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
-			}
-		} else if cns.RequiredChildOf == ns.Name() {
+
+		if cns.RequiredChildOf != "" && cns.RequiredChildOf != ns.Name() {
+			// Since the list of children of this namespace came from the forest, this implies that the
+			// in-memory forest is out of sync with itself: requiredChildOf != parent. Obviously, this
+			// should never happen.
+			//
+			// Let's just log an error and enqueue the other namespace so it can report the condition.
+			// The forest will be reset to the correct value, below.
+			log.Error(forest.OutOfSync, "While syncing children", "child", cn, "requiredChildOf", cns.RequiredChildOf)
+			r.enqueueAffected(log, "forest out-of-sync: requiredChildOf != parent", cns.RequiredChildOf)
+		}
+
+		if isRequired[cn] {
+			// This child is actually required. Remove it from the set so we know we found it. Also, the
+			// forest is almost certainly already in sync, but just set it again in case something went
+			// wrong (eg, the error shown above).
+			delete(isRequired, cn)
+			cns.RequiredChildOf = ns.Name()
+		} else {
 			// This isn't a required child, but it looks like it *used* to be a required child of this
 			// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
 			// what's on the apiserver.
 			cns.RequiredChildOf = ""
-		} else if cns.RequiredChildOf != "" {
-			// This appears to be the required child of *another* namespace, and yet it's currently our
-			// child! Oops. Add a condition to this namespace so we know we have a child that we
-			// shouldn't.
-			msg := fmt.Sprintf("child namespace %s should be a child of %s", cn, cns.RequiredChildOf)
-			ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
 		}
 	}
 
-	// Anything that's still in reqSet at this point is a required child, but it doesn't exist as a
-	// child of this namespace. There could be one of two reasons: either the namespace hasn't been
-	// created (yet), in which case we just need to enqueue it for reconciliation, or else it *also*
-	// is claimed by another namespace.
-	for cn := range reqSet {
+	// Anything that's still in isRequired at this point is a required child according to our own
+	// spec, but it doesn't exist as a child of this namespace. There could be one of two reasons:
+	// either the namespace hasn't been created (yet), in which case we just need to enqueue it for
+	// reconciliation, or else it *also* is claimed by another namespace.
+	for cn := range isRequired {
 		log.Info("Required child is missing", "child", cn)
 		cns := r.Forest.Get(cn)
+
+		// We'll always set a condition just in case the required namespace can't be created/configured,
+		// but if all is working well, the condition will be resolved as soon as the child namespace is
+		// configured correctly (see the call to ClearAllConditions, above, in this function). This is
+		// the default message, we'll override it if the namespace doesn't exist.
+		msg := fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
+
 		// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
 		// (which is when it will be created).
-		if cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name() {
+		if cns.Parent() == nil && (cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name()) {
 			cns.RequiredChildOf = ns.Name()
 			r.enqueueAffected(log, "required child is missing", cn)
-			// We expect this to be resolved shortly, but set a condition just in case it's not.
-			var msg string
 			if !cns.Exists() {
 				msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
-			} else {
-				msg = fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
 			}
-			ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
 		} else {
 			// Someone else got it first. This should never happen if the validator is working correctly.
-			log.Info("Required child is claimed by another parent", "child", cn, "otherParent", cns.RequiredChildOf)
-			msg := fmt.Sprintf("required child namespace %s is already a child namespace of %s", cn, cns.RequiredChildOf)
-			ns.SetCondition(forest.Local, api.CritRequiredChildConflict, msg)
+			other := cns.RequiredChildOf
+			if other == "" {
+				other = cns.Parent().Name()
+			}
+			log.Info("Required child is already owned/claimed by another parent", "child", cn, "otherParent", other)
 		}
+
+		// Set the condition that the required child isn't an actual child. As mentioned above, if we
+		// just need to create it, this condition will be removed shortly.
+		ns.SetCondition(cn, api.RequiredChildConflict, msg)
 	}
 }
 

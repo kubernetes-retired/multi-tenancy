@@ -152,7 +152,7 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{barName}))
 	})
 
-	It("should set CritRequiredChildConflict condition if a required child belongs elsewhere", func() {
+	It("should set RequiredChildConflict condition if a required child cannot be set", func() {
 		bazName := createNS(ctx, "baz")
 
 		// Make baz a child of foo
@@ -168,10 +168,40 @@ var _ = Describe("Hierarchy", func() {
 		barHier.Spec.RequiredChildren = []string{bazName}
 		updateHierarchy(ctx, barHier)
 
-		// Verify that all three namespaces have CritRequiredChildConflict condition set.
-		Eventually(hasCondition(ctx, fooName, api.CritRequiredChildConflict)).Should(Equal(true))
-		Eventually(hasCondition(ctx, barName, api.CritRequiredChildConflict)).Should(Equal(true))
-		Eventually(hasCondition(ctx, bazName, api.CritRequiredChildConflict)).Should(Equal(true))
+		// Verify that bar is reporting the conflict, but foo and bar are not.
+		Eventually(hasCondition(ctx, fooName, "")).Should(Equal(false))
+		Eventually(hasCondition(ctx, bazName, "")).Should(Equal(false))
+		want := &api.Condition{
+			Code:    api.RequiredChildConflict,
+			Affects: []api.AffectedObject{{Version: "v1", Kind: "Namespace", Name: bazName}},
+		}
+		Eventually(getCondition(ctx, barName, api.RequiredChildConflict)).Should(Equal(want))
+	})
+
+	It("should clear RequiredChildConflict condition if the parent removes the required child", func() {
+		bazName := createNS(ctx, "baz")
+
+		// Make baz a child of foo
+		bazHier := newHierarchy(bazName)
+		bazHier.Spec.Parent = fooName
+		updateHierarchy(ctx, bazHier)
+		Eventually(func() []string {
+			return getHierarchy(ctx, fooName).Status.Children
+		}).Should(Equal([]string{bazName}))
+
+		// Try to also make baz a required child of bar
+		barHier := newHierarchy(barName)
+		barHier.Spec.RequiredChildren = []string{bazName}
+		updateHierarchy(ctx, barHier)
+
+		// Wait for bar to report the conflict.
+		Eventually(hasCondition(ctx, barName, "")).Should(Equal(true))
+
+		// Remove the required child from bar and verify that the condition clears.
+		barHier = getHierarchy(ctx, barName) // because it's changed since the last time we updated it
+		barHier.Spec.RequiredChildren = nil
+		updateHierarchy(ctx, barHier)
+		Eventually(hasCondition(ctx, barName, "")).Should(Equal(false))
 	})
 
 	It("should have a tree label", func() {
@@ -289,12 +319,29 @@ var _ = Describe("Hierarchy", func() {
 func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {
 	return func() bool {
 		conds := getHierarchy(ctx, nm).Status.Conditions
+		if code == "" {
+			return len(conds) > 0
+		}
 		for _, cond := range conds {
 			if cond.Code == code {
 				return true
 			}
 		}
 		return false
+	}
+}
+
+func getCondition(ctx context.Context, nm string, code api.Code) func() *api.Condition {
+	return func() *api.Condition {
+		conds := getHierarchy(ctx, nm).Status.Conditions
+		for _, cond := range conds {
+			if cond.Code == code {
+				ret := cond.DeepCopy()
+				ret.Msg = "" // don't want changes here to break tests
+				return ret
+			}
+		}
+		return nil
 	}
 }
 
@@ -333,9 +380,9 @@ func getNamespaceWithOffset(offset int, ctx context.Context, nm string) *corev1.
 
 func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
 	if h.CreationTimestamp.IsZero() {
-		Expect(k8sClient.Create(ctx, h)).Should(Succeed())
+		ExpectWithOffset(1, k8sClient.Create(ctx, h)).Should(Succeed())
 	} else {
-		Expect(k8sClient.Update(ctx, h)).Should(Succeed())
+		ExpectWithOffset(1, k8sClient.Update(ctx, h)).Should(Succeed())
 	}
 }
 

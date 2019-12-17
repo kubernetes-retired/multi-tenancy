@@ -94,13 +94,18 @@ spec:
                       themselves (<30s). \n Currently, the supported values are: \n
                       - \"CRIT_PARENT_MISSING\": the specified parent is missing \n
                       - \"CRIT_PARENT_INVALID\": the specified parent is invalid (e.g.,
-                      would cause a cycle) \n - \"CRIT_REQUIRED_CHILD_CONFLICT\":
-                      there's a conflict (ie in between parent's RequiredChildren
-                      spec and child's Parent spec) \n - \"CRIT_ANCESTOR\": a critical
-                      error exists in an ancestor namespace, so this namespace is
-                      no longer being updated either."
+                      would cause a cycle) \n - \"CRIT_ANCESTOR\": a critical error
+                      exists in an ancestor namespace, so this namespace is no longer
+                      being updated either. \n - \"REQUIRED_CHILD_CONFLICT\": this
+                      namespace has a required child, but a namespace of the same
+                      name already exists and is not a child of this namespace. Note
+                      that the condition is _not_ annotated onto the other namespace;
+                      it is considered an error _only_ for the would-be parent namespace."
                     type: string
                   msg:
+                    description: A human-readable description of the condition, if
+                      the `code` and `affects` fields are not sufficiently clear on
+                      their own.
                     type: string
                 required:
                 - code
