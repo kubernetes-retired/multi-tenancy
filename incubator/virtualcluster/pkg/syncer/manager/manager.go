@@ -17,8 +17,9 @@ limitations under the License.
 package manager
 
 import (
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"sync"
+
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 )
 
 // ControllerManager manages number of controllers. It starts their caches, waits for those to sync,
@@ -38,6 +39,7 @@ type Controller interface {
 	listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
+	StartPeriodChecker(stopCh <-chan struct{})
 }
 
 // AddController adds a controller to the ControllerManager.
@@ -62,12 +64,14 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 				errCh <- err
 			}
 		}(co)
+		// start UWS syncer
 		go func(co Controller) {
 			defer wg.Done()
 			if err := co.StartUWS(stop); err != nil {
 				errCh <- err
 			}
 		}(co)
+
 	}
 
 	doneCh := make(chan struct{})

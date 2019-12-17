@@ -227,6 +227,16 @@ func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface
 	return nil
 }
 
+func (c *MultiClusterController) GetClusterNames() []string {
+	c.Lock()
+	defer c.Unlock()
+	var names []string
+	for _, cluster := range c.clusters {
+		names = append(names, cluster.GetClusterName())
+	}
+	return names
+}
+
 // worker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the reconcileHandler is never invoked concurrently with the same object.
 func (c *MultiClusterController) worker() {

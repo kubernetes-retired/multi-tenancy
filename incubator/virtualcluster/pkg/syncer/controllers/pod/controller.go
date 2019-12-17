@@ -19,7 +19,7 @@ package pod
 import (
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,6 +40,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
+	"time"
 )
 
 type controller struct {
@@ -52,6 +53,8 @@ type controller struct {
 	queue         workqueue.RateLimitingInterface
 	podSynced     cache.InformerSynced
 	serviceSynced cache.InformerSynced
+
+	periodCheckerPeriod time.Duration
 }
 
 func Register(
@@ -60,10 +63,11 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:   client,
-		informer: informer,
-		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers:  constants.DefaultControllerWorkers,
+		client:              client,
+		informer:            informer,
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
+		workers:             constants.DefaultControllerWorkers,
+		periodCheckerPeriod: 10 * time.Second,
 	}
 
 	// Create the multi cluster pod controller
