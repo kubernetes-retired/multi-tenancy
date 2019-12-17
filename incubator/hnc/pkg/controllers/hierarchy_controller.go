@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -66,11 +65,6 @@ type HierarchyReconciler struct {
 	// enqueue additional namespaces that need updating.
 	Affected chan event.GenericEvent
 
-	// These locks prevent more than one goroutine from attempting to reconcile any one namespace a a
-	// time. Without this, the forest may stay in sync, but the changes to the apiserver could be
-	// committed out of order with no guarantee that the reconciler will be called again.
-	namespaceLocks sync.Map
-
 	// reconcileID is used purely to set the "rid" field in the log, so we can tell which log messages
 	// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
 	// simply hard to tell when one ends and another begins).
@@ -94,10 +88,8 @@ func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
 
-	id := r.lockNamespace(ns)
-	defer r.unlockNamespace(ns)
-
-	log := r.Log.WithValues("ns", ns, "rid", id)
+	rid := (int)(atomic.AddInt32(&r.reconcileID, 1))
+	log := r.Log.WithValues("ns", ns, "rid", rid)
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 
@@ -497,25 +489,6 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 	}
 
 	return nil
-}
-
-// lockNamespace ensures that the controller cannot attempt to reconcile the same namespace more
-// than once at a time. When it is finished, a per-namespace lock will be held, which _must_ be
-// released by unlockNamespace.
-//
-// It also return an integral reconciliation ID, which is unsed in logs to disambiguate which
-// messages came from which attempt.
-func (r *HierarchyReconciler) lockNamespace(nm string) int {
-	m, _ := r.namespaceLocks.LoadOrStore(nm, &sync.Mutex{})
-	m.(*sync.Mutex).Lock()
-
-	return (int)(atomic.AddInt32(&r.reconcileID, 1))
-}
-
-// unlockNamespace releases the per-namespace lock.
-func (r *HierarchyReconciler) unlockNamespace(nm string) {
-	m, _ := r.namespaceLocks.Load(nm)
-	m.(*sync.Mutex).Unlock()
 }
 
 // getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
