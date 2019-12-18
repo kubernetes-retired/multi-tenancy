@@ -29,16 +29,15 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
 	configMapClient                 v1core.ConfigMapsGetter
-	multiClusterConfigMapController *sc.MultiClusterController
+	multiClusterConfigMapController *mc.MultiClusterController
 
 	configMapLister listersv1.ConfigMapLister
 	configMapSynced cache.InformerSynced
@@ -54,8 +53,8 @@ func Register(
 	}
 
 	// Create the multi cluster configmap controller
-	options := sc.Options{Reconciler: c}
-	multiClusterConfigMapController, err := sc.NewController("tenant-masters-configmap-controller", &v1.ConfigMap{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterConfigMapController, err := mc.NewMCController("tenant-masters-configmap-controller", &v1.ConfigMap{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster configmap controller %v", err)
 		return
@@ -160,15 +159,15 @@ func (c *controller) reconcileConfigMapRemove(cluster, namespace, name string) e
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-configmap-controller watch cluster %s for configmap resource", cluster.GetClusterName())
-	err := c.multiClusterConfigMapController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterConfigMapController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s configmap event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-configmap-controller stop watching cluster %s for configmap resource", cluster.GetClusterName())
 	c.multiClusterConfigMapController.TeardownClusterResource(cluster)
 }

@@ -39,11 +39,11 @@ import (
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
 
 const (
@@ -62,7 +62,7 @@ type Syncer struct {
 	workers int
 	// clusterSet holds the cluster collection in which cluster is running.
 	mu         sync.Mutex
-	clusterSet map[string]controller.ClusterInterface
+	clusterSet map[string]mc.ClusterInterface
 	// if this channel is closed, syncer will stop
 	stopChan <-chan struct{}
 }
@@ -77,7 +77,7 @@ func New(
 		secretClient: secretClient,
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
 		workers:      constants.DefaultControllerWorkers,
-		clusterSet:   make(map[string]controller.ClusterInterface),
+		clusterSet:   make(map[string]mc.ClusterInterface),
 		stopChan:     signals.SetupSignalHandler(),
 	}
 
@@ -273,7 +273,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	return nil
 }
 
-func (s *Syncer) runCluster(cluster controller.ClusterInterface) {
+func (s *Syncer) runCluster(cluster mc.ClusterInterface) {
 	go func() {
 		err := cluster.Start()
 		klog.Infof("cluster %s shutdown: %v", cluster.GetClusterName(), err)

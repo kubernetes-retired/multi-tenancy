@@ -25,16 +25,15 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
 	serviceClient                 v1core.ServicesGetter
-	multiClusterServiceController *sc.MultiClusterController
+	multiClusterServiceController *mc.MultiClusterController
 }
 
 func Register(
@@ -47,8 +46,8 @@ func Register(
 	}
 
 	// Create the multi cluster service controller
-	options := sc.Options{Reconciler: c}
-	multiClusterServiceController, err := sc.NewController("tenant-masters-service-controller", &v1.Service{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster service controller %v", err)
 		return
@@ -127,15 +126,15 @@ func (c *controller) reconcileServiceRemove(cluster, namespace, name string, ser
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-service-controller watch cluster %s for service resource", cluster.GetClusterName())
-	err := c.multiClusterServiceController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterServiceController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s service event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-service-controller stop watching cluster %s for service resource", cluster.GetClusterName())
 	c.multiClusterServiceController.TeardownClusterResource(cluster)
 }

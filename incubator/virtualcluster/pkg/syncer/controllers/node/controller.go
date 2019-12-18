@@ -28,9 +28,8 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -39,7 +38,7 @@ type controller struct {
 	// map node name in super master to tenant cluster name it belongs to.
 	nodeNameToCluster          map[string]map[string]struct{}
 	nodeClient                 v1core.NodesGetter
-	multiClusterNodeController *sc.MultiClusterController
+	multiClusterNodeController *mc.MultiClusterController
 
 	workers    int
 	nodeLister listersv1.NodeLister
@@ -60,8 +59,8 @@ func Register(
 	}
 
 	// Create the multi cluster node controller
-	options := sc.Options{Reconciler: c}
-	multiClusterNodeController, err := sc.NewController("tenant-masters-node-controller", &v1.Node{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster pod controller %v", err)
 		return
@@ -154,15 +153,15 @@ func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.N
 	return nil
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-node-controller watch cluster %s for node resource", cluster.GetClusterName())
-	err := c.multiClusterNodeController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterNodeController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s node event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-node-controller stop watching cluster %s for node resource", cluster.GetClusterName())
 	c.multiClusterNodeController.TeardownClusterResource(cluster)
 }

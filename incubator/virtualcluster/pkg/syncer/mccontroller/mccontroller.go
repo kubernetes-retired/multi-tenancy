@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package mccontroller
 
 import (
 	"context"
@@ -36,11 +36,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// MultiClusterController implements the controller pattern.
-// A MultiClusterController owns a client-go workqueue. Watch methods set up the queue to receive reconcile requests,
-// e.g., on resource CRUD events in a cluster. Then the Requests are processed by the user-provided Reconciler.
-// A MultiClusterController can watch multiple resources in multiple clusters. It saves those clusters in a set,
-// so the ControllerManager knows which caches to start and sync before starting the Controller.
+// MultiClusterController implements the multicluster controller pattern.
+// A MultiClusterController owns a client-go workqueue. The WatchClusterResource methods set
+// up the queue to receive reconcile requests, e.g., CRUD events from a tenant cluster.
+// The Requests are processed by the user-provided Reconciler.
+// MultiClusterController saves all watched tenant clusters in a set, so the ControllerManager knows
+// which caches to start and sync before starting the MultiClusterController.
 type MultiClusterController struct {
 	sync.Mutex
 	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
@@ -90,8 +91,8 @@ type ClusterInterface interface {
 	Cache
 }
 
-// NewController creates a new Controller.
-func NewController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
+// NewMCController creates a new MultiClusterController.
+func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
 	if options.Reconciler == nil {
 		return nil, fmt.Errorf("must specify Reconciler")
 	}
