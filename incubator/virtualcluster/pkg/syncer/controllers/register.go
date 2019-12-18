@@ -22,6 +22,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/configmap"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/endpoints"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/event"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/namespace"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/node"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/pod"
@@ -40,4 +41,5 @@ func Register(client clientset.Interface, informerFactory informers.SharedInform
 	node.Register(client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
 	service.Register(client.CoreV1(), informerFactory.Core().V1().Services(), controllerManager)
 	endpoints.Register(client.CoreV1(), informerFactory.Core().V1().Endpoints(), controllerManager)
+	event.Register(client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 }

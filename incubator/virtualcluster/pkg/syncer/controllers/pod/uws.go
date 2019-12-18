@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -101,12 +100,11 @@ func (c *controller) backPopulate(key interface{}) error {
 		return nil
 	}
 
-	var client *clientset.Clientset
 	tenantCluster := c.multiClusterPodController.GetCluster(podInfo.clusterName)
 	if tenantCluster == nil {
 		return fmt.Errorf("cluster %s not found", podInfo.clusterName)
 	}
-	tenantclient, err := tenantCluster.GetClient()
+	tenantClient, err := tenantCluster.GetClient()
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", podInfo.clusterName, err)
 	}
@@ -135,12 +133,12 @@ func (c *controller) backPopulate(key interface{}) error {
 			return fmt.Errorf("failed to get node %s from super master: %v", pPod.Spec.NodeName, err)
 		}
 
-		_, err = tenantclient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
+		_, err = tenantClient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
 		if errors.IsAlreadyExists(err) {
 			klog.Warningf("virtual node %s already exists", vPod.Spec.NodeName)
 		}
 
-		err = tenantclient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
+		err = tenantClient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vPod.Name,
 				Namespace: vPod.Namespace,
@@ -162,7 +160,7 @@ func (c *controller) backPopulate(key interface{}) error {
 	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 		newPod := vPod.DeepCopy()
 		newPod.Status = pPod.Status
-		if _, err = client.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
+		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, podInfo.clusterName, err)
 		}
 		c.queue.Add(key)
@@ -180,7 +178,7 @@ func (c *controller) backPopulate(key interface{}) error {
 			klog.V(4).Infof("delete virtual pPod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pPod.DeletionGracePeriodSeconds)
 			deleteOptions := metav1.NewDeleteOptions(*pPod.DeletionGracePeriodSeconds)
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
-			return client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions)
+			return tenantClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions)
 		}
 	}
 
