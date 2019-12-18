@@ -102,11 +102,11 @@ func (c *controller) backPopulate(key interface{}) error {
 	}
 
 	var client *clientset.Clientset
-	innerCluster := c.multiClusterPodController.GetCluster(podInfo.clusterName)
-	if innerCluster == nil {
+	tenantCluster := c.multiClusterPodController.GetCluster(podInfo.clusterName)
+	if tenantCluster == nil {
 		return fmt.Errorf("cluster %s not found", podInfo.clusterName)
 	}
-	client, err := innerCluster.GetClient()
+	tenantclient, err := tenantCluster.GetClient()
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", podInfo.clusterName, err)
 	}
@@ -135,12 +135,12 @@ func (c *controller) backPopulate(key interface{}) error {
 			return fmt.Errorf("failed to get node %s from super master: %v", pPod.Spec.NodeName, err)
 		}
 
-		_, err = client.CoreV1().Nodes().Create(node.NewVirtualNode(n))
+		_, err = tenantclient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
 		if errors.IsAlreadyExists(err) {
 			klog.Warningf("virtual node %s already exists", vPod.Spec.NodeName)
 		}
 
-		err = client.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
+		err = tenantclient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vPod.Name,
 				Namespace: vPod.Namespace,

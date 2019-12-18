@@ -252,7 +252,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to build rest config for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
-	innerCluster := cluster.New(clusterName, clusterRestConfig, cluster.Options{})
+	tenantCluster := cluster.NewTenantCluster(clusterName, clusterRestConfig, cluster.Options{})
 
 	s.mu.Lock()
 	if _, exist := s.clusterSet[key]; exist {
@@ -262,13 +262,13 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 
 	// for each resource type of the newly added VirtualCluster, we add a listener
 	for _, clusterChangeListener := range listener.Listeners {
-		clusterChangeListener.AddCluster(innerCluster)
+		clusterChangeListener.AddCluster(tenantCluster)
 	}
 
-	s.clusterSet[key] = innerCluster
+	s.clusterSet[key] = tenantCluster
 	s.mu.Unlock()
 
-	go s.runCluster(innerCluster)
+	go s.runCluster(tenantCluster)
 
 	return nil
 }
