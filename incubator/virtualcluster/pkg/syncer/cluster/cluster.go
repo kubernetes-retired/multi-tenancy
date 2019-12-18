@@ -34,7 +34,12 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
-// Cluster stores a Kubernetes client, cache, and other cluster-scoped dependencies.
+// Each Cluster object represents a tenant master in Virtual Cluster architecture.
+//
+// Cluster implements the ClusterInterface used by MultiClusterController in
+// github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller/controller.go.
+//
+// It stores a Kubernetes client, cache, and other cluster-scoped dependencies.
 // The dependencies are lazily created in getters and cached for reuse.
 // It is not thread safe.
 type Cluster struct {
@@ -75,7 +80,7 @@ type CacheOptions struct {
 }
 
 // New creates a new Cluster.
-func New(name string, config *rest.Config, o Options) *Cluster {
+func NewTenantCluster(name string, config *rest.Config, o Options) *Cluster {
 	return &Cluster{Name: name, Config: config, Options: o, stopCh: make(chan struct{})}
 }
 

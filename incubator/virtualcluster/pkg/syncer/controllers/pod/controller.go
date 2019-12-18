@@ -201,12 +201,12 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 	}
 
 	var client *clientset.Clientset
-	innerCluster := c.multiClusterPodController.GetCluster(cluster)
-	if innerCluster == nil {
+	tenantCluster := c.multiClusterPodController.GetCluster(cluster)
+	if tenantCluster == nil {
 		klog.Infof("cluster %s is gone", cluster)
 		return nil
 	}
-	client, err = innerCluster.GetClient()
+	client, err = tenantCluster.GetClient()
 	if err != nil {
 		return err
 	}

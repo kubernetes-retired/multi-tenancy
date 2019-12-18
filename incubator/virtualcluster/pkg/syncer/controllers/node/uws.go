@@ -107,7 +107,7 @@ func (c *controller) backPopulate(nodeName string) error {
 	var wg sync.WaitGroup
 	wg.Add(len(clusterList))
 	for clusterName, _ := range clusterList {
-		c.updateClusterNodeStatus(clusterName, node, &wg)
+		go c.updateClusterNodeStatus(clusterName, node, &wg)
 	}
 	wg.Wait()
 
@@ -117,8 +117,8 @@ func (c *controller) backPopulate(nodeName string) error {
 func (c *controller) updateClusterNodeStatus(cluster string, node *v1.Node, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	innerCluster := c.multiClusterNodeController.GetCluster(cluster)
-	client, err := clientset.NewForConfig(restclient.AddUserAgent(innerCluster.GetClientInfo().Config, "syncer"))
+	tenantCluster := c.multiClusterNodeController.GetCluster(cluster)
+	client, err := clientset.NewForConfig(restclient.AddUserAgent(tenantCluster.GetClientInfo().Config, "syncer"))
 	if err != nil {
 		klog.Errorf("could not find cluster %s in controller cache %v", cluster, err)
 		return
