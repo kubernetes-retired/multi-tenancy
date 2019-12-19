@@ -37,7 +37,7 @@ import (
 // Each Cluster object represents a tenant master in Virtual Cluster architecture.
 //
 // Cluster implements the ClusterInterface used by MultiClusterController in
-// github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller/controller.go.
+// github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller/mccontroller.go.
 //
 // It stores a Kubernetes client, cache, and other cluster-scoped dependencies.
 // The dependencies are lazily created in getters and cached for reuse.

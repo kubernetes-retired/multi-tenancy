@@ -31,10 +31,9 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
@@ -42,7 +41,7 @@ import (
 type controller struct {
 	client                       v1core.CoreV1Interface
 	secretInformer               coreinformers.SecretInformer
-	multiClusterSecretController *sc.MultiClusterController
+	multiClusterSecretController *mc.MultiClusterController
 
 	secretLister listersv1.SecretLister
 	secretSynced cache.InformerSynced
@@ -59,8 +58,8 @@ func Register(
 	}
 
 	// Create the multi cluster secret controller
-	options := sc.Options{Reconciler: c}
-	multiClusterSecretController, err := sc.NewController("tenant-masters-secret-controller", &v1.Secret{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterSecretController, err := mc.NewMCController("tenant-masters-secret-controller", &v1.Secret{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster secret controller %v", err)
 		return
@@ -219,15 +218,15 @@ func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secr
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-secret-controller watch cluster %s for secret resource", cluster.GetClusterName())
-	err := c.multiClusterSecretController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterSecretController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s secret event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-secret-controller stop watching cluster %s for secret resource", cluster.GetClusterName())
 	c.multiClusterSecretController.TeardownClusterResource(cluster)
 }

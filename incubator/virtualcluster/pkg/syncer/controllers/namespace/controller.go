@@ -30,16 +30,15 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
 	namespaceClient                 v1core.NamespacesGetter
-	multiClusterNamespaceController *sc.MultiClusterController
+	multiClusterNamespaceController *mc.MultiClusterController
 
 	nsLister listersv1.NamespaceLister
 	nsSynced cache.InformerSynced
@@ -55,8 +54,8 @@ func Register(
 	}
 
 	// Create the multi cluster configmap controller
-	options := sc.Options{Reconciler: c}
-	multiClusterNamespaceController, err := sc.NewController("tenant-masters-namespace-controller", &v1.Namespace{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
@@ -145,15 +144,15 @@ func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-namespace-controller watch cluster %s for namespace resource", cluster.GetClusterName())
-	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterNamespaceController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s namespace event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-namespace-controller stop watching cluster %s for namespace resource", cluster.GetClusterName())
 	c.multiClusterNamespaceController.TeardownClusterResource(cluster)
 }

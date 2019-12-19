@@ -34,17 +34,16 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 type controller struct {
 	client                    v1core.CoreV1Interface
-	multiClusterPodController *sc.MultiClusterController
+	multiClusterPodController *mc.MultiClusterController
 	informer                  coreinformers.Interface
 
 	workers       int
@@ -67,8 +66,8 @@ func Register(
 	}
 
 	// Create the multi cluster pod controller
-	options := sc.Options{Reconciler: c}
-	multiClusterPodController, err := sc.NewController("tenant-masters-pod-controller", &v1.Pod{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster pod controller %v", err)
 		return
@@ -307,15 +306,15 @@ func (c *controller) reconcilePodRemove(cluster, namespace, name string, vPod *v
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.GetClusterName())
-	err := c.multiClusterPodController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterPodController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-pod-controller stop watching cluster %s for pod resource", cluster.GetClusterName())
 	c.multiClusterPodController.TeardownClusterResource(cluster)
 }

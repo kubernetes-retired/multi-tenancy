@@ -29,16 +29,15 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	ctrl "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
-	sc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
 	endpointClient                  v1core.EndpointsGetter
-	multiClusterEndpointsController *sc.MultiClusterController
+	multiClusterEndpointsController *mc.MultiClusterController
 
 	endpointsLister listersv1.EndpointsLister
 	endpointsSynced cache.InformerSynced
@@ -53,8 +52,8 @@ func Register(
 		endpointClient: endpointsClient,
 	}
 
-	options := sc.Options{Reconciler: c}
-	multiClusterEndpointsController, err := sc.NewController("tenant-masters-endpoints-controller", &v1.Endpoints{}, options)
+	options := mc.Options{Reconciler: c}
+	multiClusterEndpointsController, err := mc.NewMCController("tenant-masters-endpoints-controller", &v1.Endpoints{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster endpoints controller %v", err)
 		return
@@ -161,15 +160,15 @@ func (c *controller) reconcileEndpointsRemove(cluster, namespace, name string, e
 	return err
 }
 
-func (c *controller) AddCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-endpoints-controller watch cluster %s for endpoints resource", cluster.GetClusterName())
-	err := c.multiClusterEndpointsController.WatchClusterResource(cluster, sc.WatchOptions{})
+	err := c.multiClusterEndpointsController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s endpoints event: %v", cluster.GetClusterName(), err)
 	}
 }
 
-func (c *controller) RemoveCluster(cluster ctrl.ClusterInterface) {
+func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("tenant-masters-endpoints-controller stop watching cluster %s for endpoints resource", cluster.GetClusterName())
 	c.multiClusterEndpointsController.TeardownClusterResource(cluster)
 }
