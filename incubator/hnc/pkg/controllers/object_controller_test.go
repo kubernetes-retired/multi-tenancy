@@ -192,6 +192,40 @@ var _ = Describe("Secret", func() {
 
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeFalse())
 	})
+
+	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
+		if !newObjectController {
+			return
+		}
+
+		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+
+		// Make the secret unpropagateable and verify that it disappears.
+		setFinalizer(ctx, fooName, "foo-sec", true)
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeFalse())
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+
+		// Observe the condition on the source namespace
+		want := &api.Condition{
+			Code:    api.CannotPropagate,
+			Affects: []api.AffectedObject{{Version: "v1", Kind: "Secret", Namespace: fooName, Name: "foo-sec"}},
+		}
+		Eventually(getCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(want))
+
+		// Fix the problem and verify that the condition vanishes and the secret is propagated again
+		setFinalizer(ctx, fooName, "foo-sec", false)
+		Eventually(hasCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(false))
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+	})
 })
 
 func makeSecret(ctx context.Context, nsName, secretName string) {
@@ -266,6 +300,18 @@ func modifySecret(ctx context.Context, nsName, secretName string) {
 	}
 	labels["modify"] = "make-a-change"
 	sec.SetLabels(labels)
+	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
+}
+
+func setFinalizer(ctx context.Context, nsName, secretName string, set bool) {
+	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
+	sec := &corev1.Secret{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+	if set {
+		sec.ObjectMeta.Finalizers = []string{"example.com/foo"}
+	} else {
+		sec.ObjectMeta.Finalizers = nil
+	}
 	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
 }
 

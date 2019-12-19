@@ -338,17 +338,23 @@ func (ns *Namespace) HasCritCondition() bool {
 // ClearConditions clears local conditions in the namespace for a single key. If `code` is
 // non-empty, it only clears conditions with that code, otherwise it clears all conditions for that
 // key. It should only be called by the code that also *sets* the conditions.
-func (ns *Namespace) ClearConditions(key string, code api.Code) {
+//
+// It returns true if it made any changes, false otherwise.
+func (ns *Namespace) ClearConditions(key string, code api.Code) bool {
 	// We don't *need* to special-case this here but it's a lot simpler if we do.
 	if code == "" {
+		_, existed := ns.conditions[key]
 		delete(ns.conditions, key)
-		return
+		return existed
 	}
 
 	updated := []condition{}
+	changed := false
 	for _, c := range ns.conditions[key] {
 		if c.code != code {
 			updated = append(updated, c)
+		} else {
+			changed = true
 		}
 	}
 	if len(updated) == 0 {
@@ -356,14 +362,23 @@ func (ns *Namespace) ClearConditions(key string, code api.Code) {
 	} else {
 		ns.conditions[key] = updated
 	}
+
+	return changed
 }
 
 // ClearAllConditions clears all conditions of a given code from this namespace across all keys. It
 // should only be called by the code that also *sets* the condition.
-func (ns *Namespace) ClearAllConditions(code api.Code) {
+//
+// It returns true if it made any changes, false otherwise.
+func (ns *Namespace) ClearAllConditions(code api.Code) bool {
+	changed := false
 	for k, _ := range ns.conditions {
-		ns.ClearConditions(k, code)
+		if ns.ClearConditions(k, code) {
+			changed = true
+		}
 	}
+
+	return changed
 }
 
 // GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
@@ -400,12 +415,11 @@ func (ns *Namespace) convertConditions(log logr.Logger) objectsByCodeAndMsg {
 	converted := objectsByCodeAndMsg{}
 	for key, conditions := range ns.conditions {
 		for _, condition := range conditions {
-			affectedObject := getAffectedObject(key, log)
-			if affected, ok := converted[condition.code][condition.msg]; !ok {
-				converted[condition.code] = objectsByMsg{condition.msg: {affectedObject}}
-			} else {
-				converted[condition.code][condition.msg] = append(affected, affectedObject)
+			if _, exists := converted[condition.code]; !exists {
+				converted[condition.code] = objectsByMsg{}
 			}
+			affectedObject := getAffectedObject(key, log)
+			converted[condition.code][condition.msg] = append(converted[condition.code][condition.msg], affectedObject)
 		}
 	}
 	return converted

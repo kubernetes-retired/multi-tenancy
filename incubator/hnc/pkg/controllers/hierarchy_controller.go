@@ -82,8 +82,7 @@ type NamespaceSyncer interface {
 // +kubebuilder:rbac:groups=hnc.x-k8s.io,resources=hierarchies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;update;patch
 
-// Reconcile simply calls SyncNamespace, which can also be called if a namespace is created or
-// deleted.
+// Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if !ex[req.Namespace] {
 		atomic.AddInt32(&hcTot, 1)
@@ -127,14 +126,20 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 		return nil
 	}
 
-	// Write back if anything's changed.
-	if err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); err != nil {
+	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
+	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
 		return err
 	}
 
 	// Update all the objects in this namespace. We have to do this at least *after* the tree is
 	// updated, because if we don't, we could incorrectly think we've propagated the wrong objects
 	// from our ancestors, or are propagating the wrong objects to our descendants.
+	//
+	// NB: if writeInstance didn't actually write anything - that is, if the hierarchy didn't change -
+	// this update is skipped. Otherwise, we can get into infinite loops because both objects and
+	// hierarchy reconcilers are enqueuing too freely. TODO: only call updateObjects when we make the
+	// *kind* of changes that *should* cause objects to be updated (eg add/remove critical conditions,
+	// change subtree parents, etc).
 	return r.updateObjects(ctx, log, nm)
 }
 
@@ -451,58 +456,64 @@ func (r *HierarchyReconciler) getInstances(ctx context.Context, log logr.Logger,
 	return inst, ns, nil
 }
 
-func (r *HierarchyReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) error {
-	if err := r.writeHierarchy(ctx, log, oldHC, newHC); err != nil {
-		return err
+func (r *HierarchyReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
+	ret := false
+	if updated, err := r.writeHierarchy(ctx, log, oldHC, newHC); err != nil {
+		return false, err
+	} else {
+		ret = ret || updated
 	}
-	if err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
-		return err
+
+	if updated, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
+		return false, err
+	} else {
+		ret = ret || updated
 	}
-	return nil
+	return ret, nil
 }
 
-func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) error {
+func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
-		return nil
+		return false, nil
 	}
 
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating singleton on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
-			return err
+			return false, err
 		}
 	} else {
 		log.Info("Updating singleton on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
-			return err
+			return false, err
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
-func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) error {
+func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
-		return nil
+		return false, nil
 	}
 
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating namespace on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
-			return err
+			return false, err
 		}
 	} else {
 		log.Info("Updating namespace on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
-			return err
+			return false, err
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // updateObjects calls all type reconcillers in this namespace.
