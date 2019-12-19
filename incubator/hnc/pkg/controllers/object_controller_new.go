@@ -18,6 +18,7 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
@@ -87,6 +88,12 @@ func (r *ObjectReconcilerNew) SyncNamespace(ctx context.Context, log logr.Logger
 }
 
 func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	if !ex[req.Namespace] {
+		atomic.AddInt32(&obTot, 1)
+		atomic.AddInt32(&obCur, 1)
+		defer atomic.AddInt32(&obCur, -1)
+	}
+
 	resp := ctrl.Result{}
 	ctx := context.Background()
 	log := r.Log.WithValues("trigger", req.NamespacedName)

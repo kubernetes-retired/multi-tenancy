@@ -56,6 +56,7 @@ func main() {
 		novalidation         bool
 		debugLogs            bool
 		newObjectController  bool
+		testLog              bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -63,6 +64,7 @@ func main() {
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
 	flag.BoolVar(&newObjectController, "enable-new-object-controller", false, "Enables new object controller.")
+	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.Parse()
 
@@ -76,6 +78,10 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
+	}
+
+	if testLog {
+		controllers.LogActivity()
 	}
 
 	// Create all reconciling controllers

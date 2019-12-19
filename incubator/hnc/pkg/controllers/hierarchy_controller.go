@@ -85,6 +85,12 @@ type NamespaceSyncer interface {
 // Reconcile simply calls SyncNamespace, which can also be called if a namespace is created or
 // deleted.
 func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	if !ex[req.Namespace] {
+		atomic.AddInt32(&hcTot, 1)
+		atomic.AddInt32(&hcCur, 1)
+		defer atomic.AddInt32(&hcCur, -1)
+	}
+
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
 
