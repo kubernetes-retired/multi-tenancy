@@ -17,6 +17,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sync/atomic"
 
@@ -66,6 +67,9 @@ type ObjectReconcilerNew struct {
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional objects that need updating.
 	Affected chan event.GenericEvent
+
+	// AffectedNamespace is a channel of events used to update namespaces.
+	AffectedNamespace chan event.GenericEvent
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -128,6 +132,11 @@ func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logge
 	if r.ignore(ctx, log, inst) {
 		return ignore, nil
 	}
+
+	// Clear any existing conditions associated with this object. TODO: this will never be called if
+	// the source namespace holding this object goes away (i.e., if this namespace gets a new parent).
+	// See https://github.com/kubernetes-sigs/multi-tenancy/issues/328.
+	r.clearConditions(log, inst)
 
 	// If an object doesn't exist, assume it's been deleted or not yet created.
 	// inst.GetCreationTimestamp().IsZero() has compile time errors, so we manually check
@@ -215,8 +224,12 @@ func (r *ObjectReconcilerNew) syncPropagated(ctx context.Context, log logr.Logge
 // syncSource syncs the copy in the forest with the current source object. If there's a change,
 // enqueue all the descendants to propagate the new source.
 func (r *ObjectReconcilerNew) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
-	// syncPropagated doesn't check isExcluded because the propagation won't happen if it's excluded.
-	if r.isExcluded(log, src) {
+	// Note that we only call exclude() here, not in syncPropagated, because we'll never propagate an
+	// *uncreated* excluded object, and if an excluded object somehow got propagated, we do want to
+	// delete it.
+	if r.exclude(log, src) {
+		// In case this was previously propagated, we should delete any propagated copies
+		r.syncDeletedSource(ctx, log, src)
 		return
 	}
 	sns := src.GetNamespace()
@@ -245,6 +258,17 @@ func (r *ObjectReconcilerNew) enqueueDescendants(ctx context.Context, log logr.L
 		log.V(1).Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", "The source changed")
 		r.Affected <- event.GenericEvent{Meta: dc}
 	}
+}
+
+func (r *ObjectReconcilerNew) enqueueNamespace(log logr.Logger, nnm, reason string) {
+	go func() {
+		log.Info("Enqueuing for reconciliation", "affected", nnm, "reason", reason)
+		// The handler only cares about the metadata
+		inst := &api.HierarchyConfiguration{}
+		inst.ObjectMeta.Name = api.Singleton
+		inst.ObjectMeta.Namespace = nnm
+		r.AffectedNamespace <- event.GenericEvent{Meta: inst}
+	}()
 }
 
 // enqueueLocalObjects enqueues all the objects (with the same GVK) in the namespace.
@@ -306,8 +330,12 @@ func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst 
 	if errors.IsNotFound(err) {
 		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
 		return nil
+	} else if err != nil {
+		r.setErrorConditions(log, nil, inst, "delete", err)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, srcInst *unstructured.Unstructured) error {
@@ -320,15 +348,55 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 	log.V(1).Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
 
 	var err error = nil
+	var op string
 	if exist {
 		err = r.Update(ctx, inst)
+		op = "update"
 	} else {
 		err = r.Create(ctx, inst)
+		op = "create"
 	}
 	if err != nil {
+		r.setErrorConditions(log, srcInst, inst, op, err)
 		log.Error(err, "Couldn't write", "object", inst)
 	}
 	return err
+}
+
+func (r *ObjectReconcilerNew) setErrorConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, op string, err error) {
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+
+	key := getObjectKey(inst)
+	msg := fmt.Sprintf("Could not %s: %s", op, err.Error())
+	r.setCondition(log, api.CannotUpdate, inst.GetNamespace(), key, msg)
+	if srcInst != nil {
+		r.setCondition(log, api.CannotPropagate, srcInst.GetNamespace(), key, msg)
+	}
+}
+
+func (r *ObjectReconcilerNew) setCondition(log logr.Logger, code api.Code, nnm, key, msg string) {
+	r.Forest.Get(nnm).SetCondition(key, code, msg)
+	r.enqueueNamespace(log, nnm, "Set condition for "+key+": "+msg)
+}
+
+func getObjectKey(inst *unstructured.Unstructured) string {
+	gvk := inst.GetObjectKind().GroupVersionKind()
+	return fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
+}
+
+func (r *ObjectReconcilerNew) clearConditions(log logr.Logger, inst *unstructured.Unstructured) {
+	gvk := inst.GetObjectKind().GroupVersionKind()
+	key := fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
+	ns := r.Forest.Get(inst.GetNamespace())
+	for ns != nil {
+		if ns.ClearConditions(key, "") {
+			// TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/326
+			// Don't enqueue if we're just going to put the same conditions back
+			r.enqueueNamespace(log, ns.Name(), "Removed conditions for "+key)
+		}
+		ns = ns.Parent()
+	}
 }
 
 // hasPropagatedLabel returns true if "api.LabelInheritedFrom" label is set.
@@ -359,12 +427,13 @@ func (r *ObjectReconcilerNew) syncDeletedSource(ctx context.Context, log logr.Lo
 	r.enqueueDescendants(ctx, log, inst)
 }
 
-// isExcluded returns true if the object shouldn't be handled by the HNC. Eventually, this may be
-// user-configurable, but right now it's used for Service Account token secrets and to decide object
-// propagation based on finalizer field.
-func (r *ObjectReconcilerNew) isExcluded(log logr.Logger, inst *unstructured.Unstructured) bool {
+// exclude returns true if the object shouldn't be handled by the HNC, and in some non-obvious cases
+// sets a condition on the namespace. Eventually, this may be user-configurable, but right now it's
+// used for Service Account token secrets and to decide object propagation based on finalizer field.
+func (r *ObjectReconcilerNew) exclude(log logr.Logger, inst *unstructured.Unstructured) bool {
 	// Object with nonempty finalizer list is not propagated
 	if len(inst.GetFinalizers()) != 0 {
+		r.setCondition(log, api.CannotPropagate, inst.GetNamespace(), getObjectKey(inst), "Objects with finalizers cannot be propagated")
 		return true
 	}
 

@@ -31,10 +31,12 @@ var ex = map[string]bool{
 //
 // This function is called both from main.go as well as from the integ tests.
 func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, newObjectController bool) error {
+	hcChan := make(chan event.GenericEvent)
+
 	// Create all object reconcillers
 	objReconcilers := []NamespaceSyncer{}
 	for _, gvk := range config.GVKs {
-		or, err := createObjectReconciler(newObjectController, mgr, f, gvk)
+		or, err := createObjectReconciler(newObjectController, mgr, f, gvk, hcChan)
 		if err != nil {
 			return fmt.Errorf("cannot create %v controller: %s", gvk, err.Error())
 		}
@@ -47,7 +49,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, newObjectCont
 		Log:      ctrl.Log.WithName("controllers").WithName("Hierarchy"),
 		Forest:   f,
 		Types:    objReconcilers,
-		Affected: make(chan event.GenericEvent),
+		Affected: hcChan,
 	}
 	if err := hr.SetupWithManager(mgr, maxReconciles); err != nil {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
@@ -56,14 +58,15 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, newObjectCont
 	return nil
 }
 
-func createObjectReconciler(newObjectController bool, mgr ctrl.Manager, f *forest.Forest, gvk schema.GroupVersionKind) (NamespaceSyncer, error) {
+func createObjectReconciler(newObjectController bool, mgr ctrl.Manager, f *forest.Forest, gvk schema.GroupVersionKind, hcChan chan event.GenericEvent) (NamespaceSyncer, error) {
 	if newObjectController {
 		or := &ObjectReconcilerNew{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("controllers").WithName(gvk.Kind),
-			Forest:   f,
-			GVK:      gvk,
-			Affected: make(chan event.GenericEvent),
+			Client:            mgr.GetClient(),
+			Log:               ctrl.Log.WithName("controllers").WithName(gvk.Kind),
+			Forest:            f,
+			GVK:               gvk,
+			Affected:          make(chan event.GenericEvent),
+			AffectedNamespace: hcChan,
 		}
 		// TODO figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 		return or, or.SetupWithManager(mgr, 10)
