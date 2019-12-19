@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -14,13 +15,20 @@ import (
 
 // Counters of total/current number of hier/object reconciliation attempts.
 var (
-	hcTot int32
-	hcCur int32
-	obTot int32
-	obCur int32
+	hcTot     int32
+	hcCur     int32
+	obTot     int32
+	obCur     int32
+	mutexQ    int32
+	apiCall   int32
+	hcWriteHC int32
+	hcWriteNS int32
+	hcRead    int32
+	objWrite  int32
+	objRead   int32
 )
 
-// The ex map is only used by reconcile counters for performance testing. We explicitly
+// The ex map is used by controllers to exclude namespaces to reconcile. We explicitly
 // exclude some default namespaces with constantly changing objects.
 var ex = map[string]bool{
 	"kube-system": true,
@@ -85,13 +93,27 @@ func createObjectReconciler(newObjectController bool, mgr ctrl.Manager, f *fores
 func LogActivity() {
 	log := ctrl.Log.WithName("reconcileCounter")
 	var total, cur int32 = 0, 0
+	working := false
+	actN := 1
 	go func() {
 		// run forever
 		for {
 			// Log activity only when the controllers were still working in the last 0.5s.
 			time.Sleep(500 * time.Millisecond)
 			if hcTot+obTot != total || cur != 0 {
-				log.Info("Activity", "hcTot", hcTot, "hcCur", hcCur, "obTot", obTot, "obCur", obCur)
+				// If the controller was previously idle, change its status and log it's started.
+				if working == false {
+					working = true
+					log.Info("Activity-"+strconv.Itoa(actN)+"-started", "hcNSwrite", hcWriteNS, "hcWrite", hcWriteHC, "hcRead", hcRead, "objWrite", objWrite, "objRead", objRead, "hcTot", hcTot, "obTot", obTot)
+				}
+				log.Info("Activity", "hcNSwrite", hcWriteNS, "hcWrite", hcWriteHC, "hcRead", hcRead, "objWrite", objWrite, "objRead", objRead, "apiCall", apiCall, "mutexQ", mutexQ, "hcTot", hcTot, "hcCur", hcCur, "obTot", obTot, "obCur", obCur)
+			} else {
+				// If the controller was previously working, change its status and log it's finished.
+				if working == true {
+					working = false
+					log.Info("Activity-"+strconv.Itoa(actN)+"-finished", "hcNSwrite", hcWriteNS, "hcWrite", hcWriteHC, "hcRead", hcRead, "objWrite", objWrite, "objRead", objRead, "hcTot", hcTot, "obTot", obTot)
+					actN++
+				}
 			}
 			total = hcTot + obTot
 			cur = hcCur + obCur

@@ -1,0 +1,26 @@
+#!/bin/bash
+# Clean up topologies
+. ./scripts/performance/clean-up-topologies
+
+echo "Loading Topology Skewer..."
+
+# Default 100 (3, 30, 100)
+N=100
+
+# Create all namespaces
+for ((i=1;i<=N;i++))
+do
+  echo "Creating namespace tplg-skewer-$i"
+  kubectl create ns tplg-skewer-$i
+  kubectl -n tplg-skewer-$i create configmap configmap1-$i --from-literal key=value
+  kubectl -n tplg-skewer-$i create configmap configmap2-$i --from-literal key=value
+done
+
+# Create skewer topology. Do it twice to make sure the parents are set.
+for t in {1,2}
+do
+  for ((i=2;i<=N;i++))
+  do
+    kubectl hns set tplg-skewer-$i --parent tplg-skewer-$((i-1))
+  done
+done

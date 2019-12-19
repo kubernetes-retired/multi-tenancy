@@ -1,0 +1,28 @@
+#!/bin/bash
+# Clean up topologies
+. ./scripts/performance/clean-up-topologies
+
+echo "Loading Topology Wide..."
+
+# Default 500 (50, 250, 500)
+N=500
+
+# Create root namespace
+kubectl create ns tplg-wide-0
+kubectl -n tplg-wide-0 create configmap configmap1-0 --from-literal key=value
+kubectl -n tplg-wide-0 create configmap configmap2-0 --from-literal key=value
+sleep 2
+
+# Create all other namespaces
+for ((i=1;i<=N;i++))
+do
+  kubectl create ns tplg-wide-$i
+  kubectl -n tplg-wide-$i create configmap configmap1-$i --from-literal key=value
+  kubectl -n tplg-wide-$i create configmap configmap2-$i --from-literal key=value
+done
+
+# Create wide topology
+for ((i=1;i<=N;i++))
+do
+  kubectl hns set tplg-wide-$i --parent tplg-wide-0
+done

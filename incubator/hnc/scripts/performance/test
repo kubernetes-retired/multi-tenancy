@@ -1,0 +1,160 @@
+#!/bin/bash
+echo "Performance Test"
+
+actMsg[1]="Start up controllers(act-A)"
+actMsg[2]="Create a ConfigMap object in the root namespace(act-C1)"
+actMsg[3]="Delete the new ConfigMap object in the root namespace(act-D)"
+actMsg[4]="Stop and restart controllers(act-B)"
+actMsg[5]="Set root parent to a non-existent namespace(act-E)(No controller activities)"
+actMsg[6]="Create a ConfigMap object in the root namespace(act-C2)"
+actMsg[7]="Create the non-existent namespace(act-F)"
+
+rootname[1]="tplg-wide-0"
+rootname[2]="tplg-full-0-0"
+rootname[3]="tplg-skewer-1"
+
+last=$(date -u +"%Y-%m-%dT%TZ")
+
+function reset_counter
+{
+  hcTot1=0
+  obTot1=0
+  hcRead1=0
+  hcWriteNS1=0
+  hcWriteHC1=0
+  objRead1=0
+  objWrite1=0
+}
+
+reset_counter
+
+for tplg in {1..3}
+do
+  echo "************Loading the topology ${tplg}************"
+  case $tplg in
+  1)
+    . ./scripts/performance/load-topology-wide
+    ;;
+  2)
+    . ./scripts/performance/load-topology-full
+    ;;
+  3)
+    . ./scripts/performance/load-topology-skewer
+    ;;
+  esac
+  root=${rootname[tplg]}
+
+  echo "************Starting up the controllers on topology ${tplg}************"
+  make deploy
+
+  echo "************Testing actions on topology ${tplg}************"
+  i=0
+  reset_counter
+  for actN in {1..7}
+  do
+    i=$((i+1))
+    echo "[Activity ${actN}]: ${actMsg[actN]}"
+    case $actN in
+    2 | 6)
+      echo "Creating root-configmap"
+      kubectl -n $root create configmap root-configmap --from-literal key=value
+      ;;
+    3)
+      echo "Deleting root-configmap"
+      kubectl -n $root delete configmap root-configmap
+      ;;
+    4)
+      echo "Deleting hnc-controller-manager deployment"
+      kubectl -n hnc-system delete deployment hnc-controller-manager
+      echo "Creating hnc-controller-manager deployment"
+      kubectl apply -f manifests/hnc-manager.yaml
+      i=1
+      reset_counter
+      ;;
+    5)
+      kubectl hns set $root --parent tplg-rootparent
+      ;;
+    7)
+      echo "Creating tplg-rootparent namespace"
+      kubectl create ns tplg-rootparent
+      ;;
+    esac
+
+    echo "Waiting for the controllers to complete the action..."
+    echo "Looking for logs containing Activity-${i}-started and Activity-${i}-finished..."
+    sleep 30
+    # Empty the variables.
+    start=
+    finish=
+    # Run until the start is not empty.
+    until [ ! -z "$start" ]
+    do
+      sleep 5
+      start=$(kubectl logs -n hnc-system deployment/hnc-controller-manager -c manager --since-time="$last" | grep Activity-$i-started)
+      if [ -z "$start" ]
+      then
+        echo "No controller activities detected"
+        break
+      fi
+    done
+    if [ -z "$start" ]
+    then
+      i=$((i-1))
+      continue
+    fi
+
+    # Collect all the data in the start log
+    sec1=`echo ${start} | jq -r '.ts' | grep -Eo ^[0-9]*`
+
+    # Update the last timestamp.
+    last=$(date -u -d @${sec1} +"%Y-%m-%dT%TZ")
+
+    # Run until the finish is not empty.
+    until [ ! -z "$finish" ]
+    do
+      sleep 5
+      finish=$(kubectl logs -n hnc-system deployment/hnc-controller-manager -c manager --since-time="$last" | grep Activity-$i-finished)
+    done
+
+    # Collect all the data in the finish log
+    sec2=`echo ${finish} | jq -r '.ts' | grep -Eo ^[0-9]*`
+    hcTot2=`echo ${finish} | jq -r '.hcTot' | grep -Eo ^[0-9]*`
+    obTot2=`echo ${finish} | jq -r '.obTot' | grep -Eo ^[0-9]*`
+    hcRead2=`echo ${finish} | jq -r '.hcRead' | grep -Eo ^[0-9]*`
+    hcWriteHC2=`echo ${finish} | jq -r '.hcWrite' | grep -Eo ^[0-9]*`
+    hcWriteNS2=`echo ${finish} | jq -r '.hcNSWrite' | grep -Eo ^[0-9]*`
+    objRead2=`echo ${finish} | jq -r '.objRead' | grep -Eo ^[0-9]*`
+    objWrite2=`echo ${finish} | jq -r '.objWrite' | grep -Eo ^[0-9]*`
+
+    diffTime=$((sec2-sec1))s
+    diffHcTot=$((hcTot2-hcTot1))
+    diffObTot=$((obTot2-obTot1))
+    diffHcRead=$((hcRead2-hcRead1))
+    diffHcWriteHC=$((hcWriteHC2-hcWriteHC1))
+    diffHcWriteNS=$((hcWriteNS2-hcWriteNS1))
+    diffObjRead=$((objRead2-objRead1))
+    diffObjWrite=$((objWrite2-objWrite1))
+
+    now=$(date -u +"%Y-%m-%dT%T")
+    echo "Current time : $now"
+    echo "Action start time : $last"
+    # Update the last timestamp.
+    last=$(date -u -d @${sec2} +"%Y-%m-%dT%TZ")
+    echo "Action end time : $last"
+    echo "Completion time: $diffTime"
+    echo "Total hc reconciles: $diffHcTot"
+    echo "Total obj reconciles: $diffObTot"
+    echo "Total hc reads: $diffHcRead"
+    echo "Total hc writes: $diffHcWriteHC"
+    echo "Total hc NS writes: $diffHcWriteNS"
+    echo "Total obj reads: $diffObjRead"
+    echo "Total obj writes: $diffObjWrite"
+    hcTot1=hcTot2
+    obTot1=obTot2
+    hcRead1=$hcRead2
+    hcWriteHC1=$hcWriteHC2
+    hcWriteNS1=$hcWriteNS2
+    objRead1=$objRead2
+    objWrite1=$objWrite2
+  done
+done

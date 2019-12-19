@@ -84,11 +84,12 @@ type NamespaceSyncer interface {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&hcTot, 1)
-		atomic.AddInt32(&hcCur, 1)
-		defer atomic.AddInt32(&hcCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+	atomic.AddInt32(&hcTot, 1)
+	atomic.AddInt32(&hcCur, 1)
+	defer atomic.AddInt32(&hcCur, -1)
 
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
@@ -150,6 +151,10 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
 func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration) {
+	if !ex[inst.ObjectMeta.Namespace] {
+		atomic.AddInt32(&mutexQ, 1)
+		defer atomic.AddInt32(&mutexQ, -1)
+	}
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -477,6 +482,11 @@ func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logge
 		return false, nil
 	}
 
+	if !ex[inst.ObjectMeta.Namespace] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&hcWriteHC, 1)
+	}
+
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating singleton on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
@@ -497,6 +507,11 @@ func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logge
 func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
 		return false, nil
+	}
+
+	if !ex[inst.Name] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&hcWriteNS, 1)
 	}
 
 	if inst.CreationTimestamp.IsZero() {
@@ -529,6 +544,10 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 
 // getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
 func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, error) {
+	if !ex[nm] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&hcRead, 1)
+	}
 	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	inst := &api.HierarchyConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
@@ -548,6 +567,9 @@ func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*api
 // doesn't. This allows it to be trivially identified as a namespace that doesn't exist, and also
 // allows us to easily modify it if we want to create it.
 func (r *HierarchyReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
+	if !ex[nm] {
+		atomic.AddInt32(&apiCall, 1)
+	}
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {

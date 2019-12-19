@@ -92,11 +92,12 @@ func (r *ObjectReconcilerNew) SyncNamespace(ctx context.Context, log logr.Logger
 }
 
 func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&obTot, 1)
-		atomic.AddInt32(&obCur, 1)
-		defer atomic.AddInt32(&obCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+	atomic.AddInt32(&obTot, 1)
+	atomic.AddInt32(&obCur, 1)
+	defer atomic.AddInt32(&obCur, -1)
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
@@ -107,6 +108,11 @@ func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	inst.SetGroupVersionKind(r.GVK)
 	inst.SetNamespace(req.Namespace)
 	inst.SetName(req.Name)
+
+	if !ex[req.Namespace] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&objRead, 1)
+	}
 	if err := r.Get(ctx, req.NamespacedName, inst); err != nil {
 		if !errors.IsNotFound(err) {
 			log.Error(err, "Couldn't read")
@@ -122,6 +128,10 @@ func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 // the object (delete, write or do nothing) and a source object if the action is to write it. It can
 // also update the forest if a source object is added or removed.
 func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
+	if !ex[inst.GetNamespace()] {
+		atomic.AddInt32(&mutexQ, 1)
+		defer atomic.AddInt32(&mutexQ, -1)
+	}
 	// This is the only place we should lock the forest in each Reconcile, so this fn needs to return
 	// everything relevant for the rest of the Reconcile. This fn shouldn't contact the apiserver since
 	// that's a slow operation and everything will block on the lock being held.
@@ -295,6 +305,10 @@ func (r *ObjectReconcilerNew) enqueueLocalObjects(ctx context.Context, log logr.
 // needed in SyncNamespace, so we made it into a function with forest lock instead of holding the
 // lock for the entire SyncNamespace.
 func (r *ObjectReconcilerNew) enqueuePropagatedObjects(ctx context.Context, log logr.Logger, ns string) {
+	if !ex[ns] {
+		atomic.AddInt32(&mutexQ, 1)
+		defer atomic.AddInt32(&mutexQ, -1)
+	}
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
@@ -326,6 +340,10 @@ func (r *ObjectReconcilerNew) operate(ctx context.Context, log logr.Logger, act 
 
 func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
 	log.V(1).Info("Deleting obsolete copy")
+	if !ex[inst.GetNamespace()] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&objWrite, 1)
+	}
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
 		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
@@ -349,6 +367,10 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 
 	var err error = nil
 	var op string
+	if !ex[ns] {
+		atomic.AddInt32(&apiCall, 1)
+		atomic.AddInt32(&objWrite, 1)
+	}
 	if exist {
 		err = r.Update(ctx, inst)
 		op = "update"
@@ -364,6 +386,10 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 }
 
 func (r *ObjectReconcilerNew) setErrorConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, op string, err error) {
+	if !ex[inst.GetNamespace()] {
+		atomic.AddInt32(&mutexQ, 1)
+		defer atomic.AddInt32(&mutexQ, -1)
+	}
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 

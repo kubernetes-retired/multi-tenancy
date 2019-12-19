@@ -1,0 +1,44 @@
+#!/bin/bash
+# Clean up topologies
+. ./scripts/performance/clean-up-topologies
+
+echo "Loading Topology Full..."
+
+# Default 20 (3, 10, 20)
+N=20
+
+# Create root namespace
+kubectl create ns tplg-full-0-0
+kubectl -n tplg-full-0-0 create configmap configmap1-0-0 --from-literal key=value
+kubectl -n tplg-full-0-0 create configmap configmap2-0-0 --from-literal key=value
+sleep 2
+
+# Create all namespaces with tree depth 1
+for ((i=1;i<=N;i++))
+do
+  echo "Creating namespace tplg-full-0-$i"
+  kubectl create ns tplg-full-0-$i
+  kubectl -n tplg-full-0-$i create configmap configmap1-0-$i --from-literal key=value
+  kubectl -n tplg-full-0-$i create configmap configmap2-0-$i --from-literal key=value
+  # Create all namespaces with tree depth 2
+  for ((j=1;j<=N;j++))
+  do
+    echo "Creating namespace tplg-full-$i-$j"
+    kubectl create ns tplg-full-$i-$j
+    kubectl -n tplg-full-$i-$j create configmap configmap1-$i-$j --from-literal key=value
+    kubectl -n tplg-full-$i-$j create configmap configmap2-$i-$j --from-literal key=value
+  done
+done
+
+# Create full topology. Do it twice to make sure the parents are set.
+for t in {1,2}
+do
+  for ((i=1;i<=N;i++))
+  do
+    kubectl hns set tplg-full-0-$i --parent tplg-full-0-0
+    for ((j=1;j<=N;j++))
+    do
+      kubectl hns set tplg-full-$i-$j --parent tplg-full-0-$i
+    done
+  done
+done

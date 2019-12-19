@@ -50,11 +50,12 @@ type ObjectReconciler struct {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete;deletecollection;use;impersonate
 
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&obTot, 1)
-		atomic.AddInt32(&obCur, 1)
-		defer atomic.AddInt32(&obCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+	atomic.AddInt32(&obTot, 1)
+	atomic.AddInt32(&obCur, 1)
+	defer atomic.AddInt32(&obCur, -1)
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
