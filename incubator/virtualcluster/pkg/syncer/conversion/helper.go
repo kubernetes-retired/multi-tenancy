@@ -61,7 +61,7 @@ func ToSuperMasterNamespace(cluster, ns string) string {
 	return targetNamespace
 }
 
-func GetVirtualOwner(nsLister listersv1.NamespaceLister, pNamespace string) (cluster, namespace string, err error) {
+func GetVirtualNamespace(nsLister listersv1.NamespaceLister, pNamespace string) (cluster, namespace string, err error) {
 	vcInfo, err := nsLister.Get(pNamespace)
 	if err != nil {
 		return
@@ -76,15 +76,14 @@ func GetVirtualOwner(nsLister listersv1.NamespaceLister, pNamespace string) (clu
 	return
 }
 
-func GetOwner(obj runtime.Object) (cluster, namespace string) {
+func GetVirtualOwner(obj runtime.Object) (cluster string) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return "", ""
+		return ""
 	}
 
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
-	namespace = strings.TrimPrefix(meta.GetNamespace(), cluster+"-")
-	return cluster, namespace
+	return cluster
 }
 
 func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {

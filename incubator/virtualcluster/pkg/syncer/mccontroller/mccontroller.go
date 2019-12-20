@@ -138,6 +138,11 @@ func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, 
 		return nil
 	}
 	c.clusters[cluster.GetClusterName()] = cluster
+
+	if c.objectType == nil {
+		return nil
+	}
+
 	h := &handler.EnqueueRequestForObject{Cluster: cluster.GetClientInfo(), Queue: c.Queue}
 	return cluster.AddEventHandler(c.objectType, h)
 }

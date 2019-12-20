@@ -61,7 +61,7 @@ func Register(
 
 	// Create the multi cluster pod controller
 	options := mc.Options{Reconciler: c}
-	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Namespace{}, options)
+	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", nil, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster event controller %v", err)
 		return
@@ -112,7 +112,7 @@ func (c *controller) enqueueEvent(obj interface{}) {
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterEventController.Start(stopCh)
+	return nil
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -120,7 +120,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.GetClusterName())
+	klog.Infof("tenant-masters-event-controller watch cluster %s for event resource", cluster.GetClusterName())
 	err := c.multiClusterEventController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s event event: %v", cluster.GetClusterName(), err)

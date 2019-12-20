@@ -30,6 +30,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/controllers/node"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // StartUWS starts the upward syncer
@@ -40,7 +41,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 	klog.Infof("starting pod upward syncer")
 
-	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.nsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -52,19 +53,6 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	klog.V(1).Infof("shutting down")
 
 	return nil
-}
-
-// podQueueKey holds information we need to sync a pod.
-// It contains enough information to look up the cluster resource.
-type podQueueKey struct {
-	// clusterName is the cluster this pod belongs to.
-	clusterName string
-	// vNamespace is the namespace this pod on tenant namespaces.
-	vNamespace string
-	// namespace is the namespace this pod on super master namespaces.
-	namespace string
-	// name is the pod name.
-	name string
 }
 
 // run runs a run thread that just dequeues items, processes them, and marks them done.
@@ -82,7 +70,7 @@ func (c *controller) processNextWorkItem() bool {
 	defer c.queue.Done(key)
 
 	klog.Infof("back populate pod %+v", key)
-	err := c.backPopulate(key)
+	err := c.backPopulate(key.(string))
 	if err == nil {
 		c.queue.Forget(key)
 		return true
@@ -93,23 +81,35 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(key interface{}) error {
-	podInfo, ok := key.(podQueueKey)
-	if !ok {
-		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
+func (c *controller) backPopulate(key string) error {
+	pNamespace, pName, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("invalid resource key %v: %v", key, err))
 		return nil
 	}
 
-	tenantCluster := c.multiClusterPodController.GetCluster(podInfo.clusterName)
+	clusterName, vNamespace, err := conversion.GetVirtualNamespace(c.nsLister, pNamespace)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("could not find ns %s in controller cache: %v", pNamespace, err)
+	}
+	if clusterName == "" || vNamespace == "" {
+		klog.Infof("drop pod %s/%s which is not belongs to any tenant", pNamespace, pName)
+		return nil
+	}
+
+	tenantCluster := c.multiClusterPodController.GetCluster(clusterName)
 	if tenantCluster == nil {
-		return fmt.Errorf("cluster %s not found", podInfo.clusterName)
+		return fmt.Errorf("cluster %s not found", clusterName)
 	}
 	tenantClient, err := tenantCluster.GetClient()
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", podInfo.clusterName, err)
+		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	pPod, err := c.podLister.Pods(podInfo.namespace).Get(podInfo.name)
+	pPod, err := c.podLister.Pods(pNamespace).Get(pName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -117,12 +117,12 @@ func (c *controller) backPopulate(key interface{}) error {
 		return err
 	}
 
-	vPodObj, err := c.multiClusterPodController.Get(podInfo.clusterName, podInfo.vNamespace, podInfo.name)
+	vPodObj, err := c.multiClusterPodController.Get(clusterName, vNamespace, pName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("could not find pPod %s/%s pPod in controller cache %v", podInfo.vNamespace, pPod.Name, err)
+		return fmt.Errorf("could not find pPod %s/%s pPod in controller cache %v", vNamespace, pName, err)
 	}
 	vPod := vPodObj.(*v1.Pod)
 
@@ -161,7 +161,7 @@ func (c *controller) backPopulate(key interface{}) error {
 		newPod := vPod.DeepCopy()
 		newPod.Status = pPod.Status
 		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
-			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, podInfo.clusterName, err)
+			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
 		c.queue.Add(key)
 		return nil

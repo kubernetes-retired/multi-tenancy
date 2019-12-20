@@ -47,10 +47,12 @@ type controller struct {
 	informer                  coreinformers.Interface
 
 	workers       int
-	podLister     listersv1.PodLister
 	queue         workqueue.RateLimitingInterface
+	podLister     listersv1.PodLister
 	podSynced     cache.InformerSynced
 	serviceSynced cache.InformerSynced
+	nsLister      listersv1.NamespaceLister
+	nsSynced      cache.InformerSynced
 }
 
 func Register(
@@ -74,9 +76,13 @@ func Register(
 	}
 	c.multiClusterPodController = multiClusterPodController
 
+	c.serviceSynced = informer.Services().Informer().HasSynced
+
+	c.nsLister = informer.Namespaces().Lister()
+	c.nsSynced = informer.Namespaces().Informer().HasSynced
+
 	c.podLister = informer.Pods().Lister()
 	c.podSynced = informer.Pods().Informer().HasSynced
-	c.serviceSynced = informer.Services().Informer().HasSynced
 	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -121,17 +127,18 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	clusterName, vNamespace := conversion.GetOwner(pod)
+	clusterName := conversion.GetVirtualOwner(pod)
 	if clusterName == "" {
 		return
 	}
 
-	c.queue.Add(podQueueKey{
-		clusterName: clusterName,
-		vNamespace:  vNamespace,
-		namespace:   pod.Namespace,
-		name:        pod.Name,
-	})
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
+		return
+	}
+
+	c.queue.Add(key)
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

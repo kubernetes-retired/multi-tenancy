@@ -36,7 +36,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	klog.Infof("starting pod upward syncer")
+	klog.Infof("starting event upward syncer")
 
 	if !cache.WaitForCacheSync(stopCh, c.eventSynced, c.nsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
@@ -93,7 +93,7 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("could not find pEvent %s/%s in controller cache: %v", pNamespace, pName, err)
 	}
 
-	clusterName, tenantNS, err := conversion.GetVirtualOwner(c.nsLister, pNamespace)
+	clusterName, tenantNS, err := conversion.GetVirtualNamespace(c.nsLister, pNamespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
