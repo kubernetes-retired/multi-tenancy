@@ -25,6 +25,8 @@ const (
 	LabelCluster = "tenancy.x-k8s.io/cluster"
 	// LabelUID is the uid in the tenant namespace.
 	LabelUID = "tenancy.x-k8s.io/uid"
+	// LabelNamespace records which cluster namespace this resource belongs to.
+	LabelNamespace = "tenancy.x-k8s.io/namespace"
 
 	// SyncStatusKey is a label key records the sync status of the resource.
 	SyncStatusKey = "tenancy.x-k8s.io/sync.status"

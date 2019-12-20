@@ -87,7 +87,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 
 	anno := m.GetAnnotations()
 	if anno == nil {
-		anno = map[string]string{}
+		anno = make(map[string]string)
 	}
 	anno[constants.LabelCluster] = cluster
 	anno[constants.LabelUID] = string(uid)
@@ -102,6 +102,15 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 	if err != nil {
 		return nil, err
 	}
+
+	anno := m.GetAnnotations()
+	if anno == nil {
+		anno = make(map[string]string)
+	}
+	anno[constants.LabelCluster] = cluster
+	anno[constants.LabelUID] = string(m.GetUID())
+	anno[constants.LabelNamespace] = m.GetName()
+	m.SetAnnotations(anno)
 
 	resetMetadata(m)
 
