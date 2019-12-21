@@ -1,30 +1,101 @@
 # The Hierarchical Namespace Controller (HNC)
 
-This is an early concept to allow namespaces to be linked to each other in
-parent-child relationships, and to allow certain objects from ancestors to be
-"visible" in their descendents, which is achieved by copying them. This is most
-useful for objects such as RBAC roles and bindings - a rolebinding made in a
-parent namespace will (under normal circumstances) also grant access in child
-namespaces as well, allowing for hierarchical administration.
+```bash
+$ kubectl hns create child -n parent
+$ kubectl hns tree parent
+parent
+└── child
+```
 
-The HNC is probably most useful in multi-team environments - that is, clusters
-shared by multiple teams in the same company or organization. It is _not_
-suitable for "hard multitenancy" and does _not_ attempt to add any isolation
-features to K8s. It can also be used in single-tenant scenarios, such as when
-you want to run multiple types of services in their own namespaces, but with
-common policies applied to them.
+Hierarchical namespaces make it easier for you to create and manage namespaces
+in your cluster. For example, you can create a hierarchical namespace under your
+team's namespace, even if you don't have cluster-level permission to create
+namespaces, and easily apply policies like RBAC and Network Policies across all
+namespaces in your team (e.g. a set of related microservices).
 
-Status: pre-alpha, no guarantees of compatability or feature support until
-further notice.
+You can read more
+about hierarchical namespaces in the [HNC Concepts doc](http://bit.ly/38YYhE0).
+
+The best way you can help contribute to bringing hierarchical namespaces to the
+Kubernetes ecosystem is to try out HNC and report the problems you have (see
+below). Or, if it's working well for you, let us know on the \#wg-multitenancy
+channel on Slack, or join a MTWG meeting. We'd love to hear from you!
+
+With that said, please be cautious - HNC is pre-alpha software. There are no
+guarantees of compatibility or feature support until further notice. HNC also
+requires very high privileges on your cluster and you should not install it on
+clusters with sensitive configurations that you can't afford to lose.
+
+Lead developer: @adrianludwin (aludwin@google.com).
+
+## Using HNC
+
+### Installing or upgrading HNC
+```bash
+# Set the desired release:
+HNC_VERSION=v0.2.0-rc1
+
+# Install prerequisites on your cluster
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+# WAIT for the cert-manager deployments to all become healthy. This can take a
+# minute or two.
+
+# Install HNC on your cluster. If this fails due to the cert-manager webhook not
+being ready yet, just re-run it.
+kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
+# Download kubectl plugin (Linux only) - will move to Krew soon
+PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
+chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
+# If desired to make 'kubectl hns' work:
+ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
+```
+
+### Getting started and learning more
+As a quick start, I'd recommend following the [HNC demo
+scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
+to get an idea of what HNC can do. For a more in-depth understanding, check out
+the [HNC Concepts doc](http://bit.ly/38YYhE0).
+
+### Uninstalling HNC
+**WARNING:** this will also delete all the hierarchical relationships between
+your namespaces. Reinstalling HNC will _not_ recreate these relationships. There
+is no need to uninstall HNC before upgrading it.
+
+```bash
+rm ${PLUGIN_DIR}/kubectl-hns
+rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
+kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+```
+
+## Issues and project management
+
+All HNC issues are assigned to an HNC milestone. So far, the following
+milestones are defined:
+
+* [COMPLETE v0.1](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7): an
+  initial release with all basic functionality so you can play with it, but not
+  suitable for any real workloads.
+* [v0.2](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8): contains
+  enough functionality to be suitable for non-production workloads.
+* [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9): all
+  unscheduled work.
+
+Non-coding tasks are also tracked in the [HNC
+project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
+
+## Developing HNC
+
+HNC is a small project, and we have limited abilities to help onboard developers
+and review pull requests at this time. However, if you want to *use* HNC
+yourself and are also a developer, we want to know what does and does not work
+for you, and we'd welcome any PRs that might solve your problems.
 
 * Design doc: http://bit.ly/k8s-hnc-design
 * Demonstration: https://youtu.be/XFZhApTlJ88?t=171 (MTWG meeting; Sep 24 '19)
   * Script for said demo: https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
-
-Developers: @adrianludwin (Google). Please contact me if you want to help out,
-or just join a MTWG meeting.
-
-## Getting started
 
 ### Prerequisites
 
@@ -33,21 +104,19 @@ accessible from your `PATH`:
   - Docker
   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
   - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
-  - [kubebuilder](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) (_Github issue_). You will most likely encounter this issue when running the tests or any other command.
-  - [cert-manager](https://github.com/jetstack/cert-manager)
+  - [kubebuilder](https://kubebuilder.io) - this [Github issue](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) may help you resolve errors you get when running the tests or any other command.
 
-### Deploying to a cluster
+### Building and deploying to a test cluster
 
 To deploy to a cluster:
   - Ensure your `kubeconfig` is configured to point at your cluster
     - For example, if you're using GKE, run `gcloud container clusters
       get-credentials <cluster-name> --zone <cluster-zone>`
     - To deploy to KIND, see below instead.
-  - `IMG=<img> make deploy` to deploy to your cluster. `<img>` must be in a
-    container registry that you have permission to access.
-    - If you're using GKE, you might want to pick
-      `IMG=gcr.io/<project-id>/controller:latest`. Also, ensure you run `gcloud
-      auth configure-docker` so that `docker-push` works correctly.
+  - If you're using GCR, make sure that gcloud is set to the project containing
+    the GCR repo you want to use, then say `make deploy` to deploy to your cluster.
+    - Ensure you run `gcloud auth configure-docker` so that `docker-push` works
+      correctly.
     - If you get an error referencing the certificate manager, wait a minute or
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
@@ -58,15 +127,6 @@ To deploy to a cluster:
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
-
-### Using the HNC
-
-To learn how HNC works, I'd recommend following the [demo
-script](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
-mentioned above.
-
-At this point, you should be able to run the demo script yourself. Please
-contact us on Slack if you're having trouble.
 
 ### Developing with KIND
 
@@ -94,7 +154,7 @@ system:serviceaccount:<namespace>:<sa-name>` to impersonate a service account
 from the command line, [as documented
 here](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#referring-to-subjects).
 
-## Development/code
+### Code structure
 
 The directory structure is fairly standard for a Kubernetes project. The most
 interesting directories are probably:
@@ -112,42 +172,43 @@ Within the `controllers` directory, there are two controller:
   as well as the namespace in which it lives.
 * **Object controller:** Propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
-  (group/version/kind) - currently, `Role`, `RoleBinding` and `Secret`.
+  (group/version/kind) - e.g., `Role`, `Secret`, etc.
 
-## Issues and project management
+### Releasing
 
-All HNC issues are assigned to an HNC milestone. So far, the following
-milestones are defined:
+1. Ensure you have a Personal Access Token from Github with permissions to write
+   to the repo, and
+   [permisison]((https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566))
+   to access `k8s-staging-multitenancy`'s GCR.
 
-* [v0.1](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7): an
-  initial release with all basic functionality so you can play with it, but not
-  suitable for any real workloads.
-* [v0.2](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8): contains
-  enough functionality to be suitable for non-production workloads.
-* [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9): all
-  unscheduled work.
+2. Set the following environment variables:
 
-Non-coding tasks are also tracked in the [HNC
-project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
-
-## Releasing
-
-[comment]: # (TODO: pull the code directly from Github)
-1.Check out the code to the version that you want to release and run the 
-following command in `incubator/hnc`.
-```bash
-make release
 ```
-It will use Cloud Build (on your GCP account)
-to build the container image remotely while building YAMLs locally.
-
-2.Make sure you have [permisison]((https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566)) to access `k8s-staging-multitenancy`'s GCR.
-Then upload the container image via the following commands:
-```bash
-docker pull gcr.io/$PROJECT_ID/hnc/controller
-docker tag gcr.io/$PROJECT_ID/hnc/controller gcr.io/k8s-staging-multitenancy/hnc/controller:$VERSION_TAG
-docker push gcr.io/k8s-staging-multitenancy/hnc/controller:$VERSION_TAG
+export HNC_USER=<your github name>
+export HNC_PAT=<your personal access token>
+export HNC_IMG_TAG=<the desired image tag, eg v0.1.0-rc1>
 ```
 
-3.Upload generated YAMLs (located in `incubator/hnc/manifests/hnc-manager.yaml`) 
-to Github. See instructions [here](https://help.github.com/en/github/administering-a-repository/creating-releases).
+3. Create a draft release in Github. Ensure that the Github tag name is
+   `hnc-$HNC_IMG_TAG`. Save the release in order to tag the repo, or manually
+   create the tag beforehand and just save the release as a draft.
+
+4. Get the release ID by calling `curl -u "$HNC_USER:$HNC_PAT"
+   https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases`, finding
+   your release, and noting it's ID. Save this as an env var: `export
+   HNC_RELEASE_ID=<id>`
+
+5. Call `make release`. **Note that your personal access token will be visible
+   in the build logs,** but will not be printed to the console from `make`
+   itself.  TODO: fix this (see
+   https://cloud.google.com/cloud-build/docs/securing-builds/use-encrypted-secrets-credentials#example_build_request_using_an_encrypted_variable).
+
+6. Exit your shell so your personal access token isn't lying around.
+
+7. Publish the release if you didn't do it already.
+
+8. Test!
+
+After the release, you can run `curl -u "$HNC_USER:$HNC_PAT"
+https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$HNC_RELEASE_ID`
+to see how many times the assets have been downloaded.

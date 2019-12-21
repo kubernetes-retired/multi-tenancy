@@ -1,7 +1,62 @@
 steps:
-# TODO: pull the code directly from Github
 # Build release container image
-- name: gcr.io/cloud-builders/docker
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/hnc/controller', '.']
+# Pull source and check out correct tag
+- name: gcr.io/cloud-builders/git
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    git clone https://github.com/kubernetes-sigs/multi-tenancy
+    cd multi-tenancy
+    git checkout hnc-$_HNC_IMG_TAG
+# Build the manifests and the kubectl plugin
+- name: mirror.gcr.io/library/golang
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    # Get kustomize
+    export PATH=$$(go env GOPATH)/bin:$$PATH
+    mkdir -p $$(go env GOPATH)/bin
+    GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.2.1
 
-images: ['gcr.io/$PROJECT_ID/hnc/controller']
+    # Build manifests
+    cd multi-tenancy/incubator/hnc
+    mkdir out
+    cd out
+    touch kustomization.yaml
+    kustomize edit add resource ../config/default
+    kustomize edit set image controller=$_HNC_RELEASED_IMG
+    kustomize build . -o ./hnc-manager.yaml
+
+    # Build plugin
+    go build -o kubectl-hierarchical_namespaces ../cmd/kubectl/main.go
+# Upload manifest
+- name: gcr.io/cloud-builders/curl
+  args:
+  - '-X'
+  - 'POST'
+  - '-H'
+  - 'Content-Type: application/x-application'
+  - '--data-binary'
+  - '@multi-tenancy/incubator/hnc/out/hnc-manager.yaml'
+  - '-u'
+  - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
+  - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=hnc-manager.yaml'
+# Upload plugin
+- name: gcr.io/cloud-builders/curl
+  args:
+  - '-X'
+  - 'POST'
+  - '-H'
+  - 'Content-Type: application/x-application'
+  - '--data-binary'
+  - '@multi-tenancy/incubator/hnc/out/kubectl-hierarchical_namespaces'
+  - '-u'
+  - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
+  - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hierarchical_namespaces'
+# Build Docker image
+- name: gcr.io/cloud-builders/docker
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/hnc/controller:$_HNC_IMG_TAG', 'multi-tenancy/incubator/hnc']
+
+images: ['gcr.io/$PROJECT_ID/hnc/controller:$_HNC_IMG_TAG']
