@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 
@@ -60,15 +61,29 @@ func ToSuperMasterNamespace(cluster, ns string) string {
 	return targetNamespace
 }
 
-func GetOwner(obj runtime.Object) (cluster, namespace string) {
+func GetVirtualNamespace(nsLister listersv1.NamespaceLister, pNamespace string) (cluster, namespace string, err error) {
+	vcInfo, err := nsLister.Get(pNamespace)
+	if err != nil {
+		return
+	}
+
+	if v, ok := vcInfo.GetAnnotations()[constants.LabelCluster]; ok {
+		cluster = v
+	}
+	if v, ok := vcInfo.GetAnnotations()[constants.LabelNamespace]; ok {
+		namespace = v
+	}
+	return
+}
+
+func GetVirtualOwner(obj runtime.Object) (cluster string) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return "", ""
+		return ""
 	}
 
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
-	namespace = strings.TrimPrefix(meta.GetNamespace(), cluster+"-")
-	return cluster, namespace
+	return cluster
 }
 
 func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {
@@ -80,14 +95,14 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 
 	uid := m.GetUID()
 
-	resetMetadata(m)
+	ResetMetadata(m)
 	if len(targetNamespace) > 0 {
 		m.SetNamespace(targetNamespace)
 	}
 
 	anno := m.GetAnnotations()
 	if anno == nil {
-		anno = map[string]string{}
+		anno = make(map[string]string)
 	}
 	anno[constants.LabelCluster] = cluster
 	anno[constants.LabelUID] = string(uid)
@@ -103,14 +118,23 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 		return nil, err
 	}
 
-	resetMetadata(m)
+	anno := m.GetAnnotations()
+	if anno == nil {
+		anno = make(map[string]string)
+	}
+	anno[constants.LabelCluster] = cluster
+	anno[constants.LabelUID] = string(m.GetUID())
+	anno[constants.LabelNamespace] = m.GetName()
+	m.SetAnnotations(anno)
+
+	ResetMetadata(m)
 
 	targetName := strings.Join([]string{cluster, m.GetName()}, "-")
 	m.SetName(targetName)
 	return target, nil
 }
 
-func resetMetadata(obj metav1.Object) {
+func ResetMetadata(obj metav1.Object) {
 	obj.SetSelfLink("")
 	obj.SetUID("")
 	obj.SetResourceVersion("")
@@ -240,4 +264,18 @@ func MutateService(newService *corev1.Service) {
 	for i := range newService.Spec.Ports {
 		newService.Spec.Ports[i].NodePort = 0
 	}
+}
+
+func BuildVirtualPodEvent(cluster string, pEvent *v1.Event, vPod *v1.Pod) *v1.Event {
+	vEvent := pEvent.DeepCopy()
+	ResetMetadata(vEvent)
+	vEvent.SetNamespace(vPod.Namespace)
+	vEvent.InvolvedObject.Namespace = vPod.Namespace
+	vEvent.InvolvedObject.UID = vPod.UID
+	vEvent.InvolvedObject.ResourceVersion = ""
+
+	vEvent.Message = strings.ReplaceAll(vEvent.Message, cluster+"-", "")
+	vEvent.Message = strings.ReplaceAll(vEvent.Message, cluster, "")
+
+	return vEvent
 }
