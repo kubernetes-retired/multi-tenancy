@@ -3,38 +3,35 @@
 
 # If CONFIG is `kind`, various defaults will be optimized for deploying locally to Kind
 CONFIG ?= "default"
+
+PROJECT_ID=$(shell gcloud config get-value project)
+
+# Set default version tag for krew build and Docker image (unless version is set)
+HNC_IMG_TAG ?= latest
+
 # Image URL to use all building/pushing image targets
 ifeq ($(CONFIG),kind)
-	# The tag is `kind-local` since K8s always attempst to re-pull an image with the
-	# `latest` tag, and this doesn't work when we're testing locally (we rely on the
-	# docker-push target, below, to push the image into Kind).
-	IMG ?= controller:kind-local
+# The tag is `kind-local` since K8s always attempst to re-pull an image with
+# the `latest` tag, and this doesn't work when we're testing locally (we rely
+# on the docker-push target, below, to push the image into Kind).
+HNC_IMG ?= controller:kind-local
 else
-	IMG ?= controller:latest
+HNC_IMG ?= "gcr.io/${PROJECT_ID}/hnc/controller:${HNC_IMG_TAG}"
 endif
+
+HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/hnc/controller:${HNC_IMG_TAG}"
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
-
-# Set default version tag for krew build (unless version is set)
-ifeq (,${VERSION})
-VERSION=v0.1.0
-endif
+GOBIN ?= $(shell go env GOPATH)/bin
 
 # Set default object controller to the new one
-ifeq (,${NOC})
-NOC=1
-endif
+NOC ?= 1
 
 # Get check sum value of krew archive
 KREW_CKSM=$(shell sha256sum bin/kubectl-hierarchical_namespaces.tar.gz | cut -d " " -f 1)
-
 
 all: test docker-build
 
@@ -76,7 +73,7 @@ krew-build: krew-tar
 	cp hack/krew-hierarchical-namespaces.yaml manifests/krew-hierarchical-namespaces.yaml
 	sed -i 's/^\(\s*sha256\s*:\s*\).*/\1"$(KREW_CKSM)"/' \
 		manifests/krew-hierarchical-namespaces.yaml
-	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(VERSION)"/' \
+	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(HNC_IMG_TAG)"/' \
 		manifests/krew-hierarchical-namespaces.yaml
 
 # Install kubectl plugin locally using krew.
@@ -95,13 +92,14 @@ krew-uninstall:
 # files in /config (which should be checked into Git) as well as the kustomized
 # files in /manifest (which are not checked into Git).
 manifests: controller-gen
+	@echo "Building manifests with image ${HNC_IMG}"
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	-rm -rf manifests/
 	mkdir manifests
 	cd manifests && \
 		touch kustomization.yaml && \
 		kustomize edit add resource ../config/default && \
-		kustomize edit set image controller=${IMG}
+		kustomize edit set image controller=${HNC_IMG}
 	kustomize build manifests/ -o manifests/hnc-manager.yaml
 
 # Run go fmt against code
@@ -149,16 +147,17 @@ deploy-prereq:
 
 # Push the docker image
 docker-push: docker-build
+	@echo "Pushing ${HNC_IMG}"
 ifeq ($(CONFIG),kind)
-	kind load docker-image ${IMG}
+	kind load docker-image ${HNC_IMG}
 else
-	docker push ${IMG}
+	docker push ${HNC_IMG}
 endif
 
 # Build the docker image
 docker-build: generate fmt vet
 	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
-	docker build . -t ${IMG}
+	docker build . -t ${HNC_IMG}
 
 ###################### KIND ACTIONS #########################
 
@@ -180,5 +179,36 @@ kind-deploy:
 
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
-release: manifests
-	gcloud builds submit --config cloudbuild.yaml .
+#
+# ALL COMMANDS THAT INCLUDE THE PERSONAL ACCESS TOKEN ARE HIDDEN
+release: check-release-env test
+	@echo "*********************************************"
+	@echo "*********************************************"
+	@echo "Invoking Cloud Build"
+	@echo "*********************************************"
+	@echo "*********************************************"
+	@gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=_HNC_IMG_TAG=${HNC_IMG_TAG},_HNC_USER=${HNC_USER},_HNC_PERSONAL_ACCESS_TOKEN=${HNC_PAT},_HNC_RELEASE_ID=${HNC_RELEASE_ID},_HNC_RELEASED_IMG=${HNC_RELEASED_IMG}
+	@echo Pushing image to K8s staging
+	@docker pull ${HNC_IMG}
+	@docker tag ${HNC_IMG} ${HNC_RELEASED_IMG}
+	@docker push ${HNC_RELEASED_IMG}
+
+ERR_MSG=Ensure that HNC_IMG_TAG (eg v0.1.0), HNC_USER (your Github username), HNC_PAT (Github personal access token) and HNC_RELEASE_ID (Github numeric ID) are set
+check-release-env:
+ifndef HNC_IMG_TAG
+	$(error HNC_IMG_TAG is undefined; ${ERR_MSG})
+endif
+ifndef HNC_USER
+	$(error HNC_USER is undefinied; ${ERR_MSG})
+endif
+ifndef HNC_PAT
+	$(error HNC_PAT is undefined; ${ERR_MSG})
+endif
+ifndef HNC_RELEASE_ID
+	$(error HNC_RELEASE_ID is undefined; ${ERR_MSG})
+endif
+	@echo "*********************************************"
+	@echo "*********************************************"
+	@echo "Releasing ${HNC_RELEASED_IMG} using ${PROJECT_ID}"
+	@echo "*********************************************"
+	@echo "*********************************************"

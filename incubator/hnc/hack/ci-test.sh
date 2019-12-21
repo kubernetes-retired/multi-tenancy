@@ -14,6 +14,8 @@
 
 set -e
 
+# This file is run by Prow during all presuubmits
+
 # Not included or existing by default in Prow
 #  - This is part of an ongoing discussion present on the issue:
 #    https://github.com/kubernetes/test-infra/issues/9469;
