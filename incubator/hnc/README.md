@@ -24,7 +24,29 @@ further notice.
 Developers: @adrianludwin (Google). Please contact me if you want to help out,
 or just join a MTWG meeting.
 
-## Getting started
+## Using HNC
+
+To install HNC:
+
+```bash
+# Install on your cluster
+HNC_VERSION=0.2.0-rc1
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
+# Download kubectl plugin (Linux only) - will move to Krew soon
+PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
+# If desired to make 'kubectl hns' work:
+ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
+```
+
+As a quick start, I'd recommend following the [demo
+script](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
+mentioned above. For a more in-depth understanding, check out the [HNC Concepts
+doc](http://bit.ly/38YYhE0).
+
+## Developing HNC
 
 ### Prerequisites
 
@@ -33,8 +55,7 @@ accessible from your `PATH`:
   - Docker
   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
   - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
-  - [kubebuilder](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) (_Github issue_). You will most likely encounter this issue when running the tests or any other command.
-  - [cert-manager](https://github.com/jetstack/cert-manager)
+  - [kubebuilder](https://kubebuilder.io) - this [Github issue](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) may help you resolve errors you get when running the tests or any other command.
 
 ### Deploying to a cluster
 
@@ -43,11 +64,10 @@ To deploy to a cluster:
     - For example, if you're using GKE, run `gcloud container clusters
       get-credentials <cluster-name> --zone <cluster-zone>`
     - To deploy to KIND, see below instead.
-  - `IMG=<img> make deploy` to deploy to your cluster. `<img>` must be in a
-    container registry that you have permission to access.
-    - If you're using GKE, you might want to pick
-      `IMG=gcr.io/<project-id>/controller:latest`. Also, ensure you run `gcloud
-      auth configure-docker` so that `docker-push` works correctly.
+  - If you're using GCR, make sure that gcloud is set to the project containing
+    the GCR repo you want to use, then say `make deploy` to deploy to your cluster.
+    - Ensure you run `gcloud auth configure-docker` so that `docker-push` works
+      correctly.
     - If you get an error referencing the certificate manager, wait a minute or
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
@@ -58,15 +78,6 @@ To deploy to a cluster:
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
-
-### Using the HNC
-
-To learn how HNC works, I'd recommend following the [demo
-script](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
-mentioned above.
-
-At this point, you should be able to run the demo script yourself. Please
-contact us on Slack if you're having trouble.
 
 ### Developing with KIND
 
@@ -132,22 +143,39 @@ project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
 
 ## Releasing
 
-[comment]: # (TODO: pull the code directly from Github)
-1.Check out the code to the version that you want to release and run the 
-following command in `incubator/hnc`.
-```bash
-make release
-```
-It will use Cloud Build (on your GCP account)
-to build the container image remotely while building YAMLs locally.
+1. Ensure you have a Personal Access Token from Github with permissions to write
+   to the repo, and
+   [permisison]((https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566))
+   to access `k8s-staging-multitenancy`'s GCR.
 
-2.Make sure you have [permisison]((https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566)) to access `k8s-staging-multitenancy`'s GCR.
-Then upload the container image via the following commands:
-```bash
-docker pull gcr.io/$PROJECT_ID/hnc/controller
-docker tag gcr.io/$PROJECT_ID/hnc/controller gcr.io/k8s-staging-multitenancy/hnc/controller:$VERSION_TAG
-docker push gcr.io/k8s-staging-multitenancy/hnc/controller:$VERSION_TAG
+2. Set the following environment variables:
+
+```
+export HNC_USER=<your github name>
+export HNC_PAT=<your personal access token>
+export HNC_IMG_TAG=<the desired image tag, eg v0.1.0-rc1>
 ```
 
-3.Upload generated YAMLs (located in `incubator/hnc/manifests/hnc-manager.yaml`) 
-to Github. See instructions [here](https://help.github.com/en/github/administering-a-repository/creating-releases).
+3. Create a draft release in Github. Ensure that the Github tag name is
+   `hnc-$HNC_IMG_TAG`. Save the release in order to tag the repo, or manually
+   create the tag beforehand and just save the release as a draft.
+
+4. Get the release ID by calling `curl -u "$HNC_USER:$HNC_PAT"
+   https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases`, finding
+   your release, and noting it's ID. Save this as an env var: `export
+   HNC_RELEASE_ID=<id>`
+
+5. Call `make release`. Note that your personal access token will be visible in
+   the build logs, but will not be printed to the console from `make` itself.
+   TODO: fix this (see
+   https://cloud.google.com/cloud-build/docs/securing-builds/use-encrypted-secrets-credentials#example_build_request_using_an_encrypted_variable).
+
+6. Exit your shell so your personal access token isn't lying around.
+
+7. Publish the release if you didn't do it already.
+
+8. Test!
+
+After the release, you can run `curl -u "$HNC_USER:$HNC_PAT"
+https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases` to see how
+many times the assets have been downloaded.
