@@ -18,6 +18,7 @@ package pod
 
 import (
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -37,6 +38,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
@@ -148,21 +150,31 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.Infof("reconcile pod %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
 
+	var operation string
 	switch request.Event {
 	case reconciler.AddEvent:
+		operation = "pod_add"
+		defer recordOperation(operation, time.Now())
 		err := c.reconcilePodCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.UpdateEvent:
+		operation = "pod_update"
+		defer recordOperation(operation, time.Now())
 		err := c.reconcilePodUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	case reconciler.DeleteEvent:
+		operation = "pod_delete"
+		defer recordOperation(operation, time.Now())
 		err := c.reconcilePodRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
 			return reconciler.Result{Requeue: true}, err
@@ -329,4 +341,15 @@ func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
 // assignedPod selects pods that are assigned (scheduled and running).
 func assignedPod(pod *v1.Pod) bool {
 	return len(pod.Spec.NodeName) != 0
+}
+
+func recordOperation(operation string, start time.Time) {
+	metrics.PodOperations.WithLabelValues(operation).Inc()
+	metrics.PodOperationsDuration.WithLabelValues(operation).Observe(metrics.SinceInSeconds(start))
+}
+
+func recordError(operation string, err error) {
+	if err != nil {
+		metrics.PodOperationsErrors.WithLabelValues(operation).Inc()
+	}
 }

@@ -19,6 +19,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 
 	"k8s.io/apiserver/pkg/util/term"
@@ -101,14 +102,11 @@ func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	// Wait for all caches to sync before resource sync.
 	cc.SuperMasterInformerFactory.WaitForCacheSync(stopCh)
 
-	// Prepare a reusable runCommand function.
-	run := func(ctx context.Context) {
-		ss.Run()
-		<-ctx.Done()
-	}
-
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
+
+	// Prepare a reusable runCommand function.
+	run := startSyncer(ctx, ss, cc, stopCh)
 
 	go func() {
 		select {
@@ -138,4 +136,14 @@ func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	// Leader election is disabled, so runCommand inline until done.
 	run(ctx)
 	return fmt.Errorf("finished without leader elect")
+}
+
+func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) func(context.Context) {
+	return func(ctx context.Context) {
+		s.Run(stopCh)
+		go func() {
+			s.ListenAndServe(net.JoinHostPort(cc.Address, cc.Port), cc.CertFile, cc.KeyFile)
+		}()
+		<-ctx.Done()
+	}
 }

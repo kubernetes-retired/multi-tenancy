@@ -52,6 +52,11 @@ type ResourceSyncerOptions struct {
 
 	SuperMaster           string
 	SuperMasterKubeconfig string
+
+	Address  string
+	Port     string
+	CertFile string
+	KeyFile  string
 }
 
 // NewResourceSyncerOptions creates a new resource syncer with a default config.
@@ -70,6 +75,12 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs := fss.FlagSet("misc")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
+
+	serverFlags := fss.FlagSet("server")
+	serverFlags.StringVar(&o.Address, "address", "", "The server address.")
+	serverFlags.StringVar(&o.Port, "port", "80", "The server port.")
+	serverFlags.StringVar(&o.CertFile, "cert-file", "", "CertFile is the file containing x509 Certificate for HTTPS.")
+	serverFlags.StringVar(&o.KeyFile, "key-file", "", "KeyFile is the file containing x509 private key matching certFile.")
 
 	BindFlags(&o.ComponentConfig.LeaderElection, fss.FlagSet("leader election"))
 
@@ -100,7 +111,6 @@ func BindFlags(l *syncerconfig.SyncerLeaderElectionConfiguration, fs *pflag.Flag
 		"leader election. Supported options are `endpoints` (default) and `configmaps`.")
 	fs.StringVar(&l.LockObjectNamespace, "lock-object-namespace", l.LockObjectNamespace, "DEPRECATED: define the namespace of the lock object.")
 	fs.StringVar(&l.LockObjectName, "lock-object-name", l.LockObjectName, "DEPRECATED: define the name of the lock object.")
-
 }
 
 // Config return a syncer config object
@@ -137,6 +147,11 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	c.Recorder = recorder
 	c.LeaderElectionClient = leaderElectionClient
 	c.LeaderElection = leaderElectionConfig
+
+	c.Address = o.Address
+	c.Port = o.Port
+	c.CertFile = o.CertFile
+	c.KeyFile = o.KeyFile
 
 	return c, nil
 }
