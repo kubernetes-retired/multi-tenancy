@@ -53,6 +53,12 @@ type Config struct {
 
 	// LeaderElection is optional.
 	LeaderElection *leaderelection.LeaderElectionConfig
+
+	// server config.
+	Address  string
+	Port     string
+	CertFile string
+	KeyFile  string
 }
 
 type completedConfig struct {

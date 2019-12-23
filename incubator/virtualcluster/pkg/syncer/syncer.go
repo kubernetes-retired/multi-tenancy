@@ -18,9 +18,11 @@ package syncer
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -32,7 +34,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -44,6 +45,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
 const (
@@ -63,8 +65,12 @@ type Syncer struct {
 	// clusterSet holds the cluster collection in which cluster is running.
 	mu         sync.Mutex
 	clusterSet map[string]mc.ClusterInterface
-	// if this channel is closed, syncer will stop
-	stopChan <-chan struct{}
+}
+
+// Bootstrap is a bootstrapping interface for syncer, targets the initialization protocol
+type Bootstrap interface {
+	ListenAndServe(address, certFile, keyFile string)
+	Run(<-chan struct{})
 }
 
 func New(
@@ -78,7 +84,6 @@ func New(
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
 		workers:      constants.DefaultControllerWorkers,
 		clusterSet:   make(map[string]mc.ClusterInterface),
-		stopChan:     signals.SetupSignalHandler(),
 	}
 
 	// Handle VirtualCluster add&delete
@@ -138,9 +143,9 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 }
 
 // Run begins watching and downward&upward syncing.
-func (s *Syncer) Run() {
+func (s *Syncer) Run(stopChan <-chan struct{}) {
 	go func() {
-		if err := s.controllerManager.Start(s.stopChan); err != nil {
+		if err := s.controllerManager.Start(stopChan); err != nil {
 			klog.V(1).Infof("controller manager exit: %v", err)
 		}
 	}()
@@ -151,18 +156,30 @@ func (s *Syncer) Run() {
 		klog.Infof("starting virtual cluster controller")
 		defer klog.Infof("shutting down virtual cluster controller")
 
-		if !cache.WaitForCacheSync(s.stopChan, s.virtualClusterSynced) {
+		if !cache.WaitForCacheSync(stopChan, s.virtualClusterSynced) {
 			return
 		}
 
 		klog.V(5).Infof("starting workers")
 		for i := 0; i < s.workers; i++ {
-			go wait.Until(s.run, 1*time.Second, s.stopChan)
+			go wait.Until(s.run, 1*time.Second, stopChan)
 		}
-		<-s.stopChan
+		<-stopChan
 	}()
 
 	return
+}
+
+// ListenAndServe initializes a server to respond to HTTP network requests on the syncer.
+func (s *Syncer) ListenAndServe(address, certFile, keyFile string) {
+	metrics.Register()
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	if certFile != "" && keyFile != "" {
+		klog.Fatal(http.ListenAndServeTLS(address, certFile, keyFile, mux))
+	} else {
+		klog.Fatal(http.ListenAndServe(address, mux))
+	}
 }
 
 // run runs a run thread that just dequeues items, processes them, and marks them done.
