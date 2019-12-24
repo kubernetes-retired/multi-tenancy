@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
@@ -32,7 +33,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -231,6 +232,34 @@ func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface
 		}
 	}
 	return nil
+}
+
+func (c *MultiClusterController) GetClusterNames() []string {
+	c.Lock()
+	defer c.Unlock()
+	var names []string
+	for _, cluster := range c.clusters {
+		names = append(names, cluster.GetClusterName())
+	}
+	return names
+}
+
+// RequeueObject requeues the cluster object, thus reconcileHandler can reconcile it again.
+func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}, event reconciler.EventType) {
+	o, err := meta.Accessor(obj)
+	if err != nil {
+		return
+	}
+
+	cluster := c.GetCluster(clusterName)
+	if cluster == nil {
+		return
+	}
+	r := reconciler.Request{Cluster: cluster.GetClientInfo(), Event: event, Obj: obj}
+	r.Namespace = o.GetNamespace()
+	r.Name = o.GetName()
+
+	c.Queue.Add(r)
 }
 
 // worker runs a worker thread that just dequeues items, processes them, and marks them done.

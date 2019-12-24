@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,14 +76,15 @@ func GetVirtualNamespace(nsLister listersv1.NamespaceLister, pNamespace string) 
 	return
 }
 
-func GetVirtualOwner(obj runtime.Object) (cluster string) {
+func GetVirtualOwner(obj runtime.Object) (cluster, namespace string) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
-	return cluster
+	namespace = strings.TrimPrefix(meta.GetNamespace(), cluster+"-")
+	return cluster, namespace
 }
 
 func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {
