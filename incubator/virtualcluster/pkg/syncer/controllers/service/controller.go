@@ -65,6 +65,9 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	return c.multiClusterServiceController.Start(stopCh)
 }
 
+func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
+}
+
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.Infof("reconcile service %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
 

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,6 +55,8 @@ type controller struct {
 	serviceSynced cache.InformerSynced
 	nsLister      listersv1.NamespaceLister
 	nsSynced      cache.InformerSynced
+
+	periodCheckerPeriod time.Duration
 }
 
 func Register(
@@ -63,10 +65,11 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:   client,
-		informer: informer,
-		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers:  constants.DefaultControllerWorkers,
+		client:              client,
+		informer:            informer,
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
+		workers:             constants.DefaultControllerWorkers,
+		periodCheckerPeriod: 60 * time.Second,
 	}
 
 	// Create the multi cluster pod controller
@@ -129,7 +132,7 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	clusterName := conversion.GetVirtualOwner(pod)
+	clusterName, _ := conversion.GetVirtualOwner(pod)
 	if clusterName == "" {
 		return
 	}
