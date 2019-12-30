@@ -3,7 +3,7 @@ kind: ClusterVersion
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: cv-sample 
+  name: cv-sample-lb
 spec:
   # a statefulset and service bundle for etcd
   etcd:
@@ -30,7 +30,7 @@ spec:
             subdomain: etcd
             containers:
             - name: etcd
-              image: virtualcluster/etcd-v3.4.0
+              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/etcd-v3.4.0
               imagePullPolicy: Always
               command: 
               - etcd
@@ -132,7 +132,7 @@ spec:
             subdomain: apiserver-svc
             containers:
             - name: apiserver
-              image: virtualcluster/apiserver-v1.15.4
+              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/apiserver-v1.15.4
               imagePullPolicy: Always
               command:
               - kube-apiserver
@@ -214,7 +214,7 @@ spec:
       spec:
         selector:
           component-name: apiserver
-        type: NodePort
+        type: LoadBalancer
         ports:
         - port: 6443
           protocol: TCP
@@ -242,7 +242,7 @@ spec:
           spec:
             containers:
             - name: controller-manager
-              image: virtualcluster/controller-manager-v1.15.4
+              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/controller-manager-v1.15.4
               imagePullPolicy: Always
               command:
               - kube-controller-manager

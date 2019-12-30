@@ -7,6 +7,6 @@ metadata:
   namespace: tenant1admin
 spec:
   clusterDomain: cluster.local
-  clusterVersionName: cv-sample 
+  clusterVersionName: cv-sample-np
   # will expire in one year
   pkiExpireDays: 365

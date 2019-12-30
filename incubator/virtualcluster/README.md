@@ -61,6 +61,7 @@ We achieve this by serializing the ca into a secret that will be mounted on
 vn-agents.
 ```bash
 # if using minikube, the client CA (i.e. client.crt and client.key) is located in ~/.minikube/
+# if using other cloud platforms, please copy the kubelet-client-certificate from master node
 cp ~/.minikube/client.crt ~/.minikube/client.key .
 # create secret
 kubectl create secret generic vc-kubelet-client --from-file=./client.crt --from-file=./client.key --namespace vc-manager
@@ -78,14 +79,15 @@ kubectl apply -f config/setup/all_in_one.yaml
 9. Create the clusterversion (e.g. cv-sample), once the management 
 controllers are ready.
 ```bash 
-_output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1.yaml
+_output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1_nodeport.yaml
 ```
 <br />
 <br />
 
 10. If using minikube, create the tenant namespace and virtualcluster
 ```bash
-_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1.yaml -vckbcfg vc-1.kubeconfig -minikube
+# when using minikube, the tenant apiserver is exposed through nodeport service
+_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1_nodeport.yaml -vckbcfg vc-1.kubeconfig
 ```
 Once the tenant master is created, a kubeconfig file `vc-1.kubeconfig` will 
 be created

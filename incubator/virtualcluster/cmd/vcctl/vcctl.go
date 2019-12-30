@@ -30,7 +30,6 @@ func main() {
 	yaml := createCmd.String("yaml", "", "path to the yaml file of the object that will be created.")
 	vcKbCfg := createCmd.String("vckbcfg", "", "path to the kubeconfig that is used to access virtual cluster.")
 	crtKbCfg := createCmd.String("kubeconfig", "", "path to the kubeconfig of the meta cluster.")
-	minikube := createCmd.Bool("minikube", false, "if running with minikube. (default false)")
 
 	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
 	delYaml := deleteCmd.String("yaml", "", "path to the yaml file of the virtualcluster that will be deleted.")
@@ -49,7 +48,7 @@ func main() {
 				log.Fatalf("fail to set flag kubeconfig: %s", err)
 			}
 		}
-		if err := subcmd.Create(*yaml, *vcKbCfg, *minikube); err != nil {
+		if err := subcmd.Create(*yaml, *vcKbCfg); err != nil {
 			log.Fatalf("fail to create object: %s", err)
 		}
 	case "delete":
