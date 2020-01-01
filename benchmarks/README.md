@@ -48,7 +48,7 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 | MTB-PL1-BC-HI-2 | [Block use of NodePort services](e2e/tests/block_nodeports/) | |
 | MTB-PL1-BC-HI-3 | [Block use of host networking and ports ](e2e/tests/block_host_net_ports/) | |
 | MTB-PL1-BC-HI-4 | [Block use of host PID](e2e/tests/block_host_pid/)  | |
-| MTB-PL1-BC-HI-5 | [Block use of host IPC](e2e/tests/block_host_ipc/))  | |
+| MTB-PL1-BC-HI-5 | [Block use of host IPC](e2e/tests/block_host_ipc/)  | |
 
 ### Multi-Tenancy Profile Level 2
 
