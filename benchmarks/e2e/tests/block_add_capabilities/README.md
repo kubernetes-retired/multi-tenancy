@@ -1,4 +1,4 @@
-# Block add capabilities <small>MTB-PL1-BC-CPI-3</small>
+# [MTB-PL1-BC-CPI-3] Block add capabilities <small>MTB-PL1-BC-CPI-3</small>
 
 **Profile Applicability:**
 
@@ -26,4 +26,4 @@ Create a pod or container that adds new `capabilities` in its `securityContext`.
 
 **Remediation:**
 
-Define a `PodSecurityPolicy` with `allowedCapabilities` or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce new capabilities cannot be added.
+Define a `PodSecurityPolicy` with `allowedCapabilities` and map the policy to each tenant namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce new capabilities cannot be added.

@@ -1,4 +1,4 @@
-# Require run as non-root user <small>MTB-PL1-BC-CPI-4</small>
+# [MTB-PL1-BC-CPI-4] Require run as non-root user <small>MTB-PL1-BC-CPI-4</small>
 
 **Profile Applicability:**
 
@@ -25,4 +25,4 @@ Pprocesses in containers run as the root user (uid 0), by default. To prevent po
 
 **Remediation:**
 
-Define a `PodSecurityPolicy` a `runAsUser` rule set to `MustRunAsNonRoot` or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `runAsNonRoot` is set to `true` in the pod or container `securityContext`.
+Define a `PodSecurityPolicy` a `runAsUser` rule set to `MustRunAsNonRoot` and map the policy to each tenant's namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `runAsNonRoot` is set to `true` for tenant pods.

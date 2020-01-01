@@ -1,4 +1,4 @@
-# Block use of host networking and ports
+# [MTB-PL1-BC-HI-3] Block use of host networking and ports
 
 **Profile Applicability:**
 
@@ -10,7 +10,7 @@ Behavioral
 
 **Category:**
 
-Host Protection
+Host Isolation
 
 **Description:**
 
