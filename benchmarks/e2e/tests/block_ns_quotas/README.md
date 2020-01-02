@@ -6,7 +6,7 @@ Level 1
 
 **Type:**
 
-Behavioral
+Configuration
 
 **Category:**
 

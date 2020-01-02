@@ -1,4 +1,4 @@
-# [MTB-PL1-BC-CPI-4] Require run as non-root user <small>MTB-PL1-BC-CPI-4</small>
+# [MTB-PL1-BC-CPI-4] Require run as non-root user
 
 **Profile Applicability:**
 
@@ -18,10 +18,11 @@ Linux
 
 **Rationale:**
 
+Pprocesses in containers run as the root user (uid 0), by default. To prevent potential compromise of container hosts, specify a least privileged user ID when building the container image and require that application containers run as non root users.
 
 **Audit:**
 
-Pprocesses in containers run as the root user (uid 0), by default. To prevent potential compromise of container hosts, specify a least privileged user ID when building the container image and require that application containers run as non root users.
+Create a pod or container that does not set `runAsNonRoot` to `true` in its `securityContext`. The pod creation must fail for both cases.
 
 **Remediation:**
 
