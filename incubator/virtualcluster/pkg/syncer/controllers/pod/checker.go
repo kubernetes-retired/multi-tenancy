@@ -138,7 +138,7 @@ func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterIn
 			if vPod.DeletionTimestamp != nil {
 				clusterClient, err := cluster.GetClient()
 				if err != nil {
-					klog.Errorf("error getting cluster %s clientset: %v", err)
+					klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 					continue
 				}
 				// since pPod not found in super master, we can force delete vPod
