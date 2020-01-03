@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,7 +50,7 @@ const (
 )
 
 // Create creates an object based on the file yamlPath
-func Create(yamlPath, vcKbCfg string, minikube bool) error {
+func Create(yamlPath, vcKbCfg string) error {
 	if _, err := os.Stat(vcKbCfg); err == nil {
 		return fmt.Errorf("--vckbcfg %s file exists", vcKbCfg)
 	}
@@ -77,7 +78,7 @@ func Create(yamlPath, vcKbCfg string, minikube bool) error {
 	}
 
 	// create a new client to talk to apiserver directly
-	// NOTE the client returned by manager.GetClient() will talk to local cache only
+	// NOTE the client returned by manager.GetClient() will talk to local cache
 	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
 	if err != nil {
 		return err
@@ -86,7 +87,7 @@ func Create(yamlPath, vcKbCfg string, minikube bool) error {
 	switch o := obj.(type) {
 	case *tenancyv1alpha1.Virtualcluster:
 		log.Printf("creating Virtualcluster %s", o.Name)
-		err = createVirtualcluster(cli, o, vcKbCfg, minikube)
+		err = createVirtualcluster(cli, o, vcKbCfg)
 		if err != nil {
 			return err
 		}
@@ -103,11 +104,42 @@ func Create(yamlPath, vcKbCfg string, minikube bool) error {
 	return nil
 }
 
+// getAPISvcPort gets the apiserver service port if not specifed
+func getAPISvcPort(svc *v1.Service) (int, error) {
+	if len(svc.Spec.Ports) == 0 {
+		return 0, errors.New("no port is specified for apiserver service ")
+	}
+	if svc.Spec.Ports[0].TargetPort.IntValue() != 0 {
+		return svc.Spec.Ports[0].TargetPort.IntValue(), nil
+	}
+	return int(svc.Spec.Ports[0].Port), nil
+}
+
 // createVirtualcluster creates a virtual cluster based on the file yamlPath and
 // generates the kubeconfig file for accessing the virtual cluster
-func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, vcKbCfg string, minikube bool) error {
-	err := cli.Create(context.TODO(), vc)
+func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, vcKbCfg string) error {
+
+	cv := &tenancyv1alpha1.ClusterVersion{}
+	if err := cli.Get(context.TODO(), types.NamespacedName{
+		Namespace: "default",
+		Name:      vc.Spec.ClusterVersionName,
+	}, cv); err != nil {
+		return err
+	}
+
+	apiSvcPort, err := getAPISvcPort(cv.Spec.APIServer.Service)
 	if err != nil {
+		return err
+	}
+
+	// fail early, if service type is not supported
+	svcType := cv.Spec.APIServer.Service.Spec.Type
+	if svcType != v1.ServiceTypeNodePort &&
+		svcType != v1.ServiceTypeLoadBalancer {
+		return fmt.Errorf("unsupported apiserver service type: %s", svcType)
+	}
+
+	if err := cli.Create(context.TODO(), vc); err != nil {
 		return err
 	}
 
@@ -134,7 +166,7 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 	}
 	log.Println("controller-manager is ready")
 
-	return genKubeConfig(ns, vcKbCfg, cli, minikube)
+	return genKubeConfig(ns, vcKbCfg, cli, svcType, apiSvcPort)
 }
 
 // pollStatefulSet keeps checking if the StatefulSet in `namespace` with `name` is
@@ -189,7 +221,7 @@ func getVcKubeConfig(cli client.Client, clusterNamespace, srtName string) ([]byt
 }
 
 // genKubeConfig generates the kubeconfig file for accessing the virtual cluster
-func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, minikube bool) error {
+func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, svcType v1.ServiceType, apiSvcPort int) error {
 	// get the content of admin.kubeconfig and write to vcKbCfg
 	fn, err := os.OpenFile(vcKbCfg, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -199,13 +231,12 @@ func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, minikube
 	if err != nil {
 		return err
 	}
-	// replace the server address in kubeconfig if using minikube
-	if minikube == true {
-		kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterNamespace)
-		if err != nil {
-			return err
-		}
+	// replace the server address in kubeconfig based on service type
+	kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterNamespace, svcType, apiSvcPort)
+	if err != nil {
+		return err
 	}
+
 	n, err := fn.Write(kbCfgBytes)
 	if err != nil {
 		return err
@@ -218,16 +249,29 @@ func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, minikube
 
 // replaceServerAddr replace api server IP with the minikube gateway IP, and
 // disable TLS varification by removing the server CA
-func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterNamespace string) ([]byte, error) {
-	minikubeIP, err := getMinikubeIP()
-	if err != nil {
-		return nil, err
+func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterNamespace string, svcType v1.ServiceType, apiSvcPort int) ([]byte, error) {
+	var newStr string
+	switch svcType {
+	case v1.ServiceTypeNodePort:
+		nodeIP, err := netutil.GetNodeIP(cli)
+		if err != nil {
+			return nil, err
+		}
+		svcNodePort, err := netutil.GetSvcNodePort(APIServerSvcName,
+			clusterNamespace, cli)
+		if err != nil {
+			return nil, err
+		}
+		newStr = fmt.Sprintf("server: https://%s:%d", nodeIP, svcNodePort)
+	case v1.ServiceTypeLoadBalancer:
+		externalIP, err := netutil.GetLBIP(APIServerSvcName,
+			clusterNamespace, cli)
+		if err != nil {
+			return nil, err
+		}
+		newStr = fmt.Sprintf("server: https://%s:%d", externalIP, apiSvcPort)
 	}
-	svcNodePort, err := netutil.GetSvcNodePort(APIServerSvcName, clusterNamespace, cli)
-	if err != nil {
-		return nil, err
-	}
-	newStr := fmt.Sprintf("server: https://%s:%d", minikubeIP, svcNodePort)
+
 	lines := strings.Split(string(kubeCfgContent), "\n")
 	// remove server CA, disable TLS varification
 	for i := 0; i < len(lines); {

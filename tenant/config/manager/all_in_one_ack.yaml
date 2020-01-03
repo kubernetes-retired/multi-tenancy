@@ -1,0 +1,245 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  name: tenant-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - patch
+  - watch
+  - delete
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenants
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenants/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenantnamespaces
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenantnamespaces/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: tenant-system
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    alpha.admissionwebhook.cert-manager.io: "true"
+  creationTimestamp: null
+  name: tenant-validating-webhook-cfg
+webhooks:
+- clientConfig:
+    caBundle: XG4=
+    service:
+      name: webhook-server-service
+      namespace: tenant-system
+      path: /validating-create-update-tenantnamespace
+  failurePolicy: Fail
+  name: validating-create-update-tenantnamespace.x-k8s.io
+  namespaceSelector:
+    matchExpressions:
+    - key: control-plane
+      operator: DoesNotExist
+  rules:
+  - apiGroups:
+    - tenancy
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - tenantnamespaces
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: controller-manager-service
+  namespace: tenant-system
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+  ports:
+  - port: 443
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: webhook-server-secret
+  namespace: tenant-system
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: controller-manager
+  namespace: tenant-system
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  serviceName: controller-manager-service
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+    spec:
+      containers:
+      - command:
+        - /manager
+        image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/tenant
+        imagePullPolicy: Always
+        name: manager
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: SECRET_NAME
+            value: webhook-server-secret
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        ports:
+        - containerPort: 9876
+          name: webhook-server
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /tmp/cert
+          name: cert
+          readOnly: true
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-secret

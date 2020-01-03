@@ -3,10 +3,10 @@ kind: Virtualcluster
 metadata: 
   labels:
     controller-tools.k8s.io: "1.0"
-  name: vc-sample-2
-  namespace: tenant-2
+  name: vc-sample-1
+  namespace: tenant1admin
 spec:
   clusterDomain: cluster.local
-  clusterVersionName: cv-sample 
+  clusterVersionName: cv-sample-lb
   # will expire in one year
   pkiExpireDays: 365
