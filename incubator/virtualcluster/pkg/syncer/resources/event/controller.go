@@ -35,16 +35,21 @@ import (
 )
 
 type controller struct {
-	client                      v1core.EventsGetter
-	multiClusterEventController *mc.MultiClusterController
-	informer                    coreinformers.Interface
-
-	workers     int
+	// super master event client (not used for now)
+	client v1core.EventsGetter
+	// super master event informer/lister/synced functions
+	informer    coreinformers.Interface
 	eventLister listersv1.EventLister
 	eventSynced cache.InformerSynced
 	nsLister    listersv1.NamespaceLister
 	nsSynced    cache.InformerSynced
-	queue       workqueue.RateLimitingInterface
+
+	// Connect to all tenant master event informers
+	multiClusterEventController *mc.MultiClusterController
+
+	// UWS queue
+	workers int
+	queue   workqueue.RateLimitingInterface
 }
 
 func Register(
