@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -138,7 +139,12 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("service is not ready")
 	}
 
-	conversion.MutatePod(vPod, pPod, vSecret, pSecret, services)
+	nameServer, err := c.getClusterNameServer(c.client, cluster)
+	if err != nil {
+		return fmt.Errorf("nameserver not found: %v", err)
+	}
+
+	conversion.VC(tenantCluster.GetSpec()).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
@@ -146,6 +152,15 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return nil
 	}
 	return err
+}
+
+func (c *controller) getClusterNameServer(client v1core.ServicesGetter, cluster string) (string, error) {
+	svc, err := client.Services(conversion.ToSuperMasterNamespace(cluster, constants.TenantDNSServerNS)).Get(constants.TenantDNSServerServiceName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	return svc.Spec.ClusterIP, nil
 }
 
 func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.Service, error) {
