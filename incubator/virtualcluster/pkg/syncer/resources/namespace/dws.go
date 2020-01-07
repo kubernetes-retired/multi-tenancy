@@ -17,11 +17,13 @@ limitations under the License.
 package namespace
 
 import (
+	"fmt"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -30,6 +32,9 @@ import (
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
+	if !cache.WaitForCacheSync(stopCh, c.nsSynced) {
+		return fmt.Errorf("failed to wait for caches to sync")
+	}
 	return c.multiClusterNamespaceController.Start(stopCh)
 }
 

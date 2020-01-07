@@ -21,6 +21,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -32,6 +33,7 @@ type controller struct {
 	namespaceClient v1core.NamespacesGetter
 	// super master namespace lister
 	nsLister listersv1.NamespaceLister
+	nsSynced cache.InformerSynced
 	// Connect to all tenant master namespace informers
 	multiClusterNamespaceController *mc.MultiClusterController
 }
@@ -54,6 +56,7 @@ func Register(
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
 	c.nsLister = namespaceInformer.Lister()
+	c.nsSynced = namespaceInformer.Informer().HasSynced
 
 	controllerManager.AddController(c)
 }

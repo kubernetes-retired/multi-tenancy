@@ -21,6 +21,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -32,6 +33,7 @@ type controller struct {
 	endpointClient v1core.EndpointsGetter
 	// super master endpoints informer lister/synced function
 	endpointsLister listersv1.EndpointsLister
+	endpointsSynced cache.InformerSynced
 	// Connect to all tenant master endpoints informers
 	multiClusterEndpointsController *mc.MultiClusterController
 }
@@ -53,6 +55,7 @@ func Register(
 	}
 	c.multiClusterEndpointsController = multiClusterEndpointsController
 	c.endpointsLister = endpointsInformer.Lister()
+	c.endpointsSynced = endpointsInformer.Informer().HasSynced
 
 	controllerManager.AddController(c)
 }
