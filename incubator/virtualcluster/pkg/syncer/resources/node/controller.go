@@ -30,20 +30,23 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
+	// lock to protect nodeNameToCluster
 	sync.Mutex
-	// map node name in super master to tenant cluster name it belongs to.
-	nodeNameToCluster          map[string]map[string]struct{}
-	nodeClient                 v1core.NodesGetter
-	multiClusterNodeController *mc.MultiClusterController
-
-	workers    int
+	// phyical node to tenant cluster map. A physical node can be presented as virtual node in multiple tenant clusters.
+	nodeNameToCluster map[string]map[string]struct{}
+	// super master node client
+	nodeClient v1core.NodesGetter
+	// super master node lister/synced function
 	nodeLister listersv1.NodeLister
-	queue      workqueue.RateLimitingInterface
 	nodeSynced cache.InformerSynced
+	// Connect to all tenant master node informers
+	multiClusterNodeController *mc.MultiClusterController
+	// UWS queue
+	workers int
+	queue   workqueue.RateLimitingInterface
 }
 
 func Register(
@@ -88,72 +91,7 @@ func Register(
 	controllerManager.AddController(c)
 }
 
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterNodeController.Start(stopCh)
-}
-
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile node %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
-
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
-		if err != nil {
-			klog.Errorf("failed reconcile node %s/%s in cluster %s as %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
-		if err != nil {
-			return reconciler.Result{}, err
-		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
-		if err != nil {
-			return reconciler.Result{}, err
-		}
-	}
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) reconcileCreate(cluster, namespace, name string, node *v1.Node) error {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exist := c.nodeNameToCluster[name]; !exist {
-		c.nodeNameToCluster[name] = make(map[string]struct{})
-	}
-	c.nodeNameToCluster[name][cluster] = struct{}{}
-
-	return nil
-}
-
-func (c *controller) reconcileUpdate(cluster, namespace, name string, node *v1.Node) error {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exist := c.nodeNameToCluster[name]; !exist {
-		c.nodeNameToCluster[name] = make(map[string]struct{})
-	}
-	c.nodeNameToCluster[name][cluster] = struct{}{}
-
-	return nil
-}
-
-func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.Node) error {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exists := c.nodeNameToCluster[name]; !exists {
-		return nil
-	}
-
-	delete(c.nodeNameToCluster[name], cluster)
-
-	return nil
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
