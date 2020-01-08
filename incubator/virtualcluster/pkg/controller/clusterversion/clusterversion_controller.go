@@ -38,7 +38,7 @@ var log = logf.Log.WithName("clusterversion-controller")
 // Add creates a new ClusterVersion Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
-func Add(mgr manager.Manager) error {
+func Add(mgr manager.Manager, _ string) error {
 	return add(mgr, newReconciler(mgr))
 }
 
