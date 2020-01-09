@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/string"
 )
 
 const (
@@ -54,7 +55,7 @@ func Add(mgr manager.Manager, masterProvisioner string) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, masterProv string, provArgs ...interface{}) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, masterProv string) reconcile.Reconciler {
 	var mp MasterProvisioner
 	switch masterProv {
 	case "native":
@@ -107,6 +108,8 @@ type ReconcileVirtualcluster struct {
 // +kubebuilder:rbac:groups=core,resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
@@ -123,7 +126,32 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		return
 	}
 
-	// TODO implement the delete logic (finalizer)
+	vcFinalizerName := fmt.Sprintf("virtualcluster.finalizer.%s", r.mp.GetMasterProvisioner())
+
+	if vc.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !strutil.ContainString(vc.ObjectMeta.Finalizers, vcFinalizerName) {
+			vc.ObjectMeta.Finalizers = append(vc.ObjectMeta.Finalizers, vcFinalizerName)
+			if err = r.Update(context.Background(), vc); err != nil {
+				return
+			}
+			log.Info("finalizer registered", "finalizer", vcFinalizerName)
+		}
+	} else {
+		// The Virtualcluster is being deleted
+		if strutil.ContainString(vc.ObjectMeta.Finalizers, vcFinalizerName) {
+			// delete the control plane
+			log.Info("Virtualcluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
+			if err = r.mp.DeleteVirtualCluster(vc); err != nil {
+				return
+			}
+			// remove finalizer from the list and update it.
+			vc.ObjectMeta.Finalizers = strutil.RemoveString(vc.ObjectMeta.Finalizers, vcFinalizerName)
+			if err = r.Update(context.Background(), vc); err != nil {
+				return
+			}
+		}
+		return
+	}
 
 	// reconcile Virtualcluster (vc) based on vc status
 	// NOTE: vc status is required by other components (e.g. syncer need to

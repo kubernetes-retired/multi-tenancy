@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	ctrlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util"
+	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/string"
 )
 
 var log = logf.Log.WithName("clusterversion-controller")
@@ -95,7 +95,7 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 
 	if cv.ObjectMeta.DeletionTimestamp.IsZero() {
 		// the object has not been deleted yet, registers the finalizers
-		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == false {
+		if strutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == false {
 			cv.ObjectMeta.Finalizers = append(cv.ObjectMeta.Finalizers, cvf)
 			log.Info("register finalizer for ClusterVersion", "finalizer", cvf)
 			if err := r.Update(context.Background(), cv); err != nil {
@@ -104,12 +104,12 @@ func (r *ReconcileClusterVersion) Reconcile(request reconcile.Request) (reconcil
 		}
 	} else {
 		// the object is being deleted, star the finalizer
-		if ctrlutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == true {
+		if strutil.ContainString(cv.ObjectMeta.Finalizers, cvf) == true {
 			// the finalizer logic
 			log.Info("a ClusterVersion object is deleted", "ClusterVersion", cv.Name)
 
 			// remove the finalizer after done
-			cv.ObjectMeta.Finalizers = ctrlutil.RemoveString(cv.ObjectMeta.Finalizers, cvf)
+			cv.ObjectMeta.Finalizers = strutil.RemoveString(cv.ObjectMeta.Finalizers, cvf)
 			if err := r.Update(context.Background(), cv); err != nil {
 				return reconcile.Result{}, err
 			}
