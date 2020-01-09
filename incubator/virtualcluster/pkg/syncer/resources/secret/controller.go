@@ -17,12 +17,7 @@ limitations under the License.
 package secret
 
 import (
-	"fmt"
-
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
@@ -30,21 +25,19 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 type controller struct {
-	client                       v1core.CoreV1Interface
-	secretInformer               coreinformers.SecretInformer
+	// super master secret client
+	secretClient v1core.CoreV1Interface
+	// super master secret informer/lister/synced function
+	secretInformer coreinformers.SecretInformer
+	secretLister   listersv1.SecretLister
+	secretSynced   cache.InformerSynced
+	// Connect to all tenant master secret informers
 	multiClusterSecretController *mc.MultiClusterController
-
-	secretLister listersv1.SecretLister
-	secretSynced cache.InformerSynced
 }
 
 func Register(
@@ -53,7 +46,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:         secretClient,
+		secretClient:   secretClient,
 		secretInformer: secretInformer,
 	}
 
@@ -73,152 +66,10 @@ func Register(
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
-		return fmt.Errorf("failed to wait for caches to sync")
-	}
 	return nil
-}
-
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterSecretController.Start(stopCh)
 }
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile secret %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
-
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileSecretCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
-		if err != nil {
-			klog.Errorf("failed reconcile secret %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileSecretUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
-		if err != nil {
-			klog.Errorf("failed reconcile secret %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileSecretRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Secret))
-		if err != nil {
-			klog.Errorf("failed reconcile secret %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	}
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) reconcileSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
-	switch secret.Type {
-	case v1.SecretTypeServiceAccountToken:
-		return c.reconcileServiceAccountSecretUpdate(cluster, namespace, name, secret)
-	default:
-		return c.reconcileNormalSecretCreate(cluster, namespace, name, secret)
-	}
-}
-
-func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-
-	saName := secret.Annotations[v1.ServiceAccountNameKey]
-
-	pSecret, err := utils.GetSecret(c.client, targetNamespace, saName)
-	if err != nil {
-		return err
-	}
-
-	needUpdate := false
-
-	if pSecret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
-		needUpdate = true
-		if len(pSecret.Labels) == 0 {
-			pSecret.Labels = make(map[string]string)
-		}
-		pSecret.Labels[constants.SyncStatusKey] = constants.SyncStatusReady
-	}
-
-	if !equality.Semantic.DeepEqual(secret.Data, pSecret.Data) {
-		needUpdate = true
-		pSecret.Data = secret.Data
-	}
-
-	if !needUpdate {
-		return nil
-	}
-
-	_, err = c.client.Secrets(targetNamespace).Update(pSecret)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *controller) reconcileNormalSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	_, err := c.secretLister.Secrets(targetNamespace).Get(name)
-	if err == nil {
-		return c.reconcileNormalSecretUpdate(cluster, namespace, name, secret)
-	}
-
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, secret)
-	if err != nil {
-		return err
-	}
-
-	_, err = c.client.Secrets(targetNamespace).Create(newObj.(*v1.Secret))
-	if errors.IsAlreadyExists(err) {
-		klog.Infof("secret %s/%s of cluster %s already exist in super master", namespace, name, cluster)
-		return nil
-	}
-
-	return err
-}
-
-func (c *controller) reconcileSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
-	switch secret.Type {
-	case v1.SecretTypeServiceAccountToken:
-		return c.reconcileServiceAccountSecretUpdate(cluster, namespace, name, secret)
-	default:
-		return c.reconcileNormalSecretUpdate(cluster, namespace, name, secret)
-	}
-}
-
-func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string, vSecret *v1.Secret) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	pSecret, err := c.secretLister.Secrets(targetNamespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	updatedSecret := conversion.CheckSecretEquality(pSecret, vSecret)
-	if updatedSecret != nil {
-		pSecret, err = c.client.Secrets(targetNamespace).Update(updatedSecret)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secret *v1.Secret) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &constants.DefaultDeletionPolicy,
-	}
-	err := c.client.Secrets(targetNamespace).Delete(name, opts)
-	if errors.IsNotFound(err) {
-		klog.Warningf("secret %s/%s of cluster is not found in super master", namespace, name)
-		return nil
-	}
-	return err
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
