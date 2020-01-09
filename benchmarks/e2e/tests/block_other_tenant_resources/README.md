@@ -1,4 +1,4 @@
-## Block access to other tenant resources
+# [MTB-PL1-CC-TI-2] Block access to other tenant resources
 
 **Profile Applicability:**
 
@@ -6,7 +6,7 @@ Level 1
 
 **Type:**
 
-Behavioral
+Configuration
 
 **Category:**
 

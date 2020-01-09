@@ -1,4 +1,4 @@
-# Configure namespace resource quotas 
+# [MTB-PL1-CC-FNS-1] Configure namespace resource quotas 
 
 **Profile Applicability:**
 
@@ -6,7 +6,7 @@ Level 1
 
 **Type:**
 
-Behavioral
+Configuration
 
 **Category:**
 

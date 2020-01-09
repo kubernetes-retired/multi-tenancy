@@ -1,4 +1,4 @@
-# Block use of NodePort services
+# [MTB-PL1-BC-HI-1] Block use of NodePort services
 
 **Profile Applicability:**
 
@@ -10,7 +10,7 @@ Behavioral
 
 **Category:**
 
-Host Protection
+Host Isolation
 
 **Description:**
 

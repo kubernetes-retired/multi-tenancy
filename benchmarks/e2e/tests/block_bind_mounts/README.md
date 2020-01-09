@@ -1,4 +1,4 @@
-# Block use of bind mounts (`hostPath` volumes)
+# [MTB-PL1-BC-HI-1] Block use of bind mounts (`hostPath` volumes)
 
 **Profile Applicability:**
 
@@ -27,4 +27,4 @@ Create a pod defining a volume of type hostpath. The pod creation must fail.
 
 **Remediation:**
 
-Define a `PodSecurityPolicy` or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that a `hostPath` volume cannot be used.
+Define a `PodSecurityPolicy` that restricts hostPath volumes and map the policy to each tenant namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that a `hostPath` volume cannot be used.
