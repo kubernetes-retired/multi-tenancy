@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -48,6 +49,9 @@ type Cluster struct {
 
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	Config *rest.Config
+
+	// spec is the vc definition. Required.
+	spec *v1alpha1.VirtualclusterSpec
 
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
@@ -80,13 +84,18 @@ type CacheOptions struct {
 }
 
 // New creates a new Cluster.
-func NewTenantCluster(name string, config *rest.Config, o Options) *Cluster {
-	return &Cluster{Name: name, Config: config, Options: o, stopCh: make(chan struct{})}
+func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, config *rest.Config, o Options) *Cluster {
+	return &Cluster{Name: name, spec: spec, Config: config, Options: o, stopCh: make(chan struct{})}
 }
 
 // GetClusterName returns the name given when Cluster c was created.
 func (c *Cluster) GetClusterName() string {
 	return c.Name
+}
+
+// GetSpec returns the virtual cluster spec.
+func (c *Cluster) GetSpec() *v1alpha1.VirtualclusterSpec {
+	return c.spec
 }
 
 // GetScheme returns the default client-go scheme.

@@ -31,6 +31,7 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"k8s.io/api/core/v1"
@@ -85,6 +86,7 @@ type Cache interface {
 // ClusterInterface decouples the controller package from the cluster package.
 type ClusterInterface interface {
 	GetClusterName() string
+	GetSpec() *v1alpha1.VirtualclusterSpec
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetCache() (cache.Cache, error)
 	GetClientInfo() *reconciler.ClusterInfo

@@ -269,7 +269,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to build rest config for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
-	tenantCluster := cluster.NewTenantCluster(clusterName, clusterRestConfig, cluster.Options{})
+	tenantCluster := cluster.NewTenantCluster(clusterName, vc.Spec.DeepCopy(), clusterRestConfig, cluster.Options{})
 
 	s.mu.Lock()
 	if _, exist := s.clusterSet[key]; exist {

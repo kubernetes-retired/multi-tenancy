@@ -40,6 +40,9 @@ const (
 
 	// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
 	ResourceSyncerUserAgent = "resource-syncer"
+
+	TenantDNSServerNS          = "kube-system"
+	TenantDNSServerServiceName = "kube-dns"
 )
 
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground
