@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/string"
+	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 )
 
 var log = logf.Log.WithName("clusterversion-controller")

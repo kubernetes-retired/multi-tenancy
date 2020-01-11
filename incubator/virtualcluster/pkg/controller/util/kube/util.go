@@ -14,23 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package kube
 
-func ContainString(sli []string, s string) bool {
-	for _, str := range sli {
-		if str == s {
-			return true
-		}
-	}
-	return false
-}
+import (
+	"fmt"
+	"io/ioutil"
+)
 
-func RemoveString(sli []string, s string) (newSli []string) {
-	for _, str := range sli {
-		if str == s {
-			continue
-		}
-		newSli = append(newSli, str)
+// the namespace of the pod can be found in this file
+const svcAccountPath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
+// GetPodNsFromInside gets the namespace of the pod from inside the pod
+func GetPodNsFromInside() (string, error) {
+	fileContentByt, err := ioutil.ReadFile(svcAccountPath)
+	if err != nil {
+		return "", err
 	}
-	return
+	if len(fileContentByt) == 0 {
+		return "", fmt.Errorf("can't get namespace from file %s", svcAccountPath)
+	}
+	return string(fileContentByt), nil
 }
