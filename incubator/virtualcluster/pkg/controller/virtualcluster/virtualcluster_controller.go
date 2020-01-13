@@ -142,13 +142,11 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			// delete the control plane
 			log.Info("Virtualcluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
 			if err = r.mp.DeleteVirtualCluster(vc); err != nil {
-				log.Info("Control plane of the Virtualcluster has been deleted", "vc-name", vc.Name)
 				return
 			}
 			// remove finalizer from the list and update it.
 			vc.ObjectMeta.Finalizers = strutil.RemoveString(vc.ObjectMeta.Finalizers, vcFinalizerName)
 			if err = r.Update(context.Background(), vc); err != nil {
-				log.Info("finalizer of Virtualcluster is removed", "vc-name", vc.Name, "finalizer", vcFinalizerName)
 				return
 			}
 		}

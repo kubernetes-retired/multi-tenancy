@@ -69,7 +69,7 @@ type ASKConfig struct {
 type AliyunSDKErrCode string
 
 const (
-	ClusterNotFound         AliyunSDKErrCode = "ErrorClusterNotFound"
+	ClusterNotFound         AliyunSDKErrCode = "ErrorCheckAcl"
 	ClusterNameAlreadyExist AliyunSDKErrCode = "ClusterNameAlreadyExist"
 )
 
@@ -223,6 +223,18 @@ func isErrResponse(responseBody string) *AliyunSDKErr {
 	return sdkErr
 }
 
+// clusterNotFoundErr checks if given err is ASK ClusterNotFound Error
+func clusterNotFoundErr(err error) bool {
+	ase, ok := err.(*AliyunSDKErr)
+	if !ok {
+		return false
+	}
+	if ase.errorCode == ClusterNotFound {
+		return true
+	}
+	return false
+}
+
 // getASKState gets the latest state of the ASK with the given clusterID
 func getASKState(cli *sdk.Client, clusterID, regionID string) (string, error) {
 	request := requests.NewCommonRequest()
@@ -235,6 +247,10 @@ func getASKState(cli *sdk.Client, clusterID, regionID string) (string, error) {
 	request.QueryParams["RegionId"] = regionID
 	response, err := cli.ProcessCommonRequest(request)
 	if err != nil {
+		return "", err
+	}
+	errRep := isErrResponse(response.GetHttpContentString())
+	if errRep != nil {
 		return "", err
 	}
 
@@ -498,6 +514,10 @@ OuterLoop:
 		case <-time.After(2 * time.Second):
 			state, err := getASKState(cli, clusterID, askCfg.regionID)
 			if err != nil {
+				if clusterNotFoundErr(err) {
+					log.Info("corresponding ASK cluster is not found", "vc-name", vc.Name)
+					break OuterLoop
+				}
 				return err
 			}
 			if state == "deleting" {
