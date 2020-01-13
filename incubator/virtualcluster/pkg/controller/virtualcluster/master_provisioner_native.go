@@ -341,7 +341,11 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 }
 
 func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
-	return errors.New("Not implement yet")
+	return nil
+}
+
+func (mpn *MasterProvisionerNative) GetMasterProvisioner() string {
+	return "native"
 }
 
 func getClusterVersion(cvl *tenancyv1alpha1.ClusterVersionList, cvn string) *tenancyv1alpha1.ClusterVersion {

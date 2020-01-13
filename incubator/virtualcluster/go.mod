@@ -3,6 +3,7 @@ module github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
 go 1.12
 
 require (
+	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
 	github.com/emicklei/go-restful v2.9.6+incompatible
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/google/cadvisor v0.34.0
@@ -14,7 +15,6 @@ require (
 	github.com/spf13/cobra v0.0.0-20180319062004-c439c4fa0937
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.4.0
-	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2 // indirect
 	golang.org/x/net v0.0.0-20190812203447-cdfb69ac37fc
 	golang.org/x/sys v0.0.0-20190429190828-d89cdac9e872 // indirect
 	golang.org/x/text v0.3.2 // indirect
