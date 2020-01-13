@@ -69,7 +69,10 @@ type ASKConfig struct {
 type AliyunSDKErrCode string
 
 const (
-	ClusterNotFound         AliyunSDKErrCode = "ErrorCheckAcl"
+	// full list of potential API errors can be found at
+	// https://error-center.alibabacloud.com/status/product/Cos?spm=a2c69.11428812.home.7.2247bb9adTOFxm
+	OprationNotSupported    AliyunSDKErrCode = "ErrorCheckAcl"
+	ClusterNotFound         AliyunSDKErrCode = "ErrorClusterNotFound"
 	ClusterNameAlreadyExist AliyunSDKErrCode = "ClusterNameAlreadyExist"
 )
 
@@ -229,7 +232,8 @@ func clusterNotFoundErr(err error) bool {
 	if !ok {
 		return false
 	}
-	if ase.errorCode == ClusterNotFound {
+	if ase.errorCode == ClusterNotFound ||
+		ase.errorCode == OprationNotSupported {
 		return true
 	}
 	return false
