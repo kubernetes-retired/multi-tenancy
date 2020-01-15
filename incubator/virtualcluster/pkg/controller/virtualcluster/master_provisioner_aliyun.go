@@ -164,7 +164,7 @@ func sendCreationRequest(cli *sdk.Client, clusterName string, askCfg ASKConfig) 
 "name": "%s", 
 "region_id": "%s",
 "zoneid": "%s", 
-"nat_gateway": false,
+"nat_gateway": true,
 "private_zone": true
 }`, clusterName, askCfg.regionID, askCfg.zoneID)
 	}
