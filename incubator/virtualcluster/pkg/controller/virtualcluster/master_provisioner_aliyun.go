@@ -56,36 +56,26 @@ const (
 	AliyunASKCfgMpRegionID = "askRegionID"
 	AliyunASKCfgMpZoneID   = "askZoneID"
 	AliyunASKCfgMpVPCID    = "askVpcID"
+	AliyunASKCfgMpVSID     = "askVswitchID"
 
 	AnnotationClusterIDKey = "clusterID"
 )
 
 type ASKConfig struct {
-	vpcID    string
-	regionID string
-	zoneID   string
+	vpcID     string
+	vswitchID string
+	regionID  string
+	zoneID    string
 }
-
-type AliyunSDKErrCode string
 
 const (
 	// full list of potential API errors can be found at
 	// https://error-center.alibabacloud.com/status/product/Cos?spm=a2c69.11428812.home.7.2247bb9adTOFxm
-	OprationNotSupported    AliyunSDKErrCode = "ErrorCheckAcl"
-	ClusterNotFound         AliyunSDKErrCode = "ErrorClusterNotFound"
-	ClusterNameAlreadyExist AliyunSDKErrCode = "ClusterNameAlreadyExist"
+	OprationNotSupported    = "ErrorCheckAcl"
+	ClusterNotFound         = "ErrorClusterNotFound"
+	ClusterNameAlreadyExist = "ClusterNameAlreadyExist"
+	QueryClusterError       = "ErrorQueryCluster"
 )
-
-// AliyunSDKErr holds the information of the error response returned by aliyun
-type AliyunSDKErr struct {
-	errorName    string
-	errorCode    AliyunSDKErrCode
-	errorMessage string
-}
-
-func (ase *AliyunSDKErr) Error() string {
-	return fmt.Sprintf("Aliyun SDK Error: errorName(%s), errorCode(%s), errorMessage(%s)", ase.errorName, ase.errorCode, ase.errorMessage)
-}
 
 type MasterProvisionerAliyun struct {
 	client.Client
@@ -156,37 +146,34 @@ func sendCreationRequest(cli *sdk.Client, clusterName string, askCfg ASKConfig) 
 	request.QueryParams["RegionId"] = askCfg.regionID
 
 	// set vpc, if vpcID is specified
-	var vpcIDEntry string
+	var body string
 	if askCfg.vpcID != "" {
-		vpcIDEntry = fmt.Sprintf("\"\nvpc_id\": %s\n", askCfg.vpcID)
-	} else {
-		log.Info("vpcID is not specified, a new vpc will be created")
-	}
-	body := fmt.Sprintf(`{
+		body = fmt.Sprintf(`{
 "cluster_type": "Ask",
 "name": "%s", 
 "region_id": "%s",
-"zoneid": "%s", %s
-"nat_gateway": true,
+"zoneid": "%s", 
+"vpc_id": "%s",
+"vswitch_id": "%s",
+"nat_gateway": false,
 "private_zone": true
-}`, clusterName, askCfg.regionID, askCfg.zoneID, vpcIDEntry)
+}`, clusterName, askCfg.regionID, askCfg.zoneID, askCfg.vpcID, askCfg.vswitchID)
+	} else {
+		body = fmt.Sprintf(`{
+"cluster_type": "Ask",
+"name": "%s", 
+"region_id": "%s",
+"zoneid": "%s", 
+"nat_gateway": false,
+"private_zone": true
+}`, clusterName, askCfg.regionID, askCfg.zoneID)
+	}
 
 	request.Content = []byte(body)
 	response, err := cli.ProcessCommonRequest(request)
 	if err != nil {
+
 		return "", err
-	}
-	if sdkErr := isErrResponse(response.GetHttpContentString()); sdkErr != nil {
-		if sdkErr.errorCode == ClusterNameAlreadyExist {
-			// clusterName already exists, query Aliyun to get the clusterID
-			// corresponding to the clusterName
-			clsID, getClsIDErr := getClusterIDByName(cli, clusterName, askCfg.regionID)
-			if getClsIDErr != nil {
-				return "", getClsIDErr
-			}
-			return clsID, nil
-		}
-		return "", sdkErr
 	}
 
 	// cluster information of the newly created ASK in json format
@@ -201,42 +188,22 @@ func sendCreationRequest(cli *sdk.Client, clusterName string, askCfg ASKConfig) 
 	return clusterID, nil
 }
 
-// isErrResponse checks if given responseBody belongs to an error response,
-// if yes, the responseBody is parsed and an AliyunSDKErr is returned
-func isErrResponse(responseBody string) *AliyunSDKErr {
-	// on success, the response body is in JSON format
-	if strutil.IsJSON(responseBody) {
-		return nil
-	}
-	// an error response body:
+func isSDKErr(err error) bool {
+	return strings.HasPrefix(err.Error(), "SDK.ServerError")
+}
+
+func getSDKErrCode(err error) string {
+	// an SDK error looks like:
 	//
-	// ERROR: SDK.ServerError
+	// SDK.ServerError
 	// ErrorCode:
 	// Recommend:
 	// RequestId:
 	// Message: {"code":"ClusterNameAlreadyExist","message":"cluster name {XXX} already exist in your clusters","requestId":"C2D0F836-DD3D-4749-97AB-10AE8371BABE","status":400}
-	sdkErr := &AliyunSDKErr{}
-	errEntries := strings.Split(responseBody, "\n")
-	sdkErr.errorName = (strings.Split(errEntries[0], ": "))[1]
-	errorCode := (strings.Split(errEntries[4], ":"))[2]
-	// remove quotes around the string
-	sdkErr.errorCode = AliyunSDKErrCode(errorCode[1 : len(errorCode)-1])
-	errorMessage := (strings.Split(errEntries[4], ":"))[4]
-	sdkErr.errorMessage = errorMessage[1 : len(errorMessage)-1]
-	return sdkErr
-}
-
-// clusterNotFoundErr checks if given err is ASK ClusterNotFound Error
-func clusterNotFoundErr(err error) bool {
-	ase, ok := err.(*AliyunSDKErr)
-	if !ok {
-		return false
-	}
-	if ase.errorCode == ClusterNotFound ||
-		ase.errorCode == OprationNotSupported {
-		return true
-	}
-	return false
+	errMsg := strings.Split(err.Error(), "\n")[4]
+	errCodeWithQuote := strutil.SplitFields(errMsg, ':', ',')[2]
+	// remove surrounding quotes
+	return errCodeWithQuote[1 : len(errCodeWithQuote)-1]
 }
 
 // getASKState gets the latest state of the ASK with the given clusterID
@@ -251,10 +218,6 @@ func getASKState(cli *sdk.Client, clusterID, regionID string) (string, error) {
 	request.QueryParams["RegionId"] = regionID
 	response, err := cli.ProcessCommonRequest(request)
 	if err != nil {
-		return "", err
-	}
-	errRep := isErrResponse(response.GetHttpContentString())
-	if errRep != nil {
 		return "", err
 	}
 
@@ -377,24 +340,29 @@ func (mpa *MasterProvisionerAliyun) getASKConfigs() (cfg ASKConfig, err error) {
 		err = getErr
 	}
 
-	regionID, exist := ASKCfgMp.Data[AliyunASKCfgMpRegionID]
-	if !exist {
+	regionID, riExist := ASKCfgMp.Data[AliyunASKCfgMpRegionID]
+	if !riExist {
 		err = fmt.Errorf("%s not exist", AliyunASKCfgMpRegionID)
 		return
 	}
 	cfg.regionID = regionID
 
-	zoneID, exist := ASKCfgMp.Data[AliyunASKCfgMpZoneID]
-	if !exist {
+	zoneID, ziExist := ASKCfgMp.Data[AliyunASKCfgMpZoneID]
+	if !ziExist {
 		err = fmt.Errorf("%s not exist", AliyunASKCfgMpZoneID)
 		return
 	}
 	cfg.zoneID = zoneID
 
-	vpcID, exist := ASKCfgMp.Data[AliyunASKCfgMpVPCID]
-	if exist {
+	vpcID, viExist := ASKCfgMp.Data[AliyunASKCfgMpVPCID]
+	vsID, vsiExist := ASKCfgMp.Data[AliyunASKCfgMpVSID]
+	if viExist != vsiExist {
+		err = errors.New("vswitchID and vpcID need to be used together")
+	}
+
+	if viExist && vsiExist {
 		cfg.vpcID = vpcID
-		return
+		cfg.vswitchID = vsID
 	}
 
 	return
@@ -421,17 +389,47 @@ func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		return err
 	}
 
-	clsID, err := sendCreationRequest(cli, vc.Name, askCfg)
+	var clsID string
+	creationTimeout := time.After(100 * time.Second)
+	clsID, err = sendCreationRequest(cli, vc.Name, askCfg)
 	if err != nil {
+		if isSDKErr(err) {
+			if getSDKErrCode(err) == ClusterNameAlreadyExist {
+				// clusterName already exists, query Aliyun to get the clusterID
+				// corresponding to the clusterName
+				var getClsIDErr error
+				clsID, getClsIDErr = getClusterIDByName(cli, vc.Name, askCfg.regionID)
+				if getClsIDErr != nil {
+					return getClsIDErr
+				}
+				tmpState, getStErr := getASKState(cli, clsID, askCfg.regionID)
+				if getStErr != nil {
+					return getStErr
+				}
+
+				// if the ASK is still in 'initial' state, wait for it to be ready
+				if tmpState == "initial" {
+					log.Info("ASK is in 'initial' state", "ASK-ID", clsID)
+					goto PollASK
+				}
+
+				// if the ASK is in 'running' state, proceed the PostCreation actions
+				if tmpState == "running" {
+					log.Info("ASK is up and running", "ASK-ID", clsID)
+					goto PostCreation
+				}
+
+				// TODO should we handle the "failed" state? delete the ASK?
+				return fmt.Errorf("unknown ASK(%s) state: %s", vc.Name, tmpState)
+			}
+		}
 		return err
 	}
 
 	log.Info("ASK is creating", "ASK-ID", clsID)
 
 	// 3. block until the newly created ASK is up and running
-	creationTimeout := time.After(120 * time.Second)
-
-OuterLoop:
+PollASK:
 	for {
 		select {
 		case <-time.After(10 * time.Second):
@@ -442,7 +440,7 @@ OuterLoop:
 			if clsState == "running" {
 				// ASK is up and running, stop polling
 				log.Info("ASK is up and running", "ASK-ID", clsID)
-				break OuterLoop
+				break PollASK
 			}
 		case <-creationTimeout:
 			return fmt.Errorf("creating cluster(%s) timeout", clsID)
@@ -450,6 +448,7 @@ OuterLoop:
 	}
 
 	// 4. create the root namesapce of the Virtualcluster
+PostCreation:
 	vcNs := conversion.ToClusterKey(vc)
 	err = mpa.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -518,13 +517,17 @@ OuterLoop:
 		case <-time.After(2 * time.Second):
 			state, err := getASKState(cli, clusterID, askCfg.regionID)
 			if err != nil {
-				if clusterNotFoundErr(err) {
-					log.Info("corresponding ASK cluster is not found", "vc-name", vc.Name)
-					break OuterLoop
+				if isSDKErr(err) {
+					if getSDKErrCode(err) == ClusterNotFound {
+						log.Info("corresponding ASK cluster is not found", "vc-name", vc.Name)
+						break OuterLoop
+					}
 				}
 				return err
 			}
 			if state == "deleting" {
+				// once the ASK cluster enter the 'deleting' state, the cloud
+				// provider will delete the cluster
 				log.Info("ASK cluster is being deleted")
 				break OuterLoop
 			}

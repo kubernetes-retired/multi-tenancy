@@ -16,7 +16,9 @@ limitations under the License.
 
 package strings
 
-import "encoding/json"
+import (
+	"strings"
+)
 
 // ContainString checks if string slice sli contains string s
 func ContainString(sli []string, s string) bool {
@@ -39,8 +41,17 @@ func RemoveString(sli []string, s string) (newSli []string) {
 	return
 }
 
-// IsJSON check whether given s is in json format
-func IsJSON(s string) bool {
-	var js map[string]interface{}
-	return json.Unmarshal([]byte(s), &js) == nil
+// SplitFields splits string s into substrings separated by delimiters in
+// rs and returns a slice of the substrings
+func SplitFields(s string, rs ...rune) []string {
+	fn := func(ru rune) bool {
+		var ret bool
+		for _, r := range rs {
+			if ru == r {
+				ret = true
+			}
+		}
+		return ret
+	}
+	return strings.FieldsFunc(s, fn)
 }
