@@ -45,13 +45,12 @@ func RemoveString(sli []string, s string) (newSli []string) {
 // rs and returns a slice of the substrings
 func SplitFields(s string, rs ...rune) []string {
 	fn := func(ru rune) bool {
-		var ret bool
 		for _, r := range rs {
 			if ru == r {
-				ret = true
+				return true
 			}
 		}
-		return ret
+		return false
 	}
 	return strings.FieldsFunc(s, fn)
 }

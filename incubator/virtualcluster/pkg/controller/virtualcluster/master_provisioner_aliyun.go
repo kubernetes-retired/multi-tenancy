@@ -389,66 +389,61 @@ func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		return err
 	}
 
-	var clsID string
+	var (
+		clsID    string
+		clsState string
+	)
 	creationTimeout := time.After(100 * time.Second)
 	clsID, err = sendCreationRequest(cli, vc.Name, askCfg)
 	if err != nil {
-		if isSDKErr(err) {
-			if getSDKErrCode(err) == ClusterNameAlreadyExist {
-				// clusterName already exists, query Aliyun to get the clusterID
-				// corresponding to the clusterName
-				var getClsIDErr error
-				clsID, getClsIDErr = getClusterIDByName(cli, vc.Name, askCfg.regionID)
-				if getClsIDErr != nil {
-					return getClsIDErr
-				}
-				tmpState, getStErr := getASKState(cli, clsID, askCfg.regionID)
-				if getStErr != nil {
-					return getStErr
-				}
+		if !isSDKErr(err) {
+			return err
+		}
+		// check SDK error code
+		if getSDKErrCode(err) == ClusterNameAlreadyExist {
+			// clusterName already exists, query Aliyun to get the clusterID
+			// corresponding to the clusterName
+			var getClsIDErr error
+			clsID, getClsIDErr = getClusterIDByName(cli, vc.Name, askCfg.regionID)
+			if getClsIDErr != nil {
+				return getClsIDErr
+			}
+			var getStErr error
+			clsState, getStErr = getASKState(cli, clsID, askCfg.regionID)
+			if getStErr != nil {
+				return getStErr
+			}
 
-				// if the ASK is still in 'initial' state, wait for it to be ready
-				if tmpState == "initial" {
-					log.Info("ASK is in 'initial' state", "ASK-ID", clsID)
-					goto PollASK
-				}
-
-				// if the ASK is in 'running' state, proceed the PostCreation actions
-				if tmpState == "running" {
-					log.Info("ASK is up and running", "ASK-ID", clsID)
-					goto PostCreation
-				}
-
-				// TODO should we handle the "failed" state? delete the ASK?
-				return fmt.Errorf("unknown ASK(%s) state: %s", vc.Name, tmpState)
+			if clsState != "running" && clsState != "initial" {
+				return fmt.Errorf("unknown ASK(%s) state: %s", vc.Name, clsState)
 			}
 		}
-		return err
 	}
 
-	log.Info("ASK is creating", "ASK-ID", clsID)
+	log.Info("creating the ASK", "ASK-ID", clsID)
 
 	// 3. block until the newly created ASK is up and running
 PollASK:
 	for {
 		select {
 		case <-time.After(10 * time.Second):
-			clsState, err := getASKState(cli, clsID, askCfg.regionID)
-			if err != nil {
-				return err
-			}
 			if clsState == "running" {
 				// ASK is up and running, stop polling
 				log.Info("ASK is up and running", "ASK-ID", clsID)
 				break PollASK
 			}
+			var getStErr error
+			clsState, getStErr = getASKState(cli, clsID, askCfg.regionID)
+			if getStErr != nil {
+				return getStErr
+			}
+
 		case <-creationTimeout:
 			return fmt.Errorf("creating cluster(%s) timeout", clsID)
 		}
 	}
 
 	// 4. create the root namesapce of the Virtualcluster
-PostCreation:
 	vcNs := conversion.ToClusterKey(vc)
 	err = mpa.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
