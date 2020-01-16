@@ -19,15 +19,12 @@ package virtualcluster
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
-	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,18 +36,52 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/config"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
+	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 type MasterProvisionerNative struct {
 	client.Client
 	scheme *runtime.Scheme
+	rootCA *vcpki.CrtKeyPair
 }
 
-func NewMasterProvisionerNative(mgr manager.Manager) *MasterProvisionerNative {
-	return &MasterProvisionerNative{
+func NewMasterProvisionerNative(mgr manager.Manager, cfg *config.NativeProvisionerConfig) (*MasterProvisionerNative, error) {
+	var mp = &MasterProvisionerNative{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 	}
+
+	canRead, _ := cert.CanReadCertAndKey(cfg.RootCACertFile, cfg.RootCAKeyFile)
+	if !canRead {
+		return mp, nil
+	}
+
+	certificate, err := tls.LoadX509KeyPair(cfg.RootCACertFile, cfg.RootCAKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load root ca certificate pair: %v", err)
+	}
+	rootCACert, err := x509.ParseCertificate(certificate.Certificate[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse root ca certificate: %v", err)
+	}
+	rootCAKey, ok := certificate.PrivateKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to assert root ca rsa privateKey: %v", err)
+	}
+	mp.rootCA = &vcpki.CrtKeyPair{
+		Crt: rootCACert,
+		Key: rootCAKey,
+	}
+
+	log.Info("using pass-in RootCA to sign tenant's certificate")
+
+	return mp, nil
 }
 
 // CreateVirtualCluster sets up the control plane for vc on meta k8s
@@ -123,9 +154,9 @@ func genInitialClusterArgs(replicas int32, stsName, svcName string) (argsVal str
 	return argsVal
 }
 
-// completmentETCDTemplate completments the ETCD template of the specified clusterversion
+// complementETCDTemplate complements the ETCD template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcns
 	etcdBdl.Service.ObjectMeta.Namespace = vcns
 	args := etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args
@@ -135,16 +166,16 @@ func completmentETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSv
 	etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args = args
 }
 
-// completmentAPIServerTemplate completments the apiserver template of the specified clusterversion
+// complementAPIServerTemplate complements the apiserver template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentAPIServerTemplate(vcns string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementAPIServerTemplate(vcns string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	apiserverBdl.StatefulSet.ObjectMeta.Namespace = vcns
 	apiserverBdl.Service.ObjectMeta.Namespace = vcns
 }
 
-// completmentCtrlMgrTemplate completments the controller manager template of the specified clusterversion
+// complementCtrlMgrTemplate complements the controller manager template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	ctrlMgrBdl.StatefulSet.ObjectMeta.Namespace = vcns
 }
 
@@ -157,11 +188,11 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 
 	switch ssBdl.Name {
 	case "etcd":
-		completmentETCDTemplate(ns, ssBdl)
+		complementETCDTemplate(ns, ssBdl)
 	case "apiserver":
-		completmentAPIServerTemplate(ns, ssBdl)
+		complementAPIServerTemplate(ns, ssBdl)
 	case "controller-manager":
-		completmentCtrlMgrTemplate(ns, ssBdl)
+		complementCtrlMgrTemplate(ns, ssBdl)
 	default:
 		return fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
 	}
@@ -269,32 +300,38 @@ func (mpn *MasterProvisionerNative) createNS(vc *tenancyv1alpha1.Virtualcluster)
 func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
 	ns := conversion.ToClusterKey(vc)
 	caGroup := &vcpki.ClusterCAGroup{}
-	// create root ca, all components will share a single root ca
-	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(
-		&cert.Config{
-			CommonName:   "kubernetes",
-			Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
-		})
-	if rootCAErr != nil {
-		return rootCAErr
+
+	rootCAPair := mpn.rootCA
+
+	// create a independent root CA for tenant.
+	if rootCAPair == nil {
+		rootCACrt, rootKey, err := pkiutil.NewCertificateAuthority(
+			&cert.Config{
+				CommonName:   "kubernetes",
+				Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
+			})
+		if err != nil {
+			return err
+		}
+
+		rootRsaKey, ok := rootKey.(*rsa.PrivateKey)
+		if !ok {
+			return errors.New("fail to assert rsa PrivateKey")
+		}
+
+		rootCAPair = &vcpki.CrtKeyPair{
+			Crt: rootCACrt,
+			Key: rootRsaKey,
+		}
 	}
 
-	rootRsaKey, ok := rootKey.(*rsa.PrivateKey)
-	if !ok {
-		return errors.New("fail to assert rsa PrivateKey")
-	}
-
-	rootCAPair := &vcpki.CrtKeyPair{
-		Crt: rootCACrt,
-		Key: rootRsaKey,
-	}
 	caGroup.RootCA = rootCAPair
 
 	etcdDomains := append(cv.GetEtcdServers(), cv.GetEtcdDomain())
 	// create crt, key for etcd
-	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomains)
-	if etcdCrtErr != nil {
-		return etcdCrtErr
+	etcdCAPair, err := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomains)
+	if err != nil {
+		return err
 	}
 	caGroup.ETCD = etcdCAPair
 

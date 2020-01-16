@@ -14,23 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+package config
 
-import (
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+type Config struct {
+	MasterProvisioner       string
+	NativeProvisionerConfig *NativeProvisionerConfig
+}
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/config"
-)
+type NativeProvisionerConfig struct {
+	// RootCACertFile If set, this root certificate authority will be used to sign tenant's certificate.
+	// This must be a valid PEM-encoded CA bundle.
+	RootCACertFile string
+	// RootCAKeyFile is the file containing x509 private key matching the certFile.
+	RootCAKeyFile string
+}
 
-// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager, *config.Config) error
-
-// AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, cfg *config.Config) error {
-	for _, f := range AddToManagerFuncs {
-		if err := f(m, cfg); err != nil {
-			return err
-		}
+func NewVCControllerConfig() *Config {
+	return &Config{
+		NativeProvisionerConfig: &NativeProvisionerConfig{},
 	}
-	return nil
 }

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/config"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 )
 
@@ -38,7 +39,7 @@ var log = logf.Log.WithName("clusterversion-controller")
 // Add creates a new ClusterVersion Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
-func Add(mgr manager.Manager, _ string) error {
+func Add(mgr manager.Manager, _ *config.Config) error {
 	return add(mgr, newReconciler(mgr))
 }
 

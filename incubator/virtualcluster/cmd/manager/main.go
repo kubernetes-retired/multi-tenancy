@@ -28,15 +28,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	vcconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/config"
 )
 
 func main() {
 	var (
-		metricsAddr       string
-		masterProvisioner string
+		metricsAddr      string
+		controllerConfig = vcconfig.NewVCControllerConfig()
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
+	flag.StringVar(&controllerConfig.MasterProvisioner, "master-provsioner", "native", "The underlying platform that will provision master for virtualcluster.")
+	flag.StringVar(&controllerConfig.NativeProvisionerConfig.RootCACertFile, "native-root-ca-cert", "", "(--master-provsioner=native only) If set, this root certificate authority will be used to sign tenant's certificate.")
+	flag.StringVar(&controllerConfig.NativeProvisionerConfig.RootCAKeyFile, "native-root-ca-key", "", "(--master-provsioner=native only) the file containing x509 private key matching the certFile.")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
@@ -68,7 +72,7 @@ func main() {
 
 	// Setup all Controllers
 	log.Info("Setting up controller")
-	if err := controller.AddToManager(mgr, masterProvisioner); err != nil {
+	if err := controller.AddToManager(mgr, controllerConfig); err != nil {
 		log.Error(err, "unable to register controllers to the manager")
 		os.Exit(1)
 	}

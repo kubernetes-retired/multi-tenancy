@@ -82,11 +82,11 @@ type MasterProvisionerAliyun struct {
 	scheme *runtime.Scheme
 }
 
-func NewMasterProvisionerAliyun(mgr manager.Manager) *MasterProvisionerAliyun {
+func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, error) {
 	return &MasterProvisionerAliyun{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
-	}
+	}, nil
 }
 
 // getClusterIDByName returns the clusterID of the cluster with clusterName

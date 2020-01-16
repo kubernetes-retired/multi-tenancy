@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/config"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 )
 
@@ -50,29 +51,41 @@ var log = logf.Log.WithName("virtualcluster-controller")
 // Add creates a new Virtualcluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
-func Add(mgr manager.Manager, masterProvisioner string) error {
-	return add(mgr, newReconciler(mgr, masterProvisioner))
+func Add(mgr manager.Manager, cfg *config.Config) error {
+	return add(mgr, cfg)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, masterProv string) reconcile.Reconciler {
-	var mp MasterProvisioner
-	switch masterProv {
+func newReconciler(mgr manager.Manager, cfg *config.Config) (reconcile.Reconciler, error) {
+	var (
+		mp  MasterProvisioner
+		err error
+	)
+
+	switch cfg.MasterProvisioner {
 	case "native":
-		mp = NewMasterProvisionerNative(mgr)
+		mp, err = NewMasterProvisionerNative(mgr, cfg.NativeProvisionerConfig)
 	case "aliyun":
-		mp = NewMasterProvisionerAliyun(mgr)
+		mp, err = NewMasterProvisionerAliyun(mgr)
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	return &ReconcileVirtualcluster{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		mp:     mp,
-	}
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, cfg *config.Config) error {
+	r, err := newReconciler(mgr, cfg)
+	if err != nil {
+		return err
+	}
 	// Create a new controller
 	c, err := controller.New("virtualcluster-controller",
 		mgr, controller.Options{Reconciler: r})
