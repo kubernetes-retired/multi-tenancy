@@ -43,6 +43,9 @@ const (
 
 	TenantDNSServerNS          = "kube-system"
 	TenantDNSServerServiceName = "kube-dns"
+
+	// PublicObjectKey is a label key which marks the super master object that should be populated to every tenant master.
+	PublicObjectKey = "tenancy.x-k8s.io/super.public"
 )
 
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground

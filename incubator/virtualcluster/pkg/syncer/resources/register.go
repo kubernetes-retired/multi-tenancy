@@ -30,6 +30,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/secret"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/service"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/serviceaccount"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
 )
 
 func Register(client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
@@ -42,4 +43,5 @@ func Register(client clientset.Interface, informerFactory informers.SharedInform
 	service.Register(client.CoreV1(), informerFactory.Core().V1().Services(), controllerManager)
 	endpoints.Register(client.CoreV1(), informerFactory.Core().V1().Endpoints(), controllerManager)
 	event.Register(client.CoreV1(), informerFactory.Core().V1(), controllerManager)
+	storageclass.Register(client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
 }

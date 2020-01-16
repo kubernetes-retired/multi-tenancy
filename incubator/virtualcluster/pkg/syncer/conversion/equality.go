@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
+	v1storage "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
@@ -349,4 +350,15 @@ func CheckEndpointsEquality(pObj, vObj *v1.Endpoints) *v1.Endpoints {
 	}
 
 	return updated
+}
+
+func CheckStorageClassEquality(pObj, vObj *v1storage.StorageClass) *v1storage.StorageClass {
+	pCopy := pObj.DeepCopy()
+	pCopy.ObjectMeta = *vObj.ObjectMeta.DeepCopy()
+
+	if !equality.Semantic.DeepEqual(vObj, pCopy) {
+		return pCopy
+	} else {
+		return nil
+	}
 }
