@@ -33,7 +33,7 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Installing or upgrading HNC
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.2.0-rc1
+HNC_VERSION=v0.2.0
 
 # Install prerequisites on your cluster
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
@@ -41,7 +41,7 @@ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.1
 # minute or two.
 
 # Install HNC on your cluster. If this fails due to the cert-manager webhook not
-being ready yet, just re-run it.
+# being ready yet, just re-run it.
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
@@ -75,13 +75,14 @@ kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined:
 
-* [COMPLETE v0.1](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7): an
-  initial release with all basic functionality so you can play with it, but not
-  suitable for any real workloads.
-* [v0.2](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8): contains
-  enough functionality to be suitable for non-production workloads.
-* [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9): all
-  unscheduled work.
+* [v0.1 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
+  an initial release with all basic functionality so you can play with it, but
+  not suitable for any real workloads.
+* [v0.2 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
+  contains enough functionality to be suitable for non-production workloads.
+* v0.3: definition in progress (as of Jan 2020)
+* [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
+  all unscheduled work.
 
 Non-coding tasks are also tracked in the [HNC
 project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
@@ -207,7 +208,10 @@ export HNC_IMG_TAG=<the desired image tag, eg v0.1.0-rc1>
 
 7. Publish the release if you didn't do it already.
 
-8. Test!
+8. Test! At a minimum, install it onto a cluster and ensure that the controller
+   comes up.
+
+9. Update the "installing HNC" section of this README with the latest version.
 
 After the release, you can run `curl -u "$HNC_USER:$HNC_PAT"
 https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$HNC_RELEASE_ID`
