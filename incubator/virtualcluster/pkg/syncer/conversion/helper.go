@@ -19,8 +19,10 @@ package conversion
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 
+	"github.com/pkg/errors"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,7 +93,16 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		return nil, err
 	}
 
-	uid := m.GetUID()
+	ownerReferencesStr, err := json.Marshal(m.GetOwnerReferences())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal owner references")
+	}
+
+	var tenantScopeMeta = map[string]string{
+		constants.LabelCluster:         cluster,
+		constants.LabelUID:             string(m.GetUID()),
+		constants.LabelOwnerReferences: string(ownerReferencesStr),
+	}
 
 	ResetMetadata(m)
 	if len(targetNamespace) > 0 {
@@ -102,8 +113,9 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 	if anno == nil {
 		anno = make(map[string]string)
 	}
-	anno[constants.LabelCluster] = cluster
-	anno[constants.LabelUID] = string(uid)
+	for k, v := range tenantScopeMeta {
+		anno[k] = v
+	}
 	m.SetAnnotations(anno)
 
 	return target, nil
