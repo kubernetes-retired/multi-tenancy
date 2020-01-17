@@ -80,6 +80,7 @@ type Options struct {
 type Cache interface {
 	Start() error
 	WaitForCacheSync() bool
+	Synced() bool
 	Stop()
 }
 
@@ -161,33 +162,6 @@ func (c *MultiClusterController) TeardownClusterResource(cluster ClusterInterfac
 // Start starts the ClustersController's control loops (as many as MaxConcurrentReconciles) in separate channels
 // and blocks until an empty struct is sent to the stop channel.
 func (c *MultiClusterController) Start(stop <-chan struct{}) error {
-	c.Lock()
-	// pre start all the cluster caches
-	wg := &sync.WaitGroup{}
-	wg.Add(len(c.clusters))
-
-	errCh := make(chan error)
-	for _, cl := range c.clusters {
-		go func(cl ClusterInterface) {
-			if err := cl.Start(); err != nil {
-				errCh <- err
-			}
-		}(cl)
-
-		klog.Infof("sync cache for cluster %s", cl.GetClusterName())
-		go func(cl ClusterInterface) {
-			defer wg.Done()
-
-			if ok := cl.WaitForCacheSync(); !ok {
-				errCh <- fmt.Errorf("failed to wait for caches to sync")
-			}
-		}(cl)
-		klog.Infof("successfully sync cache for cluster %s", cl.GetClusterName())
-	}
-	c.Unlock()
-
-	wg.Wait()
-
 	klog.Infof("start clusters-controller %q", c.name)
 
 	defer c.Queue.ShutDown()
@@ -199,37 +173,33 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 	select {
 	case <-stop:
 		return nil
-	case err := <-errCh:
-		return err
 	}
 }
 
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
-	c.Lock()
-	defer c.Unlock()
-	for _, cluster := range c.clusters {
-		if cluster.GetClusterName() == clusterName {
-			clusterCache, err := cluster.GetCache()
-			if err != nil {
-				return nil, err
-			}
-			instance := getTargetObject(c.objectType)
-			err = clusterCache.Get(context.TODO(), client.ObjectKey{
-				Namespace: namespace,
-				Name:      name,
-			}, instance)
-			return instance, err
-		}
+	cluster := c.GetCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	instance := getTargetObject(c.objectType)
+	clusterCache, err := cluster.GetCache()
+	if err != nil {
+		return nil, err
+	}
+	err = clusterCache.Get(context.TODO(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, instance)
+	return instance, err
 }
 
 func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface {
 	c.Lock()
 	defer c.Unlock()
 	for _, cluster := range c.clusters {
-		if cluster.GetClusterName() == clusterName {
+		// If cluster cache has not been synced, we assume it is not available
+		if cluster.GetClusterName() == clusterName && cluster.Synced() {
 			return cluster
 		}
 	}
