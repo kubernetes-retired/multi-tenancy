@@ -56,13 +56,15 @@ type Cluster struct {
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
 
-	//
 	mapper meta.RESTMapper
 
 	// informers are injected by the controllerManager when controllerManager.Start is called
 	cache  cache.Cache
 	client *client.DelegatingClient
 	Options
+
+	// a flag indicates that the cluster cache has been synced
+	synced bool
 
 	stopCh chan struct{}
 }
@@ -85,7 +87,7 @@ type CacheOptions struct {
 
 // New creates a new Cluster.
 func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, config *rest.Config, o Options) *Cluster {
-	return &Cluster{Name: name, spec: spec, Config: config, Options: o, stopCh: make(chan struct{})}
+	return &Cluster{Name: name, spec: spec, Config: config, Options: o, synced: false, stopCh: make(chan struct{})}
 }
 
 // GetClusterName returns the name given when Cluster c was created.
@@ -230,6 +232,14 @@ func (c *Cluster) WaitForCacheSync() bool {
 		return false
 	}
 	return ca.WaitForCacheSync(c.stopCh)
+}
+
+func (c *Cluster) SetSynced() {
+	c.synced = true
+}
+
+func (c *Cluster) Synced() bool {
+	return c.synced
 }
 
 // Stop send a msg to stopCh, stop the cache.

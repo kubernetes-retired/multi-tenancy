@@ -290,7 +290,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	return nil
 }
 
-func (s *Syncer) runCluster(cluster mc.ClusterInterface) {
+func (s *Syncer) runCluster(cluster *cluster.Cluster) {
 	go func() {
 		err := cluster.Start()
 		klog.Infof("cluster %s shutdown: %v", cluster.GetClusterName(), err)
@@ -302,4 +302,5 @@ func (s *Syncer) runCluster(cluster mc.ClusterInterface) {
 		s.queue.AddAfter(cluster.GetClusterName(), 5*time.Second)
 		return
 	}
+	cluster.SetSynced()
 }
