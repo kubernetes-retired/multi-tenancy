@@ -22,11 +22,13 @@ import (
 
 	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 	"k8s.io/utils/pointer"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 type VCMutateInterface interface {
@@ -201,6 +203,13 @@ func (p *podMutator) mutateDNSConfig(vPod *v1.Pod, nameServer string) {
 }
 
 func (p *podMutator) mutateClusterFirstDNS(vPod *v1.Pod, nameServer string) {
+	if nameServer == "" {
+		klog.Infof("vc %s does not have ClusterDNS IP configured and cannot create Pod using %q policy. Falling back to %q policy.",
+			p.pPod.GetAnnotations()[constants.LabelCluster], v1.DNSClusterFirst, v1.DNSDefault)
+		p.pPod.Spec.DNSPolicy = v1.DNSDefault
+		return
+	}
+
 	existingDNSConfig := p.pPod.Spec.DNSConfig
 
 	// For a pod with DNSClusterFirst policy, the cluster DNS server is
@@ -257,7 +266,7 @@ type serviceMutator struct {
 }
 
 func (s *serviceMutator) Mutate() {
-	//newService.Spec.ClusterIP = ""
+	s.pService.Spec.ClusterIP = ""
 	for i := range s.pService.Spec.Ports {
 		s.pService.Spec.Ports[i].NodePort = 0
 	}
