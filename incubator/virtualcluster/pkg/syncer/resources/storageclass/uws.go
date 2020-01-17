@@ -31,6 +31,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -84,13 +85,13 @@ func (c *controller) processNextWorkItem() bool {
 }
 
 func (c *controller) backPopulate(req scReconcileRequest) error {
-	op := "APPLY"
+	op := reconciler.AddEvent
 	pStorageClass, err := c.storageclassLister.Get(req.key)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
-		op = "DELETE"
+		op = reconciler.DeleteEvent
 	}
 
 	cluster := c.multiClusterStorageClassController.GetCluster(req.clusterName)
@@ -109,23 +110,11 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		return err
 	}
 
-	storageClassInformer, err := clusterCache.GetInformer(&v1.StorageClass{})
-	if err != nil {
-		klog.Errorf("failed to get storageclass informer for cluster %s", req.clusterName)
-		return err
-	}
-
-	hasSynced := storageClassInformer.HasSynced
-	if !hasSynced() {
-		// This should be rare, let us just fail the entire reconcile
-		return fmt.Errorf("storageclass informer has not been synced yet")
-	}
-
 	vStorageClass := &v1.StorageClass{}
 	err = clusterCache.Get(context.TODO(), client.ObjectKey{Name: req.key}, vStorageClass)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if op == "APPLY" {
+			if op == reconciler.AddEvent {
 				// Available in super, hence create a new in tenant master
 				vStorageClass := conversion.BuildVirtualStorageClass(req.clusterName, pStorageClass)
 				_, err := tenantClient.StorageV1().StorageClasses().Create(vStorageClass)
@@ -138,7 +127,7 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		return err
 	}
 
-	if op == "DELETE" {
+	if op == reconciler.DeleteEvent {
 		opts := &metav1.DeleteOptions{
 			PropagationPolicy: &constants.DefaultDeletionPolicy,
 		}
