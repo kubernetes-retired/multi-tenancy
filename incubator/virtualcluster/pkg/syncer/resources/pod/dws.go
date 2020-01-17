@@ -157,6 +157,9 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 func (c *controller) getClusterNameServer(client v1core.ServicesGetter, cluster string) (string, error) {
 	svc, err := client.Services(conversion.ToSuperMasterNamespace(cluster, constants.TenantDNSServerNS)).Get(constants.TenantDNSServerServiceName, metav1.GetOptions{})
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return "", nil
+		}
 		return "", err
 	}
 
