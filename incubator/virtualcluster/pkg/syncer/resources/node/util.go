@@ -29,6 +29,7 @@ import (
 )
 
 func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
+	now := metav1.Now()
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: superMasterNode.Name,
@@ -36,6 +37,16 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 				"type":             "virtual-node",
 				v1.LabelOSStable:   runtime.GOOS,
 				v1.LabelArchStable: runtime.GOARCH,
+			},
+		},
+		Spec: v1.NodeSpec{
+			Unschedulable: true,
+			Taints: []v1.Taint{
+				{
+					Key:       "node.kubernetes.io/unschedulable",
+					Effect:    v1.TaintEffectNoSchedule,
+					TimeAdded: &now,
+				},
 			},
 		},
 	}
