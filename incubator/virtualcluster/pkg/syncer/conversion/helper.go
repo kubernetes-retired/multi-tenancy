@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -170,4 +171,10 @@ func BuildVirtualPodEvent(cluster string, pEvent *v1.Event, vPod *v1.Pod) *v1.Ev
 	vEvent.Message = strings.ReplaceAll(vEvent.Message, cluster, "")
 
 	return vEvent
+}
+
+func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageClass) *storagev1.StorageClass {
+	vStorageClass := pStorageClass.DeepCopy()
+	ResetMetadata(vStorageClass)
+	return vStorageClass
 }
