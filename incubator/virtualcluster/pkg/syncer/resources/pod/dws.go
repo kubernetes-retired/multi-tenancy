@@ -144,7 +144,10 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("nameserver not found: %v", err)
 	}
 
-	conversion.VC(tenantCluster.GetSpec()).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
+	err = conversion.VC(tenantCluster).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
+	if err != nil {
+		return fmt.Errorf("failed to mutate pod: %v", err)
+	}
 
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {

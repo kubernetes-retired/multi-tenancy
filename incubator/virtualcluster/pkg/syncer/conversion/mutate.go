@@ -22,13 +22,14 @@ import (
 
 	"k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 	"k8s.io/utils/pointer"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
 
 type VCMutateInterface interface {
@@ -37,10 +38,10 @@ type VCMutateInterface interface {
 }
 
 type mutator struct {
-	vc *v1alpha1.VirtualclusterSpec
+	vc mccontroller.ClusterInterface
 }
 
-func VC(vc *v1alpha1.VirtualclusterSpec) VCMutateInterface {
+func VC(vc mccontroller.ClusterInterface) VCMutateInterface {
 	return &mutator{vc: vc}
 }
 
@@ -53,17 +54,17 @@ func (m *mutator) Service(pService *v1.Service) ServiceMutateInterface {
 }
 
 type PodMutateInterface interface {
-	Mutate(pPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string)
+	Mutate(pPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error
 }
 
 type podMutator struct {
-	vc   *v1alpha1.VirtualclusterSpec
+	vc   mccontroller.ClusterInterface
 	pPod *v1.Pod
 }
 
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func (p *podMutator) Mutate(vPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) {
+func (p *podMutator) Mutate(vPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error {
 	p.pPod.Status = corev1.PodStatus{}
 	p.pPod.Spec.NodeName = ""
 
@@ -93,6 +94,8 @@ func (p *podMutator) Mutate(vPod *corev1.Pod, vSASecret, SASecret *v1.Secret, se
 	if p.pPod.Spec.Subdomain != "" {
 		p.pPod.Spec.Subdomain = ""
 	}
+
+	return p.attachTenantMeta(vPod)
 }
 
 func mutateContainerEnv(c *v1.Container, vPod *v1.Pod, serviceEnvMap map[string]string) {
@@ -205,7 +208,7 @@ func (p *podMutator) mutateDNSConfig(vPod *v1.Pod, nameServer string) {
 func (p *podMutator) mutateClusterFirstDNS(vPod *v1.Pod, nameServer string) {
 	if nameServer == "" {
 		klog.Infof("vc %s does not have ClusterDNS IP configured and cannot create Pod using %q policy. Falling back to %q policy.",
-			p.pPod.GetAnnotations()[constants.LabelCluster], v1.DNSClusterFirst, v1.DNSDefault)
+			p.vc.GetClusterName(), v1.DNSClusterFirst, v1.DNSDefault)
 		p.pPod.Spec.DNSPolicy = v1.DNSDefault
 		return
 	}
@@ -228,10 +231,10 @@ func (p *podMutator) mutateClusterFirstDNS(vPod *v1.Pod, nameServer string) {
 		},
 	}
 
-	if p.vc.ClusterDomain != "" {
-		nsSvcDomain := fmt.Sprintf("%s.svc.%s", vPod.Namespace, p.vc.ClusterDomain)
-		svcDomain := fmt.Sprintf("svc.%s", p.vc.ClusterDomain)
-		dnsConfig.Searches = []string{nsSvcDomain, svcDomain, p.vc.ClusterDomain}
+	if clusterDomain := p.vc.GetSpec().ClusterDomain; clusterDomain != "" {
+		nsSvcDomain := fmt.Sprintf("%s.svc.%s", vPod.Namespace, clusterDomain)
+		svcDomain := fmt.Sprintf("svc.%s", clusterDomain)
+		dnsConfig.Searches = []string{nsSvcDomain, svcDomain, clusterDomain}
 	}
 
 	if existingDNSConfig != nil {
@@ -256,12 +259,45 @@ func omitDuplicates(strs []string) []string {
 	return ret
 }
 
+// TODO(zhuangqh): make this plugable.
+// for now, only Deployment Pods are mutated.
+func (p *podMutator) attachTenantMeta(vPod *v1.Pod) error {
+	if len(vPod.ObjectMeta.OwnerReferences) == 0 {
+		return nil
+	}
+
+	if vPod.ObjectMeta.OwnerReferences[0].Kind != "ReplicaSet" {
+		return nil
+	}
+
+	ns := vPod.ObjectMeta.Namespace
+	replicaSetName := vPod.ObjectMeta.OwnerReferences[0].Name
+	client, err := p.vc.GetClient()
+	if err != nil {
+		return fmt.Errorf("vc %s failed to get client: %v", p.vc.GetClusterName(), err)
+	}
+	replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(replicaSetName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("vc %s failed to get replicaset object %s in %s: %v", p.vc.GetClusterName(), replicaSetName, ns, err)
+	}
+
+	labels := p.pPod.GetLabels()
+	if len(labels) == 0 {
+		labels = make(map[string]string)
+	}
+	labels[constants.LabelExtendDeploymentName] = replicaSetObj.ObjectMeta.OwnerReferences[0].Name
+	labels[constants.LabelExtendDeploymentUID] = string(replicaSetObj.ObjectMeta.OwnerReferences[0].UID)
+	p.pPod.SetLabels(labels)
+
+	return nil
+}
+
 type ServiceMutateInterface interface {
 	Mutate()
 }
 
 type serviceMutator struct {
-	vc       *v1alpha1.VirtualclusterSpec
+	vc       mccontroller.ClusterInterface
 	pService *v1.Service
 }
 
