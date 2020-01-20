@@ -50,4 +50,12 @@ const (
 	PublicObjectKey = "tenancy.x-k8s.io/super.public"
 )
 
+const (
+	// TODO(zhuangqh): make extend info plugable
+	// LabelExtendDeploymentName is the parent deployment name of pod. only take effect on pods.
+	LabelExtendDeploymentName = "tenancy.x-k8s.io/extend.deployment.name"
+	// LabelExtendDeploymentUID is the parent deployment uid of pod. only take effect on pods.
+	LabelExtendDeploymentUID = "tenancy.x-k8s.io/extend.deployment.uid"
+)
+
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground
