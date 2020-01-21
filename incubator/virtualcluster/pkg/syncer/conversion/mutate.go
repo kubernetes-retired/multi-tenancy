@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"k8s.io/api/core/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
@@ -54,7 +53,7 @@ func (m *mutator) Service(pService *v1.Service) ServiceMutateInterface {
 }
 
 type PodMutateInterface interface {
-	Mutate(pPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error
+	Mutate(pPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error
 }
 
 type podMutator struct {
@@ -64,8 +63,8 @@ type podMutator struct {
 
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func (p *podMutator) Mutate(vPod *corev1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error {
-	p.pPod.Status = corev1.PodStatus{}
+func (p *podMutator) Mutate(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error {
+	p.pPod.Status = v1.PodStatus{}
 	p.pPod.Spec.NodeName = ""
 
 	// setup env var map
@@ -293,7 +292,7 @@ func (p *podMutator) attachTenantMeta(vPod *v1.Pod) error {
 }
 
 type ServiceMutateInterface interface {
-	Mutate()
+	Mutate(vService *v1.Service)
 }
 
 type serviceMutator struct {
@@ -301,8 +300,16 @@ type serviceMutator struct {
 	pService *v1.Service
 }
 
-func (s *serviceMutator) Mutate() {
-	s.pService.Spec.ClusterIP = ""
+func (s *serviceMutator) Mutate(vService *v1.Service) {
+	if v1helper.IsServiceIPSet(vService) {
+		anno := s.pService.GetAnnotations()
+		if len(anno) == 0 {
+			anno = make(map[string]string)
+		}
+		anno[constants.LabelClusterIP] = vService.Spec.ClusterIP
+		s.pService.SetAnnotations(anno)
+		s.pService.Spec.ClusterIP = ""
+	}
 	for i := range s.pService.Spec.Ports {
 		s.pService.Spec.Ports[i].NodePort = 0
 	}
