@@ -17,11 +17,15 @@ limitations under the License.
 package service
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -32,8 +36,15 @@ import (
 )
 
 type controller struct {
-	serviceClient                 v1core.ServicesGetter
+	// super master service client
+	serviceClient v1core.ServicesGetter
+	// super master informer/listers/synced functions
+	serviceLister listersv1.ServiceLister
+	serviceSynced cache.InformerSynced
+	// Connect to all tenant master service informers
 	multiClusterServiceController *mc.MultiClusterController
+	// Checker timer
+	periodCheckerPeriod time.Duration
 }
 
 func Register(
@@ -42,7 +53,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		serviceClient: serviceClient,
+		serviceClient:       serviceClient,
+		periodCheckerPeriod: 60 * time.Second,
 	}
 
 	// Create the multi cluster service controller
@@ -54,6 +66,9 @@ func Register(
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
+	c.serviceLister = serviceInformer.Lister()
+	c.serviceSynced = serviceInformer.Informer().HasSynced
+
 	controllerManager.AddController(c)
 }
 
@@ -63,9 +78,6 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	return c.multiClusterServiceController.Start(stopCh)
-}
-
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {

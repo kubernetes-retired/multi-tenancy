@@ -69,7 +69,8 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
+func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+	return nil
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
