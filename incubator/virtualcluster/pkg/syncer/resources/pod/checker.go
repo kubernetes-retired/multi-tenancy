@@ -18,6 +18,7 @@ package pod
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -41,12 +43,17 @@ const (
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
+func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
+
+	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
+		return fmt.Errorf("failed to wait for caches to sync before starting Pod checker")
+	}
 
 	// Start a loop to periodically check if pods keep consistency between super
 	// master and tenant masters.
 	wait.Until(c.checkPods, c.periodCheckerPeriod, stopCh)
+	return nil
 }
 
 // checkPods checks to see if pods in super master informer cache and tenant master
@@ -105,6 +112,7 @@ func (c *controller) checkPods() {
 					klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
 				}
 			}
+			continue
 		}
 		vPod := vPodObj.(*v1.Pod)
 
@@ -130,7 +138,7 @@ func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterIn
 	}
 
 	klog.Infof("check pods consistency in cluster %s", clusterName)
-	for _, vPod := range podList.Items {
+	for i, vPod := range podList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {
@@ -149,7 +157,7 @@ func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterIn
 				}
 			} else {
 				// pPod not found and vPod still exists, we need to create pPod again
-				c.multiClusterPodController.RequeueObject(clusterName, vPod, reconciler.AddEvent)
+				c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i], reconciler.AddEvent)
 			}
 			continue
 		}
@@ -159,7 +167,7 @@ func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterIn
 			continue
 		}
 
-		updatedPod := conversion.CheckPodEquality(pPod, &vPod)
+		updatedPod := conversion.CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
 		}

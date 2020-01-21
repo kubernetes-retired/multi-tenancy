@@ -362,3 +362,23 @@ func CheckStorageClassEquality(pObj, vObj *v1storage.StorageClass) *v1storage.St
 		return nil
 	}
 }
+
+func CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
+	var updated *v1.Service
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+
+	if !equality.Semantic.DeepEqual(pObj.Spec, vObj.Spec) {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.Spec = *vObj.Spec.DeepCopy()
+	}
+
+	return updated
+}

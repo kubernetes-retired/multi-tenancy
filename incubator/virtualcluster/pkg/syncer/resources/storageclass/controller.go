@@ -137,7 +137,8 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
+func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+	return nil
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {

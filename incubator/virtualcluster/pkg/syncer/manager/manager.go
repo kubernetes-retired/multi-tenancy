@@ -39,7 +39,7 @@ type Controller interface {
 	listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
-	StartPeriodChecker(stopCh <-chan struct{})
+	StartPeriodChecker(stopCh <-chan struct{}) error
 }
 
 // AddController adds a controller to the ControllerManager.
@@ -74,7 +74,9 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 		// start period checker
 		go func(co Controller) {
 			defer wg.Done()
-			co.StartPeriodChecker(stop)
+			if err := co.StartPeriodChecker(stop); err != nil {
+				errCh <- err
+			}
 		}(co)
 	}
 

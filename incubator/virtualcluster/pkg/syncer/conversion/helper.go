@@ -103,6 +103,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		constants.LabelCluster:         cluster,
 		constants.LabelUID:             string(m.GetUID()),
 		constants.LabelOwnerReferences: string(ownerReferencesStr),
+		constants.LabelNamespace:       m.GetNamespace(),
 	}
 
 	ResetMetadata(m)

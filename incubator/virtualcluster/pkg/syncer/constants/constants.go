@@ -29,6 +29,8 @@ const (
 	LabelNamespace = "tenancy.x-k8s.io/namespace"
 	// LabelOwnerReferences is the ownerReferences of the object in tenant context.
 	LabelOwnerReferences = "tenancy.x-k8s.io/ownerReferences"
+	// LabelClusterIP is the cluster ip of the corresponding service in tenant namespace.
+	LabelClusterIP = "tenancy.x-k8s.io/clusterIP"
 
 	// SyncStatusKey is a label key records the sync status of the resource.
 	SyncStatusKey = "tenancy.x-k8s.io/sync.status"

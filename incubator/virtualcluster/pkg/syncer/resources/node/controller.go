@@ -91,7 +91,8 @@ func Register(
 	controllerManager.AddController(c)
 }
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) {
+func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+	return nil
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
