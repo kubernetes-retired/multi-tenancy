@@ -22,6 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -30,12 +33,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // MultiClusterController implements the multicluster controller pattern.
@@ -80,7 +82,6 @@ type Options struct {
 type Cache interface {
 	Start() error
 	WaitForCacheSync() bool
-	Synced() bool
 	Stop()
 }
 
@@ -92,6 +93,7 @@ type ClusterInterface interface {
 	GetCache() (cache.Cache, error)
 	GetClientInfo() *reconciler.ClusterInfo
 	GetClient() (*clientset.Clientset, error)
+	GetDelegatingClient() (*client.DelegatingClient, error)
 	Cache
 }
 
@@ -183,11 +185,11 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
 	instance := getTargetObject(c.objectType)
-	clusterCache, err := cluster.GetCache()
+	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
 	}
-	err = clusterCache.Get(context.TODO(), client.ObjectKey{
+	err = delegatingClient.Get(context.TODO(), client.ObjectKey{
 		Namespace: namespace,
 		Name:      name,
 	}, instance)
@@ -198,8 +200,7 @@ func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface
 	c.Lock()
 	defer c.Unlock()
 	for _, cluster := range c.clusters {
-		// If cluster cache has not been synced, we assume it is not available
-		if cluster.GetClusterName() == clusterName && cluster.Synced() {
+		if cluster.GetClusterName() == clusterName {
 			return cluster
 		}
 	}
@@ -301,6 +302,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 	switch objectType.(type) {
 	case *v1.ConfigMap:
 		return &v1.ConfigMap{}
+	case *v1.Node:
+		return &v1.Node{}
 	case *v1.Pod:
 		return &v1.Pod{}
 	case *v1.Secret:
@@ -309,6 +312,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.Service{}
 	case *v1.ServiceAccount:
 		return &v1.ServiceAccount{}
+	case *storagev1.StorageClass:
+		return &storagev1.StorageClass{}
 	default:
 		return nil
 	}

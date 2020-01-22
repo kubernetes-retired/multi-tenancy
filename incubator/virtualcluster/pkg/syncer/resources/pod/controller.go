@@ -42,6 +42,7 @@ type controller struct {
 	informer      coreinformers.Interface
 	podLister     listersv1.PodLister
 	podSynced     cache.InformerSynced
+	serviceLister listersv1.ServiceLister
 	serviceSynced cache.InformerSynced
 	nsLister      listersv1.NamespaceLister
 	nsSynced      cache.InformerSynced
@@ -76,6 +77,7 @@ func Register(
 	}
 	c.multiClusterPodController = multiClusterPodController
 
+	c.serviceLister = informer.Services().Lister()
 	c.serviceSynced = informer.Services().Informer().HasSynced
 
 	c.nsLister = informer.Namespaces().Lister()

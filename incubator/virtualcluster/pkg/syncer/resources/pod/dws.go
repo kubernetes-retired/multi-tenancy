@@ -171,13 +171,13 @@ func (c *controller) getClusterNameServer(client v1core.ServicesGetter, cluster 
 
 func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.Service, error) {
 	var services []*v1.Service
-	list, err := c.informer.Services().Lister().Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
+	list, err := c.serviceLister.Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
 	services = append(services, list...)
 
-	list, err = c.informer.Services().Lister().Services(pPod.Namespace).List(labels.Everything())
+	list, err = c.serviceLister.Services(pPod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
