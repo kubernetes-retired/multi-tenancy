@@ -17,6 +17,7 @@ limitations under the License.
 package cluster
 
 import (
+	"fmt"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -58,9 +59,13 @@ type Cluster struct {
 
 	mapper meta.RESTMapper
 
-	// informers are injected by the controllerManager when controllerManager.Start is called
-	cache  cache.Cache
-	client *client.DelegatingClient
+	// informer cache and delegating client for watched tenant master objects
+	cache            cache.Cache
+	delegatingClient *client.DelegatingClient
+
+	// a clientset client for unwatched tenant master objects (rw directly to tenant apiserver)
+	client *clientset.Clientset
+
 	Options
 
 	// a flag indicates that the cluster cache has been synced
@@ -111,8 +116,17 @@ func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
 	return reconciler.NewClusterInfo(c.Name, c.Config)
 }
 
+// GetClient returns a clientset client without any informer caches. All client requests go to apiserver directly.
 func (c *Cluster) GetClient() (*clientset.Clientset, error) {
-	return clientset.NewForConfig(restclient.AddUserAgent(c.Config, constants.ResourceSyncerUserAgent))
+	if c.client != nil {
+		return c.client, nil
+	}
+	var err error
+	c.client, err = clientset.NewForConfig(restclient.AddUserAgent(c.Config, constants.ResourceSyncerUserAgent))
+	if err != nil {
+		return nil, err
+	}
+	return c.client, nil
 }
 
 // GetMapper returns a lazily created apimachinery RESTMapper.
@@ -162,8 +176,12 @@ func (c *Cluster) GetCache() (cache.Cache, error) {
 // TODO: consider implementing Reader, Writer and StatusClient in Cluster
 // and forwarding to actual delegating client.
 func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
-	if c.client != nil {
-		return c.client, nil
+	if !c.synced {
+		return nil, fmt.Errorf("The client cache has not been synced yet.")
+	}
+
+	if c.delegatingClient != nil {
+		return c.delegatingClient, nil
 	}
 
 	ca, err := c.GetCache()
@@ -193,7 +211,7 @@ func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
 		StatusClient: cl,
 	}
 
-	c.client = dc
+	c.delegatingClient = dc
 	return dc, nil
 }
 
@@ -236,10 +254,6 @@ func (c *Cluster) WaitForCacheSync() bool {
 
 func (c *Cluster) SetSynced() {
 	c.synced = true
-}
-
-func (c *Cluster) Synced() bool {
-	return c.synced
 }
 
 // Stop send a msg to stopCh, stop the cache.

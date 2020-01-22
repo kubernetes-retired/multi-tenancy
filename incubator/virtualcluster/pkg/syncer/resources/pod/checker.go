@@ -77,7 +77,7 @@ func (c *controller) checkPods() {
 		wg.Add(1)
 		go func(clusterName string, cluster mc.ClusterInterface) {
 			defer wg.Done()
-			c.checkPodsOfCluster(clusterName, cluster)
+			c.checkPodsOfCluster(cluster)
 		}(clusterName, cluster)
 	}
 	wg.Wait()
@@ -124,10 +124,10 @@ func (c *controller) checkPods() {
 }
 
 // checkPodsOfCluster checks to see if pods in specific cluster keeps consistency.
-func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterInterface) {
+func (c *controller) checkPodsOfCluster(cluster mc.ClusterInterface) {
 	clusterInformerCache, err := cluster.GetCache()
 	if err != nil {
-		klog.Errorf("failed to get informer cache for cluster %s", clusterName)
+		klog.Errorf("failed to get informer cache for cluster %s", cluster.GetClusterName())
 		return
 	}
 	podList := &v1.PodList{}
@@ -137,27 +137,27 @@ func (c *controller) checkPodsOfCluster(clusterName string, cluster mc.ClusterIn
 		return
 	}
 
-	klog.Infof("check pods consistency in cluster %s", clusterName)
+	klog.Infof("check pods consistency in cluster %s", cluster.GetClusterName())
 	for i, vPod := range podList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
+		targetNamespace := conversion.ToSuperMasterNamespace(cluster.GetClusterName(), vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {
 			// pPod not found and vPod is under deletion, we need to delete vPod manually
 			if vPod.DeletionTimestamp != nil {
-				clusterClient, err := cluster.GetClient()
+				client, err := cluster.GetClient()
 				if err != nil {
-					klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
+					klog.Errorf("error getting cluster %s clientset: %v", cluster.GetClusterName(), err)
 					continue
 				}
 				// since pPod not found in super master, we can force delete vPod
 				deleteOptions := metav1.NewDeleteOptions(0)
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
-				if err = clusterClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
-					klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+				if err = client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
+					klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, cluster.GetClusterName(), err)
 				}
 			} else {
 				// pPod not found and vPod still exists, we need to create pPod again
-				c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i], reconciler.AddEvent)
+				c.multiClusterPodController.RequeueObject(cluster.GetClusterName(), &podList.Items[i], reconciler.AddEvent)
 			}
 			continue
 		}

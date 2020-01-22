@@ -122,7 +122,7 @@ func (c *controller) backPopulate(key string) error {
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("could not find pPod %s/%s pPod in controller cache %v", vNamespace, pName, err)
+		return fmt.Errorf("could not find pPod %s/%s's vPod in controller cache %v", vNamespace, pName, err)
 	}
 	vPod := vPodObj.(*v1.Pod)
 

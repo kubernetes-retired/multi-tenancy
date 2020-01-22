@@ -17,7 +17,6 @@ limitations under the License.
 package storageclass
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -32,8 +31,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // StartUWS starts the upward syncer
@@ -94,24 +91,16 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		op = reconciler.DeleteEvent
 	}
 
-	cluster := c.multiClusterStorageClassController.GetCluster(req.clusterName)
-	if cluster == nil {
-		klog.Errorf("failed to locate cluster %s", req.clusterName)
-		return nil
+	tenantCluster := c.multiClusterStorageClassController.GetCluster(req.clusterName)
+	if tenantCluster == nil {
+		return fmt.Errorf("cluster %s not found", req.clusterName)
 	}
-	tenantClient, err := cluster.GetClient()
+	tenantClient, err := tenantCluster.GetClient()
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", req.clusterName, err)
 	}
 
-	clusterCache, err := cluster.GetCache()
-	if err != nil {
-		klog.Errorf("failed to get cache for cluster %s", req.clusterName)
-		return err
-	}
-
-	vStorageClass := &v1.StorageClass{}
-	err = clusterCache.Get(context.TODO(), client.ObjectKey{Name: req.key}, vStorageClass)
+	vStorageClassObj, err := c.multiClusterStorageClassController.Get(req.clusterName, "", req.key)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if op == reconciler.AddEvent {
@@ -136,7 +125,7 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 			return err
 		}
 	} else {
-		updatedStorageClass := conversion.CheckStorageClassEquality(pStorageClass, vStorageClass)
+		updatedStorageClass := conversion.CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
 		if updatedStorageClass != nil {
 			_, err := tenantClient.StorageV1().StorageClasses().Update(updatedStorageClass)
 			if err != nil {
