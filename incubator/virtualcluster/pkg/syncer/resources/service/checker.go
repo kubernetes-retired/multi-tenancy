@@ -17,7 +17,6 @@ limitations under the License.
 package service
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -30,7 +29,6 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -55,17 +53,11 @@ func (c *controller) checkServices() {
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
-		cluster := c.multiClusterServiceController.GetCluster(clusterName)
-		if cluster == nil {
-			klog.Errorf("failed to locate cluster %s", clusterName)
-			continue
-		}
-
 		wg.Add(1)
-		go func(clusterName string, cluster mc.ClusterInterface) {
+		go func(clusterName string) {
 			defer wg.Done()
-			c.checkServicesOfCluster(clusterName, cluster)
-		}(clusterName, cluster)
+			c.checkServicesOfTenantCluster(clusterName)
+		}(clusterName)
 	}
 	wg.Wait()
 
@@ -92,25 +84,21 @@ func (c *controller) checkServices() {
 	}
 }
 
-func (c *controller) checkServicesOfCluster(clusterName string, cluster mc.ClusterInterface) {
-	clusterInformerCache, err := cluster.GetCache()
-	if err != nil {
-		klog.Errorf("failed to get informer cache for cluster %s", clusterName)
-		return
-	}
-	svcList := &v1.ServiceList{}
-	err = clusterInformerCache.List(context.TODO(), svcList)
+func (c *controller) checkServicesOfTenantCluster(clusterName string) {
+	listObj, err := c.multiClusterServiceController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing services from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-
 	klog.Infof("check services consistency in cluster %s", clusterName)
-	for i, vServices := range svcList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vServices.Namespace)
-		pService, err := c.serviceLister.Services(targetNamespace).Get(vServices.Name)
+	svcList := listObj.(*v1.ServiceList)
+	for i, vService := range svcList.Items {
+		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vService.Namespace)
+		pService, err := c.serviceLister.Services(targetNamespace).Get(vService.Name)
 		if errors.IsNotFound(err) {
-			c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i], reconciler.AddEvent)
+			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i], reconciler.AddEvent); err != nil {
+				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+			}
 			continue
 		}
 
@@ -121,7 +109,7 @@ func (c *controller) checkServicesOfCluster(clusterName string, cluster mc.Clust
 
 		updatedService := conversion.CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
-			klog.Warningf("spec of service %v/%v diff in super&tenant master", vServices.Namespace, vServices.Name)
+			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
 		}
 	}
 }

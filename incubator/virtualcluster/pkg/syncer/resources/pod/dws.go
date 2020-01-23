@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
@@ -99,8 +98,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 
 	pPod := newObj.(*v1.Pod)
 
-	// check if the secret in super master is ready
-	// we must create pod after sync the secret.
+	// check if the secret in super master is ready we must create pod after sync the secret.
 	saName := "default"
 	if pPod.Spec.ServiceAccountName != "" {
 		saName = pPod.Spec.ServiceAccountName
@@ -115,17 +113,11 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("secret for pod is not ready")
 	}
 
-	var client *clientset.Clientset
-	tenantCluster := c.multiClusterPodController.GetCluster(cluster)
-	if tenantCluster == nil {
-		klog.Infof("cluster %s is gone", cluster)
-		return nil
-	}
-	client, err = tenantCluster.GetClient()
+	tenantClient, err := c.multiClusterPodController.GetClusterClient(cluster)
 	if err != nil {
 		return err
 	}
-	vSecret, err := utils.GetSecret(client.CoreV1(), namespace, saName)
+	vSecret, err := utils.GetSecret(tenantClient.CoreV1(), namespace, saName)
 	if err != nil {
 		return fmt.Errorf("failed to get secret: %v", err)
 	}
@@ -141,10 +133,10 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 
 	nameServer, err := c.getClusterNameServer(c.client, cluster)
 	if err != nil {
-		return fmt.Errorf("nameserver not found: %v", err)
+		return fmt.Errorf("failed to find nameserver: %v", err)
 	}
 
-	err = conversion.VC(tenantCluster).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
+	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}

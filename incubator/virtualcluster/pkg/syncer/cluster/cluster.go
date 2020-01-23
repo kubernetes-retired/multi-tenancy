@@ -105,9 +105,7 @@ func (c *Cluster) GetSpec() *v1alpha1.VirtualclusterSpec {
 	return c.spec
 }
 
-// GetScheme returns the default client-go scheme.
-// It is used by other Cluster getters, and to add custom resources to the scheme.
-func (c *Cluster) GetScheme() *runtime.Scheme {
+func (c *Cluster) getScheme() *runtime.Scheme {
 	return scheme.Scheme
 }
 
@@ -129,9 +127,8 @@ func (c *Cluster) GetClient() (*clientset.Clientset, error) {
 	return c.client, nil
 }
 
-// GetMapper returns a lazily created apimachinery RESTMapper.
-// It is used by other Cluster getters. TODO: consider not exporting.
-func (c *Cluster) GetMapper() (meta.RESTMapper, error) {
+// getMapper returns a lazily created apimachinery RESTMapper.
+func (c *Cluster) getMapper() (meta.RESTMapper, error) {
 	if c.mapper != nil {
 		return c.mapper, nil
 	}
@@ -145,20 +142,19 @@ func (c *Cluster) GetMapper() (meta.RESTMapper, error) {
 	return mapper, nil
 }
 
-// GetCache returns a lazily created controller-runtime Cache.
-// It is used by other Cluster getters. TODO: consider not exporting.
-func (c *Cluster) GetCache() (cache.Cache, error) {
+// getCache returns a lazily created controller-runtime Cache.
+func (c *Cluster) getCache() (cache.Cache, error) {
 	if c.cache != nil {
 		return c.cache, nil
 	}
 
-	m, err := c.GetMapper()
+	m, err := c.getMapper()
 	if err != nil {
 		return nil, err
 	}
 
 	ca, err := cache.New(c.Config, cache.Options{
-		Scheme:    c.GetScheme(),
+		Scheme:    c.getScheme(),
 		Mapper:    m,
 		Resync:    c.Resync,
 		Namespace: c.Namespace,
@@ -184,18 +180,18 @@ func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
 		return c.delegatingClient, nil
 	}
 
-	ca, err := c.GetCache()
+	ca, err := c.getCache()
 	if err != nil {
 		return nil, err
 	}
 
-	m, err := c.GetMapper()
+	m, err := c.getMapper()
 	if err != nil {
 		return nil, err
 	}
 
 	cl, err := client.New(c.Config, client.Options{
-		Scheme: c.GetScheme(),
+		Scheme: c.getScheme(),
 		Mapper: m,
 	})
 	if err != nil {
@@ -218,7 +214,7 @@ func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
 // AddEventHandler instructs the Cluster's cache to watch objectType's resource,
 // if it doesn't already, and to add handler as an event handler.
 func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocache.ResourceEventHandler) error {
-	ca, err := c.GetCache()
+	ca, err := c.getCache()
 	if err != nil {
 		return err
 	}
@@ -235,7 +231,7 @@ func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocac
 // Start starts the Cluster's cache and blocks,
 // until an empty struct is sent to the stop channel.
 func (c *Cluster) Start() error {
-	ca, err := c.GetCache()
+	ca, err := c.getCache()
 	if err != nil {
 		return err
 	}
@@ -245,7 +241,7 @@ func (c *Cluster) Start() error {
 // WaitForCacheSync waits for the Cluster's cache to sync,
 // OR until an empty struct is sent to the stop channel.
 func (c *Cluster) WaitForCacheSync() bool {
-	ca, err := c.GetCache()
+	ca, err := c.getCache()
 	if err != nil {
 		return false
 	}

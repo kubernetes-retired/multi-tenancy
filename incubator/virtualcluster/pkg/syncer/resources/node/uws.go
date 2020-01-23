@@ -114,12 +114,7 @@ func (c *controller) backPopulate(nodeName string) error {
 func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	tenantCluster := c.multiClusterNodeController.GetCluster(clusterName)
-	if tenantCluster == nil {
-		klog.Errorf("cluster %s not found", clusterName)
-		return
-	}
-	tenantClient, err := tenantCluster.GetClient()
+	tenantClient, err := c.multiClusterNodeController.GetClusterClient(clusterName)
 	if err != nil {
 		klog.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 		return

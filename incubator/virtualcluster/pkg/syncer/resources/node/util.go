@@ -55,6 +55,7 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 	n.Status.NodeInfo.OperatingSystem = "Linux"
 	n.Status.DaemonEndpoints = v1.NodeDaemonEndpoints{
 		KubeletEndpoint: v1.DaemonEndpoint{
+			// vn-agent service port. Hard coded for now.
 			Port: 10550,
 		},
 	}
