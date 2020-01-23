@@ -114,7 +114,7 @@ func (c *controller) reconcileServiceCreate(cluster, namespace, name string, ser
 	}
 
 	pService := newObj.(*v1.Service)
-	conversion.VC(nil).Service(pService).Mutate(service)
+	conversion.VC(nil, "").Service(pService).Mutate(service)
 
 	_, err = c.serviceClient.Services(targetNamespace).Create(pService)
 	if errors.IsAlreadyExists(err) {

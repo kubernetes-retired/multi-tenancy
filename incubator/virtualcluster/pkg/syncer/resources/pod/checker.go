@@ -17,7 +17,6 @@ limitations under the License.
 package pod
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
@@ -32,7 +31,6 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -68,17 +66,11 @@ func (c *controller) checkPods() {
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
-		cluster := c.multiClusterPodController.GetCluster(clusterName)
-		if cluster == nil {
-			klog.Errorf("failed to locate cluster %s", clusterName)
-			continue
-		}
-
 		wg.Add(1)
-		go func(clusterName string, cluster mc.ClusterInterface) {
+		go func(clusterName string) {
 			defer wg.Done()
-			c.checkPodsOfCluster(cluster)
-		}(clusterName, cluster)
+			c.checkPodsOfTenantCluster(clusterName)
+		}(clusterName)
 	}
 	wg.Wait()
 
@@ -123,41 +115,37 @@ func (c *controller) checkPods() {
 	}
 }
 
-// checkPodsOfCluster checks to see if pods in specific cluster keeps consistency.
-func (c *controller) checkPodsOfCluster(cluster mc.ClusterInterface) {
-	clusterInformerCache, err := cluster.GetCache()
+// checkPodsOfTenantCluster checks to see if pods in specific cluster keeps consistency.
+func (c *controller) checkPodsOfTenantCluster(clusterName string) {
+	listObj, err := c.multiClusterPodController.List(clusterName)
 	if err != nil {
-		klog.Errorf("failed to get informer cache for cluster %s", cluster.GetClusterName())
+		klog.Errorf("error listing pods from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	podList := &v1.PodList{}
-	err = clusterInformerCache.List(context.TODO(), podList)
-	if err != nil {
-		klog.Errorf("error listing pods from cluster informer cache: %v", err)
-		return
-	}
-
-	klog.Infof("check pods consistency in cluster %s", cluster.GetClusterName())
+	klog.Infof("check pods consistency in cluster %s", clusterName)
+	podList := listObj.(*v1.PodList)
 	for i, vPod := range podList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(cluster.GetClusterName(), vPod.Namespace)
+		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {
 			// pPod not found and vPod is under deletion, we need to delete vPod manually
 			if vPod.DeletionTimestamp != nil {
-				client, err := cluster.GetClient()
+				client, err := c.multiClusterPodController.GetClusterClient(clusterName)
 				if err != nil {
-					klog.Errorf("error getting cluster %s clientset: %v", cluster.GetClusterName(), err)
+					klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 					continue
 				}
 				// since pPod not found in super master, we can force delete vPod
 				deleteOptions := metav1.NewDeleteOptions(0)
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
 				if err = client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
-					klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, cluster.GetClusterName(), err)
+					klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 				}
 			} else {
 				// pPod not found and vPod still exists, we need to create pPod again
-				c.multiClusterPodController.RequeueObject(cluster.GetClusterName(), &podList.Items[i], reconciler.AddEvent)
+				if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i], reconciler.AddEvent); err != nil {
+					klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+				}
 			}
 			continue
 		}

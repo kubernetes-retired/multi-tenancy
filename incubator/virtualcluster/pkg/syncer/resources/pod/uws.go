@@ -100,11 +100,7 @@ func (c *controller) backPopulate(key string) error {
 		return nil
 	}
 
-	tenantCluster := c.multiClusterPodController.GetCluster(clusterName)
-	if tenantCluster == nil {
-		return fmt.Errorf("cluster %s not found", clusterName)
-	}
-	tenantClient, err := tenantCluster.GetClient()
+	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}

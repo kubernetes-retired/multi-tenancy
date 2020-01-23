@@ -91,11 +91,7 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		op = reconciler.DeleteEvent
 	}
 
-	tenantCluster := c.multiClusterStorageClassController.GetCluster(req.clusterName)
-	if tenantCluster == nil {
-		return fmt.Errorf("cluster %s not found", req.clusterName)
-	}
-	tenantClient, err := tenantCluster.GetClient()
+	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(req.clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", req.clusterName, err)
 	}

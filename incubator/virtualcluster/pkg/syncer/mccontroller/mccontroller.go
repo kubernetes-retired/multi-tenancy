@@ -32,7 +32,6 @@ import (
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -44,8 +43,7 @@ import (
 // A MultiClusterController owns a client-go workqueue. The WatchClusterResource methods set
 // up the queue to receive reconcile requests, e.g., CRUD events from a tenant cluster.
 // The Requests are processed by the user-provided Reconciler.
-// MultiClusterController saves all watched tenant clusters in a set, so the ControllerManager knows
-// which caches to start and sync before starting the MultiClusterController.
+// MultiClusterController saves all watched tenant clusters in a set.
 type MultiClusterController struct {
 	sync.Mutex
 	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
@@ -90,7 +88,6 @@ type ClusterInterface interface {
 	GetClusterName() string
 	GetSpec() *v1alpha1.VirtualclusterSpec
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
-	GetCache() (cache.Cache, error)
 	GetClientInfo() *reconciler.ClusterInfo
 	GetClient() (*clientset.Clientset, error)
 	GetDelegatingClient() (*client.DelegatingClient, error)
@@ -157,14 +154,14 @@ func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, 
 // The cluster informer should stop together.
 func (c *MultiClusterController) TeardownClusterResource(cluster ClusterInterface) {
 	c.Lock()
+	defer c.Unlock()
 	delete(c.clusters, cluster.GetClusterName())
-	c.Unlock()
 }
 
 // Start starts the ClustersController's control loops (as many as MaxConcurrentReconciles) in separate channels
 // and blocks until an empty struct is sent to the stop channel.
 func (c *MultiClusterController) Start(stop <-chan struct{}) error {
-	klog.Infof("start clusters-controller %q", c.name)
+	klog.Infof("start mc-controller %q", c.name)
 
 	defer c.Queue.ShutDown()
 
@@ -180,7 +177,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
-	cluster := c.GetCluster(clusterName)
+	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
@@ -196,17 +193,46 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 	return instance, err
 }
 
-func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface {
-	c.Lock()
-	defer c.Unlock()
-	for _, cluster := range c.clusters {
-		if cluster.GetClusterName() == clusterName {
-			return cluster
-		}
+// List returns a list of objects with specific cluster.
+func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	return nil
+	instanceList := getTargetObjectList(c.objectType)
+	delegatingClient, err := cluster.GetDelegatingClient()
+	if err != nil {
+		return nil, err
+	}
+	err = delegatingClient.List(context.TODO(), instanceList)
+	return instanceList, err
 }
 
+func (c *MultiClusterController) getCluster(clusterName string) ClusterInterface {
+	c.Lock()
+	defer c.Unlock()
+	return c.clusters[clusterName]
+}
+
+// GetClusterClient returns the cluster's clientset client for direct access to tenant apiserver
+func (c *MultiClusterController) GetClusterClient(clusterName string) (*clientset.Clientset, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	return cluster.GetClient()
+}
+
+// GetClusterDomain returns the cluster's domain name specified in VirtualclusterSpec
+func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return "", fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	return cluster.GetSpec().ClusterDomain, nil
+}
+
+// GetClusterNames returns the name list of all managed tenant clusters
 func (c *MultiClusterController) GetClusterNames() []string {
 	c.Lock()
 	defer c.Unlock()
@@ -218,21 +244,22 @@ func (c *MultiClusterController) GetClusterNames() []string {
 }
 
 // RequeueObject requeues the cluster object, thus reconcileHandler can reconcile it again.
-func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}, event reconciler.EventType) {
+func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}, event reconciler.EventType) error {
 	o, err := meta.Accessor(obj)
 	if err != nil {
-		return
+		return err
 	}
 
-	cluster := c.GetCluster(clusterName)
+	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return
+		return fmt.Errorf("could not find cluster %s", clusterName)
 	}
 	r := reconciler.Request{Cluster: cluster.GetClientInfo(), Event: event, Obj: obj}
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
 
 	c.Queue.Add(r)
+	return nil
 }
 
 // worker runs a worker thread that just dequeues items, processes them, and marks them done.
@@ -314,6 +341,27 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.ServiceAccount{}
 	case *storagev1.StorageClass:
 		return &storagev1.StorageClass{}
+	default:
+		return nil
+	}
+}
+
+func getTargetObjectList(objectType runtime.Object) runtime.Object {
+	switch objectType.(type) {
+	case *v1.ConfigMap:
+		return &v1.ConfigMapList{}
+	case *v1.Node:
+		return &v1.NodeList{}
+	case *v1.Pod:
+		return &v1.PodList{}
+	case *v1.Secret:
+		return &v1.SecretList{}
+	case *v1.Service:
+		return &v1.ServiceList{}
+	case *v1.ServiceAccount:
+		return &v1.ServiceAccountList{}
+	case *storagev1.StorageClass:
+		return &storagev1.StorageClassList{}
 	default:
 		return nil
 	}
