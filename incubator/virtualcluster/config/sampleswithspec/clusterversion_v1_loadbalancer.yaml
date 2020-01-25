@@ -261,6 +261,7 @@ spec:
               - --service-cluster-ip-range=10.32.0.0/24
               - --use-service-account-credentials=true
               - --experimental-cluster-signing-duration=87600h
+              - --node-monitor-grace-period=200s
               - --v=2
               livenessProbe:
                 httpGet:
