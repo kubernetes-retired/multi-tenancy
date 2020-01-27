@@ -125,6 +125,10 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 	klog.Infof("check pods consistency in cluster %s", clusterName)
 	podList := listObj.(*v1.PodList)
 	for i, vPod := range podList.Items {
+		if vPod.Spec.NodeName != "" && !isPodScheduled(&vPod) {
+			// We should skip pods with NodeName set in the spec
+			continue
+		}
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {

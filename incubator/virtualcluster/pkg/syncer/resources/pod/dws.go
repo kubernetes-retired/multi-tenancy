@@ -28,6 +28,7 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -79,6 +80,31 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	return reconciler.Result{}, nil
 }
 
+func isPodScheduled(pod *v1.Pod) bool {
+	_, cond := podutil.GetPodCondition(&pod.Status, v1.PodScheduled)
+	return cond != nil && cond.Status == v1.ConditionTrue
+}
+
+func createNotSupportEvent(pod *v1.Pod) *v1.Event {
+	eventTime := metav1.Now()
+	return &v1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "syncer",
+		},
+		InvolvedObject: v1.ObjectReference{
+			APIVersion: "v1",
+			Kind:       "Pod",
+			Name:       pod.Name,
+		},
+		Type:                "Warning",
+		Reason:              "NotSupported",
+		Message:             "The Pod has nodeName set in the spec which is not supported for now",
+		FirstTimestamp:      eventTime,
+		LastTimestamp:       eventTime,
+		ReportingController: "syncer",
+	}
+}
+
 func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v1.Pod) error {
 	// load deleting pod, don't create any pod on super master.
 	if vPod.DeletionTimestamp != nil {
@@ -89,6 +115,18 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 	_, err := c.podLister.Pods(targetNamespace).Get(name)
 	if err == nil {
 		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
+	}
+
+	if vPod.Spec.NodeName != "" && !isPodScheduled(vPod) {
+		// For now, we skip vPod that has NodeName set to prevent tenant from deploying DaemonSet or DaemonSet alike CRDs.
+		tenantClient, err := c.multiClusterPodController.GetClusterClient(cluster)
+		if err != nil {
+			return fmt.Errorf("failed to create client from cluster %s config: %v", cluster, err)
+		}
+		event := createNotSupportEvent(vPod)
+		vEvent := conversion.BuildVirtualPodEvent(cluster, event, vPod)
+		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(vEvent)
+		return err
 	}
 
 	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, vPod)
