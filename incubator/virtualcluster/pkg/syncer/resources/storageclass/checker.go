@@ -67,7 +67,7 @@ func (c *controller) checkStorageClass() {
 	}
 
 	for _, pStorageClass := range pStorageClassList {
-		if pStorageClass.Labels[constants.PublicObjectKey] != "true" {
+		if !publicStorageClass(pStorageClass) {
 			continue
 		}
 		for _, clusterName := range clusterNames {
