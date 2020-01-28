@@ -63,6 +63,12 @@ type podMutator struct {
 	pPod        *v1.Pod
 }
 
+// getCluster returns the cluster name of the corresponding virtualcluster
+func (p *podMutator) getCluster() string {
+	ans := p.pPod.GetAnnotations()
+	return ans[constants.LabelCluster]
+}
+
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
 func (p *podMutator) Mutate(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error {
@@ -70,7 +76,7 @@ func (p *podMutator) Mutate(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, servic
 	p.pPod.Spec.NodeName = ""
 
 	// setup env var map
-	serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, *p.pPod.Spec.EnableServiceLinks, services)
+	serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, p.getCluster(), *p.pPod.Spec.EnableServiceLinks, services)
 
 	for i := range p.pPod.Spec.Containers {
 		mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
@@ -148,10 +154,12 @@ func mutateDownwardAPIField(env *v1.EnvVar, vPod *v1.Pod) {
 	env.ValueFrom = nil
 }
 
-func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []*v1.Service) map[string]string {
+func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services []*v1.Service) map[string]string {
 	var (
 		serviceMap = make(map[string]*v1.Service)
 		m          = make(map[string]string)
+		// the master service namespace of the given virtualcluster
+		tenantMasterSvcNs = ToSuperMasterNamespace(cluster, masterServiceNamespace)
 	)
 
 	// project the services in namespace ns onto the master services
@@ -164,10 +172,11 @@ func getServiceEnvVarMap(ns string, enableServiceLinks bool, services []*v1.Serv
 		serviceName := service.Name
 
 		// We always want to add environment variabled for master services
-		// from the master service namespace, even if enableServiceLinks is false.
+		// from the corresponding master service namespace of the virtualcluster,
+		// even if enableServiceLinks is false.
 		// We also add environment variables for other services in the same
 		// namespace, if enableServiceLinks is true.
-		if service.Namespace == masterServiceNamespace && masterServices.Has(serviceName) {
+		if service.Namespace == tenantMasterSvcNs && masterServices.Has(serviceName) {
 			if _, exists := serviceMap[serviceName]; !exists {
 				serviceMap[serviceName] = service
 			}
