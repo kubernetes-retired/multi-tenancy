@@ -103,7 +103,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		}
 
 		if err != nil {
-			klog.Errorf("failed to get pService %s/%s from super master cache: %v", pService.Namespace, pService.Name, err)
+			klog.Errorf("failed to get pService %s/%s from super master cache: %v", targetNamespace, vService.Name, err)
 			continue
 		}
 

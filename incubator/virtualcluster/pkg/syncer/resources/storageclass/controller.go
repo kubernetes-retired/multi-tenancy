@@ -18,6 +18,7 @@ package storageclass
 
 import (
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/storage/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -48,6 +49,9 @@ type controller struct {
 	// UWS queue
 	workers int
 	queue   workqueue.RateLimitingInterface
+
+	// Checker timer
+	periodCheckerPeriod time.Duration
 }
 
 type scReconcileRequest struct {
@@ -61,10 +65,11 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:   client,
-		informer: informer,
-		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_storageclasses"),
-		workers:  constants.DefaultControllerWorkers,
+		client:              client,
+		informer:            informer,
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_storageclasses"),
+		workers:             constants.DefaultControllerWorkers,
+		periodCheckerPeriod: 60 * time.Second,
 	}
 
 	options := mc.Options{Reconciler: c}
@@ -134,10 +139,6 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	return nil
 }
 
