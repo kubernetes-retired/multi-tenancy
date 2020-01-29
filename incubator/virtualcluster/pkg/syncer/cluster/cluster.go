@@ -27,12 +27,14 @@ import (
 	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -48,8 +50,11 @@ type Cluster struct {
 	// Name is used to uniquely identify a Cluster in tracing, logging and monitoring.  Name is required.
 	Name string
 
+	// KubeClientConfig is used to make it easy to get an api server client. Required.
+	KubeClientConfig clientcmd.ClientConfig
+
 	// Config is the rest.config used to talk to the apiserver.  Required.
-	Config *rest.Config
+	RestConfig *rest.Config
 
 	// spec is the vc definition. Required.
 	spec *v1alpha1.VirtualclusterSpec
@@ -90,9 +95,28 @@ type CacheOptions struct {
 	Namespace string
 }
 
+var _ mccontroller.ClusterInterface = &Cluster{}
+
 // New creates a new Cluster.
-func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, config *rest.Config, o Options) *Cluster {
-	return &Cluster{Name: name, spec: spec, Config: config, Options: o, synced: false, stopCh: make(chan struct{})}
+func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, configBytes []byte, o Options) (*Cluster, error) {
+	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build rest config: %v", err)
+	}
+
+	kubeClientConfig, err := clientcmd.NewClientConfigFromBytes(configBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build kube client config: %v", err)
+	}
+
+	return &Cluster{
+		Name:             name,
+		spec:             spec,
+		KubeClientConfig: kubeClientConfig,
+		RestConfig:       clusterRestConfig,
+		Options:          o,
+		synced:           false,
+		stopCh:           make(chan struct{})}, nil
 }
 
 // GetClusterName returns the name given when Cluster c was created.
@@ -111,20 +135,25 @@ func (c *Cluster) getScheme() *runtime.Scheme {
 
 // GetClientInfo returns the cluster client info.
 func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
-	return reconciler.NewClusterInfo(c.Name, c.Config)
+	return reconciler.NewClusterInfo(c.Name, c.RestConfig)
 }
 
-// GetClient returns a clientset client without any informer caches. All client requests go to apiserver directly.
-func (c *Cluster) GetClient() (*clientset.Clientset, error) {
+// GetClientSet returns a clientset client without any informer caches. All client requests go to apiserver directly.
+func (c *Cluster) GetClientSet() (*clientset.Clientset, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
 	var err error
-	c.client, err = clientset.NewForConfig(restclient.AddUserAgent(c.Config, constants.ResourceSyncerUserAgent))
+	c.client, err = clientset.NewForConfig(restclient.AddUserAgent(c.RestConfig, constants.ResourceSyncerUserAgent))
 	if err != nil {
 		return nil, err
 	}
 	return c.client, nil
+}
+
+// GetClientConfig return clientConfig used to make it easy to get an api server client.
+func (c *Cluster) GetClientConfig() clientcmd.ClientConfig {
+	return c.KubeClientConfig
 }
 
 // getMapper returns a lazily created apimachinery RESTMapper.
@@ -133,7 +162,7 @@ func (c *Cluster) getMapper() (meta.RESTMapper, error) {
 		return c.mapper, nil
 	}
 
-	mapper, err := apiutil.NewDiscoveryRESTMapper(c.Config)
+	mapper, err := apiutil.NewDiscoveryRESTMapper(c.RestConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +182,7 @@ func (c *Cluster) getCache() (cache.Cache, error) {
 		return nil, err
 	}
 
-	ca, err := cache.New(c.Config, cache.Options{
+	ca, err := cache.New(c.RestConfig, cache.Options{
 		Scheme:    c.getScheme(),
 		Mapper:    m,
 		Resync:    c.Resync,
@@ -190,7 +219,7 @@ func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
 		return nil, err
 	}
 
-	cl, err := client.New(c.Config, client.Options{
+	cl, err := client.New(c.RestConfig, client.Options{
 		Scheme: c.getScheme(),
 		Mapper: m,
 	})

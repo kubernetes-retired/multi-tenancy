@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/validation"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 
@@ -178,4 +179,22 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 	vStorageClass := pStorageClass.DeepCopy()
 	ResetMetadata(vStorageClass)
 	return vStorageClass
+}
+
+func BuildKubeConfigSecret(clusterName string, vPod *v1.Pod, kubeConfig []byte) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("vc-kubeconfig-%s", string(uuid.NewUUID())),
+			Annotations: map[string]string{
+				constants.LabelCluster:   clusterName,
+				constants.LabelNamespace: vPod.Namespace,
+				// record the owner pod. checker should do gc for us.
+				constants.LabelOwnerReferences: fmt.Sprintf(`'[{"apiVersion":"core/v1","kind":"Pod","name":"%s","uid":"%s"}]'`, vPod.Name, vPod.UID),
+			},
+		},
+		Data: map[string][]byte{
+			"kubeconfig": kubeConfig,
+		},
+		Type: v1.SecretTypeOpaque,
+	}
 }

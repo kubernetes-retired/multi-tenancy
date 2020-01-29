@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
@@ -280,15 +281,40 @@ func (p *podMutator) attachTenantMeta(vPod *v1.Pod) error {
 		return nil
 	}
 
-	ns := vPod.ObjectMeta.Namespace
-	replicaSetName := vPod.ObjectMeta.OwnerReferences[0].Name
-	client, err := p.mc.GetClusterClient(p.clusterName)
-	if err != nil {
-		return fmt.Errorf("vc %s failed to get client: %v", p.clusterName, err)
-	}
-	replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(replicaSetName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("vc %s failed to get replicaset object %s in %s: %v", p.clusterName, replicaSetName, ns, err)
+func PodMutateKubeConfig(vPod *v1.Pod, secret *v1.Secret, mountPath string) PodMutator {
+	return func(p *podMutateCtx) error {
+		// find an available volume name
+		var volumeNames []string
+		for _, v := range vPod.Spec.Volumes {
+			volumeNames = append(volumeNames, v.Name)
+		}
+
+		kubeConfigVolumeName := "vc-kubeconfig-" + string(uuid.NewUUID())
+
+		p.pPod.Spec.Volumes = append(p.pPod.Spec.Volumes, v1.Volume{
+			Name: kubeConfigVolumeName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: secret.Name,
+				},
+			},
+		})
+
+		volumeMount := v1.VolumeMount{
+			Name:      kubeConfigVolumeName,
+			ReadOnly:  true,
+			MountPath: mountPath,
+		}
+
+		for i := range p.pPod.Spec.Containers {
+			p.pPod.Spec.Containers[i].VolumeMounts = append(p.pPod.Spec.Containers[i].VolumeMounts, volumeMount)
+		}
+
+		for i := range p.pPod.Spec.InitContainers {
+			p.pPod.Spec.InitContainers[i].VolumeMounts = append(p.pPod.Spec.InitContainers[i].VolumeMounts, volumeMount)
+		}
+
+		return nil
 	}
 
 	if len(replicaSetObj.ObjectMeta.OwnerReferences) == 0 {
