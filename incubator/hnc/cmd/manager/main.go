@@ -32,6 +32,7 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
 )
 
@@ -81,7 +82,7 @@ func main() {
 	}
 
 	if testLog {
-		controllers.LogActivity()
+		stats.StartLoggingActivity()
 	}
 
 	// Create all reconciling controllers

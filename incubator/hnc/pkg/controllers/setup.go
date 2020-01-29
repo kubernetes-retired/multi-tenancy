@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"fmt"
-	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -12,19 +11,13 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
-// Counters of total/current number of hier/object reconciliation attempts.
-var (
-	hcTot int32
-	hcCur int32
-	obTot int32
-	obCur int32
-)
-
-// The ex map is only used by reconcile counters for performance testing. We explicitly
+// The ex map is used by controllers to exclude namespaces to reconcile. We explicitly
 // exclude some default namespaces with constantly changing objects.
+// TODO make the exclusion configurable - https://github.com/kubernetes-sigs/multi-tenancy/issues/374
 var ex = map[string]bool{
-	"kube-system": true,
-	"hnc-system":  true,
+	"kube-system":  true,
+	"hnc-system":   true,
+	"cert-manager": true,
 }
 
 // Create creates all reconcilers.
@@ -79,22 +72,4 @@ func createObjectReconciler(newObjectController bool, mgr ctrl.Manager, f *fores
 		GVK:    gvk,
 	}
 	return or, or.SetupWithManager(mgr)
-}
-
-// LogActivity generates logs for performance testing.
-func LogActivity() {
-	log := ctrl.Log.WithName("reconcileCounter")
-	var total, cur int32 = 0, 0
-	go func() {
-		// run forever
-		for {
-			// Log activity only when the controllers were still working in the last 0.5s.
-			time.Sleep(500 * time.Millisecond)
-			if hcTot+obTot != total || cur != 0 {
-				log.Info("Activity", "hcTot", hcTot, "hcCur", hcCur, "obTot", obTot, "obCur", obCur)
-			}
-			total = hcTot + obTot
-			cur = hcCur + obCur
-		}
-	}()
 }

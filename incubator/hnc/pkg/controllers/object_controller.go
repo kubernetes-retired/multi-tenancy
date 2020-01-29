@@ -18,7 +18,6 @@ package controllers
 import (
 	"context"
 	"reflect"
-	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -32,6 +31,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 )
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
@@ -50,11 +50,12 @@ type ObjectReconciler struct {
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete;deletecollection;use;impersonate
 
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&obTot, 1)
-		atomic.AddInt32(&obCur, 1)
-		defer atomic.AddInt32(&obCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+
+	stats.StartObjReconcile(r.GVK)
+	defer stats.StopObjReconcile(r.GVK)
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
@@ -123,6 +124,7 @@ func (r *ObjectReconciler) update(ctx context.Context, log logr.Logger, inst *un
 
 	dests, good := r.syncWithForest(ctx, log, inst, srcInst)
 	if !good {
+		stats.WriteObject(inst.GroupVersionKind())
 		return r.Delete(ctx, inst)
 	}
 
@@ -244,6 +246,7 @@ func (r *ObjectReconciler) propagate(ctx context.Context, log logr.Logger, inst 
 		metadata.SetLabel(propagated, api.LabelInheritedFrom, srcNS)
 
 		// Push to the apiserver
+		stats.WriteObject(propagated.GroupVersionKind())
 		log.Info("Propagating", "dst", dst, "origin", srcNS)
 		err := r.Update(ctx, propagated)
 		if err != nil && errors.IsNotFound(err) {
@@ -283,6 +286,7 @@ func (r *ObjectReconciler) onDelete(ctx context.Context, log logr.Logger, nnm ty
 		// TODO: double-check the label - or maybe just call deleteObsolete?
 
 		// Delete the copy
+		stats.WriteObject(propagated.GroupVersionKind())
 		log.Info("Deleting", "propagated", propagatedNnm)
 		if err := r.Delete(ctx, propagated); err != nil {
 			log.Error(err, "Coudln't delete", "propagated", propagated)
