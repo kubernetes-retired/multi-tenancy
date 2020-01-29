@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
@@ -78,7 +79,8 @@ func Register(
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				newNode := newObj.(*v1.Node)
 				oldNode := oldObj.(*v1.Node)
-				if newNode.ResourceVersion == oldNode.ResourceVersion {
+				if newNode.ResourceVersion == oldNode.ResourceVersion || equality.Semantic.DeepEqual(newNode.Status.Conditions, oldNode.Status.Conditions) {
+					//We only update tenant virtual nodes if there are condition changes, e.g., updating LastHeartBeatTime.
 					return
 				}
 

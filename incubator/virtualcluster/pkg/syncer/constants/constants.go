@@ -50,6 +50,8 @@ const (
 
 	// PublicObjectKey is a label key which marks the super master object that should be populated to every tenant master.
 	PublicObjectKey = "tenancy.x-k8s.io/super.public"
+
+	LabelVirtualNode = "tenancy.x-k8s.io/virtualnode"
 )
 
 const (
