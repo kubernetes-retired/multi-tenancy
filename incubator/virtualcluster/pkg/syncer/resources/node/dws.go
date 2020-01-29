@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -30,15 +31,20 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 // The reconcile logic for tenant master node informer, the main purpose is to maintain
 // the nodeNameToCluster mapping
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile node %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.Infof("reconcile node %s %s event for cluster %s", request.Name, request.Event, request.Cluster.Name)
+	vNode := request.Obj.(*v1.Node)
+	if vNode.Labels[constants.LabelVirtualNode] != "true" {
+		// We only handle virtual nodes created by syncer
+		return reconciler.Result{}, nil
+	}
 
 	switch request.Event {
 	case reconciler.AddEvent:
-		c.reconcileCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
+		c.reconcileCreate(request.Cluster.Name, request.Namespace, request.Name, vNode)
 	case reconciler.UpdateEvent:
-		c.reconcileUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
+		c.reconcileUpdate(request.Cluster.Name, request.Namespace, request.Name, vNode)
 	case reconciler.DeleteEvent:
-		c.reconcileRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Node))
+		c.reconcileRemove(request.Cluster.Name, request.Namespace, request.Name, vNode)
 	}
 	return reconciler.Result{}, nil
 }

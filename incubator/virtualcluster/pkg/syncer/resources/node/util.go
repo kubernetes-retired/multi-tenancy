@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
@@ -34,9 +36,9 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: superMasterNode.Name,
 			Labels: map[string]string{
-				"type":             "virtual-node",
-				v1.LabelOSStable:   runtime.GOOS,
-				v1.LabelArchStable: runtime.GOARCH,
+				constants.LabelVirtualNode: "true",
+				v1.LabelOSStable:           runtime.GOOS,
+				v1.LabelArchStable:         runtime.GOARCH,
 			},
 		},
 		Spec: v1.NodeSpec{

@@ -117,6 +117,10 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 	tenantClient, err := c.multiClusterNodeController.GetClusterClient(clusterName)
 	if err != nil {
 		klog.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+		// Cluster is removed. We should remove the entry from nodeNameToCluster map.
+		c.Lock()
+		delete(c.nodeNameToCluster[node.Name], clusterName)
+		c.Unlock()
 		return
 	}
 
