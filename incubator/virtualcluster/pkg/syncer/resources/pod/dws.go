@@ -46,13 +46,15 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.Infof("reconcile pod %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	vPod := request.Obj.(*v1.Pod)
+	c.updateClusterVNodePodMap(request.Cluster.Name, vPod, request.Event)
 
 	var operation string
 	switch request.Event {
 	case reconciler.AddEvent:
 		operation = "pod_add"
 		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		err := c.reconcilePodCreate(request.Cluster.Name, request.Namespace, request.Name, vPod)
 		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
@@ -61,7 +63,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.UpdateEvent:
 		operation = "pod_update"
 		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		err := c.reconcilePodUpdate(request.Cluster.Name, request.Namespace, request.Name, vPod)
 		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
@@ -70,7 +72,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	case reconciler.DeleteEvent:
 		operation = "pod_delete"
 		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Pod))
+		err := c.reconcilePodRemove(request.Cluster.Name, request.Namespace, request.Name, vPod)
 		recordError(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
