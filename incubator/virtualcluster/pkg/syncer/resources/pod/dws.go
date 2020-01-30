@@ -324,6 +324,11 @@ func createKubeConfigByServiceAccount(saClient v1core.ServiceAccountInterface, s
 					Token: string(token),
 				},
 			}
+			cluster := cfg.Clusters[ctx.Cluster]
+			cluster.Server = "https://kubernetes.default"
+			cfg.Clusters = map[string]*clientcmdapi.Cluster{
+				ctx.Cluster: cluster,
+			}
 
 			out, err := clientcmd.Write(*cfg)
 			if err != nil {

@@ -84,7 +84,13 @@ func PodMutateDefault(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*
 		p.pPod.Spec.NodeName = ""
 
 		// setup env var map
-		serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, p.clusterName, *p.pPod.Spec.EnableServiceLinks, services)
+		apiServerClusterIP, serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, p.clusterName, p.pPod.Spec.EnableServiceLinks, services)
+
+		// if apiServerClusterIP is empty, just let it fails.
+		p.pPod.Spec.HostAliases = append(p.pPod.Spec.HostAliases, v1.HostAlias{
+			IP:        apiServerClusterIP,
+			Hostnames: []string{"kubernetes", "kubernetes.default", "kubernetes.default.svc"},
+		})
 
 		for i := range p.pPod.Spec.Containers {
 			mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
@@ -163,13 +169,15 @@ func mutateDownwardAPIField(env *v1.EnvVar, vPod *v1.Pod) {
 	env.ValueFrom = nil
 }
 
-func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services []*v1.Service) map[string]string {
+func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services []*v1.Service) (string, map[string]string) {
 	var (
-		serviceMap = make(map[string]*v1.Service)
-		m          = make(map[string]string)
-		// the master service namespace of the given virtualcluster
-		tenantMasterSvcNs = ToSuperMasterNamespace(cluster, masterServiceNamespace)
+		serviceMap       = make(map[string]*v1.Service)
+		m                = make(map[string]string)
+		apiServerService string
 	)
+
+	// the master service namespace of the given virtualcluster
+	tenantMasterSvcNs := ToSuperMasterNamespace(cluster, masterServiceNamespace)
 
 	// project the services in namespace ns onto the master services
 	for i := range services {
@@ -186,10 +194,11 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services [
 		// We also add environment variables for other services in the same
 		// namespace, if enableServiceLinks is true.
 		if service.Namespace == tenantMasterSvcNs && masterServices.Has(serviceName) {
+			apiServerService = service.Spec.ClusterIP
 			if _, exists := serviceMap[serviceName]; !exists {
 				serviceMap[serviceName] = service
 			}
-		} else if service.Namespace == ns && enableServiceLinks {
+		} else if service.Namespace == ns && enableServiceLinks != nil && *enableServiceLinks {
 			serviceMap[serviceName] = service
 		}
 	}
@@ -202,7 +211,7 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services [
 	for _, e := range envvars.FromServices(mappedServices) {
 		m[e.Name] = e.Value
 	}
-	return m
+	return apiServerService, m
 }
 
 func mutateDNSConfig(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameServer string) {
