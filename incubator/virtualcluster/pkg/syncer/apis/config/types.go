@@ -37,6 +37,8 @@ type SyncerConfiguration struct {
 	EnableTenantKubeConfig bool
 	// TenantKubeConfigMountPath specifies where the tenant kubeconfig to mount.
 	TenantKubeConfigMountPath string
+	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
+	DisableServiceAccountToken bool
 }
 
 // SyncerLeaderElectionConfiguration expands LeaderElectionConfiguration

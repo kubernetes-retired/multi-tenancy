@@ -362,6 +362,15 @@ func PodMutateKubeConfig(vPod *v1.Pod, secret *v1.Secret, mountPath string) PodM
 	}
 }
 
+func PodMutateAutoMountServiceAccountToken(disable bool) PodMutator {
+	return func(p *podMutateCtx) error {
+		if disable {
+			p.pPod.Spec.AutomountServiceAccountToken = pointer.BoolPtr(false)
+		}
+		return nil
+	}
+}
+
 type ServiceMutateInterface interface {
 	Mutate(vService *v1.Service)
 }

@@ -178,6 +178,7 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 
 	var ms = []conversion.PodMutator{
 		conversion.PodMutateDefault(vPod, vSecret, pSecret, services, nameServer),
+		conversion.PodMutateAutoMountServiceAccountToken(c.config.DisableServiceAccountToken),
 		conversion.PodAddExtensionMeta(vPod),
 	}
 
