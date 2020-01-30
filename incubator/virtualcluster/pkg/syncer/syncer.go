@@ -37,6 +37,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -73,6 +74,7 @@ type Bootstrap interface {
 }
 
 func New(
+	config *config.SyncerConfiguration,
 	secretClient v1core.SecretsGetter,
 	virtualClusterInformer vcinformers.VirtualclusterInformer,
 	superMasterClient clientset.Interface,
@@ -107,7 +109,7 @@ func New(
 	multiClusterControllerManager := manager.New()
 	syncer.controllerManager = multiClusterControllerManager
 
-	resources.Register(superMasterClient, superMasterInformers, multiClusterControllerManager)
+	resources.Register(config, superMasterClient, superMasterInformers, multiClusterControllerManager)
 
 	return syncer
 }

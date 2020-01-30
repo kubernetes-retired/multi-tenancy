@@ -21,7 +21,7 @@ import (
 	componentbaseconfig "k8s.io/component-base/config"
 )
 
-// SyncerConfiguration configures a syncer
+// SyncerConfiguration configures a syncer. It is read only during syncer life cycle.
 type SyncerConfiguration struct {
 	metav1.TypeMeta
 
@@ -31,6 +31,12 @@ type SyncerConfiguration struct {
 	// ClientConnection specifies the kubeconfig file and client connection
 	// settings for the proxy server to use when communicating with the apiserver.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
+
+	// EnableTenantKubeConfig specifies whether to mount a tenant kubeconfig which is
+	// generated from tenant service account or not.
+	EnableTenantKubeConfig bool
+	// TenantKubeConfigMountPath specifies where the tenant kubeconfig to mount.
+	TenantKubeConfigMountPath string
 }
 
 // SyncerLeaderElectionConfiguration expands LeaderElectionConfiguration

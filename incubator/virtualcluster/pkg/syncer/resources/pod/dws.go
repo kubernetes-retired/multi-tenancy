@@ -176,7 +176,34 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("failed to find nameserver: %v", err)
 	}
 
-	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
+	var ms = []conversion.PodMutator{
+		conversion.PodMutateDefault(vPod, vSecret, pSecret, services, nameServer),
+		conversion.PodAddExtensionMeta(vPod),
+	}
+
+	if c.config.EnableTenantKubeConfig {
+		clientConfig, err := c.multiClusterPodController.GetClusterClientConfig(cluster)
+		if err != nil {
+			return fmt.Errorf("failed to get cluster config")
+		}
+
+		kubeConfigBytes, err := createKubeConfigByServiceAccount(tenantClient.CoreV1().ServiceAccounts(vPod.Namespace), tenantClient.CoreV1().Secrets(vPod.Namespace), clientConfig, saName)
+		if err != nil {
+			return fmt.Errorf("failed to create kubeconfig from service account: %v", err)
+		}
+
+		secret := conversion.BuildKubeConfigSecret(cluster, vPod, kubeConfigBytes)
+		secret.Namespace = targetNamespace
+
+		_, err = c.client.Secrets(targetNamespace).Create(secret)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create kubeconfig secret for pod: %v", err)
+		}
+
+		ms = append(ms, conversion.PodMutateKubeConfig(vPod, secret, c.config.TenantKubeConfigMountPath))
+	}
+
+	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(ms...)
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}
@@ -285,9 +312,6 @@ func createKubeConfigByServiceAccount(saClient v1core.ServiceAccountInterface, s
 			}
 
 			cfg := &rawConfig
-			if err := clientcmdapi.MinifyConfig(cfg); err != nil {
-				return nil, fmt.Errorf("invalid configuration, unable to create new config file: %v", err)
-			}
 
 			ctx := cfg.Contexts[cfg.CurrentContext]
 			cfg.CurrentContext = saName
