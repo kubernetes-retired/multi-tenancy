@@ -31,13 +31,13 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -74,6 +74,7 @@ type Bootstrap interface {
 }
 
 func New(
+	config *config.SyncerConfiguration,
 	secretClient v1core.SecretsGetter,
 	virtualClusterInformer vcinformers.VirtualclusterInformer,
 	superMasterClient clientset.Interface,
@@ -108,7 +109,7 @@ func New(
 	multiClusterControllerManager := manager.New()
 	syncer.controllerManager = multiClusterControllerManager
 
-	resources.Register(superMasterClient, superMasterInformers, multiClusterControllerManager)
+	resources.Register(config, superMasterClient, superMasterInformers, multiClusterControllerManager)
 
 	return syncer
 }
@@ -265,11 +266,11 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	if err != nil {
 		return fmt.Errorf("failed to get secret (%s) for virtual cluster %s/%s: %v", KubeconfigAdmin, vc.Namespace, vc.Name, err)
 	}
-	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(adminKubeConfigSecret.Data[KubeconfigAdmin])
+
+	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Spec.DeepCopy(), adminKubeConfigSecret.Data[KubeconfigAdmin], cluster.Options{})
 	if err != nil {
-		return fmt.Errorf("failed to build rest config for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
+		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
-	tenantCluster := cluster.NewTenantCluster(clusterName, vc.Spec.DeepCopy(), clusterRestConfig, cluster.Options{})
 
 	s.mu.Lock()
 	if _, exist := s.clusterSet[key]; exist {

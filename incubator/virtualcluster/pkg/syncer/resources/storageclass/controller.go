@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
@@ -60,6 +61,7 @@ type scReconcileRequest struct {
 }
 
 func Register(
+	config *config.SyncerConfiguration,
 	client v1storage.StorageClassesGetter,
 	informer storageinformers.Interface,
 	controllerManager *manager.ControllerManager,

@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
@@ -46,7 +47,7 @@ func VC(mc *mc.MultiClusterController, clusterName string) VCMutateInterface {
 }
 
 func (m *mutator) Pod(pPod *v1.Pod) PodMutateInterface {
-	return &podMutator{mc: m.mc, clusterName: m.clusterName, pPod: pPod}
+	return &podMutateCtx{mc: m.mc, clusterName: m.clusterName, pPod: pPod}
 }
 
 func (m *mutator) Service(pService *v1.Service) ServiceMutateInterface {
@@ -54,59 +55,73 @@ func (m *mutator) Service(pService *v1.Service) ServiceMutateInterface {
 }
 
 type PodMutateInterface interface {
-	Mutate(pPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error
+	Mutate(ms ...PodMutator) error
 }
 
-type podMutator struct {
+type PodMutator func(p *podMutateCtx) error
+
+type podMutateCtx struct {
 	mc          *mc.MultiClusterController
 	clusterName string
 	pPod        *v1.Pod
 }
 
-// getCluster returns the cluster name of the corresponding virtualcluster
-func (p *podMutator) getCluster() string {
-	ans := p.pPod.GetAnnotations()
-	return ans[constants.LabelCluster]
-}
-
 // MutatePod convert the meta data of containers to super master namespace.
 // replace the service account token volume mounts to super master side one.
-func (p *podMutator) Mutate(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) error {
-	p.pPod.Status = v1.PodStatus{}
-	p.pPod.Spec.NodeName = ""
-
-	// setup env var map
-	serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, p.getCluster(), *p.pPod.Spec.EnableServiceLinks, services)
-
-	for i := range p.pPod.Spec.Containers {
-		mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
-		mutateContainerSecret(&p.pPod.Spec.Containers[i], vSASecret, SASecret)
-	}
-
-	for i := range p.pPod.Spec.InitContainers {
-		mutateContainerEnv(&p.pPod.Spec.InitContainers[i], vPod, serviceEnv)
-		mutateContainerSecret(&p.pPod.Spec.InitContainers[i], vSASecret, SASecret)
-	}
-
-	for i, volume := range p.pPod.Spec.Volumes {
-		if volume.Name == vSASecret.Name {
-			p.pPod.Spec.Volumes[i].Name = SASecret.Name
-			p.pPod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
+func (p *podMutateCtx) Mutate(ms ...PodMutator) error {
+	for _, mutator := range ms {
+		if err := mutator(p); err != nil {
+			return err
 		}
 	}
 
-	clusterDomain, err := p.mc.GetClusterDomain(p.clusterName)
-	if err != nil {
-		return err
-	}
-	p.mutateDNSConfig(vPod, clusterDomain, nameServer)
+	return nil
+}
 
-	// FIXME(zhuangqh): how to support pod subdomain.
-	if p.pPod.Spec.Subdomain != "" {
-		p.pPod.Spec.Subdomain = ""
-	}
+func PodMutateDefault(vPod *v1.Pod, vSASecret, SASecret *v1.Secret, services []*v1.Service, nameServer string) PodMutator {
+	return func(p *podMutateCtx) error {
+		p.pPod.Status = v1.PodStatus{}
+		p.pPod.Spec.NodeName = ""
 
-	return p.attachTenantMeta(vPod)
+		// setup env var map
+		apiServerClusterIP, serviceEnv := getServiceEnvVarMap(p.pPod.Namespace, p.clusterName, p.pPod.Spec.EnableServiceLinks, services)
+
+		// if apiServerClusterIP is empty, just let it fails.
+		p.pPod.Spec.HostAliases = append(p.pPod.Spec.HostAliases, v1.HostAlias{
+			IP:        apiServerClusterIP,
+			Hostnames: []string{"kubernetes", "kubernetes.default", "kubernetes.default.svc"},
+		})
+
+		for i := range p.pPod.Spec.Containers {
+			mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
+			mutateContainerSecret(&p.pPod.Spec.Containers[i], vSASecret, SASecret)
+		}
+
+		for i := range p.pPod.Spec.InitContainers {
+			mutateContainerEnv(&p.pPod.Spec.InitContainers[i], vPod, serviceEnv)
+			mutateContainerSecret(&p.pPod.Spec.InitContainers[i], vSASecret, SASecret)
+		}
+
+		for i, volume := range p.pPod.Spec.Volumes {
+			if volume.Name == vSASecret.Name {
+				p.pPod.Spec.Volumes[i].Name = SASecret.Name
+				p.pPod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
+			}
+		}
+
+		clusterDomain, err := p.mc.GetClusterDomain(p.clusterName)
+		if err != nil {
+			return err
+		}
+		mutateDNSConfig(p, vPod, clusterDomain, nameServer)
+
+		// FIXME(zhuangqh): how to support pod subdomain.
+		if p.pPod.Spec.Subdomain != "" {
+			p.pPod.Spec.Subdomain = ""
+		}
+
+		return nil
+	}
 }
 
 func mutateContainerEnv(c *v1.Container, vPod *v1.Pod, serviceEnvMap map[string]string) {
@@ -154,13 +169,15 @@ func mutateDownwardAPIField(env *v1.EnvVar, vPod *v1.Pod) {
 	env.ValueFrom = nil
 }
 
-func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services []*v1.Service) map[string]string {
+func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services []*v1.Service) (string, map[string]string) {
 	var (
-		serviceMap = make(map[string]*v1.Service)
-		m          = make(map[string]string)
-		// the master service namespace of the given virtualcluster
-		tenantMasterSvcNs = ToSuperMasterNamespace(cluster, masterServiceNamespace)
+		serviceMap       = make(map[string]*v1.Service)
+		m                = make(map[string]string)
+		apiServerService string
 	)
+
+	// the master service namespace of the given virtualcluster
+	tenantMasterSvcNs := ToSuperMasterNamespace(cluster, masterServiceNamespace)
 
 	// project the services in namespace ns onto the master services
 	for i := range services {
@@ -177,10 +194,11 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services [
 		// We also add environment variables for other services in the same
 		// namespace, if enableServiceLinks is true.
 		if service.Namespace == tenantMasterSvcNs && masterServices.Has(serviceName) {
+			apiServerService = service.Spec.ClusterIP
 			if _, exists := serviceMap[serviceName]; !exists {
 				serviceMap[serviceName] = service
 			}
-		} else if service.Namespace == ns && enableServiceLinks {
+		} else if service.Namespace == ns && enableServiceLinks != nil && *enableServiceLinks {
 			serviceMap[serviceName] = service
 		}
 	}
@@ -193,21 +211,21 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks bool, services [
 	for _, e := range envvars.FromServices(mappedServices) {
 		m[e.Name] = e.Value
 	}
-	return m
+	return apiServerService, m
 }
 
-func (p *podMutator) mutateDNSConfig(vPod *v1.Pod, clusterDomain, nameServer string) {
+func mutateDNSConfig(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameServer string) {
 	dnsPolicy := p.pPod.Spec.DNSPolicy
 
 	switch dnsPolicy {
 	case v1.DNSNone:
 		return
 	case v1.DNSClusterFirstWithHostNet:
-		p.mutateClusterFirstDNS(vPod, clusterDomain, nameServer)
+		mutateClusterFirstDNS(p, vPod, clusterDomain, nameServer)
 		return
 	case v1.DNSClusterFirst:
 		if !p.pPod.Spec.HostNetwork {
-			p.mutateClusterFirstDNS(vPod, clusterDomain, nameServer)
+			mutateClusterFirstDNS(p, vPod, clusterDomain, nameServer)
 			return
 		}
 		// Fallback to DNSDefault for pod on hostnetwork.
@@ -219,7 +237,7 @@ func (p *podMutator) mutateDNSConfig(vPod *v1.Pod, clusterDomain, nameServer str
 	}
 }
 
-func (p *podMutator) mutateClusterFirstDNS(vPod *v1.Pod, clusterDomain, nameServer string) {
+func mutateClusterFirstDNS(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameServer string) {
 	if nameServer == "" {
 		klog.Infof("vc %s does not have ClusterDNS IP configured and cannot create Pod using %q policy. Falling back to %q policy.",
 			p.clusterName, v1.DNSClusterFirst, v1.DNSDefault)
@@ -273,37 +291,84 @@ func omitDuplicates(strs []string) []string {
 	return ret
 }
 
-// TODO(zhuangqh): make this plugable.
 // for now, only Deployment Pods are mutated.
-func (p *podMutator) attachTenantMeta(vPod *v1.Pod) error {
-	if len(vPod.ObjectMeta.OwnerReferences) == 0 || vPod.ObjectMeta.OwnerReferences[0].Kind != "ReplicaSet" {
+func PodAddExtensionMeta(vPod *v1.Pod) PodMutator {
+	return func(p *podMutateCtx) error {
+		if len(vPod.ObjectMeta.OwnerReferences) == 0 || vPod.ObjectMeta.OwnerReferences[0].Kind != "ReplicaSet" {
+			return nil
+		}
+
+		ns := vPod.ObjectMeta.Namespace
+		replicaSetName := vPod.ObjectMeta.OwnerReferences[0].Name
+		client, err := p.mc.GetClusterClient(p.clusterName)
+		if err != nil {
+			return fmt.Errorf("vc %s failed to get client: %v", p.clusterName, err)
+		}
+		replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(replicaSetName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("vc %s failed to get replicaset object %s in %s: %v", p.clusterName, replicaSetName, ns, err)
+		}
+
+		if len(replicaSetObj.ObjectMeta.OwnerReferences) == 0 {
+			// It can be a standalone rs
+			return nil
+		}
+		labels := p.pPod.GetLabels()
+		if len(labels) == 0 {
+			labels = make(map[string]string)
+		}
+		labels[constants.LabelExtendDeploymentName] = replicaSetObj.ObjectMeta.OwnerReferences[0].Name
+		labels[constants.LabelExtendDeploymentUID] = string(replicaSetObj.ObjectMeta.OwnerReferences[0].UID)
+		p.pPod.SetLabels(labels)
+
 		return nil
 	}
+}
 
-	ns := vPod.ObjectMeta.Namespace
-	replicaSetName := vPod.ObjectMeta.OwnerReferences[0].Name
-	client, err := p.mc.GetClusterClient(p.clusterName)
-	if err != nil {
-		return fmt.Errorf("vc %s failed to get client: %v", p.clusterName, err)
-	}
-	replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(replicaSetName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("vc %s failed to get replicaset object %s in %s: %v", p.clusterName, replicaSetName, ns, err)
-	}
+func PodMutateKubeConfig(vPod *v1.Pod, secret *v1.Secret, mountPath string) PodMutator {
+	return func(p *podMutateCtx) error {
+		// find an available volume name
+		var volumeNames []string
+		for _, v := range vPod.Spec.Volumes {
+			volumeNames = append(volumeNames, v.Name)
+		}
 
-	if len(replicaSetObj.ObjectMeta.OwnerReferences) == 0 {
-		// It can be a standalone rs
+		kubeConfigVolumeName := "vc-kubeconfig-" + string(uuid.NewUUID())
+
+		p.pPod.Spec.Volumes = append(p.pPod.Spec.Volumes, v1.Volume{
+			Name: kubeConfigVolumeName,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					SecretName: secret.Name,
+				},
+			},
+		})
+
+		volumeMount := v1.VolumeMount{
+			Name:      kubeConfigVolumeName,
+			ReadOnly:  true,
+			MountPath: mountPath,
+		}
+
+		for i := range p.pPod.Spec.Containers {
+			p.pPod.Spec.Containers[i].VolumeMounts = append(p.pPod.Spec.Containers[i].VolumeMounts, volumeMount)
+		}
+
+		for i := range p.pPod.Spec.InitContainers {
+			p.pPod.Spec.InitContainers[i].VolumeMounts = append(p.pPod.Spec.InitContainers[i].VolumeMounts, volumeMount)
+		}
+
 		return nil
 	}
-	labels := p.pPod.GetLabels()
-	if len(labels) == 0 {
-		labels = make(map[string]string)
-	}
-	labels[constants.LabelExtendDeploymentName] = replicaSetObj.ObjectMeta.OwnerReferences[0].Name
-	labels[constants.LabelExtendDeploymentUID] = string(replicaSetObj.ObjectMeta.OwnerReferences[0].UID)
-	p.pPod.SetLabels(labels)
+}
 
-	return nil
+func PodMutateAutoMountServiceAccountToken(disable bool) PodMutator {
+	return func(p *podMutateCtx) error {
+		if disable {
+			p.pPod.Spec.AutomountServiceAccountToken = pointer.BoolPtr(false)
+		}
+		return nil
+	}
 }
 
 type ServiceMutateInterface interface {

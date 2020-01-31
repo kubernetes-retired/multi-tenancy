@@ -63,24 +63,34 @@ type ResourceSyncerOptions struct {
 func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 	return &ResourceSyncerOptions{
 		ComponentConfig: syncerconfig.SyncerConfiguration{
-			LeaderElection:   syncerconfig.SyncerLeaderElectionConfiguration{},
-			ClientConnection: componentbaseconfig.ClientConnectionConfiguration{},
+			LeaderElection:             syncerconfig.SyncerLeaderElectionConfiguration{},
+			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
+			EnableTenantKubeConfig:     false,
+			TenantKubeConfigMountPath:  "/var/run/vc",
+			DisableServiceAccountToken: true,
 		},
+		Address:  "",
+		Port:     "80",
+		CertFile: "",
+		KeyFile:  "",
 	}, nil
 }
 
 func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 
-	fs := fss.FlagSet("misc")
+	fs := fss.FlagSet("")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
+	fs.BoolVar(&o.ComponentConfig.EnableTenantKubeConfig, "enable-tenant-kubeconfig", o.ComponentConfig.EnableTenantKubeConfig, "EnableTenantKubeConfig specifies whether to mount a tenant kubeconfig which is generated from tenant service account or not.")
+	fs.StringVar(&o.ComponentConfig.TenantKubeConfigMountPath, "tenant-kubeconfig-mount-path", o.ComponentConfig.TenantKubeConfigMountPath, "TenantKubeConfigMountPath specifies where the tenant kubeconfig to mount.")
+	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 
 	serverFlags := fss.FlagSet("server")
-	serverFlags.StringVar(&o.Address, "address", "", "The server address.")
-	serverFlags.StringVar(&o.Port, "port", "80", "The server port.")
-	serverFlags.StringVar(&o.CertFile, "cert-file", "", "CertFile is the file containing x509 Certificate for HTTPS.")
-	serverFlags.StringVar(&o.KeyFile, "key-file", "", "KeyFile is the file containing x509 private key matching certFile.")
+	serverFlags.StringVar(&o.Address, "address", o.Address, "The server address.")
+	serverFlags.StringVar(&o.Port, "port", o.Port, "The server port.")
+	serverFlags.StringVar(&o.CertFile, "cert-file", o.CertFile, "CertFile is the file containing x509 Certificate for HTTPS.")
+	serverFlags.StringVar(&o.KeyFile, "key-file", o.KeyFile, "KeyFile is the file containing x509 private key matching certFile.")
 
 	BindFlags(&o.ComponentConfig.LeaderElection, fss.FlagSet("leader election"))
 

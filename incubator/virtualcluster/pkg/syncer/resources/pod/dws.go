@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 
@@ -174,7 +176,35 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("failed to find nameserver: %v", err)
 	}
 
-	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(vPod, vSecret, pSecret, services, nameServer)
+	var ms = []conversion.PodMutator{
+		conversion.PodMutateDefault(vPod, vSecret, pSecret, services, nameServer),
+		conversion.PodMutateAutoMountServiceAccountToken(c.config.DisableServiceAccountToken),
+		conversion.PodAddExtensionMeta(vPod),
+	}
+
+	if c.config.EnableTenantKubeConfig {
+		clientConfig, err := c.multiClusterPodController.GetClusterClientConfig(cluster)
+		if err != nil {
+			return fmt.Errorf("failed to get cluster config")
+		}
+
+		kubeConfigBytes, err := createKubeConfigByServiceAccount(tenantClient.CoreV1().ServiceAccounts(vPod.Namespace), tenantClient.CoreV1().Secrets(vPod.Namespace), clientConfig, saName)
+		if err != nil {
+			return fmt.Errorf("failed to create kubeconfig from service account: %v", err)
+		}
+
+		secret := conversion.BuildKubeConfigSecret(cluster, vPod, kubeConfigBytes)
+		secret.Namespace = targetNamespace
+
+		_, err = c.client.Secrets(targetNamespace).Create(secret)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create kubeconfig secret for pod: %v", err)
+		}
+
+		ms = append(ms, conversion.PodMutateKubeConfig(vPod, secret, c.config.TenantKubeConfigMountPath))
+	}
+
+	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(ms...)
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}
@@ -257,6 +287,60 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v
 	}
 
 	return nil
+}
+
+func createKubeConfigByServiceAccount(saClient v1core.ServiceAccountInterface, secretClient v1core.SecretInterface, clientConfig clientcmd.ClientConfig, saName string) ([]byte, error) {
+	serviceAccount, err := saClient.Get(saName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	rawConfig, err := clientConfig.RawConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, reference := range serviceAccount.Secrets {
+		secret, err := secretClient.Get(reference.Name, metav1.GetOptions{})
+		if err != nil {
+			continue
+		}
+
+		if secret.Type == v1.SecretTypeServiceAccountToken {
+			token, exists := secret.Data[v1.ServiceAccountTokenKey]
+			if !exists {
+				return nil, fmt.Errorf("service account token %q for service account %q did not contain token data", secret.Name, saName)
+			}
+
+			cfg := &rawConfig
+
+			ctx := cfg.Contexts[cfg.CurrentContext]
+			cfg.CurrentContext = saName
+			cfg.Contexts = map[string]*clientcmdapi.Context{
+				cfg.CurrentContext: ctx,
+			}
+			ctx.AuthInfo = saName
+			cfg.AuthInfos = map[string]*clientcmdapi.AuthInfo{
+				ctx.AuthInfo: {
+					Token: string(token),
+				},
+			}
+			cluster := cfg.Clusters[ctx.Cluster]
+			cluster.Server = "https://kubernetes.default"
+			cfg.Clusters = map[string]*clientcmdapi.Cluster{
+				ctx.Cluster: cluster,
+			}
+
+			out, err := clientcmd.Write(*cfg)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write serializes the config to yaml")
+			}
+
+			return out, nil
+		}
+	}
+
+	return nil, fmt.Errorf("any available service account token not found")
 }
 
 func (c *controller) reconcilePodRemove(cluster, namespace, name string, vPod *v1.Pod) error {

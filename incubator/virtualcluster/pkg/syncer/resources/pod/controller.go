@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -36,6 +37,8 @@ import (
 )
 
 type controller struct {
+	// syncer configuration
+	config *config.SyncerConfiguration
 	// super master pod client
 	client v1core.CoreV1Interface
 	// super master informer/listers/synced functions
@@ -56,11 +59,13 @@ type controller struct {
 }
 
 func Register(
+	config *config.SyncerConfiguration,
 	client v1core.CoreV1Interface,
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
+		config:              config,
 		client:              client,
 		informer:            informer,
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),

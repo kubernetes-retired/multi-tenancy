@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/configmap"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/endpoints"
@@ -33,15 +34,15 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
 )
 
-func Register(client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
-	namespace.Register(client.CoreV1(), informerFactory.Core().V1().Namespaces(), controllerManager)
-	pod.Register(client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	configmap.Register(client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
-	secret.Register(client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)
-	serviceaccount.Register(client.CoreV1(), informerFactory.Core().V1().ServiceAccounts(), controllerManager)
-	node.Register(client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
-	service.Register(client.CoreV1(), informerFactory.Core().V1().Services(), controllerManager)
-	endpoints.Register(client.CoreV1(), informerFactory.Core().V1().Endpoints(), controllerManager)
-	event.Register(client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	storageclass.Register(client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
+func Register(config *config.SyncerConfiguration, client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
+	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1().Namespaces(), controllerManager)
+	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
+	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
+	secret.Register(config, client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)
+	serviceaccount.Register(config, client.CoreV1(), informerFactory.Core().V1().ServiceAccounts(), controllerManager)
+	node.Register(config, client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
+	service.Register(config, client.CoreV1(), informerFactory.Core().V1().Services(), controllerManager)
+	endpoints.Register(config, client.CoreV1(), informerFactory.Core().V1().Endpoints(), controllerManager)
+	event.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
+	storageclass.Register(config, client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
 }

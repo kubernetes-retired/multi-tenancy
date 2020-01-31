@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -48,6 +49,7 @@ type controller struct {
 }
 
 func Register(
+	config *config.SyncerConfiguration,
 	serviceClient v1core.ServicesGetter,
 	serviceInformer coreinformers.ServiceInformer,
 	controllerManager *manager.ControllerManager,

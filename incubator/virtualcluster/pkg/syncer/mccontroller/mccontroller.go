@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgocache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,7 +90,8 @@ type ClusterInterface interface {
 	GetSpec() *v1alpha1.VirtualclusterSpec
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetClientInfo() *reconciler.ClusterInfo
-	GetClient() (*clientset.Clientset, error)
+	GetClientSet() (*clientset.Clientset, error)
+	GetClientConfig() clientcmd.ClientConfig
 	GetDelegatingClient() (*client.DelegatingClient, error)
 	Cache
 }
@@ -220,7 +222,16 @@ func (c *MultiClusterController) GetClusterClient(clusterName string) (*clientse
 	if cluster == nil {
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	return cluster.GetClient()
+	return cluster.GetClientSet()
+}
+
+// GetClusterClientConfig ClientConfig is used to make it easy to get an api server client.
+func (c *MultiClusterController) GetClusterClientConfig(clusterName string) (clientcmd.ClientConfig, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	return cluster.GetClientConfig(), nil
 }
 
 // GetClusterDomain returns the cluster's domain name specified in VirtualclusterSpec

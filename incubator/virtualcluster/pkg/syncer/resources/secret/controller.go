@@ -25,6 +25,7 @@ import (
 
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
@@ -41,6 +42,7 @@ type controller struct {
 }
 
 func Register(
+	config *config.SyncerConfiguration,
 	secretClient v1core.CoreV1Interface,
 	secretInformer coreinformers.SecretInformer,
 	controllerManager *manager.ControllerManager,
