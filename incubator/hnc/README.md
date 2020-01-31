@@ -41,7 +41,7 @@ kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.1
 # minute or two.
 
 # Install HNC on your cluster. If this fails due to the cert-manager webhook not
-# being ready yet, just re-run it.
+# being ready yet, wait for the webhook to become ready, then re-run it. Usually the cert-manager webhook takes five minutes to be ready.
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
@@ -67,6 +67,7 @@ is no need to uninstall HNC before upgrading it.
 rm ${PLUGIN_DIR}/kubectl-hns
 rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+# Don't need to delete the cert manager if you plan to reinstall it later.
 kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 ```
 
