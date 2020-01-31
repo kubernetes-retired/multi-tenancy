@@ -58,6 +58,7 @@ func main() {
 		debugLogs            bool
 		newObjectController  bool
 		testLog              bool
+		qps                  int
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -67,11 +68,23 @@ func main() {
 	flag.BoolVar(&newObjectController, "enable-new-object-controller", false, "Enables new object controller.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
+	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.Logger(debugLogs))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+	cfg.QPS = float32(qps)
+	// By default, Burst is about 2x QPS, but since HNC's "bursts" can last for ~minutes
+	// we need to raise the QPS param to be much higher than we ordinarily would. As a
+	// result, doubling this higher threshold is probably much too high, so lower it to a more
+	// reasonable number.
+	//
+	// TODO: Better understand the behaviour of Burst, and consider making it equal to QPS if
+	// it turns out to be harmful.
+	cfg.Burst = int(cfg.QPS * 1.5)
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,

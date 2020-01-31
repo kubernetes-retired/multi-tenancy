@@ -25,3 +25,4 @@ spec:
         - "--enable-leader-election"
         - "--enable-new-object-controller"
         - "--max-reconciles=10"
+        - "--apiserver-qps-throttle=50"
