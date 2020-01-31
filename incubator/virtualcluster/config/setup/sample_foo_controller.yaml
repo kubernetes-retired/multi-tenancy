@@ -1,0 +1,92 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: foos.samplecontroller.k8s.io
+spec:
+  group: samplecontroller.k8s.io
+  version: v1alpha1
+  names:
+    kind: Foo
+    plural: foos
+  scope: Namespaced
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vc-sample-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: vc-test-role
+rules:
+- apiGroups:
+  - samplecontroller.k8s.io
+  resources:
+  - foos
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vc-test-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vc-test-role
+subjects:
+  - kind: ServiceAccount
+    name: vc-sample-controller
+    namespace: vc-sample-controller
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-sample-controller
+  namespace: vc-sample-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vc-sample-controller
+  namespace: vc-sample-controller
+  labels:
+    app: vc-sample-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-sample-controller
+  template:
+    metadata:
+      labels:
+        app: vc-sample-controller
+    spec:
+      serviceAccountName: vc-sample-controller
+      containers:
+      - command:
+        - sample-controller
+        - -kubeconfig=/var/run/vc/kubeconfig
+        image: virtualcluster/sample-controller-amd64
+        imagePullPolicy: Always
+        name: controller
