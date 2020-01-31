@@ -71,11 +71,18 @@ const (
 	// Cluster is processed by Operator, but not all components are ready
 	ClusterPending ClusterPhase = "Pending"
 
-	// All components are ready
+	// All components are running
+	// NOTE when cluster is in this state, pod can't visit the master of
+	// the virtualcluster from inside the cluster by using service account
 	ClusterRunning ClusterPhase = "Running"
 
 	// when update cluster spec, phase will be updating
 	ClusterUpdating ClusterPhase = "Updating"
+
+	// The cluster is ready
+	// NOTE cluster in this state allows in-cluster master visiting, and can
+	// pass the conformance test of Kubernetes version 1.15
+	ClusterReady ClusterPhase = "Ready"
 
 	// Cluster can not be initiated, or occur the error that Operator
 	// can not recover

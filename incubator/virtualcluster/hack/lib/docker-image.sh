@@ -23,13 +23,19 @@ get_docker_wrapped_binaries() {
   local arch=$1
   local debian_base_version=v1.0.0
   local debian_iptables_version=v11.0.2
+  local targets=()
+  # only build desired images
+  for tg in ${@:2}; do 
+      targets+=($tg,${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version})
+  done
   ### If you change any of these lists, please also update VC_ALL_TARGETS
-  local targets=(
-    manager,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
-    syncer,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
-    vn-agent,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
-  )
-
+  if [ ${#targets[@]} -eq 0 ]; then
+    targets=(
+      manager,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
+      syncer,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
+      vn-agent,"${VC_BASE_IMAGE_REGISTRY}/debian-base-${arch}:${debian_base_version}"
+    )
+  fi
   echo "${targets[@]}"
 }
 
@@ -42,10 +48,10 @@ create_docker_image() {
   local binary_dir="$1"
   local arch="$2"
   local binary_name
-  local binaries=($(get_docker_wrapped_binaries "${arch}"))
+  local binaries=($(get_docker_wrapped_binaries "${arch}" "${@:3}"))
 
   for wrappable in "${binaries[@]}"; do
-
+    
     local oldifs=$IFS
     IFS=","
     set $wrappable
@@ -81,7 +87,18 @@ build_images() {
   rm -rf "${VC_RELEASE_DIR}"
   mkdir -p "${VC_RELEASE_DIR}"
   cd ${VC_BIN_DIR}
-  cp "${VC_ALL_BINARIES[@]/#/}" ${VC_RELEASE_DIR}
 
-  create_docker_image "${VC_RELEASE_DIR}" "amd64"
+  local targets=()
+  for arg; do
+    targets+=("${arg##*/}")
+  done
+  
+  # copy only target binaries to release dir
+  if [ ${#targets[@]} -eq 0 ]; then
+    cp "${VC_ALL_BINARIES[@]/#/}" ${VC_RELEASE_DIR}
+  else 
+    cp "${targets[@]}" ${VC_RELEASE_DIR}
+  fi
+
+  create_docker_image "${VC_RELEASE_DIR}" "amd64" "${targets[@]}"
 }

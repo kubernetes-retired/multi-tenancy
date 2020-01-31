@@ -122,7 +122,7 @@ spec:
             component-name: apiserver
         # apiserver will not be updated, unless it is deleted
         updateStrategy:
-          type: OnDelete
+          type: RollingUpdate
         template:
           metadata:
             labels:
@@ -132,7 +132,7 @@ spec:
             subdomain: apiserver-svc
             containers:
             - name: apiserver
-              image: virtualcluster/apiserver-v1.15.4
+              image: virtualcluster/apiserver-v1.16.2
               imagePullPolicy: Always
               command:
               - kube-apiserver
@@ -151,6 +151,10 @@ spec:
               - --etcd-cafile=/etc/kubernetes/pki/root/tls.crt
               - --etcd-certfile=/etc/kubernetes/pki/apiserver/tls.crt
               - --etcd-keyfile=/etc/kubernetes/pki/apiserver/tls.key
+              - --proxy-client-key-file=/etc/kubernetes/pki/apiserver/tls.key
+              - --proxy-client-cert-file=/etc/kubernetes/pki/apiserver/tls.crt
+              - --requestheader-client-ca-file=/etc/kubernetes/pki/root/tls.crt
+              - --requestheader-allowed-names=""
               - --service-account-key-file=/etc/kubernetes/pki/service-account/tls.key
               - --service-cluster-ip-range=10.32.0.0/16
               - --service-node-port-range=30000-32767
@@ -234,7 +238,7 @@ spec:
           matchLabels:
             component-name: controller-manager
         updateStrategy:
-          type: OnDelete
+          type: RollingUpdate
         template:
           metadata:
             labels:
@@ -242,7 +246,7 @@ spec:
           spec:
             containers:
             - name: controller-manager
-              image: virtualcluster/controller-manager-v1.15.4
+              image: virtualcluster/controller-manager-v1.16.2
               imagePullPolicy: Always
               command:
               - kube-controller-manager

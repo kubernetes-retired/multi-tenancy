@@ -23,22 +23,36 @@ import (
 	"fmt"
 	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
-	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
+	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+)
+
+const (
+	WaitKubeSvcTimeOutSec = 120
+	DefaultETCDPeerPort   = 2380
+
+	// frequency of polling apiserver for readiness of each component
+	ComponentPollPeriodSec = 2
+	// timeout for components deployment
+	DeployTimeOutSec = 180
+	// wait the apiserver reboot timeout
+	APIServerRebootTimeOutSec = 240
 )
 
 type MasterProvisionerNative struct {
@@ -80,7 +94,7 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	}
 
 	// 2. create PKI
-	err = mpn.createPKI(vc, cv)
+	caGroup, err := mpn.createPKI(vc, cv)
 	if err != nil {
 		return err
 	}
@@ -102,6 +116,176 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	if err != nil {
 		return err
 	}
+
+	// 6. update certificate once kubernetes service has been synced to super master
+	certUpdated := make(chan struct{})
+	go mpn.updateAPIServerCrtAndKey(caGroup, vc, cv, certUpdated)
+
+	// 7. reboot the apiserver to load the latest certificate
+	go mpn.rebootAPIServer(vc, cv, certUpdated)
+
+	return nil
+}
+
+// rebootAPISrver reboots the apiserver pod of Virtualcluster 'vc'
+func (mpn *MasterProvisionerNative) rebootAPIServer(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion, certUpdated <-chan struct{}) error {
+	<-certUpdated
+	log.Info("restarting apiserver for reloading certificate", "vc", vc.GetName())
+	// change vc status to "Updating"
+	if err := mpn.updateVcStatus(vc,
+		tenancyv1alpha1.ClusterUpdating,
+		"restarting the apiserver",
+		"reload the new certificate"); err != nil {
+		return err
+	}
+
+	// delete the pod
+	p := &v1.Pod{}
+	if err := mpn.Get(context.TODO(), types.NamespacedName{
+		Namespace: conversion.ToClusterKey(vc),
+		Name:      "apiserver-0",
+	}, p); err != nil {
+		log.Error(err, "vc", vc.GetName())
+		return err
+	}
+
+	if err := mpn.Delete(context.TODO(), p); err != nil {
+		log.Error(err, "vc", vc.GetName())
+		return err
+	}
+	log.Info("delete the old apiserver pod for the Virtualcluster", "vc-name", vc.GetName())
+
+	// wait for statefulset controller to restart the pod
+	if err := mpn.pollStatefulSet(conversion.ToClusterKey(vc),
+		"apiserver",
+		vc.GetName(),
+		APIServerRebootTimeOutSec,
+		ComponentPollPeriodSec); err != nil {
+		return err
+	}
+
+	// change the VC status to "Ready"
+	log.Info("apiserver sts is ready")
+	if err := mpn.updateVcStatus(vc,
+		tenancyv1alpha1.ClusterReady,
+		"tenant master is ready",
+		"apiserver certificate has been updated"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// updateVcStatus updates the status of Virtualcluster 'vc'
+func (mpn *MasterProvisionerNative) updateVcStatus(vc *tenancyv1alpha1.Virtualcluster, phase tenancyv1alpha1.ClusterPhase, message, reason string) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		vc.Status.Phase = tenancyv1alpha1.ClusterRunning
+		vc.Status.Message = "tenant master is running"
+		vc.Status.Reason = "TenantMasterRunning"
+		updateErr := mpn.Update(context.TODO(), vc)
+		if err := mpn.Get(context.TODO(), types.NamespacedName{
+			Namespace: vc.GetNamespace(),
+			Name:      vc.GetName(),
+		}, vc); err != nil {
+			log.Info("fail to get vc on update failure", "error", err, "vc", vc.GetName())
+		}
+		return updateErr
+	})
+}
+
+// pollStatefulSet polls the status of the statefulset 'namespace/name'.
+// It returns nil if the ReadyReplicas equals to the the Replicas within the 'timeoutSec'
+func (mpn *MasterProvisionerNative) pollStatefulSet(namespace, name, vcName string, timeoutSec, periodSec int64) error {
+	timeOut := time.After(time.Duration(timeoutSec) * time.Second)
+	stsFullPath := namespace + "/" + name
+PollStatefulSet:
+	for {
+		select {
+		case <-time.After(time.Duration(periodSec) * time.Second):
+			log.Info("polling statefulset", "statefulset", stsFullPath, "vc", vcName)
+			sts := &appsv1.StatefulSet{}
+			if err := mpn.Get(context.TODO(), types.NamespacedName{
+				Namespace: namespace,
+				Name:      name,
+			}, sts); err != nil {
+				log.Info("fail to get statefulset", "statefulset", stsFullPath, "vc", vcName)
+				return err
+			}
+			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
+				log.Info("statefulset is ready", "statefulset", stsFullPath, "vc", vcName)
+				break PollStatefulSet
+			}
+		case <-timeOut:
+			log.Info("fail to poll statefulset", "statefulset", stsFullPath, "vc", vcName)
+			return fmt.Errorf("fail to poll statefulset", "statefulset", stsFullPath, "vc", vcName)
+		}
+	}
+	return nil
+}
+
+// updateAPIServerCrtAndKey updates the tenant apiserver's certificate and key
+// by adding the clusterIP of kubernetes service's
+func (mpn *MasterProvisionerNative) updateAPIServerCrtAndKey(caGroup *vcpki.ClusterCAGroup, vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion, certUpdated chan<- struct{}) error {
+	// get the clusterIP of the corresponding kubernetes service on super master
+	waitForKubeSvcTimeOut := time.After(WaitKubeSvcTimeOutSec * time.Second)
+	svc := &v1.Service{}
+PollKubeSvc:
+	for {
+		select {
+		case <-time.After(10 * time.Second):
+			svcNs := conversion.
+				ToSuperMasterNamespace(conversion.ToClusterKey(vc), "default")
+			err := mpn.Get(context.TODO(), types.NamespacedName{
+				Namespace: svcNs,
+				Name:      "kubernetes"}, svc)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					continue PollKubeSvc
+				}
+				return err
+			}
+			log.Info("kubernetes service is ready", "namespace", svcNs)
+			break PollKubeSvc
+		case <-waitForKubeSvcTimeOut:
+			return errors.New("wait for kuberentes service time out")
+		}
+	}
+
+	kubeClusterIP := svc.Spec.ClusterIP
+	log.Info("updaing apiserver certificate with kubernetes clusterIP",
+		"clusterIP", kubeClusterIP)
+
+	// regenerate cert and key based on clusterIP and podIP
+	log.Info("updating apiserver certificate by adding default/kubernetes clusterIP", "vc", vc.GetName(), "clusterIP", kubeClusterIP)
+	ns := conversion.ToClusterKey(vc)
+	apiserverDomain := cv.GetAPIServerDomain(ns)
+	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(caGroup.RootCA,
+		vc, apiserverDomain, kubeClusterIP)
+	if err != nil {
+		return err
+	}
+
+	// update the caGroup
+	caGroup.APIServer = apiserverCAPair
+
+	// update the corresponding secretes
+	apiserverSrt := &v1.Secret{}
+	err = mpn.Get(context.TODO(), types.NamespacedName{
+		Namespace: conversion.ToClusterKey(vc),
+		Name:      secret.APIServerCASecretName}, apiserverSrt)
+	if err != nil {
+		return err
+	}
+	apiserverSrt.Data[v1.TLSCertKey] =
+		pkiutil.EncodeCertPEM(apiserverCAPair.Crt)
+	apiserverSrt.Data[v1.TLSPrivateKeyKey] =
+		vcpki.EncodePrivateKeyPEM(apiserverCAPair.Key)
+	err = mpn.Update(context.TODO(), apiserverSrt)
+	if err != nil {
+		return err
+	}
+	log.Info("the secret of apiserver certificate has been updated", "vc", vc.GetName())
+
+	close(certUpdated)
 
 	return nil
 }
@@ -182,7 +366,7 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 		if err != nil {
 			return err
 		}
-		err := controllerutil.SetControllerReference(vc, ssBdl.Service, mpn.scheme)
+		err = controllerutil.SetControllerReference(vc, ssBdl.Service, mpn.scheme)
 		if err != nil {
 			return err
 		}
@@ -190,27 +374,8 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 
 	// make sure the StatsfulSet is ready
 	// (i.e. Status.ReadyReplicas == Spec.Replicas)
-	timeout := time.After(DeployTimeOut)
-	for {
-		period := time.After(ComponentPollPeriod)
-		select {
-		case <-timeout:
-			return fmt.Errorf("deploy %s timeout", ssBdl.Name)
-		case <-period:
-			sts := &appsv1.StatefulSet{}
-			if err := mpn.Get(context.TODO(), types.NamespacedName{
-				Namespace: ns,
-				Name:      ssBdl.Name},
-				sts); err != nil {
-				return err
-			}
-			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
-				log.Info("component is ready", "component", ssBdl.Name)
-				return nil
-			}
-		}
-	}
-
+	err = mpn.pollStatefulSet(ns, ssBdl.Name, vc.GetName(), DeployTimeOutSec, ComponentPollPeriodSec)
+	return err
 }
 
 // createPKISecrets creates secrets to store crt/key pairs and kubeconfigs
@@ -266,7 +431,7 @@ func (mpn *MasterProvisionerNative) createNS(vc *tenancyv1alpha1.Virtualcluster)
 
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
 // virtual clusters, and store them as secrets in the meta cluster
-func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
+func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) (*vcpki.ClusterCAGroup, error) {
 	ns := conversion.ToClusterKey(vc)
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
@@ -276,12 +441,12 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 			Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
 		})
 	if rootCAErr != nil {
-		return rootCAErr
+		return nil, rootCAErr
 	}
 
 	rootRsaKey, ok := rootKey.(*rsa.PrivateKey)
 	if !ok {
-		return errors.New("fail to assert rsa PrivateKey")
+		return nil, errors.New("fail to assert rsa PrivateKey")
 	}
 
 	rootCAPair := &vcpki.CrtKeyPair{
@@ -294,7 +459,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	// create crt, key for etcd
 	etcdCAPair, etcdCrtErr := vcpki.NewEtcdServerCrtAndKey(rootCAPair, etcdDomains)
 	if etcdCrtErr != nil {
-		return etcdCrtErr
+		return nil, etcdCrtErr
 	}
 	caGroup.ETCD = etcdCAPair
 
@@ -302,7 +467,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	apiserverDomain := cv.GetAPIServerDomain(ns)
 	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	caGroup.APIServer = apiserverCAPair
 
@@ -311,7 +476,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 		"system:kube-controller-manager",
 		vc.Name, apiserverDomain, []string{}, rootCAPair)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	caGroup.CtrlMgrKbCfg = ctrlmgrKbCfg
 
@@ -320,24 +485,24 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 		"admin", vc.Name, apiserverDomain,
 		[]string{"system:masters"}, rootCAPair)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	caGroup.AdminKbCfg = adminKbCfg
 
 	// create rsa key for service-account
 	svcAcctCAPair, err := vcpki.NewServiceAccountSigningKey()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	caGroup.ServiceAccountPrivateKey = svcAcctCAPair
 
 	// store ca and kubeconfig into secrets
 	genSrtsErr := mpn.createPKISecrets(caGroup, ns)
 	if genSrtsErr != nil {
-		return genSrtsErr
+		return nil, genSrtsErr
 	}
 
-	return nil
+	return caGroup, nil
 }
 
 func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {

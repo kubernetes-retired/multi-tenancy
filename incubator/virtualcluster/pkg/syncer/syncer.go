@@ -93,7 +93,8 @@ func New(
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				newVC := newObj.(*v1alpha1.Virtualcluster)
 				oldVC := oldObj.(*v1alpha1.Virtualcluster)
-				if newVC.ResourceVersion == oldVC.ResourceVersion {
+				if newVC.ResourceVersion == oldVC.ResourceVersion ||
+					oldVC.Status.Phase == v1alpha1.ClusterUpdating {
 					return
 				}
 				syncer.enqueueVirtualCluster(newObj)

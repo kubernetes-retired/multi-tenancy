@@ -19,7 +19,6 @@ package virtualcluster
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,15 +33,6 @@ import (
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
-)
-
-const (
-	DefaultETCDPeerPort = 2380
-
-	// frequency of polling apiserver for readiness of each component
-	ComponentPollPeriod = 2 * time.Second
-	// timeout for components deployment
-	DeployTimeOut = 180 * time.Second
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
@@ -110,6 +100,8 @@ type ReconcileVirtualcluster struct {
 // +kubebuilder:rbac:groups=core,resources=secrets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
@@ -170,7 +162,6 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			}
 			return updateErr
 		})
-		return
 	case tenancyv1alpha1.ClusterPending:
 		// create new virtualcluster when vc is pending
 		log.Info("Virtualcluster is pending", "vc", vc.Name)
@@ -181,7 +172,7 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		}
 		// all components are ready, update vc status
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			vc.Status.Phase = "Running"
+			vc.Status.Phase = tenancyv1alpha1.ClusterRunning
 			vc.Status.Message = "tenant master is running"
 			vc.Status.Reason = "TenantMasterRunning"
 			updateErr := r.Update(context.TODO(), vc)
@@ -190,12 +181,14 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			}
 			return updateErr
 		})
-		return
 	case tenancyv1alpha1.ClusterRunning:
 		log.Info("Virtualcluster is running", "vc", vc.Name)
-		return
+	case tenancyv1alpha1.ClusterUpdating:
+		log.Info("Virtualcluster is updating", "vc", vc.Name)
+	case tenancyv1alpha1.ClusterReady:
+		log.Info("Virtualcluster is ready", "vc", vc.Name)
 	default:
 		err = fmt.Errorf("unknown vc phase: %s", vc.Status.Phase)
-		return
 	}
+	return
 }

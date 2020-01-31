@@ -10,6 +10,8 @@ spec:
   names:
     kind: ClusterVersion
     plural: clusterversions
+    shortNames:
+    - cv
   scope: Cluster
   validation:
     openAPIV3Schema:

@@ -52,6 +52,26 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - get

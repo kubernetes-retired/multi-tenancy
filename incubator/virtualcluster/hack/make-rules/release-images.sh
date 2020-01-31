@@ -17,5 +17,5 @@
 VC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 source "${VC_ROOT}/hack/lib/init.sh"
 
-build_binaries
-build_images
+build_binaries "$@"
+build_images "$@"
