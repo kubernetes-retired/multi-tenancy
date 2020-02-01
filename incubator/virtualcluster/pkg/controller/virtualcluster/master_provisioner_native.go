@@ -21,24 +21,31 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
-	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/kubeconfig"
+	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+)
+
+const (
+	DefaultETCDPeerPort    = 2380
+	ComponentPollPeriodSec = 2
+	// timeout for components deployment
+	DeployTimeOutSec = 180
 )
 
 type MasterProvisionerNative struct {
@@ -67,37 +74,69 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 			vc.Spec.ClusterVersionName)
 		return err
 	}
+	rootNS := conversion.ToClusterKey(vc)
 	defer func() {
 		if err != nil {
-			log.Error(err, "fail to create virtualcluster, remove namespace for deleting related resources")
+			log.Error(err, "fail to create virtualcluster, removing namespaces for deleting related resources")
+			// we keep the rootNS for debugging purpose
+			if rmNSErr := kubeutil.RemoveNS(mpn, rootNS+"-default"); rmNSErr != nil {
+				log.Error(err, "fail to remove namespace", "namespace", rootNS+"-default")
+			}
 		}
 	}()
 
-	// 1. create ns
-	err = mpn.createNS(vc)
+	// 1. create the root ns
+	err = kubeutil.CreateNS(mpn, rootNS)
 	if err != nil {
 		return err
 	}
 
-	// 2. create PKI
+	// 2. create the default ns and default/kubernetes svc
+	err = kubeutil.CreateNS(mpn, rootNS+"-default")
+	if err != nil {
+		return err
+	}
+	err = mpn.Create(context.TODO(), &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kubernetes",
+			Namespace: rootNS + "-default",
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Name:       "https",
+					Port:       443,
+					Protocol:   "TCP",
+					TargetPort: intstr.FromInt(6443),
+				},
+			},
+			SessionAffinity: v1.ServiceAffinityNone,
+			Type:            v1.ServiceTypeClusterIP,
+		},
+	})
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+
+	// 3. create PKI
 	err = mpn.createPKI(vc, cv)
 	if err != nil {
 		return err
 	}
 
-	// 3. deploy etcd
+	// 4. deploy etcd
 	err = mpn.deployComponent(vc, cv.Spec.ETCD)
 	if err != nil {
 		return err
 	}
 
-	// 4. deploy apiserver
+	// 5. deploy apiserver
 	err = mpn.deployComponent(vc, cv.Spec.APIServer)
 	if err != nil {
 		return err
 	}
 
-	// 5. deploy controller-manager
+	// 6. deploy controller-manager
 	err = mpn.deployComponent(vc, cv.Spec.ControllerManager)
 	if err != nil {
 		return err
@@ -188,29 +227,12 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 		}
 	}
 
-	// make sure the StatsfulSet is ready
-	// (i.e. Status.ReadyReplicas == Spec.Replicas)
-	timeout := time.After(DeployTimeOut)
-	for {
-		period := time.After(ComponentPollPeriod)
-		select {
-		case <-timeout:
-			return fmt.Errorf("deploy %s timeout", ssBdl.Name)
-		case <-period:
-			sts := &appsv1.StatefulSet{}
-			if err := mpn.Get(context.TODO(), types.NamespacedName{
-				Namespace: ns,
-				Name:      ssBdl.Name},
-				sts); err != nil {
-				return err
-			}
-			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
-				log.Info("component is ready", "component", ssBdl.Name)
-				return nil
-			}
-		}
+	// wait for the statefuleset to be ready
+	err = kubeutil.WaitStatefulSetReady(mpn, ns, ssBdl.GetName(), DeployTimeOutSec, ComponentPollPeriodSec)
+	if err != nil {
+		return err
 	}
-
+	return nil
 }
 
 // createPKISecrets creates secrets to store crt/key pairs and kubeconfigs
@@ -252,18 +274,6 @@ func (mpn *MasterProvisionerNative) createPKISecrets(caGroup *vcpki.ClusterCAGro
 	return nil
 }
 
-func (mpn *MasterProvisionerNative) createNS(vc *tenancyv1alpha1.Virtualcluster) error {
-	err := mpn.Create(context.TODO(), &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: conversion.ToClusterKey(vc),
-		},
-	})
-	if apierrors.IsAlreadyExists(err) {
-		return nil
-	}
-	return err
-}
-
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
 // virtual clusters, and store them as secrets in the meta cluster
 func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
@@ -299,8 +309,19 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	caGroup.ETCD = etcdCAPair
 
 	// create crt, key for apiserver
+	// get the clusterIP of the kubernetes service in the default namespace
+	defaultNS := conversion.ToClusterKey(vc) + "-default"
+	kubeClusterIP, err := kubeutil.GetSvcClusterIP(mpn, defaultNS, "kubernetes")
+	if err != nil {
+		return err
+	}
+	log.Info("the clusterIP will be added to the certificate",
+		"vc", vc.GetName(),
+		"clusterIP", kubeClusterIP,
+		"service", defaultNS+"/kubernetes")
+
 	apiserverDomain := cv.GetAPIServerDomain(ns)
-	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
+	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain, kubeClusterIP)
 	if err != nil {
 		return err
 	}
