@@ -22,6 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	v1storage "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 )
@@ -380,5 +381,28 @@ func CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 		updated.Spec = *vObj.Spec.DeepCopy()
 	}
 
+	return updated
+}
+
+func CheckPVCEquality(pObj, vObj *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
+	var updated *v1.PersistentVolumeClaim
+	// PVC meta can be changed
+	updatedMeta := CheckObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		updated.ObjectMeta = *updatedMeta
+	}
+	// ExpandPersistentVolumes feature allows storage size to be increased.
+	if pObj.Spec.Resources.Requests["storage"] != vObj.Spec.Resources.Requests["storage"] {
+		if updated == nil {
+			updated = pObj.DeepCopy()
+		}
+		if updated.Spec.Resources.Requests == nil {
+			updated.Spec.Resources.Requests = make(map[v1.ResourceName]resource.Quantity)
+		}
+		updated.Spec.Resources.Requests["storage"] = vObj.Spec.Resources.Requests["storage"]
+	}
 	return updated
 }
