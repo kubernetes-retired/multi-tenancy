@@ -19,7 +19,6 @@ package virtualcluster
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,15 +33,6 @@ import (
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
-)
-
-const (
-	DefaultETCDPeerPort = 2380
-
-	// frequency of polling apiserver for readiness of each component
-	ComponentPollPeriod = 2 * time.Second
-	// timeout for components deployment
-	DeployTimeOut = 180 * time.Second
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")

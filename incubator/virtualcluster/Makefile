@@ -78,7 +78,7 @@ release-images: test build-images
 # 1. build all binaries.
 # 2. copy binaries to the corresponding docker image.
 build-images:
-	hack/make-rules/release-images.sh
+	hack/make-rules/release-images.sh $(WHAT)
 
 # Push the docker image
 docker-push:

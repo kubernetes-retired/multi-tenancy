@@ -22,13 +22,10 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -36,6 +33,7 @@ import (
 
 	vcctlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	netutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
@@ -44,9 +42,8 @@ const (
 	DefaultPKIExpireDays = 365
 	APIServerSvcName     = "apiserver-svc"
 
-	// 	apiserverNodePort    = 30443
-	pollStsPeriod  = 2 * time.Second
-	pollStsTimeout = 120 * time.Second
+	pollStsPeriodSec  = 2
+	pollStsTimeoutSec = 120
 )
 
 // Create creates an object based on the file yamlPath
@@ -145,59 +142,25 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 
 	ns := conversion.ToClusterKey(vc)
 
-	// poll etcd StatefulSet
-	err = pollStatefulSet("etcd", ns, cli)
+	err = kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
 	if err != nil {
 		return err
 	}
 	log.Println("etcd is ready")
 
-	// poll apiserver StatefulSet
-	err = pollStatefulSet("apiserver", ns, cli)
+	err = kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
 	if err != nil {
 		return err
 	}
 	log.Println("apiserver is ready")
 
-	// poll controller-manager StatefulSet
-	err = pollStatefulSet("controller-manager", ns, cli)
+	err = kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
 	if err != nil {
 		return err
 	}
 	log.Println("controller-manager is ready")
 
 	return genKubeConfig(ns, vcKbCfg, cli, svcType, apiSvcPort)
-}
-
-// pollStatefulSet keeps checking if the StatefulSet in `namespace` with `name` is
-// ready. The poll action is proceeded every `pollStsPeriod` and will return timeout
-// error in `pollStsTimeout`.
-func pollStatefulSet(name, namespace string, cli client.Client) error {
-	log.Printf("polling StatefulSet %s/%s", namespace, name)
-	timeout := time.After(pollStsTimeout)
-	for {
-		period := time.After(pollStsPeriod)
-		select {
-		case <-timeout:
-			return fmt.Errorf("poll %s timeout", name)
-		case <-period:
-			sts := &appsv1.StatefulSet{}
-			pollErr := cli.Get(context.TODO(), types.NamespacedName{
-				Namespace: namespace,
-				Name:      name,
-			}, sts)
-			if pollErr != nil {
-				if !apierrors.IsNotFound(pollErr) {
-					return pollErr
-				}
-				log.Println(pollErr)
-			} else {
-				if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
-					return nil
-				}
-			}
-		}
-	}
 }
 
 // getVcKubeConfig gets the kubeconfig of the virtual cluster
