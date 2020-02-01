@@ -75,15 +75,12 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		return err
 	}
 	rootNS := conversion.ToClusterKey(vc)
-	defaultNS := conversion.ToClusterKey(vc) + "-default"
 	defer func() {
 		if err != nil {
 			log.Error(err, "fail to create virtualcluster, removing namespaces for deleting related resources")
-			if rmNSErr := kubeutil.RemoveNS(mpn, rootNS); rmNSErr != nil {
-				log.Error(err, "fail to remove namespace", "namespace", rootNS)
-			}
-			if rmNSErr := kubeutil.RemoveNS(mpn, defaultNS); rmNSErr != nil {
-				log.Error(err, "fail to remove namespace", "namespace", defaultNS)
+			// we keep the rootNS for debugging purpose
+			if rmNSErr := kubeutil.RemoveNS(mpn, rootNS+"-default"); rmNSErr != nil {
+				log.Error(err, "fail to remove namespace", "namespace", rootNS+"-default")
 			}
 		}
 	}()
@@ -95,14 +92,14 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	}
 
 	// 2. create the default ns and default/kubernetes svc
-	err = kubeutil.CreateNS(mpn, defaultNS)
+	err = kubeutil.CreateNS(mpn, rootNS+"-default")
 	if err != nil {
 		return err
 	}
 	err = mpn.Create(context.TODO(), &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "kubernetes",
-			Namespace: defaultNS,
+			Namespace: rootNS + "-default",
 		},
 		Spec: v1.ServiceSpec{
 			Ports: []v1.ServicePort{
