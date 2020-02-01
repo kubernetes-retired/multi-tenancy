@@ -352,6 +352,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.ServiceAccount{}
 	case *storagev1.StorageClass:
 		return &storagev1.StorageClass{}
+	case *v1.PersistentVolumeClaim:
+		return &v1.PersistentVolumeClaim{}
 	default:
 		return nil
 	}
@@ -373,6 +375,8 @@ func getTargetObjectList(objectType runtime.Object) runtime.Object {
 		return &v1.ServiceAccountList{}
 	case *storagev1.StorageClass:
 		return &storagev1.StorageClassList{}
+	case *v1.PersistentVolumeClaim:
+		return &v1.PersistentVolumeClaimList{}
 	default:
 		return nil
 	}
