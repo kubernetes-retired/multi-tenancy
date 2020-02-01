@@ -38,6 +38,7 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 )
 
 // HierarchyReconciler is responsible for determining the forest structure from the Hierarchy CRs,
@@ -84,11 +85,12 @@ type NamespaceSyncer interface {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&hcTot, 1)
-		atomic.AddInt32(&hcCur, 1)
-		defer atomic.AddInt32(&hcCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+
+	stats.StartHierConfigReconcile()
+	defer stats.StopHierConfigReconcile()
 
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
@@ -477,6 +479,7 @@ func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logge
 		return false, nil
 	}
 
+	stats.WriteHierConfig()
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating singleton on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
@@ -499,6 +502,7 @@ func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logge
 		return false, nil
 	}
 
+	stats.WriteNamespace()
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating namespace on apiserver")
 		if err := r.Create(ctx, inst); err != nil {

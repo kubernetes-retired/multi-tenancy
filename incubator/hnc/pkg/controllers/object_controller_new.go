@@ -19,11 +19,11 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -92,11 +92,12 @@ func (r *ObjectReconcilerNew) SyncNamespace(ctx context.Context, log logr.Logger
 }
 
 func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if !ex[req.Namespace] {
-		atomic.AddInt32(&obTot, 1)
-		atomic.AddInt32(&obCur, 1)
-		defer atomic.AddInt32(&obCur, -1)
+	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
 	}
+
+	stats.StartObjReconcile(r.GVK)
+	defer stats.StopObjReconcile(r.GVK)
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
@@ -326,6 +327,7 @@ func (r *ObjectReconcilerNew) operate(ctx context.Context, log logr.Logger, act 
 
 func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
 	log.V(1).Info("Deleting obsolete copy")
+	stats.WriteObject(inst.GroupVersionKind())
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
 		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
@@ -349,6 +351,7 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 
 	var err error = nil
 	var op string
+	stats.WriteObject(inst.GroupVersionKind())
 	if exist {
 		err = r.Update(ctx, inst)
 		op = "update"
