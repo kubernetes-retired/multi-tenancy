@@ -18,9 +18,12 @@ package pod
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -34,6 +37,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
@@ -56,6 +60,22 @@ type controller struct {
 	queue   workqueue.RateLimitingInterface
 	// Checker timer
 	periodCheckerPeriod time.Duration
+	// Cluster vNode PodMap and GCMap, needed for vNode garbage collection
+	sync.Mutex
+	clusterVNodePodMap map[string]map[string]map[types.UID]struct{}
+	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
+}
+
+type VirtulNodeDeletionPhase string
+
+const (
+	VNodeQuiescing VirtulNodeDeletionPhase = "Quiescing"
+	VNodeDeleting  VirtulNodeDeletionPhase = "Deleting"
+)
+
+type VNodeGCStatus struct {
+	QuiesceStartTime metav1.Time
+	Phase            VirtulNodeDeletionPhase
 }
 
 func Register(
@@ -71,6 +91,8 @@ func Register(
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
 		workers:             constants.DefaultControllerWorkers,
 		periodCheckerPeriod: 60 * time.Second,
+		clusterVNodePodMap:  make(map[string]map[string]map[types.UID]struct{}),
+		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
 	}
 
 	// Create the multi cluster pod controller
@@ -146,6 +168,72 @@ func (c *controller) enqueuePod(obj interface{}) {
 	}
 
 	c.queue.Add(key)
+}
+
+// c.Mutex needs to be Locked before calling addToClusterVNodeGCMap
+func (c *controller) addToClusterVNodeGCMap(cluster string, nodeName string) {
+	if _, exist := c.clusterVNodeGCMap[cluster]; !exist {
+		c.clusterVNodeGCMap[cluster] = make(map[string]VNodeGCStatus)
+	}
+	c.clusterVNodeGCMap[cluster][nodeName] = VNodeGCStatus{
+		QuiesceStartTime: metav1.Now(),
+		Phase:            VNodeQuiescing,
+	}
+}
+
+// c.Mutex needs to be Locked before calling removeQuiescingNodeFromClusterVNodeGCMap
+func (c *controller) removeQuiescingNodeFromClusterVNodeGCMap(cluster string, nodeName string) bool {
+	if _, exist := c.clusterVNodeGCMap[cluster]; exist {
+		if _, exist := c.clusterVNodeGCMap[cluster][nodeName]; exist {
+			if c.clusterVNodeGCMap[cluster][nodeName].Phase == VNodeQuiescing {
+				delete(c.clusterVNodeGCMap[cluster], nodeName)
+				return true
+			} else {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (c *controller) updateClusterVNodePodMap(cluster string, vPod *v1.Pod, event reconciler.EventType) {
+	nodeName := vPod.Spec.NodeName
+	if nodeName == "" || !isPodScheduled(vPod) {
+		return
+	}
+	func() {
+		c.Lock()
+		defer c.Unlock()
+		if event == reconciler.AddEvent || event == reconciler.UpdateEvent {
+			if _, exist := c.clusterVNodePodMap[cluster]; !exist {
+				c.clusterVNodePodMap[cluster] = make(map[string]map[types.UID]struct{})
+			}
+			if _, exist := c.clusterVNodePodMap[cluster][nodeName]; !exist {
+				c.clusterVNodePodMap[cluster][nodeName] = make(map[types.UID]struct{})
+			}
+			c.clusterVNodePodMap[cluster][nodeName][vPod.UID] = struct{}{}
+			if !c.removeQuiescingNodeFromClusterVNodeGCMap(cluster, nodeName) {
+				// We have consistency issue here. TODO: add to metrics
+				klog.Errorf("Cluster %s has vPods in vNode %s which is being GCed!", cluster, nodeName)
+			}
+		} else { // delete
+			if _, exist := c.clusterVNodePodMap[cluster][nodeName]; exist {
+				if _, exist := c.clusterVNodePodMap[cluster][nodeName][vPod.UID]; exist {
+					delete(c.clusterVNodePodMap[cluster][nodeName], vPod.UID)
+				} else {
+					klog.Warningf("Deleted pod %s of cluster (%s) is not found in clusterVNodePodMap", vPod.Name, cluster)
+				}
+
+				// If vNode does not have any Pod left, put it into gc map
+				if len(c.clusterVNodePodMap[cluster][nodeName]) == 0 {
+					c.addToClusterVNodeGCMap(cluster, nodeName)
+					delete(c.clusterVNodePodMap[cluster], nodeName)
+				}
+			} else {
+				klog.Warningf("The nodename %s of deleted pod %s in cluster (%s) is not found in clusterVNodePodMap", nodeName, vPod.Name, cluster)
+			}
+		}
+	}()
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

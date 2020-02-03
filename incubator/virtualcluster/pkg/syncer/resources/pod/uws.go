@@ -122,16 +122,27 @@ func (c *controller) backPopulate(key string) error {
 	}
 	vPod := vPodObj.(*v1.Pod)
 
-	// first check whether tenant pod has assigned.
-	if vPod.Spec.NodeName != pPod.Spec.NodeName {
+	// If tenant Pod has not been assigned, bind to virtual Node.
+	if vPod.Spec.NodeName == "" {
 		n, err := c.client.Nodes().Get(pPod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get node %s from super master: %v", pPod.Spec.NodeName, err)
 		}
+		// We need to handle the race with vNodeGC thread here.
+		if err = func() error {
+			c.Lock()
+			defer c.Unlock()
+			if !c.removeQuiescingNodeFromClusterVNodeGCMap(clusterName, pPod.Spec.NodeName) {
+				return fmt.Errorf("The bind target vNode %s is being GCed in cluster %s, retry", pPod.Spec.NodeName, clusterName)
+			}
+			return nil
+		}(); err != nil {
+			return err
+		}
 
 		_, err = tenantClient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
-		if errors.IsAlreadyExists(err) {
-			klog.Warningf("virtual node %s already exists", vPod.Spec.NodeName)
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
 		}
 
 		err = tenantClient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
@@ -151,6 +162,14 @@ func (c *controller) backPopulate(key string) error {
 		// virtual pod has been updated, return and waiting for next loop.
 		c.queue.AddAfter(key, 1*time.Second)
 		return nil
+	} else {
+		// Check if the vNode exists in Tenant master.
+		if _, err := tenantClient.CoreV1().Nodes().Get(vPod.Spec.NodeName, metav1.GetOptions{}); err != nil {
+			if !errors.IsNotFound(err) {
+				// We have consistency issue here, do not fix for now. TODO: add to metrics
+			}
+			return fmt.Errorf("failed to check vNode %s of vPod %s in cluster %s: %v ", vPod.Spec.NodeName, vPod.Name, clusterName, err)
+		}
 	}
 
 	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {

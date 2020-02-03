@@ -17,6 +17,8 @@ limitations under the License.
 package constants
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -52,6 +54,9 @@ const (
 	PublicObjectKey = "tenancy.x-k8s.io/super.public"
 
 	LabelVirtualNode = "tenancy.x-k8s.io/virtualnode"
+
+	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
+	DefaultvNodeGCGracePeriod = time.Second * 120
 )
 
 const (
