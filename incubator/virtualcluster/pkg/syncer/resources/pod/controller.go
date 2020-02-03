@@ -173,10 +173,9 @@ func (c *controller) addToClusterVNodeGCMap(cluster string, nodeName string) {
 		QuiesceStartTime: metav1.Now(),
 		Phase:            VNodeQuiescing,
 	}
-
 }
 
-// c.Mutex needs to be Locked before calling removeFromClusterVNodeGCMap
+// c.Mutex needs to be Locked before calling removeQuiescingNodeFromClusterVNodeGCMap
 func (c *controller) removeQuiescingNodeFromClusterVNodeGCMap(cluster string, nodeName string) bool {
 	if _, exist := c.clusterVNodeGCMap[cluster]; exist {
 		if _, exist := c.clusterVNodeGCMap[cluster][nodeName]; exist {

@@ -70,7 +70,6 @@ type Candidate struct {
 }
 
 func (c *controller) vNodeGCDo() {
-
 	candidates := func() []Candidate {
 		c.Lock()
 		defer c.Unlock()
