@@ -27,9 +27,6 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
-# Set default object controller to the new one
-NOC ?= 1
-
 # Get check sum value of krew archive
 KREW_CKSM=$(shell sha256sum bin/kubectl-hierarchical_namespaces.tar.gz | cut -d " " -f 1)
 
@@ -39,12 +36,7 @@ all: test docker-build
 
 # Run tests
 test: build
-	# run tests in all directories except ./pkg/controllers/
-	go test ./api/... ./cmd/... `go list ./pkg/... | grep -v controllers` -coverprofile cover.out
-	# separately run tests in ./pkg/controllers/
-	# by default it will use the new object controller
-	# with NOC=0 it will use the old object controller
-	go test ./pkg/controllers/... -enable-new-object-controller=${NOC} -coverprofile cover.out
+	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests

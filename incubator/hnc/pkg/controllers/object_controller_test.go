@@ -78,13 +78,8 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, bazName, barName)
 		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
 
-		// Make sure the bad one wasn't copied by the default(old) object controller
-		// and got overwritten by the new object controller.
-		if !newObjectController {
-			Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
-		} else {
-			Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		}
+		// Make sure the bad one got overwritte.
+		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
 	})
 
 	It("should be removed if the source no longer exists", func() {
@@ -102,9 +97,6 @@ var _ = Describe("Secret", func() {
 	})
 
 	It("should overwrite the propagated ones if the source is updated", func() {
-		if !newObjectController {
-			return
-		}
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeFalse())
@@ -122,10 +114,6 @@ var _ = Describe("Secret", func() {
 	})
 
 	It("shouldn't propagate/delete if the namespace has Crit condition", func() {
-		if !newObjectController {
-			return
-		}
-
 		// Set tree as baz -> bar -> foo(root).
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -194,10 +182,6 @@ var _ = Describe("Secret", func() {
 	})
 
 	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
-		if !newObjectController {
-			return
-		}
-
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
