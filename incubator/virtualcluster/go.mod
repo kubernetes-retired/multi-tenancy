@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
 	github.com/emicklei/go-restful v2.9.6+incompatible
+	github.com/go-logr/logr v0.1.0
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/google/cadvisor v0.34.0
 	github.com/json-iterator/go v1.1.6 // indirect
