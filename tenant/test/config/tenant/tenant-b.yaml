@@ -3,11 +3,11 @@ kind: Tenant
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: tenant-sample
+  name: tenant-b
 spec:
   # Add fields here
-  tenantAdminNamespaceName: "tenant1admin"
+  tenantAdminNamespaceName: "tenantbrootns"
   tenantAdmins:
     - kind: ServiceAccount
-      name: t1-user1
-      namespace: default
+      name: tb-userb
+      namespace: tenant-system

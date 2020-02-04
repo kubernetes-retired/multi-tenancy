@@ -1,0 +1,10 @@
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: TenantNamespace
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: tenantnamespace-a
+  namespace: tenantarootns
+spec:
+  # Add fields here
+  name: tenantnamespace-a-1
