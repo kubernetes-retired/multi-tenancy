@@ -51,9 +51,9 @@ const (
 	ignore
 )
 
-// ObjectReconcilerNew reconciles generic propagated objects. You must create one for each
+// ObjectReconciler reconciles generic propagated objects. You must create one for each
 // group/version/kind that needs to be propagated and set its `GVK` field appropriately.
-type ObjectReconcilerNew struct {
+type ObjectReconciler struct {
 	client.Client
 	Log logr.Logger
 
@@ -77,7 +77,7 @@ type ObjectReconcilerNew struct {
 // SyncNamespace can be called manually by the HierarchyReconciler when the hierarchy changes.
 // It enqueues all the current objects in the namespace and local copies of the original objects
 // in the ancestors.
-func (r *ObjectReconcilerNew) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {
+func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {
 	log = log.WithValues("gvk", r.GVK)
 
 	// Enqueue all the current objects in the namespace because some of them may have been deleted.
@@ -91,7 +91,7 @@ func (r *ObjectReconcilerNew) SyncNamespace(ctx context.Context, log logr.Logger
 	return nil
 }
 
-func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if ex[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
@@ -122,7 +122,7 @@ func (r *ObjectReconcilerNew) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 // syncWithForest syncs the object instance with the in-memory forest. It returns the action to take on
 // the object (delete, write or do nothing) and a source object if the action is to write it. It can
 // also update the forest if a source object is added or removed.
-func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
 	// This is the only place we should lock the forest in each Reconcile, so this fn needs to return
 	// everything relevant for the rest of the Reconcile. This fn shouldn't contact the apiserver since
 	// that's a slow operation and everything will block on the lock being held.
@@ -158,7 +158,7 @@ func (r *ObjectReconcilerNew) syncWithForest(ctx context.Context, log logr.Logge
 	return r.syncObject(ctx, log, inst)
 }
 
-func (r *ObjectReconcilerNew) ignore(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) bool {
+func (r *ObjectReconciler) ignore(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) bool {
 	// If it's about to be deleted, do nothing, just wait for it to be actually deleted.
 	if !inst.GetDeletionTimestamp().IsZero() {
 		return true
@@ -182,7 +182,7 @@ func (r *ObjectReconcilerNew) ignore(ctx context.Context, log logr.Logger, inst 
 // syncObject handles a source object and a propagated object differently. If a source object changes,
 // all descendant copies will be enqueued. If a propagated object is obsolete, it will be deleted.
 // Otherwise, it will be overwritten by the source if they are different.
-func (r *ObjectReconcilerNew) syncObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
 	// If for some reason this has been called on an object that isn't namespaced, let's generate some
 	// logspam!
 	if inst.GetNamespace() == "" {
@@ -205,7 +205,7 @@ func (r *ObjectReconcilerNew) syncObject(ctx context.Context, log logr.Logger, i
 
 // syncPropagated will determine whether to delete the obsolete copy or overwrite it with the source.
 // Or do nothing if it remains the same as the source object.
-func (r *ObjectReconcilerNew) syncPropagated(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (action, *unstructured.Unstructured) {
 	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
 
 	// Return the action to delete the obsolete copy if there's no source in the ancestors.
@@ -224,7 +224,7 @@ func (r *ObjectReconcilerNew) syncPropagated(ctx context.Context, log logr.Logge
 
 // syncSource syncs the copy in the forest with the current source object. If there's a change,
 // enqueue all the descendants to propagate the new source.
-func (r *ObjectReconcilerNew) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
 	// Note that we only call exclude() here, not in syncPropagated, because we'll never propagate an
 	// *uncreated* excluded object, and if an excluded object somehow got propagated, we do want to
 	// delete it.
@@ -250,7 +250,7 @@ func (r *ObjectReconcilerNew) syncSource(ctx context.Context, log logr.Logger, s
 	r.enqueueDescendants(ctx, log, src)
 }
 
-func (r *ObjectReconcilerNew) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
 	sns := src.GetNamespace()
 	dns := r.Forest.Get(sns).DescendantNames()
 	for _, ns := range dns {
@@ -261,7 +261,7 @@ func (r *ObjectReconcilerNew) enqueueDescendants(ctx context.Context, log logr.L
 	}
 }
 
-func (r *ObjectReconcilerNew) enqueueNamespace(log logr.Logger, nnm, reason string) {
+func (r *ObjectReconciler) enqueueNamespace(log logr.Logger, nnm, reason string) {
 	go func() {
 		log.Info("Enqueuing for reconciliation", "affected", nnm, "reason", reason)
 		// The handler only cares about the metadata
@@ -273,7 +273,7 @@ func (r *ObjectReconcilerNew) enqueueNamespace(log logr.Logger, nnm, reason stri
 }
 
 // enqueueLocalObjects enqueues all the objects (with the same GVK) in the namespace.
-func (r *ObjectReconcilerNew) enqueueLocalObjects(ctx context.Context, log logr.Logger, ns string) error {
+func (r *ObjectReconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, ns string) error {
 	ul := &unstructured.UnstructuredList{}
 	ul.SetGroupVersionKind(r.GVK)
 	if err := r.List(ctx, ul, client.InNamespace(ns)); err != nil {
@@ -295,7 +295,7 @@ func (r *ObjectReconcilerNew) enqueueLocalObjects(ctx context.Context, log logr.
 // enqueuePropagatedObjects is only called from SyncNamespace. It's the only place a forest lock is
 // needed in SyncNamespace, so we made it into a function with forest lock instead of holding the
 // lock for the entire SyncNamespace.
-func (r *ObjectReconcilerNew) enqueuePropagatedObjects(ctx context.Context, log logr.Logger, ns string) {
+func (r *ObjectReconciler) enqueuePropagatedObjects(ctx context.Context, log logr.Logger, ns string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
@@ -310,7 +310,7 @@ func (r *ObjectReconcilerNew) enqueuePropagatedObjects(ctx context.Context, log 
 }
 
 // operate operates the action generated from syncing the object with the forest.
-func (r *ObjectReconcilerNew) operate(ctx context.Context, log logr.Logger, act action, inst, srcInst *unstructured.Unstructured) error {
+func (r *ObjectReconciler) operate(ctx context.Context, log logr.Logger, act action, inst, srcInst *unstructured.Unstructured) error {
 	switch act {
 	case ignore:
 		return nil
@@ -325,7 +325,7 @@ func (r *ObjectReconcilerNew) operate(ctx context.Context, log logr.Logger, act 
 	}
 }
 
-func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
+func (r *ObjectReconciler) delete(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
 	log.V(1).Info("Deleting obsolete copy")
 	stats.WriteObject(inst.GroupVersionKind())
 	err := r.Delete(ctx, inst)
@@ -340,7 +340,7 @@ func (r *ObjectReconcilerNew) delete(ctx context.Context, log logr.Logger, inst 
 	return nil
 }
 
-func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, srcInst *unstructured.Unstructured) error {
+func (r *ObjectReconciler) write(ctx context.Context, log logr.Logger, inst, srcInst *unstructured.Unstructured) error {
 	// The object exists if CreationTimestamp is set. This flag enables us to have only 1 API call.
 	exist := inst.GetCreationTimestamp() != v1.Time{}
 	ns := inst.GetNamespace()
@@ -366,7 +366,7 @@ func (r *ObjectReconcilerNew) write(ctx context.Context, log logr.Logger, inst, 
 	return err
 }
 
-func (r *ObjectReconcilerNew) setErrorConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, op string, err error) {
+func (r *ObjectReconciler) setErrorConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, op string, err error) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
@@ -378,7 +378,7 @@ func (r *ObjectReconcilerNew) setErrorConditions(log logr.Logger, srcInst, inst 
 	}
 }
 
-func (r *ObjectReconcilerNew) setCondition(log logr.Logger, code api.Code, nnm, key, msg string) {
+func (r *ObjectReconciler) setCondition(log logr.Logger, code api.Code, nnm, key, msg string) {
 	r.Forest.Get(nnm).SetCondition(key, code, msg)
 	r.enqueueNamespace(log, nnm, "Set condition for "+key+": "+msg)
 }
@@ -388,7 +388,7 @@ func getObjectKey(inst *unstructured.Unstructured) string {
 	return fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
 }
 
-func (r *ObjectReconcilerNew) clearConditions(log logr.Logger, inst *unstructured.Unstructured) {
+func (r *ObjectReconciler) clearConditions(log logr.Logger, inst *unstructured.Unstructured) {
 	gvk := inst.GetObjectKind().GroupVersionKind()
 	key := fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
 	ns := r.Forest.Get(inst.GetNamespace())
@@ -414,7 +414,7 @@ func hasPropagatedLabel(inst *unstructured.Unstructured) bool {
 }
 
 // isInForest returns true if the object is found in the forest.
-func (r *ObjectReconcilerNew) isInForest(inst *unstructured.Unstructured) bool {
+func (r *ObjectReconciler) isInForest(inst *unstructured.Unstructured) bool {
 	ns := inst.GetNamespace()
 	n := inst.GetName()
 	gvk := inst.GroupVersionKind()
@@ -422,7 +422,7 @@ func (r *ObjectReconcilerNew) isInForest(inst *unstructured.Unstructured) bool {
 }
 
 // syncDeletedSource deletes the source copy in the forest and then enqueues all its descendants.
-func (r *ObjectReconcilerNew) syncDeletedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncDeletedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
 	ns := inst.GetNamespace()
 	n := inst.GetName()
 	gvk := inst.GroupVersionKind()
@@ -433,7 +433,7 @@ func (r *ObjectReconcilerNew) syncDeletedSource(ctx context.Context, log logr.Lo
 // exclude returns true if the object shouldn't be handled by the HNC, and in some non-obvious cases
 // sets a condition on the namespace. Eventually, this may be user-configurable, but right now it's
 // used for Service Account token secrets and to decide object propagation based on finalizer field.
-func (r *ObjectReconcilerNew) exclude(log logr.Logger, inst *unstructured.Unstructured) bool {
+func (r *ObjectReconciler) exclude(log logr.Logger, inst *unstructured.Unstructured) bool {
 	// Object with nonempty finalizer list is not propagated
 	if len(inst.GetFinalizers()) != 0 {
 		r.setCondition(log, api.CannotPropagate, inst.GetNamespace(), getObjectKey(inst), "Objects with finalizers cannot be propagated")
@@ -459,7 +459,7 @@ func (r *ObjectReconcilerNew) exclude(log logr.Logger, inst *unstructured.Unstru
 	}
 }
 
-func (r *ObjectReconcilerNew) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
+func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
 	target := &unstructured.Unstructured{}
 	target.SetGroupVersionKind(r.GVK)
 	opts := controller.Options{
