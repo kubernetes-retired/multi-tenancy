@@ -28,7 +28,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	// Create all object reconcillers
 	objReconcilers := []NamespaceSyncer{}
 	for _, gvk := range config.GVKs {
-		or := &ObjectReconcilerNew{
+		or := &ObjectReconciler{
 			Client:            mgr.GetClient(),
 			Log:               ctrl.Log.WithName("controllers").WithName(gvk.Kind),
 			Forest:            f,
