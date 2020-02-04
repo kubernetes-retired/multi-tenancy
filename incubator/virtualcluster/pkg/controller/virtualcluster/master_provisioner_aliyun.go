@@ -381,8 +381,17 @@ func (mpa *MasterProvisionerAliyun) getASKConfigs() (cfg ASKConfig, err error) {
 	cfg.zoneID = zoneID
 
 	privateKbCfg, pkcExist := ASKCfgMp.Data[AliyunASKCfgMpPrivateCfg]
+	// cfg.privateKbCfg can only be set as "true" or "false"
 	if pkcExist {
-		cfg.privateKbCfg = privateKbCfg
+		if privateKbCfg == "true" || privateKbCfg == "false" {
+			cfg.privateKbCfg = privateKbCfg
+		} else {
+			err = fmt.Errorf("%s.data.%s can only be set as 'true' or 'false'",
+				AliyunASKConfigMap, AliyunASKCfgMpPrivateCfg)
+			return
+		}
+	} else {
+		cfg.privateKbCfg = "false"
 	}
 
 	vpcID, viExist := ASKCfgMp.Data[AliyunASKCfgMpVPCID]
