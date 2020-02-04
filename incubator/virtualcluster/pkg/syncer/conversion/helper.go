@@ -182,6 +182,15 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 	return vStorageClass
 }
 
+func BuildVirtualPersistentVolume(cluster string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {
+	vPV := pPV.DeepCopy()
+	ResetMetadata(vPV)
+	// The pv needs to bind with the vPVC
+	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace
+	vPV.Spec.ClaimRef.UID = vPVC.UID
+	return vPV
+}
+
 func BuildKubeConfigSecret(clusterName string, vPod *v1.Pod, kubeConfig []byte) *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
