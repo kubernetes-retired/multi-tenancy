@@ -22,12 +22,16 @@ import (
 	"io/ioutil"
 	"time"
 
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
 // the namespace of the pod can be found in this file
@@ -68,7 +72,7 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 		period := time.After(time.Duration(periodSec) * time.Second)
 		select {
 		case <-timeOut:
-			return fmt.Errorf("%s/%s is not ready in %s seconds", timeOutSec)
+			return fmt.Errorf("%s/%s is not ready in %d seconds", namespace, name, timeOutSec)
 		case <-period:
 			sts := &appsv1.StatefulSet{}
 			if err := cli.Get(context.TODO(), types.NamespacedName{
@@ -107,4 +111,30 @@ func RemoveNS(cli client.Client, nsName string) error {
 		return err
 	}
 	return nil
+}
+
+// AnnotateVC add the annotation('key'='val') to the Virtualcluster 'vc'
+func AnnotateVC(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, key, val string, log logr.Logger) error {
+	annPatch := client.ConstantPatch(types.MergePatchType,
+		[]byte(fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, key, val)))
+	if err := RetryPatchVCOnConflict(context.TODO(), cli, vc, annPatch, log); err != nil {
+		return err
+	}
+	log.Info("add annotation to vc", "vc", vc.GetName(), "key", key, "value", val)
+	return nil
+}
+
+// RetryPatchVCOnConflict tries to patch the Virtualcluster 'vc'. It will retry
+// to patch the 'vc' if there are conflicts caused by other code
+func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.Virtualcluster, patch client.Patch, log logr.Logger, opts ...client.PatchOption) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		patchErr := cli.Patch(ctx, vc, patch, opts...)
+		if err := cli.Get(ctx, types.NamespacedName{
+			Namespace: vc.GetNamespace(),
+			Name:      vc.GetName(),
+		}, vc); err != nil {
+			log.Info("fail to get obj on patch failure", "object", "error", err.Error())
+		}
+		return patchErr
+	})
 }
