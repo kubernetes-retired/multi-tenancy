@@ -24,3 +24,4 @@ spec:
         - "--metrics-addr=127.0.0.1:8080"
         - "--enable-leader-election"
         - "--max-reconciles=10"
+        - "--apiserver-qps-throttle=50"
