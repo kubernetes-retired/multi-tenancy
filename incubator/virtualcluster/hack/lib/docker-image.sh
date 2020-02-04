@@ -93,7 +93,7 @@ build_images() {
   for arg; do
     targets+=(${arg##*/})
   done
-  echo ${targets[@]}
+  echo "${targets[@]-}"
   
   if [ ${#targets[@]} -eq 0 ]; then
     cp "${VC_ALL_BINARIES[@]/#/}" ${VC_RELEASE_DIR}
@@ -101,5 +101,5 @@ build_images() {
     cp ${targets[@]} ${VC_RELEASE_DIR}
   fi
 
-  create_docker_image "${VC_RELEASE_DIR}" "amd64" "${targets[@]}"
+  create_docker_image "${VC_RELEASE_DIR}" "amd64" "${targets[@]-}"
 }
