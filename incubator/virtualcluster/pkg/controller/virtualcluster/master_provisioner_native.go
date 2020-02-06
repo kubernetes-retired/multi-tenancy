@@ -92,10 +92,11 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	}
 
 	// 2. create the default ns and default/kubernetes svc
-	err = kubeutil.CreateNS(mpn, rootNS+"-default")
+	err = kubeutil.CreateVCNS(mpn, rootNS, "default")
 	if err != nil {
 		return err
 	}
+
 	err = mpn.Create(context.TODO(), &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "kubernetes",
