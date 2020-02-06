@@ -238,6 +238,21 @@ spec:
           image: virtualcluster/syncer-amd64
           imagePullPolicy: Always
           name: vc-syncer
+          env:
+          - name: STDLN_OBJ_ANNO_PREFXS
+            valueFrom: 
+              configMapKeyRef:
+                name: syncer-envs
+                key: STDLN_OBJ_ANNO_PREFXS
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syncer-envs
+  namespace: vc-manager
+data:
+  # use space as delimiter. e.g. STDLN_OBJ_ANNO_PREFXS: "a b c"
+  STDLN_OBJ_ANNO_PREFXS: "" 
 ---
 apiVersion: apps/v1
 kind: DaemonSet
