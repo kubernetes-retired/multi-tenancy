@@ -37,12 +37,12 @@ func init() {
 	// run in a pod, the env will be set through a configmap
 	// TODO should we add a feature to restart the syncer if the configmap
 	// is updated
-	soap := os.Getenv("STDLN_OBJ_ANNO_PREFXS")
+	soap := os.Getenv("STANDALONE_OBJ_ANNO_PREFIXES")
 	if soap == "" {
 		return
 	}
 	// the delimiter of the prefix list is space
-	StandaloneObjAnnotationPrefixes = append(StandaloneObjAnnotationPrefixes, strings.Split(soap, " ")...)
+	StandaloneObjAnnotationPrefixes = append(StandaloneObjAnnotationPrefixes, strings.Fields(soap)...)
 }
 
 // CheckPodEquality check whether super master object and virtual object
@@ -123,7 +123,7 @@ func CheckKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	moreOrDiff := make(map[string]string)
 
 	for vk, vv := range vKV {
-		if syncerutil.HasPrefixs(vk, StandaloneObjAnnotationPrefixes) {
+		if syncerutil.HasPrefixes(vk, StandaloneObjAnnotationPrefixes) {
 			// tenant pod should not use this key. it may conflicts with syncer.
 			continue
 		}
@@ -136,7 +136,7 @@ func CheckKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	// key in virtual less then super
 	less := make(map[string]string)
 	for pk := range pKV {
-		if syncerutil.HasPrefixs(pk, StandaloneObjAnnotationPrefixes) {
+		if syncerutil.HasPrefixes(pk, StandaloneObjAnnotationPrefixes) {
 			continue
 		}
 

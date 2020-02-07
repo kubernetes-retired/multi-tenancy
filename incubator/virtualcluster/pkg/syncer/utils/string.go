@@ -49,9 +49,9 @@ func GenAnAvailableName(names []string, prefix string, n int) string {
 	}
 }
 
-// HasPrefixs checks whether the string 's' begins with any prefix in 'prefixs'.
-func HasPrefixs(s string, prefixs []string) bool {
-	for _, pf := range prefixs {
+// HasPrefixes checks whether the string 's' begins with any prefix in 'prefixes'.
+func HasPrefixes(s string, prefixes []string) bool {
+	for _, pf := range prefixes {
 		if strings.HasPrefix(s, pf) {
 			return true
 		}

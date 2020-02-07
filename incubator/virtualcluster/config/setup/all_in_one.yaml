@@ -239,11 +239,11 @@ spec:
           imagePullPolicy: Always
           name: vc-syncer
           env:
-          - name: STDLN_OBJ_ANNO_PREFXS
+          - name: STANDALONE_OBJ_ANNO_PREFIXES
             valueFrom: 
               configMapKeyRef:
                 name: syncer-envs
-                key: STDLN_OBJ_ANNO_PREFXS
+                key: STANDALONE_OBJ_ANNO_PREFIXES
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -252,7 +252,7 @@ metadata:
   namespace: vc-manager
 data:
   # use space as delimiter. e.g. STDLN_OBJ_ANNO_PREFXS: "a b c"
-  STDLN_OBJ_ANNO_PREFXS: "" 
+  STANDALONE_OBJ_ANNO_PREFIXES: "" 
 ---
 apiVersion: apps/v1
 kind: DaemonSet
