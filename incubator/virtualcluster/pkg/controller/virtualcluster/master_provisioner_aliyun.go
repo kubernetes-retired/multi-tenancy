@@ -25,7 +25,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -488,15 +487,17 @@ PollASK:
 
 	// 4. create the root namesapce of the Virtualcluster
 	vcNs := conversion.ToClusterKey(vc)
-	err = mpa.Create(context.TODO(), &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: conversion.ToClusterKey(vc),
-		},
-	})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+	// remove root ns if exist.
+	// NOTE rootNS may exist for debugging purposes if creation fail
+	err = kubeutil.RemoveNS(mpa, vcNs)
+	if err != nil {
 		return err
 	}
-	log.Info("virtualcluster ns is created", "ns", conversion.ToClusterKey(vc))
+	err = kubeutil.CreateNS(mpa, vcNs)
+	if err != nil {
+		return err
+	}
+	log.Info("virtualcluster ns is created", "ns", vcNs)
 
 	// 5. get kubeconfig of the newly created ASK
 	kbCfg, err := getASKKubeConfig(cli, clsID, askCfg.regionID, askCfg.privateKbCfg)
@@ -597,7 +598,11 @@ OuterLoop:
 			return fmt.Errorf("Delete ASK(%s) timeout", vc.Name)
 		}
 	}
-
+	// delete the root ns
+	err = kubeutil.RemoveNS(mpa, conversion.ToClusterKey(vc))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
