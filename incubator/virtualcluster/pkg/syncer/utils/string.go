@@ -16,10 +16,7 @@ limitations under the License.
 
 package utils
 
-import (
-	"math/rand"
-	"strings"
-)
+import "math/rand"
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyz")
 
@@ -47,14 +44,4 @@ func GenAnAvailableName(names []string, prefix string, n int) string {
 			return ans
 		}
 	}
-}
-
-// HasPrefixes checks whether the string 's' begins with any prefix in 'prefixes'.
-func HasPrefixes(s string, prefixes []string) bool {
-	for _, pf := range prefixes {
-		if strings.HasPrefix(s, pf) {
-			return true
-		}
-	}
-	return false
 }

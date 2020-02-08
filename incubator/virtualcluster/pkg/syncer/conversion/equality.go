@@ -17,7 +17,6 @@ limitations under the License.
 package conversion
 
 import (
-	"os"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -26,24 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
-
-	syncerutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
-
-var StandaloneObjAnnotationPrefixes = []string{"tenancy.x-k8s.io"}
-
-func init() {
-	// load the StandaloneObjAnnotationPrefixex from envs. When the syncer
-	// run in a pod, the env will be set through a configmap
-	// TODO should we add a feature to restart the syncer if the configmap
-	// is updated
-	soap := os.Getenv("STANDALONE_OBJ_ANNO_PREFIXES")
-	if soap == "" {
-		return
-	}
-	// the delimiter of the prefix list is space
-	StandaloneObjAnnotationPrefixes = append(StandaloneObjAnnotationPrefixes, strings.Fields(soap)...)
-}
 
 // CheckPodEquality check whether super master object and virtual object
 // is logical equal.
@@ -123,7 +105,7 @@ func CheckKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	moreOrDiff := make(map[string]string)
 
 	for vk, vv := range vKV {
-		if syncerutil.HasPrefixes(vk, StandaloneObjAnnotationPrefixes) {
+		if strings.HasPrefix(vk, "tenancy.x-k8s.io") {
 			// tenant pod should not use this key. it may conflicts with syncer.
 			continue
 		}
@@ -136,7 +118,7 @@ func CheckKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	// key in virtual less then super
 	less := make(map[string]string)
 	for pk := range pKV {
-		if syncerutil.HasPrefixes(pk, StandaloneObjAnnotationPrefixes) {
+		if strings.HasPrefix(pk, "tenancy.x-k8s.io") {
 			continue
 		}
 
