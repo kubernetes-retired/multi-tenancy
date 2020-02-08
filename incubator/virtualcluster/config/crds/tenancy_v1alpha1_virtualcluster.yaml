@@ -28,9 +28,17 @@ spec:
               type: string
             clusterVersionName:
               type: string
+            opaqueMetaPrefixes:
+              items:
+                type: string
+              type: array
             pkiExpireDays:
               format: int64
               type: integer
+            transparentMetaPrefixes:
+              items:
+                type: string
+              type: array
           required:
           - clusterVersionName
           type: object

@@ -172,13 +172,30 @@ func (c *controller) backPopulate(key string) error {
 		}
 	}
 
+	spec, err := c.multiClusterPodController.GetSpec(clusterName)
+	if err != nil {
+		return err
+	}
+
+	var newPod *v1.Pod
+	updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
+	if updatedMeta != nil {
+		newPod = vPod.DeepCopy()
+		newPod.ObjectMeta = *updatedMeta
+		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).Update(newPod); err != nil {
+			return fmt.Errorf("failed to back populate pod %s/%s meta update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+		}
+
+	}
+
 	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
-		newPod := vPod.DeepCopy()
+		if newPod == nil {
+			newPod = vPod.DeepCopy()
+		}
 		newPod.Status = pPod.Status
 		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
-		c.queue.Add(key)
 		return nil
 	}
 

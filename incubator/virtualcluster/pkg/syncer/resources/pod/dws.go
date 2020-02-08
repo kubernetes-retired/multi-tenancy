@@ -275,7 +275,11 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v
 		return err
 	}
 
-	updatedPod := conversion.CheckPodEquality(pPod, vPod)
+	spec, err := c.multiClusterPodController.GetSpec(cluster)
+	if err != nil {
+		return err
+	}
+	updatedPod := conversion.Equality(spec).CheckPodEquality(pPod, vPod)
 	if updatedPod != nil {
 		pPod, err = c.client.Pods(targetNamespace).Update(updatedPod)
 		if err != nil {

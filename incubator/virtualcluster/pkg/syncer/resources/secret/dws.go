@@ -151,7 +151,11 @@ func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string
 		return err
 	}
 
-	updatedSecret := conversion.CheckSecretEquality(pSecret, vSecret)
+	spec, err := c.multiClusterSecretController.GetSpec(cluster)
+	if err != nil {
+		return err
+	}
+	updatedSecret := conversion.Equality(spec).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
 		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(updatedSecret)
 		if err != nil {

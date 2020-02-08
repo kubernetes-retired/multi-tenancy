@@ -18,6 +18,7 @@ package cluster
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -47,7 +49,7 @@ import (
 // The dependencies are lazily created in getters and cached for reuse.
 // It is not thread safe.
 type Cluster struct {
-	// Name is used to uniquely identify a Cluster in tracing, logging and monitoring.  Name is required.
+	// Name is used to uniquely identify a Cluster. It is the full name of virtual cluster CRD object (ns-name).
 	Name string
 
 	// KubeClientConfig is used to make it easy to get an api server client. Required.
@@ -56,8 +58,8 @@ type Cluster struct {
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	RestConfig *rest.Config
 
-	// spec is the vc definition. Required.
-	spec *v1alpha1.VirtualclusterSpec
+	// vcLister points to the super master virtual cluster informer cache.
+	vclister vclisters.VirtualclusterLister
 
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
@@ -98,7 +100,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -111,7 +113,7 @@ func NewTenantCluster(name string, spec *v1alpha1.VirtualclusterSpec, configByte
 
 	return &Cluster{
 		Name:             name,
-		spec:             spec,
+		vclister:         vclister,
 		KubeClientConfig: kubeClientConfig,
 		RestConfig:       clusterRestConfig,
 		Options:          o,
@@ -125,8 +127,13 @@ func (c *Cluster) GetClusterName() string {
 }
 
 // GetSpec returns the virtual cluster spec.
-func (c *Cluster) GetSpec() *v1alpha1.VirtualclusterSpec {
-	return c.spec
+func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
+	parts := strings.SplitN(c.Name, "-", 2)
+	vc, err := c.vclister.Virtualclusters(parts[0]).Get(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	return vc.Spec.DeepCopy(), nil
 }
 
 func (c *Cluster) getScheme() *runtime.Scheme {

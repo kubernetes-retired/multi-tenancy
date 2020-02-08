@@ -10,3 +10,7 @@ spec:
   clusterVersionName: cv-sample-np
   # will expire in one year
   pkiExpireDays: 365
+  opaqueMetaPrefixes:
+    - "tenancy.x-k8s.io"
+  transparentMetaPrefixes:
+    - "k8s.net.status"

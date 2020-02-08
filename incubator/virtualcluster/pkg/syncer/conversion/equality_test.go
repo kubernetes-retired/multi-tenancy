@@ -22,9 +22,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/utils/pointer"
+
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
 func TestCheckKVEquality(t *testing.T) {
+	spec := v1alpha1.VirtualclusterSpec{
+		TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
+		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+	}
 	for _, tt := range []struct {
 		name     string
 		super    map[string]string
@@ -124,9 +130,19 @@ func TestCheckKVEquality(t *testing.T) {
 				"tenancy.x-k8s.io/name": "name",
 			},
 		},
+		{
+			name: "ignore transparent key",
+			super: map[string]string{
+				"tenancy.x-k8s.io/name": "name",
+				"tp.x-k8s.io/foo":       "val",
+			},
+			virtual:  nil,
+			isEqual:  true,
+			expected: nil,
+		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got, equal := CheckKVEquality(tt.super, tt.virtual)
+			got, equal := Equality(&spec).checkDWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			} else {
@@ -204,7 +220,7 @@ func TestCheckContainersImageEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got := CheckContainersImageEquality(tt.pObj, tt.vObj)
+			got := Equality(nil).checkContainersImageEquality(tt.pObj, tt.vObj)
 			if !equality.Semantic.DeepEqual(got, tt.expected) {
 				t.Errorf("expected %+v, got %+v", tt.expected, got)
 			}
@@ -257,7 +273,7 @@ func TestCheckActiveDeadlineSecondsEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			val, equal := CheckInt64Equality(tt.pObj, tt.vObj)
+			val, equal := Equality(nil).checkInt64Equality(tt.pObj, tt.vObj)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			}
