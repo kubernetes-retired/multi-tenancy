@@ -8,6 +8,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
@@ -117,7 +118,7 @@ func hasPrefixInArray(key string, array []string) bool {
 }
 
 // CheckUWObjectMetaEquality mainly checks if super master label or annotations defined in
-// VC.Spec.AdministrativeMetaPrefixes are back populated to tenant master.
+// VC.Spec.TransparentMetaPrefixes are back populated to tenant master.
 func (e vcEquality) CheckUWObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *metav1.ObjectMeta {
 	var updatedObj *metav1.ObjectMeta
 	labels, equal := e.checkUWKVEquality(pObj.Labels, vObj.Labels)
@@ -138,9 +139,9 @@ func (e vcEquality) CheckUWObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *me
 	return updatedObj
 }
 
-// checkUWKVEquality checks if any key in VC.Spec.AdministrativeMetaPrefixes that exists in pKV
+// checkUWKVEquality checks if any key in VC.Spec.TransparentMetaPrefixes that exists in pKV
 // does exist in vKV with the same value.
-// Note that we cannot remove a key from tenant if the key was presented in VC.Spec.AdministrativeMetaPrefixes
+// Note that we cannot remove a key from tenant if the key was presented in VC.Spec.TransparentMetaPrefixes
 // since we did not track the key removal event.
 func (e vcEquality) checkUWKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	if e.vcSpec == nil {
@@ -171,7 +172,7 @@ func (e vcEquality) checkUWKVEquality(pKV, vKV map[string]string) (map[string]st
 // checkDWKVEquality check the whether super master object labels and virtual object labels
 // are logically equal. If not, return the updated value. The source of truth is virtual object.
 // The exceptional keys that used by super master object are specified in
-// VC.Spec.AdministrativeMetaPrefixes plus a white list (e.g., tenancy.x-k8s.io).
+// VC.Spec.TransparentMetaPrefixes plus a white list (e.g., tenancy.x-k8s.io).
 func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
 	exceptions := []string{}
 	if e.vcSpec != nil {
@@ -454,13 +455,13 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 	}
 
 	// Super/tenant service ClusterIP cannot be the same
-	vSpecClone := vObj.Spec
+	vSpecClone := vObj.Spec.DeepCopy()
 	vSpecClone.ClusterIP = pObj.Spec.ClusterIP
-	if !equality.Semantic.DeepEqual(pObj.Spec, vSpecClone) {
+	if !equality.Semantic.DeepEqual(pObj.Spec, *vSpecClone) {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}
-		updated.Spec = vSpecClone
+		updated.Spec = *vSpecClone
 	}
 	return updated
 }

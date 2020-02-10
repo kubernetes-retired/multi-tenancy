@@ -18,7 +18,6 @@ package cluster
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -49,8 +48,10 @@ import (
 // The dependencies are lazily created in getters and cached for reuse.
 // It is not thread safe.
 type Cluster struct {
-	// Name is used to uniquely identify a Cluster. It is the full name of virtual cluster CRD object (ns-name).
-	Name string
+	// Name of the corresponding virtual cluster object.
+	VCName string
+	// Namespace of the corresponding virtual cluster object.
+	VCNamespace string
 
 	// KubeClientConfig is used to make it easy to get an api server client. Required.
 	KubeClientConfig clientcmd.ClientConfig
@@ -100,7 +101,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(namespace, name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -112,7 +113,8 @@ func NewTenantCluster(name string, vclister vclisters.VirtualclusterLister, conf
 	}
 
 	return &Cluster{
-		Name:             name,
+		VCName:           name,
+		VCNamespace:      namespace,
 		vclister:         vclister,
 		KubeClientConfig: kubeClientConfig,
 		RestConfig:       clusterRestConfig,
@@ -121,15 +123,14 @@ func NewTenantCluster(name string, vclister vclisters.VirtualclusterLister, conf
 		stopCh:           make(chan struct{})}, nil
 }
 
-// GetClusterName returns the name given when Cluster c was created.
+// GetClusterName returns the unique cluster name, aka, the full name of virtual cluster CRD.
 func (c *Cluster) GetClusterName() string {
-	return c.Name
+	return c.VCNamespace + "-" + c.VCName
 }
 
 // GetSpec returns the virtual cluster spec.
 func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
-	parts := strings.SplitN(c.Name, "-", 2)
-	vc, err := c.vclister.Virtualclusters(parts[0]).Get(parts[1])
+	vc, err := c.vclister.Virtualclusters(c.VCNamespace).Get(c.VCName)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func (c *Cluster) getScheme() *runtime.Scheme {
 
 // GetClientInfo returns the cluster client info.
 func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
-	return reconciler.NewClusterInfo(c.Name, c.RestConfig)
+	return reconciler.NewClusterInfo(c.GetClusterName(), c.RestConfig)
 }
 
 // GetClientSet returns a clientset client without any informer caches. All client requests go to apiserver directly.

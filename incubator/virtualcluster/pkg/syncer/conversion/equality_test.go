@@ -26,7 +26,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
-func TestCheckKVEquality(t *testing.T) {
+func TestCheckDWKVEquality(t *testing.T) {
 	spec := v1alpha1.VirtualclusterSpec{
 		TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
 		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
@@ -143,6 +143,113 @@ func TestCheckKVEquality(t *testing.T) {
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
 			got, equal := Equality(&spec).checkDWKVEquality(tt.super, tt.virtual)
+			if equal != tt.isEqual {
+				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
+			} else {
+				if !equality.Semantic.DeepEqual(got, tt.expected) {
+					tc.Errorf("expected result %+v, got %+v", tt.expected, got)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckUWKVEquality(t *testing.T) {
+	spec := v1alpha1.VirtualclusterSpec{
+		TransparentMetaPrefixes: []string{"tp.x-k8s.io", "tp1.x-k8s.io"},
+		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+	}
+	for _, tt := range []struct {
+		name     string
+		super    map[string]string
+		virtual  map[string]string
+		isEqual  bool
+		expected map[string]string
+	}{
+		{
+			name: "equal - no transparent keys",
+			super: map[string]string{
+				"a": "b",
+			},
+			virtual: map[string]string{
+				"a": "b",
+			},
+			isEqual:  true,
+			expected: nil,
+		},
+		{
+			name: "not equal - no transparent keys",
+			super: map[string]string{
+				"a":                "b",
+				"tenancy.x-k8s.io": "c",
+			},
+			virtual: map[string]string{
+				"a": "c",
+			},
+			isEqual:  true,
+			expected: nil,
+		},
+		{
+			name: "miss one transparent key",
+			super: map[string]string{
+				"a":           "b",
+				"b":           "c",
+				"tp.x-k8s.io": "a",
+			},
+			virtual: nil,
+			isEqual: false,
+			expected: map[string]string{
+				"tp.x-k8s.io": "a",
+			},
+		},
+		{
+			name: "miss two transparent key",
+			super: map[string]string{
+				"a":            "b",
+				"tp.x-k8s.io":  "a",
+				"tp1.x-k8s.io": "a",
+			},
+			virtual: map[string]string{
+				"a": "b",
+			},
+			isEqual: false,
+			expected: map[string]string{
+				"a":            "b",
+				"tp.x-k8s.io":  "a",
+				"tp1.x-k8s.io": "a",
+			},
+		},
+		{
+			name: "has all transparent keys",
+			super: map[string]string{
+				"a":            "b",
+				"tp.x-k8s.io":  "a",
+				"tp1.x-k8s.io": "a",
+			},
+			virtual: map[string]string{
+				"tp.x-k8s.io":  "a",
+				"tp1.x-k8s.io": "a",
+			},
+			isEqual:  true,
+			expected: nil,
+		},
+		{
+			name: "wrong transparent key-val",
+			super: map[string]string{
+				"tenancy.x-k8s.io/name": "name",
+				"tp.x-k8s.io/foo":       "a",
+			},
+			virtual: map[string]string{
+				"tp.x-k8s.io/foo": "b",
+			},
+			isEqual: false,
+			expected: map[string]string{
+				"tp.x-k8s.io/foo": "a",
+			},
+		},
+	} {
+		t.Run(tt.name, func(tc *testing.T) {
+			got, equal := Equality(&spec).checkUWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			} else {

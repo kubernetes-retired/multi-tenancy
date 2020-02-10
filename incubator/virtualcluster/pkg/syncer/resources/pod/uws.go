@@ -185,18 +185,21 @@ func (c *controller) backPopulate(key string) error {
 		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).Update(newPod); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s meta update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
-
 	}
 
 	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 		if newPod == nil {
 			newPod = vPod.DeepCopy()
+		} else {
+			// Pod has been updated, let us fetch the latest version.
+			if newPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
+				return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			}
 		}
 		newPod.Status = pPod.Status
 		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
-		return nil
 	}
 
 	// pPod is under deletion.
