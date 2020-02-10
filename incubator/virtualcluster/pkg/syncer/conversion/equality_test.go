@@ -203,7 +203,7 @@ func TestCheckUWKVEquality(t *testing.T) {
 			},
 		},
 		{
-			name: "miss two transparent key",
+			name: "miss two transparent keys",
 			super: map[string]string{
 				"a":            "b",
 				"tp.x-k8s.io":  "a",
