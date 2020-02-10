@@ -35,17 +35,11 @@ type stat struct {
 	objects objects
 }
 
-var (
-	testLogEnabled bool
-	stats          stat
-)
+var stats stat
 
 // StartHierConfigReconcile updates stats when hierarchyConfig
 // reconciliation starts.
 func StartHierConfigReconcile() {
-	if !testLogEnabled {
-		return
-	}
 	stats.totalHierConfigReconciles.incr()
 	stats.curHierConfigReconciles.incr()
 }
@@ -53,18 +47,12 @@ func StartHierConfigReconcile() {
 // StopHierConfigReconcile updates stats when hierarchyConfig
 // reconciliation finishes.
 func StopHierConfigReconcile() {
-	if !testLogEnabled {
-		return
-	}
 	stats.curHierConfigReconciles.decr()
 }
 
 // StartObjReconcile updates the stats for objects with common GK
 // when an object reconciliation starts.
 func StartObjReconcile(gvk schema.GroupVersionKind) {
-	if !testLogEnabled {
-		return
-	}
 	gk := gvk.GroupKind()
 	if _, ok := stats.objects[gk]; !ok {
 		stats.objects[gk] = &object{}
@@ -76,39 +64,27 @@ func StartObjReconcile(gvk schema.GroupVersionKind) {
 // StopObjReconcile updates the stats for objects with common GK
 // when an object reconciliation finishes.
 func StopObjReconcile(gvk schema.GroupVersionKind) {
-	if !testLogEnabled {
-		return
-	}
 	gk := gvk.GroupKind()
 	stats.objects[gk].curReconciles.decr()
 }
 
 // WriteNamespace updates stats when writing namespace instance.
 func WriteNamespace() {
-	if !testLogEnabled {
-		return
-	}
 	stats.namespaceWrites.incr()
 }
 
 // WriteHierConfig updates stats when writing hierarchyConfig instance.
 func WriteHierConfig() {
-	if !testLogEnabled {
-		return
-	}
 	stats.hierConfigWrites.incr()
 }
 
 // WriteObject updates the object stats by GK when writing the object.
 func WriteObject(gvk schema.GroupVersionKind) {
-	if !testLogEnabled {
-		return
-	}
 	gk := gvk.GroupKind()
 	stats.objects[gk].apiWrites.incr()
 }
 
-func initStats() {
+func init() {
 	objects := make(map[schema.GroupKind]*object)
 	stats = stat{
 		actionID: 1,
@@ -118,8 +94,6 @@ func initStats() {
 
 // StartLoggingActivity generates logs for performance testing.
 func StartLoggingActivity() {
-	testLogEnabled = true
-	initStats()
 	log := ctrl.Log.WithName("reconcileCounter")
 	var total, lastTotal, lastCur counter = 0, 0, 0
 	working := false
