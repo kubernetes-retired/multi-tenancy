@@ -17,12 +17,9 @@ limitations under the License.
 package endpoints
 
 import (
-	"fmt"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -31,10 +28,9 @@ import (
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	if !cache.WaitForCacheSync(stopCh, c.endpointsSynced) {
-		return fmt.Errorf("failed to wait for caches to sync")
-	}
-	return c.multiClusterEndpointsController.Start(stopCh)
+	// FIXME(zhuangqh): temorary bypass endpoints dws
+	// sign away the right of control to super master kcm.
+	return nil
 }
 
 // The reconcile logic for tenant master endpoints informer
