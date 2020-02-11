@@ -68,7 +68,7 @@ func Register(
 
 	// Create the multi cluster pod controller
 	options := mc.Options{Reconciler: c}
-	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", nil, options)
+	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Event{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster event controller %v", err)
 		return
