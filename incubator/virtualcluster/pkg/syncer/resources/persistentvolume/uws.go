@@ -145,7 +145,7 @@ func (c *controller) backPopulate(key string) error {
 	} else {
 		vPV := vPVObj.(*v1.PersistentVolume)
 		// We only update PV.Spec, PV.Status is managed by tenant/super pv binder controller independently.
-		updatedPVSpec := conversion.CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
 			newPV := vPV.DeepCopy()
 			newPV.Spec = *updatedPVSpec

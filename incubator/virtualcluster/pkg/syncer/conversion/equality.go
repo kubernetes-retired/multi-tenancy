@@ -490,7 +490,7 @@ func (e vcEquality) CheckPVCEquality(pObj, vObj *v1.PersistentVolumeClaim) *v1.P
 	return updated
 }
 
-func CheckPVSpecEquality(pObj, vObj *v1.PersistentVolumeSpec) *v1.PersistentVolumeSpec {
+func (e vcEquality) CheckPVSpecEquality(pObj, vObj *v1.PersistentVolumeSpec) *v1.PersistentVolumeSpec {
 	var updatedPVSpec *v1.PersistentVolumeSpec
 	pCopy := pObj.DeepCopy()
 	pCopy.ClaimRef = vObj.ClaimRef.DeepCopy()

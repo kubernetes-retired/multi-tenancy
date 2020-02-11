@@ -130,7 +130,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			}
 			continue
 		}
-		updatedPVSpec := conversion.CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
 			klog.Warningf("spec of pv %v diff in super&tenant master %s", vPV.Name, clusterName)
 		}
