@@ -96,7 +96,11 @@ func (c *controller) reconcilePVCUpdate(cluster, namespace, name string, vPVC *v
 		return err
 	}
 
-	updatedPVC := conversion.CheckPVCEquality(pPVC, vPVC)
+	spec, err := c.multiClusterPersistentVolumeClaimController.GetSpec(cluster)
+	if err != nil {
+		return err
+	}
+	updatedPVC := conversion.Equality(spec).CheckPVCEquality(pPVC, vPVC)
 	if updatedPVC != nil {
 		pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Update(updatedPVC)
 		if err != nil {

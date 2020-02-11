@@ -121,7 +121,7 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 			return err
 		}
 	} else {
-		updatedStorageClass := conversion.CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
+		updatedStorageClass := conversion.Equality(nil).CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
 		if updatedStorageClass != nil {
 			_, err := tenantClient.StorageV1().StorageClasses().Update(updatedStorageClass)
 			if err != nil {

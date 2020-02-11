@@ -235,10 +235,19 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			klog.Errorf("error getting pPod %s/%s from super master cache: %v", targetNamespace, vPod.Name, err)
 			continue
 		}
-
-		updatedPod := conversion.CheckPodEquality(pPod, &podList.Items[i])
+		spec, err := c.multiClusterPodController.GetSpec(clusterName)
+		if err != nil {
+			klog.Errorf("fail to get cluster spec : %s", clusterName)
+			continue
+		}
+		updatedPod := conversion.Equality(spec).CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
+		}
+
+		updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
+		if updatedMeta != nil {
+			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
 		}
 	}
 }
