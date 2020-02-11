@@ -37,7 +37,7 @@ type controller struct {
 	// super master pvc lister
 	pvcLister listersv1.PersistentVolumeClaimLister
 	pvcSynced cache.InformerSynced
-	// Connect to all tenant master namespace informers
+	// Connect to all tenant master pvc informers
 	multiClusterPersistentVolumeClaimController *mc.MultiClusterController
 	// Checker timer
 	periodCheckerPeriod time.Duration

@@ -27,6 +27,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/event"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/namespace"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/node"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/persistentvolume"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/persistentvolumeclaim"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/pod"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/secret"
@@ -47,4 +48,5 @@ func Register(config *config.SyncerConfiguration, client clientset.Interface, in
 	event.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	storageclass.Register(config, client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
 	persistentvolumeclaim.Register(config, client.CoreV1(), informerFactory.Core().V1().PersistentVolumeClaims(), controllerManager)
+	persistentvolume.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 }

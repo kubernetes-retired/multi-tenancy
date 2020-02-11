@@ -486,5 +486,16 @@ func (e vcEquality) CheckPVCEquality(pObj, vObj *v1.PersistentVolumeClaim) *v1.P
 		}
 		updated.Spec.Resources.Requests["storage"] = vObj.Spec.Resources.Requests["storage"]
 	}
+	// We don't check PVC status since it will be managed by tenant/master pv binder controller independently.
 	return updated
+}
+
+func (e vcEquality) CheckPVSpecEquality(pObj, vObj *v1.PersistentVolumeSpec) *v1.PersistentVolumeSpec {
+	var updatedPVSpec *v1.PersistentVolumeSpec
+	pCopy := pObj.DeepCopy()
+	pCopy.ClaimRef = vObj.ClaimRef.DeepCopy()
+	if !equality.Semantic.DeepEqual(vObj, pCopy) {
+		updatedPVSpec = pCopy
+	}
+	return updatedPVSpec
 }
