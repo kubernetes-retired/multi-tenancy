@@ -94,7 +94,11 @@ func (c *controller) reconcileConfigMapUpdate(cluster, namespace, name string, v
 		return err
 	}
 
-	updatedConfigMap := conversion.CheckConfigMapEquality(pConfigMap, vConfigMap)
+	spec, err := c.multiClusterConfigMapController.GetSpec(cluster)
+	if err != nil {
+		return err
+	}
+	updatedConfigMap := conversion.Equality(spec).CheckConfigMapEquality(pConfigMap, vConfigMap)
 	if updatedConfigMap != nil {
 		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(updatedConfigMap)
 		if err != nil {

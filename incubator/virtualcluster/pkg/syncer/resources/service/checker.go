@@ -106,8 +106,12 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			klog.Errorf("failed to get pService %s/%s from super master cache: %v", targetNamespace, vService.Name, err)
 			continue
 		}
-
-		updatedService := conversion.CheckServiceEquality(pService, &svcList.Items[i])
+		spec, err := c.multiClusterServiceController.GetSpec(clusterName)
+		if err != nil {
+			klog.Errorf("fail to get cluster spec : %s", clusterName)
+			continue
+		}
+		updatedService := conversion.Equality(spec).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
 		}

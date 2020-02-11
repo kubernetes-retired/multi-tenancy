@@ -87,7 +87,7 @@ type Cache interface {
 // ClusterInterface decouples the controller package from the cluster package.
 type ClusterInterface interface {
 	GetClusterName() string
-	GetSpec() *v1alpha1.VirtualclusterSpec
+	GetSpec() (*v1alpha1.VirtualclusterSpec, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetClientInfo() *reconciler.ClusterInfo
 	GetClientSet() (*clientset.Clientset, error)
@@ -240,7 +240,24 @@ func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, e
 	if cluster == nil {
 		return "", fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	return cluster.GetSpec().ClusterDomain, nil
+	spec, err := cluster.GetSpec()
+	if err != nil {
+		return "", nil
+	}
+	return spec.ClusterDomain, nil
+}
+
+func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.VirtualclusterSpec, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	spec, err := cluster.GetSpec()
+	if err != nil {
+		return nil, err
+	}
+	return spec, nil
+
 }
 
 // GetClusterNames returns the name list of all managed tenant clusters

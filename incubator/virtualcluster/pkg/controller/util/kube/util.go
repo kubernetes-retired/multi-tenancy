@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // the namespace of the pod can be found in this file
@@ -88,7 +89,26 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 	}
 }
 
-// CreateNS create namespace 'nsName' by client 'cli'
+// CreateVCNS creates namespace 'nsName' by client 'cli' and add annotation
+// related to 'cluster'
+func CreateVCNS(cli client.Client, cluster, nsName string) error {
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nsName,
+		},
+	}
+	superNs, err := conversion.BuildSuperMasterNamespace(cluster, ns)
+	if err != nil {
+		return err
+	}
+	err = cli.Create(context.TODO(), superNs)
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return err
+}
+
+// CreateNS creates namespace 'nsName' by client 'cli'
 func CreateNS(cli client.Client, nsName string) error {
 	err := cli.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{

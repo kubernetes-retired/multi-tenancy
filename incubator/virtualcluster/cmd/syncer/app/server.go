@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 
 	"k8s.io/apiserver/pkg/util/term"
@@ -144,6 +146,10 @@ func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.Compl
 		s.Run(stopCh)
 		go func() {
 			s.ListenAndServe(net.JoinHostPort(cc.Address, cc.Port), cc.CertFile, cc.KeyFile)
+		}()
+		go func() {
+			// start a pprof http server
+			klog.Fatal(http.ListenAndServe(":6060", nil))
 		}()
 		<-ctx.Done()
 	}

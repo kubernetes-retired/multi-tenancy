@@ -25,11 +25,12 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -486,15 +487,17 @@ PollASK:
 
 	// 4. create the root namesapce of the Virtualcluster
 	vcNs := conversion.ToClusterKey(vc)
-	err = mpa.Create(context.TODO(), &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: conversion.ToClusterKey(vc),
-		},
-	})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+	// remove root ns if exist.
+	// NOTE rootNS may exist for debugging purposes if creation fail
+	err = kubeutil.RemoveNS(mpa, vcNs)
+	if err != nil {
 		return err
 	}
-	log.Info("virtualcluster ns is created", "ns", conversion.ToClusterKey(vc))
+	err = kubeutil.CreateNS(mpa, vcNs)
+	if err != nil {
+		return err
+	}
+	log.Info("virtualcluster ns is created", "ns", vcNs)
 
 	// 5. get kubeconfig of the newly created ASK
 	kbCfg, err := getASKKubeConfig(cli, clsID, askCfg.regionID, askCfg.privateKbCfg)
@@ -511,6 +514,7 @@ PollASK:
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
+	log.Info("admin kubeconfig is created for virtualcluster", "vc", vc.GetName())
 
 	// 7. get the slb id of the ask, and patch an annotation including the slb
 	// id to the vc cr
@@ -518,8 +522,24 @@ PollASK:
 	if err != nil {
 		return err
 	}
+	log.Info("slb id has been added to vc as annotation", "vc", vc.GetName(), "id", clsSlbId)
 
-	log.Info("admin kubeconfig is created for virtualcluster", "vc", vc.Name)
+	// 8. delete the node-controller service account to disable the
+	// node periodic check
+	tenantCliCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kbCfg))
+	if err != nil {
+		return err
+	}
+	tenantCli, err := kubernetes.NewForConfig(tenantCliCfg)
+	if err != nil {
+		return err
+	}
+	// delete if exist
+	if err = tenantCli.CoreV1().ServiceAccounts("kube-system").
+		Delete("node-controller", &metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+	log.Info("the node selector service account is deleted", "vc", vc.GetName())
 	return nil
 }
 
@@ -578,7 +598,11 @@ OuterLoop:
 			return fmt.Errorf("Delete ASK(%s) timeout", vc.Name)
 		}
 	}
-
+	// delete the root ns
+	err = kubeutil.RemoveNS(mpa, conversion.ToClusterKey(vc))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

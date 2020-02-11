@@ -113,7 +113,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		updatedStorageClass := conversion.CheckStorageClassEquality(pStorageClass, &scList.Items[i])
+		updatedStorageClass := conversion.Equality(nil).CheckStorageClassEquality(pStorageClass, &scList.Items[i])
 		if updatedStorageClass != nil {
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 		}
