@@ -75,7 +75,11 @@ func main() {
 	// Exporters use Application Default Credentials to authenticate.
 	// See https://developers.google.com/identity/protocols/application-default-credentials
 	// for more details.
-	exporter, err := stackdriver.NewExporter(stackdriver.Options{})
+	exporter, err := stackdriver.NewExporter(stackdriver.Options{
+		// Stackdriver’s minimum stats reporting period must be >= 60 seconds.
+		// https://opencensus.io/exporters/supported-exporters/go/stackdriver/
+		ReportingInterval: stats.ReportingInterval,
+	})
 	if err != nil {
 		setupLog.Error(err, "cannot create Stackdriver exporter")
 		os.Exit(1)
