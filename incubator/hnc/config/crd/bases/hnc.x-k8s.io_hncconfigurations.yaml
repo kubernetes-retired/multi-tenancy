@@ -1,0 +1,95 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.2.4
+  creationTimestamp: null
+  name: hncconfigurations.hnc.x-k8s.io
+spec:
+  group: hnc.x-k8s.io
+  names:
+    kind: HNCConfiguration
+    listKind: HNCConfigurationList
+    plural: hncconfigurations
+    singular: hncconfiguration
+  scope: Cluster
+  validation:
+    openAPIV3Schema:
+      description: HNCConfiguration is a cluster-wide configuration for HNC as a whole.
+        See details in http://bit.ly/hnc-type-configuration
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: HNCConfigurationSpec defines the desired state of HNC configuration.
+          properties:
+            types:
+              description: Types indicates the desired synchronization states of kinds,
+                if any.
+              items:
+                description: TypeSynchronizationSpec defines the desired synchronization
+                  state of a specific kind.
+                properties:
+                  apiVersion:
+                    description: API version of the kind defined below. This is used
+                      to unambiguously identifies the kind.
+                    type: string
+                  kind:
+                    description: Kind to be configured.
+                    type: string
+                  mode:
+                    description: Synchronization mode of the kind.
+                    type: string
+                type: object
+              type: array
+          type: object
+        status:
+          description: HNCConfigurationStatus defines the observed state of HNC configuration.
+          properties:
+            types:
+              description: Types indicates the observed synchronization states of
+                kinds, if any.
+              items:
+                description: TypeSynchronizationStatus defines the observed synchronization
+                  state of a specific kind.
+                properties:
+                  apiVersion:
+                    description: API version of the kind defined below. This is used
+                      to unambiguously identifies the kind.
+                    type: string
+                  kind:
+                    description: Kind to be configured.
+                    type: string
+                  numPropagated:
+                    description: Tracks the number of original objects that are being
+                      propagated to descendant namespaces.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
+              type: array
+          type: object
+      type: object
+  version: v1alpha1
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

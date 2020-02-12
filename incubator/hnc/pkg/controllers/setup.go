@@ -55,5 +55,14 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
 	}
 
+	// Create the ConfigReconciler.
+	cr := &ConfigReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("HNCConfiguration"),
+	}
+	if err := cr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create Config controller: %s", err.Error())
+	}
+
 	return nil
 }
