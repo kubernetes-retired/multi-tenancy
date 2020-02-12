@@ -359,6 +359,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.ConfigMap{}
 	case *v1.Node:
 		return &v1.Node{}
+	case *v1.Event:
+		return &v1.Event{}
 	case *v1.Pod:
 		return &v1.Pod{}
 	case *v1.Secret:
@@ -384,6 +386,8 @@ func getTargetObjectList(objectType runtime.Object) runtime.Object {
 		return &v1.ConfigMapList{}
 	case *v1.Node:
 		return &v1.NodeList{}
+	case *v1.Event:
+		return &v1.EventList{}
 	case *v1.Pod:
 		return &v1.PodList{}
 	case *v1.Secret:

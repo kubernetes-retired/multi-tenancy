@@ -120,6 +120,13 @@ func (c *controller) backPopulate(key string) error {
 	}
 
 	vEvent := conversion.BuildVirtualPodEvent(clusterName, pEvent, vPod)
-	_, err = tenantClient.CoreV1().Events(tenantNS).Create(vEvent)
-	return err
+	_, err = c.multiClusterEventController.Get(clusterName, tenantNS, vEvent.Name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			_, err = tenantClient.CoreV1().Events(tenantNS).Create(vEvent)
+			return err
+		}
+		return err
+	}
+	return nil
 }
