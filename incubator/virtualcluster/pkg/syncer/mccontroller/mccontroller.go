@@ -357,6 +357,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 	switch objectType.(type) {
 	case *v1.ConfigMap:
 		return &v1.ConfigMap{}
+	case *v1.Namespace:
+		return &v1.Namespace{}
 	case *v1.Node:
 		return &v1.Node{}
 	case *v1.Event:
@@ -384,6 +386,8 @@ func getTargetObjectList(objectType runtime.Object) runtime.Object {
 	switch objectType.(type) {
 	case *v1.ConfigMap:
 		return &v1.ConfigMapList{}
+	case *v1.Namespace:
+		return &v1.NamespaceList{}
 	case *v1.Node:
 		return &v1.NodeList{}
 	case *v1.Event:
