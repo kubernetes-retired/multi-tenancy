@@ -65,8 +65,6 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 		ComponentConfig: syncerconfig.SyncerConfiguration{
 			LeaderElection:             syncerconfig.SyncerLeaderElectionConfiguration{},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
-			EnableTenantKubeConfig:     false,
-			TenantKubeConfigMountPath:  "/var/run/vc",
 			DisableServiceAccountToken: true,
 		},
 		Address:  "",
@@ -82,8 +80,6 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs := fss.FlagSet("")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
-	fs.BoolVar(&o.ComponentConfig.EnableTenantKubeConfig, "enable-tenant-kubeconfig", o.ComponentConfig.EnableTenantKubeConfig, "EnableTenantKubeConfig specifies whether to mount a tenant kubeconfig which is generated from tenant service account or not.")
-	fs.StringVar(&o.ComponentConfig.TenantKubeConfigMountPath, "tenant-kubeconfig-mount-path", o.ComponentConfig.TenantKubeConfigMountPath, "TenantKubeConfigMountPath specifies where the tenant kubeconfig to mount.")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 
 	serverFlags := fss.FlagSet("server")

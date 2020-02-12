@@ -32,11 +32,6 @@ type SyncerConfiguration struct {
 	// settings for the proxy server to use when communicating with the apiserver.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 
-	// EnableTenantKubeConfig specifies whether to mount a tenant kubeconfig which is
-	// generated from tenant service account or not.
-	EnableTenantKubeConfig bool
-	// TenantKubeConfigMountPath specifies where the tenant kubeconfig to mount.
-	TenantKubeConfigMountPath string
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
 }
