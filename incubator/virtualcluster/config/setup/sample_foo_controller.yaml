@@ -86,7 +86,6 @@ spec:
       containers:
       - command:
         - sample-controller
-        - -kubeconfig=/var/run/vc/kubeconfig
         image: virtualcluster/sample-controller-amd64
         imagePullPolicy: Always
         name: controller

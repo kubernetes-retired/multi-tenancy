@@ -20,7 +20,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -30,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/validation"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 
@@ -101,7 +99,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		return nil, errors.Wrap(err, "failed to marshal owner references")
 	}
 
-	var tenantScopeMeta = map[string]string{
+	var tenantScopeMetaInAnnotation = map[string]string{
 		constants.LabelCluster:         cluster,
 		constants.LabelUID:             string(m.GetUID()),
 		constants.LabelOwnerReferences: string(ownerReferencesStr),
@@ -117,7 +115,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 	if anno == nil {
 		anno = make(map[string]string)
 	}
-	for k, v := range tenantScopeMeta {
+	for k, v := range tenantScopeMetaInAnnotation {
 		anno[k] = v
 	}
 	m.SetAnnotations(anno)
@@ -189,22 +187,4 @@ func BuildVirtualPersistentVolume(cluster string, pPV *v1.PersistentVolume, vPVC
 	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace
 	vPV.Spec.ClaimRef.UID = vPVC.UID
 	return vPV
-}
-
-func BuildKubeConfigSecret(clusterName string, vPod *v1.Pod, kubeConfig []byte) *v1.Secret {
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("vc-kubeconfig-%s", string(uuid.NewUUID())),
-			Annotations: map[string]string{
-				constants.LabelCluster:   clusterName,
-				constants.LabelNamespace: vPod.Namespace,
-				// record the owner pod. checker should do gc for us.
-				constants.LabelOwnerReferences: fmt.Sprintf(`'[{"apiVersion":"core/v1","kind":"Pod","name":"%s","uid":"%s"}]'`, vPod.Name, vPod.UID),
-			},
-		},
-		Data: map[string][]byte{
-			"kubeconfig": kubeConfig,
-		},
-		Type: v1.SecretTypeOpaque,
-	}
 }

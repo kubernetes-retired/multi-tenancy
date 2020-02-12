@@ -22,7 +22,6 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
@@ -35,6 +34,7 @@ import (
 type VCMutateInterface interface {
 	Pod(pPod *v1.Pod) PodMutateInterface
 	Service(pService *v1.Service) ServiceMutateInterface
+	ServiceAccountTokenSecret(pSecret *v1.Secret) SecretMutateInterface
 }
 
 type mutator struct {
@@ -52,6 +52,10 @@ func (m *mutator) Pod(pPod *v1.Pod) PodMutateInterface {
 
 func (m *mutator) Service(pService *v1.Service) ServiceMutateInterface {
 	return &serviceMutator{pService: pService}
+}
+
+func (m *mutator) ServiceAccountTokenSecret(pSecret *v1.Secret) SecretMutateInterface {
+	return &saSecretMutator{pSecret: pSecret}
 }
 
 type PodMutateInterface interface {
@@ -325,43 +329,6 @@ func PodAddExtensionMeta(vPod *v1.Pod) PodMutator {
 	}
 }
 
-func PodMutateKubeConfig(vPod *v1.Pod, secret *v1.Secret, mountPath string) PodMutator {
-	return func(p *podMutateCtx) error {
-		// find an available volume name
-		var volumeNames []string
-		for _, v := range vPod.Spec.Volumes {
-			volumeNames = append(volumeNames, v.Name)
-		}
-
-		kubeConfigVolumeName := "vc-kubeconfig-" + string(uuid.NewUUID())
-
-		p.pPod.Spec.Volumes = append(p.pPod.Spec.Volumes, v1.Volume{
-			Name: kubeConfigVolumeName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					SecretName: secret.Name,
-				},
-			},
-		})
-
-		volumeMount := v1.VolumeMount{
-			Name:      kubeConfigVolumeName,
-			ReadOnly:  true,
-			MountPath: mountPath,
-		}
-
-		for i := range p.pPod.Spec.Containers {
-			p.pPod.Spec.Containers[i].VolumeMounts = append(p.pPod.Spec.Containers[i].VolumeMounts, volumeMount)
-		}
-
-		for i := range p.pPod.Spec.InitContainers {
-			p.pPod.Spec.InitContainers[i].VolumeMounts = append(p.pPod.Spec.InitContainers[i].VolumeMounts, volumeMount)
-		}
-
-		return nil
-	}
-}
-
 func PodMutateAutoMountServiceAccountToken(disable bool) PodMutator {
 	return func(p *podMutateCtx) error {
 		if disable {
@@ -392,4 +359,26 @@ func (s *serviceMutator) Mutate(vService *v1.Service) {
 	for i := range s.pService.Spec.Ports {
 		s.pService.Spec.Ports[i].NodePort = 0
 	}
+}
+
+type SecretMutateInterface interface {
+	Mutate(vSecret *v1.Secret, clusterName string)
+}
+
+type saSecretMutator struct {
+	pSecret *v1.Secret
+}
+
+func (s *saSecretMutator) Mutate(vSecret *v1.Secret, clusterName string) {
+	s.pSecret.Type = v1.SecretTypeOpaque
+	labels := s.pSecret.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[constants.LabelSecretName] = vSecret.Name
+	labels[constants.LabelServiceAccountName] = vSecret.GetAnnotations()[v1.ServiceAccountNameKey]
+	s.pSecret.SetLabels(labels)
+
+	s.pSecret.Name = ""
+	s.pSecret.GenerateName = vSecret.GetAnnotations()[v1.ServiceAccountNameKey] + "-token-"
 }
