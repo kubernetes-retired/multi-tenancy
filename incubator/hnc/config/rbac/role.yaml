@@ -13,13 +13,10 @@ rules:
   verbs:
   - create
   - delete
-  - deletecollection
   - get
-  - impersonate
   - list
   - patch
   - update
-  - use
   - watch
 - apiGroups:
   - ""
