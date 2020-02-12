@@ -42,6 +42,7 @@ var stats stat
 func StartHierConfigReconcile() {
 	stats.totalHierConfigReconciles.incr()
 	stats.curHierConfigReconciles.incr()
+	recordMetricsInt64(stats.totalHierConfigReconciles, hierConfigReconcileTotal)
 }
 
 // StopHierConfigReconcile updates stats when hierarchyConfig
@@ -76,6 +77,7 @@ func WriteNamespace() {
 // WriteHierConfig updates stats when writing hierarchyConfig instance.
 func WriteHierConfig() {
 	stats.hierConfigWrites.incr()
+	recordMetricsInt64(stats.hierConfigWrites, hierConfigWritesTotal)
 }
 
 // WriteObject updates the object stats by GK when writing the object.
@@ -90,6 +92,7 @@ func init() {
 		actionID: 1,
 		objects:  objects,
 	}
+	startRecordingMetrics()
 }
 
 // StartLoggingActivity generates logs for performance testing.

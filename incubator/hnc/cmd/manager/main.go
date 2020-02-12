@@ -19,6 +19,7 @@ import (
 	"flag"
 	"os"
 
+	"contrib.go.opencensus.io/exporter/stackdriver"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -68,6 +69,25 @@ func main() {
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
 	flag.Parse()
+
+	// Enable OpenCensus exporters to export metrics
+	// to Stackdriver Monitoring.
+	// Exporters use Application Default Credentials to authenticate.
+	// See https://developers.google.com/identity/protocols/application-default-credentials
+	// for more details.
+	exporter, err := stackdriver.NewExporter(stackdriver.Options{})
+	if err != nil {
+		setupLog.Error(err, "cannot create Stackdriver exporter")
+		os.Exit(1)
+	}
+	// Flush must be called before main() exits to ensure metrics are recorded.
+	defer exporter.Flush()
+
+	if err := exporter.StartMetricsExporter(); err != nil {
+		setupLog.Error(err, "cannot start metric exporter")
+		os.Exit(1)
+	}
+	defer exporter.StopMetricsExporter()
 
 	ctrl.SetLogger(zap.Logger(debugLogs))
 
