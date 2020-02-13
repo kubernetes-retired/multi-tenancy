@@ -17,6 +17,8 @@ limitations under the License.
 package configmap
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -37,6 +39,8 @@ type controller struct {
 	configMapSynced cache.InformerSynced
 	// Connect to all tenant master configMap informers
 	multiClusterConfigMapController *mc.MultiClusterController
+	// Checker timer
+	periodCheckerPeriod time.Duration
 }
 
 func Register(
@@ -46,7 +50,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		configMapClient: configMapClient,
+		configMapClient:     configMapClient,
+		periodCheckerPeriod: 60 * time.Second,
 	}
 
 	// Create the multi cluster configmap controller
@@ -64,10 +69,6 @@ func Register(
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	return nil
 }
 
