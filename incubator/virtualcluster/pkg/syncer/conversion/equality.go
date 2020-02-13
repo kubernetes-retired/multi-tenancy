@@ -325,7 +325,7 @@ func (e vcEquality) CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigM
 		updated.Data = updatedData
 	}
 
-	updateBinaryData, equal := e.checkBinaryDataEquality(pObj.BinaryData, vObj.BinaryData)
+	updateBinaryData, equal := e.CheckBinaryDataEquality(pObj.BinaryData, vObj.BinaryData)
 	if !equal {
 		if updated == nil {
 			updated = pObj.DeepCopy()
@@ -353,7 +353,7 @@ func (e vcEquality) checkMapEquality(pObj, vObj map[string]string) (map[string]s
 	return updated, false
 }
 
-func (e vcEquality) checkBinaryDataEquality(pObj, vObj map[string][]byte) (map[string][]byte, bool) {
+func (e vcEquality) CheckBinaryDataEquality(pObj, vObj map[string][]byte) (map[string][]byte, bool) {
 	if equality.Semantic.DeepEqual(pObj, vObj) {
 		return nil, true
 	}
@@ -378,6 +378,11 @@ func (e vcEquality) checkBinaryDataEquality(pObj, vObj map[string][]byte) (map[s
 }
 
 func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
+	// ignore service account token type secret.
+	if vObj.Type == v1.SecretTypeServiceAccountToken {
+		return nil
+	}
+
 	var updated *v1.Secret
 	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
 	if updatedMeta != nil {
@@ -385,11 +390,6 @@ func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 			updated = pObj.DeepCopy()
 		}
 		updated.ObjectMeta = *updatedMeta
-	}
-
-	// ignore service account token type secret.
-	if vObj.Type == v1.SecretTypeServiceAccountToken {
-		return updated
 	}
 
 	updatedData, equal := e.checkMapEquality(pObj.StringData, vObj.StringData)
@@ -400,7 +400,7 @@ func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 		updated.StringData = updatedData
 	}
 
-	updateBinaryData, equal := e.checkBinaryDataEquality(pObj.Data, vObj.Data)
+	updateBinaryData, equal := e.CheckBinaryDataEquality(pObj.Data, vObj.Data)
 	if !equal {
 		if updated == nil {
 			updated = pObj.DeepCopy()

@@ -33,13 +33,10 @@ const (
 	LabelOwnerReferences = "tenancy.x-k8s.io/ownerReferences"
 	// LabelClusterIP is the cluster ip of the corresponding service in tenant namespace.
 	LabelClusterIP = "tenancy.x-k8s.io/clusterIP"
-
-	// SyncStatusKey is a label key records the sync status of the resource.
-	SyncStatusKey = "tenancy.x-k8s.io/sync.status"
-	// SyncStatusNotReady means the resource has not synced.
-	SyncStatusNotReady = "NotReady"
-	// SyncStatusReady means the resource has synced.
-	SyncStatusReady = "Ready"
+	// LabelServiceAccountName is the service account name related to the secret.
+	LabelServiceAccountName = "tenancy.x-k8s.io/service-account.name"
+	// LabelSecretName is the service account token secret name in tenant namespace.
+	LabelSecretName = "tenancy.x-k8s.io/secret.name"
 
 	// DefaultControllerWorkers is the quantity of the worker routine for a controller.
 	DefaultControllerWorkers = 3

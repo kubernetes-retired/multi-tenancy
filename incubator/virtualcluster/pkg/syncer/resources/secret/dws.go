@@ -20,16 +20,16 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -69,45 +69,84 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 func (c *controller) reconcileSecretCreate(cluster, namespace, name string, secret *v1.Secret) error {
 	switch secret.Type {
 	case v1.SecretTypeServiceAccountToken:
-		return c.reconcileServiceAccountSecretUpdate(cluster, namespace, name, secret)
+		return c.reconcileServiceAccountSecretCreate(cluster, namespace, name, secret)
 	default:
 		return c.reconcileNormalSecretCreate(cluster, namespace, name, secret)
 	}
 }
 
-func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, name string, secret *v1.Secret) error {
+func (c *controller) reconcileServiceAccountSecretCreate(cluster, namespace, name string, vSecret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	saName := vSecret.GetAnnotations()[v1.ServiceAccountNameKey]
 
-	saName := secret.Annotations[v1.ServiceAccountNameKey]
+	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
+		constants.LabelServiceAccountName: saName,
+		constants.LabelSecretName:         vSecret.Name,
+	}))
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if len(secretList) > 0 {
+		return serviceAccountSecretUpdate(c.secretClient.Secrets(targetNamespace), secretList, vSecret)
+	}
 
-	pSecret, err := utils.GetSecret(c.secretClient, targetNamespace, saName)
+	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, vSecret)
 	if err != nil {
 		return err
 	}
 
-	needUpdate := false
+	pSecret := newObj.(*v1.Secret)
+	conversion.VC(c.multiClusterSecretController, "").ServiceAccountTokenSecret(pSecret).Mutate(vSecret, cluster)
 
-	if pSecret.Labels[constants.SyncStatusKey] != constants.SyncStatusReady {
-		needUpdate = true
-		if len(pSecret.Labels) == 0 {
-			pSecret.Labels = make(map[string]string)
-		}
-		pSecret.Labels[constants.SyncStatusKey] = constants.SyncStatusReady
-	}
-
-	if !equality.Semantic.DeepEqual(secret.Data, pSecret.Data) {
-		needUpdate = true
-		pSecret.Data = secret.Data
-	}
-
-	if !needUpdate {
+	_, err = c.secretClient.Secrets(targetNamespace).Create(pSecret)
+	if errors.IsAlreadyExists(err) {
+		klog.Infof("secret %s/%s of cluster %s already exist in super master", namespace, name, cluster)
 		return nil
 	}
 
-	_, err = c.secretClient.Secrets(targetNamespace).Update(pSecret)
+	return err
+}
+
+func (c *controller) reconcileServiceAccountSecretUpdate(cluster, namespace, name string, vSecret *v1.Secret) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+
+	saName := vSecret.Annotations[v1.ServiceAccountNameKey]
+
+	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
+		constants.LabelServiceAccountName: saName,
+		constants.LabelSecretName:         vSecret.Name,
+	}))
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if len(secretList) == 0 {
+		return nil
+	}
+
+	return serviceAccountSecretUpdate(c.secretClient.Secrets(targetNamespace), secretList, vSecret)
+}
+
+func serviceAccountSecretUpdate(secretClient corev1.SecretInterface, secretList []*v1.Secret, vSecret *v1.Secret) error {
+	if len(secretList) == 0 {
+		return nil
+	}
+	pSecret := secretList[0]
+
+	updatedBinaryData, equal := conversion.Equality(nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
+	if equal {
+		return nil
+	}
+
+	updatedSecret := pSecret.DeepCopy()
+	updatedSecret.Data = updatedBinaryData
+	_, err := secretClient.Update(pSecret)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
