@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -134,6 +135,13 @@ func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	spec := vc.Spec.DeepCopy()
+	prefixesSet := sets.NewString(spec.OpaqueMetaPrefixes...)
+	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {
+		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
+	}
+
 	return vc.Spec.DeepCopy(), nil
 }
 
