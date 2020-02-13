@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
@@ -34,11 +34,10 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/utils"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.nsSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.nsSynced, c.secretSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Pod dws")
 	}
 	return c.multiClusterPodController.Start(stopCh)
@@ -108,6 +107,7 @@ func createNotSupportEvent(pod *v1.Pod) *v1.Event {
 }
 
 func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v1.Pod) error {
+	starttime := time.Now()
 	// load deleting pod, don't create any pod on super master.
 	if vPod.DeletionTimestamp != nil {
 		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
@@ -138,34 +138,9 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 
 	pPod := newObj.(*v1.Pod)
 
-	// check if the secret in super master is ready we must create pod after sync the secret.
-	saName := "default"
-	if pPod.Spec.ServiceAccountName != "" {
-		saName = pPod.Spec.ServiceAccountName
-	}
-
-	// find service account token secret and replace the one set by tenant kcm.
-	secretList, err := c.client.Secrets(targetNamespace).List(metav1.ListOptions{
-		LabelSelector: labels.Set(map[string]string{
-			constants.LabelServiceAccountName: saName,
-		}).String(),
-	})
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	}
-
-	if secretList == nil || len(secretList.Items) == 0 {
-		return fmt.Errorf("service account token secret for pod is not ready")
-	}
-	pSecret := &secretList.Items[0]
-
-	tenantClient, err := c.multiClusterPodController.GetClusterClient(cluster)
+	pSecret, err := c.getPodServiceAccountSecret(pPod)
 	if err != nil {
-		return err
-	}
-	vSecret, err := utils.GetSecret(tenantClient.CoreV1(), namespace, saName)
-	if err != nil {
-		return fmt.Errorf("failed to get secret: %v", err)
+		return fmt.Errorf("failed to get service account secret from cluster %s cache: %v", cluster, err)
 	}
 
 	services, err := c.getPodRelatedServices(cluster, pPod)
@@ -173,43 +148,56 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		return fmt.Errorf("failed to list services from cluster %s cache: %v", cluster, err)
 	}
 
-	if len(services) == 0 {
-		return fmt.Errorf("service is not ready")
-	}
-
-	nameServer, err := c.getClusterNameServer(c.client, cluster)
+	nameServer, err := c.getClusterNameServer(cluster)
 	if err != nil {
 		return fmt.Errorf("failed to find nameserver: %v", err)
 	}
 
 	var ms = []conversion.PodMutator{
-		conversion.PodMutateDefault(vPod, vSecret, pSecret, services, nameServer),
+		conversion.PodMutateDefault(vPod, pSecret, services, nameServer),
 		conversion.PodMutateAutoMountServiceAccountToken(c.config.DisableServiceAccountToken),
-		conversion.PodAddExtensionMeta(vPod),
+		// TODO: make extension configurable
+		//conversion.PodAddExtensionMeta(vPod),
 	}
 
 	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(ms...)
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}
-
 	_, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
 		klog.Infof("pod %s/%s of cluster %s already exist in super master", namespace, name, cluster)
 		return nil
 	}
+
 	return err
 }
 
-func (c *controller) getClusterNameServer(client v1core.ServicesGetter, cluster string) (string, error) {
-	svc, err := client.Services(conversion.ToSuperMasterNamespace(cluster, constants.TenantDNSServerNS)).Get(constants.TenantDNSServerServiceName, metav1.GetOptions{})
+func (c *controller) getPodServiceAccountSecret(pPod *v1.Pod) (*v1.Secret, error) {
+	saName := "default"
+	if pPod.Spec.ServiceAccountName != "" {
+		saName = pPod.Spec.ServiceAccountName
+	}
+	// find service account token secret and replace the one set by tenant kcm.
+	req, _ := labels.NewRequirement(constants.LabelServiceAccountName, selection.In, []string{saName})
+	secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.NewSelector().Add(*req))
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, err
+	}
+	if secretList == nil || len(secretList) == 0 {
+		return nil, fmt.Errorf("service account token secret for pod is not ready")
+	}
+	return secretList[0], nil
+}
+
+func (c *controller) getClusterNameServer(cluster string) (string, error) {
+	svc, err := c.serviceLister.Services(conversion.ToSuperMasterNamespace(cluster, constants.TenantDNSServerNS)).Get(constants.TenantDNSServerServiceName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return "", nil
 		}
 		return "", err
 	}
-
 	return svc.Spec.ClusterIP, nil
 }
 
@@ -226,7 +214,9 @@ func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.
 		return nil, err
 	}
 	services = append(services, list...)
-
+	if len(services) == 0 {
+		return nil, fmt.Errorf("service is not ready")
+	}
 	return services, nil
 }
 

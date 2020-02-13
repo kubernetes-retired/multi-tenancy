@@ -51,6 +51,8 @@ type controller struct {
 	podSynced     cache.InformerSynced
 	serviceLister listersv1.ServiceLister
 	serviceSynced cache.InformerSynced
+	secretLister  listersv1.SecretLister
+	secretSynced  cache.InformerSynced
 	nsLister      listersv1.NamespaceLister
 	nsSynced      cache.InformerSynced
 	// Connect to all tenant master pod informers
@@ -106,6 +108,9 @@ func Register(
 
 	c.serviceLister = informer.Services().Lister()
 	c.serviceSynced = informer.Services().Informer().HasSynced
+
+	c.secretLister = informer.Secrets().Lister()
+	c.secretSynced = informer.Secrets().Informer().HasSynced
 
 	c.nsLister = informer.Namespaces().Lister()
 	c.nsSynced = informer.Namespaces().Informer().HasSynced
