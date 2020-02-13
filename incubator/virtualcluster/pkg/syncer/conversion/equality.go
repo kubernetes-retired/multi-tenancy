@@ -411,17 +411,33 @@ func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 	return updated
 }
 
+func filterSubSetTargetRef(ep *v1.Endpoints) []v1.EndpointSubset {
+	epSubsetCopy := ep.Subsets
+	for _, each := range epSubsetCopy {
+		for _, addr := range each.Addresses {
+			if addr.TargetRef != nil {
+				addr.TargetRef.Namespace = ""
+				addr.TargetRef.ResourceVersion = ""
+				addr.TargetRef.UID = ""
+			}
+		}
+		for _, addr := range each.NotReadyAddresses {
+			if addr.TargetRef != nil {
+				addr.TargetRef.Namespace = ""
+				addr.TargetRef.ResourceVersion = ""
+				addr.TargetRef.UID = ""
+			}
+		}
+	}
+	return epSubsetCopy
+}
+
 func (e vcEquality) CheckEndpointsEquality(pObj, vObj *v1.Endpoints) *v1.Endpoints {
 	var updated *v1.Endpoints
-	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
-	if updatedMeta != nil {
-		if updated == nil {
-			updated = pObj.DeepCopy()
-		}
-		updated.ObjectMeta = *updatedMeta
-	}
+	pSubsetCopy := filterSubSetTargetRef(pObj)
+	vSubsetCopy := filterSubSetTargetRef(vObj)
 
-	if !equality.Semantic.DeepEqual(pObj.Subsets, vObj.Subsets) {
+	if !equality.Semantic.DeepEqual(pSubsetCopy, vSubsetCopy) {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}

@@ -375,6 +375,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolumeClaim{}
 	case *v1.PersistentVolume:
 		return &v1.PersistentVolume{}
+	case *v1.Endpoints:
+		return &v1.Endpoints{}
 	default:
 		return nil
 	}
@@ -402,6 +404,8 @@ func getTargetObjectList(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolumeClaimList{}
 	case *v1.PersistentVolume:
 		return &v1.PersistentVolumeList{}
+	case *v1.Endpoints:
+		return &v1.EndpointsList{}
 	default:
 		return nil
 	}
