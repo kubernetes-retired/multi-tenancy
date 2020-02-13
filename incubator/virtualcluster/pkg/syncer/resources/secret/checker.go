@@ -136,7 +136,13 @@ func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		updatedSecret := conversion.Equality(nil).CheckSecretEquality(pSecret, &secretList.Items[i])
+		spec, err := c.multiClusterSecretController.GetSpec(clusterName)
+		if err != nil {
+			klog.Errorf("fail to get cluster spec : %s", clusterName)
+			continue
+		}
+
+		updatedSecret := conversion.Equality(spec).CheckSecretEquality(pSecret, &secretList.Items[i])
 		if updatedSecret != nil {
 			klog.Warningf("spec of secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
 		}
