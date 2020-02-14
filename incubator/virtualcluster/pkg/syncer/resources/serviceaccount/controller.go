@@ -17,6 +17,8 @@ limitations under the License.
 package serviceaccount
 
 import (
+	"time"
+
 	"k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -37,6 +39,8 @@ type controller struct {
 	saSynced cache.InformerSynced
 	// Connect to all tenant master sa informers
 	multiClusterServiceAccountController *mc.MultiClusterController
+	// Checker timer
+	periodCheckerPeriod time.Duration
 }
 
 func Register(
@@ -46,17 +50,18 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		saClient: client,
+		saClient:            client,
+		periodCheckerPeriod: 60 * time.Second,
 	}
 
 	// Create the multi cluster secret controller
 	options := mc.Options{Reconciler: c}
-	multiClusterSecretController, err := mc.NewMCController("tenant-masters-service-account-controller", &v1.ServiceAccount{}, options)
+	multiClusterServiceAccountController, err := mc.NewMCController("tenant-masters-service-account-controller", &v1.ServiceAccount{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster secret controller %v", err)
 		return
 	}
-	c.multiClusterServiceAccountController = multiClusterSecretController
+	c.multiClusterServiceAccountController = multiClusterServiceAccountController
 	c.saLister = saInformer.Lister()
 	c.saSynced = saInformer.Informer().HasSynced
 
@@ -64,10 +69,6 @@ func Register(
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	return nil
 }
 
