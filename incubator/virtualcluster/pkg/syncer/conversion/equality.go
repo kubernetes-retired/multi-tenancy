@@ -413,19 +413,19 @@ func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 
 func filterSubSetTargetRef(ep *v1.Endpoints) []v1.EndpointSubset {
 	epSubsetCopy := ep.Subsets
-	for _, each := range epSubsetCopy {
-		for _, addr := range each.Addresses {
+	for i, each := range epSubsetCopy {
+		for j, addr := range each.Addresses {
 			if addr.TargetRef != nil {
-				addr.TargetRef.Namespace = ""
-				addr.TargetRef.ResourceVersion = ""
-				addr.TargetRef.UID = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.Namespace = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.ResourceVersion = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.UID = ""
 			}
 		}
-		for _, addr := range each.NotReadyAddresses {
+		for j, addr := range each.NotReadyAddresses {
 			if addr.TargetRef != nil {
-				addr.TargetRef.Namespace = ""
-				addr.TargetRef.ResourceVersion = ""
-				addr.TargetRef.UID = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.Namespace = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.ResourceVersion = ""
+				epSubsetCopy[i].Addresses[j].TargetRef.UID = ""
 			}
 		}
 	}
