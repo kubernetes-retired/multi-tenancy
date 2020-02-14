@@ -444,6 +444,14 @@ func (e vcEquality) CheckStorageClassEquality(pObj, vObj *v1storage.StorageClass
 	}
 }
 
+func filterNodePort(svc *v1.Service) *v1.ServiceSpec {
+	specClone := svc.Spec.DeepCopy()
+	for i, _ := range specClone.Ports {
+		specClone.Ports[i].NodePort = 0
+	}
+	return specClone
+}
+
 func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 	var updated *v1.Service
 	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
@@ -455,13 +463,15 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 	}
 
 	// Super/tenant service ClusterIP cannot be the same
-	vSpecClone := vObj.Spec.DeepCopy()
-	vSpecClone.ClusterIP = pObj.Spec.ClusterIP
-	if !equality.Semantic.DeepEqual(pObj.Spec, *vSpecClone) {
+	vSpec := filterNodePort(vObj)
+	pSpec := filterNodePort(pObj)
+	vSpec.ClusterIP = pSpec.ClusterIP
+
+	if !equality.Semantic.DeepEqual(vSpec, pSpec) {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}
-		updated.Spec = *vSpecClone
+		updated.Spec = *vObj.Spec.DeepCopy()
 	}
 	return updated
 }
