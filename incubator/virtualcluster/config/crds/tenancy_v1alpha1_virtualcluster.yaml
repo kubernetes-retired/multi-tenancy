@@ -35,6 +35,8 @@ spec:
             pkiExpireDays:
               format: int64
               type: integer
+            serviceCidr:
+              type: string
             transparentMetaPrefixes:
               items:
                 type: string

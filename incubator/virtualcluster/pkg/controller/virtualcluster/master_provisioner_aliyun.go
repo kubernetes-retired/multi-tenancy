@@ -523,6 +523,11 @@ PollASK:
 		return err
 	}
 	log.Info("slb id has been added to vc as annotation", "vc", vc.GetName(), "id", clsSlbId)
+	err = kubeutil.AnnotateVC(mpa, vc, AnnotationClusterIDKey, clsID, log)
+	if err != nil {
+		return err
+	}
+	log.Info("cluster ID has been added to vc as annotation", "vc", vc.GetName(), "cluster-id", clsID)
 
 	// 8. delete the node-controller service account to disable the
 	// node periodic check
