@@ -17,23 +17,22 @@ limitations under the License.
 package service
 
 import (
+	"fmt"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
@@ -42,8 +41,13 @@ type controller struct {
 	// super master informer/listers/synced functions
 	serviceLister listersv1.ServiceLister
 	serviceSynced cache.InformerSynced
+	nsLister      listersv1.NamespaceLister
+	nsSynced      cache.InformerSynced
 	// Connect to all tenant master service informers
 	multiClusterServiceController *mc.MultiClusterController
+	// UWS queue
+	workers int
+	queue   workqueue.RateLimitingInterface
 	// Checker timer
 	periodCheckerPeriod time.Duration
 }
@@ -51,12 +55,14 @@ type controller struct {
 func Register(
 	config *config.SyncerConfiguration,
 	serviceClient v1core.ServicesGetter,
-	serviceInformer coreinformers.ServiceInformer,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_service"),
+		workers:             constants.DefaultControllerWorkers,
 	}
 
 	// Create the multi cluster service controller
@@ -68,79 +74,55 @@ func Register(
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
-	c.serviceLister = serviceInformer.Lister()
-	c.serviceSynced = serviceInformer.Informer().HasSynced
+	c.serviceLister = informer.Services().Lister()
+	c.serviceSynced = informer.Services().Informer().HasSynced
 
+	c.nsLister = informer.Namespaces().Lister()
+	c.nsSynced = informer.Namespaces().Informer().HasSynced
+
+	informer.Services().Informer().AddEventHandler(
+		cache.FilteringResourceEventHandler{
+			FilterFunc: func(obj interface{}) bool {
+				switch t := obj.(type) {
+				case *v1.Service:
+					return isLoadBalancerService(t)
+				case cache.DeletedFinalStateUnknown:
+					if e, ok := t.Obj.(*v1.Service); ok {
+						return isLoadBalancerService(e)
+					}
+					utilruntime.HandleError(fmt.Errorf("unable to convert object %v to *v1.Service", obj))
+					return false
+				default:
+					utilruntime.HandleError(fmt.Errorf("unable to handle object in super master service controller: %v", obj))
+					return false
+				}
+			},
+			Handler: cache.ResourceEventHandlerFuncs{
+				AddFunc: c.enqueueService,
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					newService := newObj.(*v1.Service)
+					oldService := oldObj.(*v1.Service)
+					if newService.ResourceVersion != oldService.ResourceVersion {
+						c.enqueueService(newObj)
+					}
+				},
+				DeleteFunc: c.enqueueService,
+			},
+		})
 	controllerManager.AddController(c)
 }
 
-func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	return nil
+func isLoadBalancerService(svc *v1.Service) bool {
+	return svc.Spec.Type == v1.ServiceTypeLoadBalancer
 }
 
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterServiceController.Start(stopCh)
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile service %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
-
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileServiceCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
-		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileServiceUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
-		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileServiceRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
-		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	}
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) reconcileServiceCreate(cluster, namespace, name string, service *v1.Service) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, service)
+func (c *controller) enqueueService(obj interface{}) {
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
-		return err
+		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
+		return
 	}
-
-	pService := newObj.(*v1.Service)
-	conversion.VC(nil, "").Service(pService).Mutate(service)
-
-	_, err = c.serviceClient.Services(targetNamespace).Create(pService)
-	if errors.IsAlreadyExists(err) {
-		klog.Infof("service %s/%s of cluster %s already exist in super master", namespace, name, cluster)
-		return nil
-	}
-	return err
-}
-
-func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, service *v1.Service) error {
-	return nil
-}
-
-func (c *controller) reconcileServiceRemove(cluster, namespace, name string, service *v1.Service) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	opts := &metav1.DeleteOptions{
-		PropagationPolicy: &constants.DefaultDeletionPolicy,
-	}
-	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
-	if errors.IsNotFound(err) {
-		klog.Warningf("service %s/%s of cluster not found in super master", namespace, name)
-		return nil
-	}
-	return err
+	c.queue.Add(key)
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
