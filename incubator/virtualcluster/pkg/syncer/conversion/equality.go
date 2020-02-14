@@ -462,7 +462,7 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 		updated.ObjectMeta = *updatedMeta
 	}
 
-	// Super/tenant service ClusterIP cannot be the same
+	// Super/tenant service ClusterIP may not be the same
 	vSpec := filterNodePort(vObj)
 	pSpec := filterNodePort(pObj)
 	vSpec.ClusterIP = pSpec.ClusterIP
@@ -472,6 +472,19 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 			updated = pObj.DeepCopy()
 		}
 		updated.Spec = *vObj.Spec.DeepCopy()
+		updated.Spec.ClusterIP = pSpec.ClusterIP
+
+		var newPorts []v1.ServicePort
+		for _, each := range updated.Spec.Ports {
+			newPorts = append(newPorts, v1.ServicePort{
+				Name:       each.Name,
+				Protocol:   each.Protocol,
+				Port:       each.Port,
+				TargetPort: each.TargetPort,
+				// Do not copy NodePort as it can be system generated
+			})
+		}
+		updated.Spec.Ports = newPorts
 	}
 	return updated
 }
