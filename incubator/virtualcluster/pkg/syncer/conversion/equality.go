@@ -471,20 +471,13 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 		if updated == nil {
 			updated = pObj.DeepCopy()
 		}
-		updated.Spec = *vObj.Spec.DeepCopy()
-		updated.Spec.ClusterIP = pSpec.ClusterIP
-
-		var newPorts []v1.ServicePort
-		for _, each := range updated.Spec.Ports {
-			newPorts = append(newPorts, v1.ServicePort{
-				Name:       each.Name,
-				Protocol:   each.Protocol,
-				Port:       each.Port,
-				TargetPort: each.TargetPort,
-				// Do not copy NodePort as it can be system generated
-			})
+		updated.Spec = *vSpec
+		// Keep existing nodeport in pSpec unchanged.`
+		j := 0
+		for i := 0; i < len(updated.Spec.Ports) && j < len(pObj.Spec.Ports); i++ {
+			updated.Spec.Ports[i].NodePort = pObj.Spec.Ports[j].NodePort
+			j++
 		}
-		updated.Spec.Ports = newPorts
 	}
 	return updated
 }
