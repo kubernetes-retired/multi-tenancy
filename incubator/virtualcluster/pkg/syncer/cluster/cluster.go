@@ -142,7 +142,7 @@ func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
 		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
 	}
 
-	return vc.Spec.DeepCopy(), nil
+	return spec, nil
 }
 
 func (c *Cluster) getScheme() *runtime.Scheme {

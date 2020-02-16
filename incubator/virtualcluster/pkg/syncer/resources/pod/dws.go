@@ -107,7 +107,6 @@ func createNotSupportEvent(pod *v1.Pod) *v1.Event {
 }
 
 func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v1.Pod) error {
-	starttime := time.Now()
 	// load deleting pod, don't create any pod on super master.
 	if vPod.DeletionTimestamp != nil {
 		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
