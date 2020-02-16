@@ -206,11 +206,37 @@ func (c *controller) reconcileNormalSecretUpdate(cluster, namespace, name string
 }
 
 func (c *controller) reconcileSecretRemove(cluster, namespace, name string, secret *v1.Secret) error {
+	switch secret.Type {
+	case v1.SecretTypeServiceAccountToken:
+		return c.reconcileServiceAccountTokenSecretRemove(cluster, namespace, name, secret)
+	default:
+		return c.reconcileNormalSecretRemove(cluster, namespace, name, secret)
+	}
+}
+
+func (c *controller) reconcileNormalSecretRemove(cluster, namespace, name string, secret *v1.Secret) error {
 	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.secretClient.Secrets(targetNamespace).Delete(name, opts)
+	if errors.IsNotFound(err) {
+		klog.Warningf("secret %s/%s of cluster is not found in super master", namespace, name)
+		return nil
+	}
+	return err
+}
+
+func (c *controller) reconcileServiceAccountTokenSecretRemove(cluster, namespace, name string, vSecret *v1.Secret) error {
+	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+	opts := &metav1.DeleteOptions{
+		PropagationPolicy: &constants.DefaultDeletionPolicy,
+	}
+	err := c.secretClient.Secrets(targetNamespace).DeleteCollection(opts, metav1.ListOptions{
+		LabelSelector: labels.Set(map[string]string{
+			constants.LabelSecretName: name,
+		}).String(),
+	})
 	if errors.IsNotFound(err) {
 		klog.Warningf("secret %s/%s of cluster is not found in super master", namespace, name)
 		return nil

@@ -118,11 +118,13 @@ func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
 	klog.Infof("check secrets consistency in cluster %s", clusterName)
 	secretList := listObj.(*v1.SecretList)
 	for i, vSecret := range secretList.Items {
+		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSecret.Namespace)
+
 		if vSecret.Type == v1.SecretTypeServiceAccountToken {
+			c.checkServiceAccountTokenTypeSecretOfTenantCluster(clusterName, targetNamespace, &secretList.Items[i])
 			continue
 		}
 
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSecret.Namespace)
 		pSecret, err := c.secretLister.Secrets(targetNamespace).Get(vSecret.Name)
 		if errors.IsNotFound(err) {
 			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i], reconciler.AddEvent); err != nil {
@@ -146,5 +148,38 @@ func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
 		if updatedSecret != nil {
 			klog.Warningf("spec of secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
 		}
+	}
+}
+
+func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterName, targetNamespace string, vSecret *v1.Secret) {
+	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
+		constants.LabelSecretName: vSecret.Name,
+	}))
+	if errors.IsNotFound(err) || len(secretList) == 0 {
+		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret, reconciler.AddEvent); err != nil {
+			klog.Errorf("error requeue service account type vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
+		}
+		return
+	}
+
+	if err != nil {
+		klog.Errorf("failed to get service account token type pSecret %s/%s from super master cache: %v", targetNamespace, vSecret.Name, err)
+		return
+	}
+
+	if len(secretList) > 1 {
+		klog.Warningf("found service account token type pSecret %s/%s more than one", targetNamespace, vSecret.Name)
+		return
+	}
+
+	spec, err := c.multiClusterSecretController.GetSpec(clusterName)
+	if err != nil {
+		klog.Errorf("fail to get cluster spec : %s", clusterName)
+		return
+	}
+
+	updatedSecret := conversion.Equality(spec).CheckSecretEquality(secretList[0], vSecret)
+	if updatedSecret != nil {
+		klog.Warningf("spec of service account token type secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
 	}
 }
