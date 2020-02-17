@@ -423,9 +423,9 @@ func filterSubSetTargetRef(ep *v1.Endpoints) []v1.EndpointSubset {
 		}
 		for j, addr := range each.NotReadyAddresses {
 			if addr.TargetRef != nil {
-				epSubsetCopy[i].Addresses[j].TargetRef.Namespace = ""
-				epSubsetCopy[i].Addresses[j].TargetRef.ResourceVersion = ""
-				epSubsetCopy[i].Addresses[j].TargetRef.UID = ""
+				epSubsetCopy[i].NotReadyAddresses[j].TargetRef.Namespace = ""
+				epSubsetCopy[i].NotReadyAddresses[j].TargetRef.ResourceVersion = ""
+				epSubsetCopy[i].NotReadyAddresses[j].TargetRef.UID = ""
 			}
 		}
 	}
