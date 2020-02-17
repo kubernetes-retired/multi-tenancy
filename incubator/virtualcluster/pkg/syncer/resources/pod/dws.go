@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
@@ -178,8 +177,9 @@ func (c *controller) getPodServiceAccountSecret(pPod *v1.Pod) (*v1.Secret, error
 		saName = pPod.Spec.ServiceAccountName
 	}
 	// find service account token secret and replace the one set by tenant kcm.
-	req, _ := labels.NewRequirement(constants.LabelServiceAccountName, selection.In, []string{saName})
-	secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.NewSelector().Add(*req))
+	secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.SelectorFromSet(map[string]string{
+		constants.LabelServiceAccountName: saName,
+	}))
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, err
 	}
