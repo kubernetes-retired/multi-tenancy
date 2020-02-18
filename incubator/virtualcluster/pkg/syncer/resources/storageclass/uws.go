@@ -63,27 +63,43 @@ func (c *controller) run() {
 }
 
 func (c *controller) processNextWorkItem() bool {
-	req, quit := c.queue.Get()
+	obj, quit := c.queue.Get()
 	if quit {
 		return false
 	}
-	defer c.queue.Done(req)
+	defer c.queue.Done(obj)
 
-	klog.Infof("back populate storageclass %+v", req)
-	err := c.backPopulate(req.(scReconcileRequest))
-	if err == nil {
-		c.queue.Forget(req)
+	req, ok := obj.(reconciler.UwsRequest)
+	if !ok {
+		c.queue.Forget(obj)
 		return true
 	}
 
-	utilruntime.HandleError(fmt.Errorf("error processing storageclass %v (will retry): %v", req, err))
-	c.queue.AddRateLimited(req)
+	klog.Infof("back populate storageclass %+v", req.Key)
+	err := c.backPopulate(req)
+	if err == nil {
+		c.queue.Forget(obj)
+		return true
+	}
+
+	utilruntime.HandleError(fmt.Errorf("error processing storageclass %v (will retry): %v", req.Key, err))
+	if req.FirstFailureTime == nil {
+		now := metav1.Now()
+		req.FirstFailureTime = &now
+	} else {
+		if metav1.Now().After(req.FirstFailureTime.Add(constants.DefaultUwsRetryTimePeriod)) {
+			klog.Warningf("StorageClass uws request is dropped due to timeout: %v", req)
+			c.queue.Forget(obj)
+			return true
+		}
+	}
+	c.queue.AddRateLimited(obj)
 	return true
 }
 
-func (c *controller) backPopulate(req scReconcileRequest) error {
+func (c *controller) backPopulate(req reconciler.UwsRequest) error {
 	op := reconciler.AddEvent
-	pStorageClass, err := c.storageclassLister.Get(req.key)
+	pStorageClass, err := c.storageclassLister.Get(req.Key)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -91,17 +107,17 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		op = reconciler.DeleteEvent
 	}
 
-	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(req.clusterName)
+	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(req.ClusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", req.clusterName, err)
+		return fmt.Errorf("failed to create client from cluster %s config: %v", req.ClusterName, err)
 	}
 
-	vStorageClassObj, err := c.multiClusterStorageClassController.Get(req.clusterName, "", req.key)
+	vStorageClassObj, err := c.multiClusterStorageClassController.Get(req.ClusterName, "", req.Key)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if op == reconciler.AddEvent {
 				// Available in super, hence create a new in tenant master
-				vStorageClass := conversion.BuildVirtualStorageClass(req.clusterName, pStorageClass)
+				vStorageClass := conversion.BuildVirtualStorageClass(req.ClusterName, pStorageClass)
 				_, err := tenantClient.StorageV1().StorageClasses().Create(vStorageClass)
 				if err != nil {
 					return err
@@ -116,7 +132,7 @@ func (c *controller) backPopulate(req scReconcileRequest) error {
 		opts := &metav1.DeleteOptions{
 			PropagationPolicy: &constants.DefaultDeletionPolicy,
 		}
-		err := tenantClient.StorageV1().StorageClasses().Delete(req.key, opts)
+		err := tenantClient.StorageV1().StorageClasses().Delete(req.Key, opts)
 		if err != nil {
 			return err
 		}

@@ -30,6 +30,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
@@ -74,7 +75,7 @@ func (c *controller) checkStorageClass() {
 			_, err := c.multiClusterStorageClassController.Get(clusterName, "", pStorageClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					c.queue.Add(scReconcileRequest{key: pStorageClass.Name, clusterName: clusterName})
+					c.queue.Add(reconciler.UwsRequest{Key: pStorageClass.Name, ClusterName: clusterName})
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}

@@ -330,6 +330,13 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		// Return true, don't take a break
 		return true
 	}
+	if c.getCluster(req.Cluster.Name) == nil {
+		// The virtual cluster has been removed, do not reconcile for its dws requests.
+		klog.Warningf("The cluster %s has been removed, drop the dws request %v", req.Cluster.Name, req)
+		c.Queue.Forget(obj)
+		return true
+	}
+
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
 	// string of the resource to be synced.
 	if result, err := c.Reconciler.Reconcile(req); err != nil {

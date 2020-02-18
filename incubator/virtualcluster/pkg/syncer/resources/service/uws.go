@@ -23,12 +23,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartUWS starts the upward syncer
@@ -61,21 +64,38 @@ func (c *controller) run() {
 }
 
 func (c *controller) processNextWorkItem() bool {
-	key, quit := c.queue.Get()
+	obj, quit := c.queue.Get()
+
 	if quit {
 		return false
 	}
-	defer c.queue.Done(key)
+	defer c.queue.Done(obj)
 
-	klog.Infof("back populate service %+v", key)
-	err := c.backPopulate(key.(string))
-	if err == nil {
-		c.queue.Forget(key)
+	req, ok := obj.(reconciler.UwsRequest)
+	if !ok {
+		c.queue.Forget(obj)
 		return true
 	}
 
-	utilruntime.HandleError(fmt.Errorf("error processing pod %v (will retry): %v", key, err))
-	c.queue.AddRateLimited(key)
+	klog.Infof("back populate service %+v", req.Key)
+	err := c.backPopulate(req.Key)
+	if err == nil {
+		c.queue.Forget(obj)
+		return true
+	}
+
+	utilruntime.HandleError(fmt.Errorf("error processing service %v (will retry): %v", req.Key, err))
+	if req.FirstFailureTime == nil {
+		now := metav1.Now()
+		req.FirstFailureTime = &now
+	} else {
+		if metav1.Now().After(req.FirstFailureTime.Add(constants.DefaultUwsRetryTimePeriod)) {
+			klog.Warningf(" Service uws request is dropped due to timeout: %v", req)
+			c.queue.Forget(obj)
+			return true
+		}
+	}
+	c.queue.AddRateLimited(obj)
 	return true
 }
 

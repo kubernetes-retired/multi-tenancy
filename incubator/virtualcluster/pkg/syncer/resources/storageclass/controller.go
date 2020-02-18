@@ -55,11 +55,6 @@ type controller struct {
 	periodCheckerPeriod time.Duration
 }
 
-type scReconcileRequest struct {
-	key         string
-	clusterName string
-}
-
 func Register(
 	config *config.SyncerConfiguration,
 	client v1storage.StorageClassesGetter,
@@ -136,7 +131,7 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 	}
 
 	for _, clusterName := range clusterNames {
-		c.queue.Add(scReconcileRequest{key: key, clusterName: clusterName})
+		c.queue.Add(reconciler.UwsRequest{Key: key, ClusterName: clusterName})
 	}
 }
 
