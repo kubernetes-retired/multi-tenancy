@@ -49,6 +49,8 @@ import (
 // The dependencies are lazily created in getters and cached for reuse.
 // It is not thread safe.
 type Cluster struct {
+	// The root namespace name for this cluster
+	key string
 	// Name of the corresponding virtual cluster object.
 	VCName string
 	// Namespace of the corresponding virtual cluster object.
@@ -102,7 +104,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(namespace, name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(key, namespace, name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -114,6 +116,7 @@ func NewTenantCluster(namespace, name string, vclister vclisters.VirtualclusterL
 	}
 
 	return &Cluster{
+		key:              key,
 		VCName:           name,
 		VCNamespace:      namespace,
 		vclister:         vclister,
@@ -124,9 +127,9 @@ func NewTenantCluster(namespace, name string, vclister vclisters.VirtualclusterL
 		stopCh:           make(chan struct{})}, nil
 }
 
-// GetClusterName returns the unique cluster name, aka, the full name of virtual cluster CRD.
+// GetClusterName returns the unique cluster name, aka, the root namespace name.
 func (c *Cluster) GetClusterName() string {
-	return c.VCNamespace + "-" + c.VCName
+	return c.key
 }
 
 // GetSpec returns the virtual cluster spec.

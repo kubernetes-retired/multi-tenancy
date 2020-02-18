@@ -264,10 +264,10 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 
 	adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to get secret (%s) for virtual cluster %s/%s: %v", KubeconfigAdmin, vc.Namespace, vc.Name, err)
+		return fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", KubeconfigAdmin, clusterName, err)
 	}
 
-	tenantCluster, err := cluster.NewTenantCluster(vc.Namespace, vc.Name, s.lister, adminKubeConfigSecret.Data[KubeconfigAdmin], cluster.Options{})
+	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, s.lister, adminKubeConfigSecret.Data[KubeconfigAdmin], cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}

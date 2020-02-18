@@ -42,14 +42,11 @@ const (
 
 var masterServices = sets.NewString("kubernetes")
 
-// ToClusterKey make a unique id for a virtual cluster object.
-// The key uses the format <namespace>-<name> unless <namespace> is empty, then
-// it's just <name>.
+// ToClusterKey makes a unique key which is used to create the root namespace in super master for a virtual cluster.
+// To avoid name conflict, the key uses the format <namespace>-<hash>-<name>
 func ToClusterKey(vc *v1alpha1.Virtualcluster) string {
-	if len(vc.GetNamespace()) > 0 {
-		return vc.GetNamespace() + "-" + vc.GetName()
-	}
-	return vc.GetName()
+	digest := sha256.Sum256([]byte(vc.GetUID()))
+	return vc.GetNamespace() + "-" + hex.EncodeToString(digest[0:])[0:6] + "-" + vc.GetName()
 }
 
 func ToSuperMasterNamespace(cluster, ns string) string {
