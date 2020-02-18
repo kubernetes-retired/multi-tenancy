@@ -36,7 +36,7 @@ import (
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.nsSynced, c.secretSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.secretSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Pod dws")
 	}
 	return c.multiClusterPodController.Start(stopCh)

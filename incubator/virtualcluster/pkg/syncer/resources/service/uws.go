@@ -39,7 +39,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 	klog.Infof("starting service upward syncer")
 
-	if !cache.WaitForCacheSync(stopCh, c.serviceSynced, c.nsSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -85,22 +85,6 @@ func (c *controller) backPopulate(key string) error {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key %v: %v", key, err))
 		return nil
 	}
-	clusterName, vNamespace, err := conversion.GetVirtualNamespace(c.nsLister, pNamespace)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("could not find ns %s in controller cache: %v", pNamespace, err)
-	}
-	if clusterName == "" || vNamespace == "" {
-		klog.Infof("drop service %s/%s which is not belongs to any tenant", pNamespace, pName)
-		return nil
-	}
-
-	tenantClient, err := c.multiClusterServiceController.GetClusterClient(clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
-	}
 
 	pService, err := c.serviceLister.Services(pNamespace).Get(pName)
 	if err != nil {
@@ -108,6 +92,12 @@ func (c *controller) backPopulate(key string) error {
 			return nil
 		}
 		return err
+	}
+
+	clusterName, vNamespace := conversion.GetVirtualOwner(pService)
+	if clusterName == "" || vNamespace == "" {
+		klog.Infof("drop service %s/%s which is not belongs to any tenant", pNamespace, pName)
+		return nil
 	}
 
 	vServiceObj, err := c.multiClusterServiceController.Get(clusterName, vNamespace, pName)
@@ -118,6 +108,11 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("could not find pService %s/%s's vService in controller cache %v", vNamespace, pName, err)
 	}
 	vService := vServiceObj.(*v1.Service)
+
+	tenantClient, err := c.multiClusterServiceController.GetClusterClient(clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+	}
 
 	if !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
 		newService := vService.DeepCopy()

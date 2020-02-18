@@ -61,6 +61,7 @@ func ToSuperMasterNamespace(cluster, ns string) string {
 	return targetNamespace
 }
 
+// GetVirtualNamespace is used to find the corresponding namespace in tenant master for objects created in super master originally, e.g., events.
 func GetVirtualNamespace(nsLister listersv1.NamespaceLister, pNamespace string) (cluster, namespace string, err error) {
 	vcInfo, err := nsLister.Get(pNamespace)
 	if err != nil {
@@ -83,7 +84,7 @@ func GetVirtualOwner(obj runtime.Object) (cluster, namespace string) {
 	}
 
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
-	namespace = strings.TrimPrefix(meta.GetNamespace(), cluster+"-")
+	namespace = meta.GetAnnotations()[constants.LabelNamespace]
 	return cluster, namespace
 }
 
@@ -141,7 +142,7 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 
 	ResetMetadata(m)
 
-	targetName := strings.Join([]string{cluster, m.GetName()}, "-")
+	targetName := ToSuperMasterNamespace(cluster, m.GetName())
 	m.SetName(targetName)
 	return target, nil
 }
