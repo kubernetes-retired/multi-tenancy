@@ -1,6 +1,8 @@
 package stats
 
 import (
+	"math"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -40,9 +42,15 @@ var stats stat
 // StartHierConfigReconcile updates stats when hierarchyConfig
 // reconciliation starts.
 func StartHierConfigReconcile() {
+	peak.lock.Lock()
+	defer peak.lock.Unlock()
 	stats.totalHierConfigReconciles.incr()
 	stats.curHierConfigReconciles.incr()
-	recordMetricsInt64(stats.totalHierConfigReconciles, hierConfigReconcileTotal)
+
+	recordMetric(stats.totalHierConfigReconciles, hierConfigReconcileTotal)
+	// Only update the maxConcurrent value in StartReconcile() since it's impossible to
+	// get the max from StopReconcile() when the reconcile number decrements.
+	peak.concurrentHierConfigReconcile = max(peak.concurrentHierConfigReconcile, stats.curHierConfigReconciles)
 }
 
 // StopHierConfigReconcile updates stats when hierarchyConfig
@@ -54,12 +62,19 @@ func StopHierConfigReconcile() {
 // StartObjReconcile updates the stats for objects with common GK
 // when an object reconciliation starts.
 func StartObjReconcile(gvk schema.GroupVersionKind) {
+	peak.lock.Lock()
+	defer peak.lock.Unlock()
 	gk := gvk.GroupKind()
 	if _, ok := stats.objects[gk]; !ok {
 		stats.objects[gk] = &object{}
 	}
 	stats.objects[gk].totalReconciles.incr()
 	stats.objects[gk].curReconciles.incr()
+
+	recordTagMetric(stats.objects[gk].totalReconciles, objectReconcileTotal, KeyGroupKind, gk.String())
+	// Only update the maxConcurrent value in StartReconcile() since it's impossible to
+	// get the max from StopReconcile() when the reconcile number decrements.
+	peak.concurrentObjectReconcile[gk] = max(peak.concurrentObjectReconcile[gk], stats.objects[gk].curReconciles)
 }
 
 // StopObjReconcile updates the stats for objects with common GK
@@ -72,22 +87,32 @@ func StopObjReconcile(gvk schema.GroupVersionKind) {
 // WriteNamespace updates stats when writing namespace instance.
 func WriteNamespace() {
 	stats.namespaceWrites.incr()
+
+	recordMetric(stats.namespaceWrites, namespaceWritesTotal)
 }
 
 // WriteHierConfig updates stats when writing hierarchyConfig instance.
 func WriteHierConfig() {
 	stats.hierConfigWrites.incr()
-	recordMetricsInt64(stats.hierConfigWrites, hierConfigWritesTotal)
+
+	recordMetric(stats.hierConfigWrites, hierConfigWritesTotal)
 }
 
 // WriteObject updates the object stats by GK when writing the object.
 func WriteObject(gvk schema.GroupVersionKind) {
 	gk := gvk.GroupKind()
 	stats.objects[gk].apiWrites.incr()
+
+	recordTagMetric(stats.objects[gk].apiWrites, objectWritesTotal, KeyGroupKind, gk.String())
 }
 
 func init() {
 	objects := make(map[schema.GroupKind]*object)
+	peak = periodicPeak{
+		lock:                          sync.Mutex{},
+		concurrentHierConfigReconcile: 0,
+		concurrentObjectReconcile:     make(map[schema.GroupKind]counter),
+	}
 	stats = stat{
 		actionID: 1,
 		objects:  objects,
@@ -166,4 +191,8 @@ func getObjWrites() counter {
 		writes += obj.apiWrites
 	}
 	return writes
+}
+
+func max(a counter, b counter) counter {
+	return counter(math.Max(float64(a), float64(b)))
 }

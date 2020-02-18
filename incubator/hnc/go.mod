@@ -3,6 +3,7 @@ module github.com/kubernetes-sigs/multi-tenancy/incubator/hnc
 go 1.12
 
 require (
+	contrib.go.opencensus.io/exporter/stackdriver v0.13.0
 	github.com/Azure/go-autorest/autorest v0.9.1 // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.6.0 // indirect
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
@@ -16,6 +17,7 @@ require (
 	github.com/onsi/gomega v1.7.0
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/spf13/cobra v0.0.5
+	go.opencensus.io v0.22.3
 	k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b
 	k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d
 	k8s.io/cli-runtime v0.0.0-20190314001948-2899ed30580f
