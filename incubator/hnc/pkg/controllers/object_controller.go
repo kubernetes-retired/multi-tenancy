@@ -91,6 +91,11 @@ func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, n
 	return nil
 }
 
+// GetGVK provides GVK that is handled by this reconciler.
+func (r *ObjectReconciler) GetGVK() schema.GroupVersionKind {
+	return r.GVK
+}
+
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if ex[req.Namespace] {
 		return ctrl.Result{}, nil

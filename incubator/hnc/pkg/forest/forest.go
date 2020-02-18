@@ -2,6 +2,7 @@
 package forest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -21,6 +22,15 @@ var (
 	OutOfSync = errors.New("The forest is out of sync with itself")
 )
 
+// TypeSyncer syncs objects of a specific type. Reconcilers implement the interface so that they can be
+// called by the HierarchyReconciler if the hierarchy changes.
+type TypeSyncer interface {
+	// SyncNamespace syncs objects of a namespace for a specific type.
+	SyncNamespace(context.Context, logr.Logger, string) error
+	// Provides the GVK that is handled by the reconciler who implements the interface.
+	GetGVK() schema.GroupVersionKind
+}
+
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
 // the forest legally (ie, prevent cycles).
 //
@@ -29,11 +39,23 @@ var (
 type Forest struct {
 	lock       sync.Mutex
 	namespaces namedNamespaces
+
+	// types is a list of other reconcillers that HierarchyReconciler can call if the hierarchy
+	// changes. This will force all objects to be re-propagated.
+	//
+	// This is probably wildly inefficient, and we can probably make better use of things like
+	// owner references to make this better. But for a PoC, it works just fine.
+	//
+	// We put the list in the forest because the access to the list is guarded by the forest lock.
+	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
+	// In that way, we don't need to put the list in the forest.
+	types []TypeSyncer
 }
 
 func NewForest() *Forest {
 	return &Forest{
 		namespaces: namedNamespaces{},
+		types:      []TypeSyncer{},
 	}
 }
 
@@ -43,6 +65,30 @@ func (f *Forest) Lock() {
 
 func (f *Forest) Unlock() {
 	f.lock.Unlock()
+}
+
+// AddTypeSyncer adds a reconciler to the types list.
+func (f *Forest) AddTypeSyncer(nss TypeSyncer) {
+	f.types = append(f.types, nss)
+}
+
+// HasTypeSyncer returns true if there is already a reconciler with the given GVK.
+func (f *Forest) HasTypeSyncer(gvk schema.GroupVersionKind) bool {
+	for _, t := range f.types {
+		if t.GetGVK() == gvk {
+			return true
+		}
+	}
+	return false
+}
+
+// GetTypeSyncers returns the types list.
+// Retuns a copy here so that the caller does not need to hold the mutex while accessing the returned value and can modify the
+// returned value without fear of corrupting the original types list.
+func (f *Forest) GetTypeSyncers() []TypeSyncer {
+	types := make([]TypeSyncer, len(f.types))
+	copy(types, f.types)
+	return types
 }
 
 // Get returns a `Namespace` object representing a namespace in K8s.

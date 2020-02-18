@@ -54,13 +54,6 @@ type HierarchyReconciler struct {
 	// use it to determine how to propagate objects.
 	Forest *forest.Forest
 
-	// Types is a list of other reconcillers that HierarchyReconciler can call if the hierarchy
-	// changes. This will force all objects to be re-propagated.
-	//
-	// This is probably wildly inefficient, and we can probably make better use of things like
-	// owner references to make this better. But for a PoC, it works just fine.
-	Types []NamespaceSyncer
-
 	// Affected is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional namespaces that need updating.
@@ -70,13 +63,6 @@ type HierarchyReconciler struct {
 	// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
 	// simply hard to tell when one ends and another begins).
 	reconcileID int32
-}
-
-// NamespaceSyncer syncs various aspects of a namespace. The HierarchyReconciler both implements
-// it (so it can be called by NamespaceSyncer) and uses it (to sync the objects in the
-// namespace).
-type NamespaceSyncer interface {
-	SyncNamespace(context.Context, logr.Logger, string) error
 }
 
 // +kubebuilder:rbac:groups=hnc.x-k8s.io,resources=hierarchies,verbs=get;list;watch;create;update;patch;delete
@@ -522,7 +508,12 @@ func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logge
 
 // updateObjects calls all type reconcillers in this namespace.
 func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
-	for _, tr := range r.Types {
+	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
+	// from modifying the list at the same time.
+	r.Forest.Lock()
+	trs := r.Forest.GetTypeSyncers()
+	r.Forest.Unlock()
+	for _, tr := range trs {
 		if err := tr.SyncNamespace(ctx, log, ns); err != nil {
 			return err
 		}
