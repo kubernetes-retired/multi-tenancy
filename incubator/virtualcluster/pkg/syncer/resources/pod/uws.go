@@ -41,7 +41,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 	klog.Infof("starting pod upward syncer")
 
-	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced, c.nsSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -88,29 +88,18 @@ func (c *controller) backPopulate(key string) error {
 		return nil
 	}
 
-	clusterName, vNamespace, err := conversion.GetVirtualNamespace(c.nsLister, pNamespace)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("could not find ns %s in controller cache: %v", pNamespace, err)
-	}
-	if clusterName == "" || vNamespace == "" {
-		klog.Infof("drop pod %s/%s which is not belongs to any tenant", pNamespace, pName)
-		return nil
-	}
-
-	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
-	}
-
 	pPod, err := c.podLister.Pods(pNamespace).Get(pName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
 		return err
+	}
+
+	clusterName, vNamespace := conversion.GetVirtualOwner(pPod)
+	if clusterName == "" || vNamespace == "" {
+		klog.Infof("drop pod %s/%s which is not belongs to any tenant", pNamespace, pName)
+		return nil
 	}
 
 	vPodObj, err := c.multiClusterPodController.Get(clusterName, vNamespace, pName)
@@ -121,6 +110,11 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("could not find pPod %s/%s's vPod in controller cache %v", vNamespace, pName, err)
 	}
 	vPod := vPodObj.(*v1.Pod)
+
+	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+	}
 
 	// If tenant Pod has not been assigned, bind to virtual Node.
 	if vPod.Spec.NodeName == "" {

@@ -31,6 +31,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
@@ -41,8 +42,6 @@ type controller struct {
 	// super master informer/listers/synced functions
 	serviceLister listersv1.ServiceLister
 	serviceSynced cache.InformerSynced
-	nsLister      listersv1.NamespaceLister
-	nsSynced      cache.InformerSynced
 	// Connect to all tenant master service informers
 	multiClusterServiceController *mc.MultiClusterController
 	// UWS queue
@@ -76,9 +75,6 @@ func Register(
 
 	c.serviceLister = informer.Services().Lister()
 	c.serviceSynced = informer.Services().Informer().HasSynced
-
-	c.nsLister = informer.Namespaces().Lister()
-	c.nsSynced = informer.Namespaces().Informer().HasSynced
 
 	informer.Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -117,11 +113,22 @@ func isLoadBalancerService(svc *v1.Service) bool {
 }
 
 func (c *controller) enqueueService(obj interface{}) {
+	svc, ok := obj.(*v1.Service)
+	if !ok {
+		return
+	}
+
+	clusterName, _ := conversion.GetVirtualOwner(svc)
+	if clusterName == "" {
+		return
+	}
+
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
+
 	c.queue.Add(key)
 }
 

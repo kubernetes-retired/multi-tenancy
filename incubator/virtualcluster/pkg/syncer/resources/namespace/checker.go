@@ -76,7 +76,7 @@ func (c *controller) checkNamespaces() {
 	}
 
 	for _, pNamespace := range pNamespaces {
-		clusterName, vNamespace, _ := conversion.GetVirtualNamespace(c.nsLister, pNamespace.Name)
+		clusterName, vNamespace := conversion.GetVirtualOwner(pNamespace)
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
