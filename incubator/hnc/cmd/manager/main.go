@@ -19,13 +19,17 @@ import (
 	"flag"
 	"os"
 
+	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"go.opencensus.io/stats/view"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	// +kubebuilder:scaffold:imports
@@ -88,10 +92,14 @@ func main() {
 	defer exporter.Flush()
 
 	if err := exporter.StartMetricsExporter(); err != nil {
-		setupLog.Error(err, "cannot start metric exporter")
+		setupLog.Error(err, "cannot start StackDriver metric exporter")
 		os.Exit(1)
 	}
 	defer exporter.StopMetricsExporter()
+
+	prom.DefaultRegisterer = metrics.Registry
+	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: metrics.Registry})
+	view.RegisterExporter(promExporter)
 
 	ctrl.SetLogger(zap.Logger(debugLogs))
 
