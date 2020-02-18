@@ -11,10 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 )
 
 var _ = Describe("Secret", func() {
 	ctx := context.Background()
+
+	// Setup HNCConfiguration.
+	hncConfig := newHNCConfig()
 
 	var (
 		fooName string
@@ -23,6 +27,9 @@ var _ = Describe("Secret", func() {
 	)
 
 	BeforeEach(func() {
+		// Add secret to HNCConfiguration so that an ObjectReconciler will be created for secret.
+		addSecretToHNCConfig(ctx, hncConfig)
+
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
@@ -314,4 +321,25 @@ func removeSecret(ctx context.Context, nsName, secretName string) {
 	sec.Name = secretName
 	sec.Namespace = nsName
 	ExpectWithOffset(1, k8sClient.Delete(ctx, sec)).Should(Succeed())
+}
+
+func newHNCConfig() *api.HNCConfiguration {
+	hncConfig := &api.HNCConfiguration{}
+	hncConfig.ObjectMeta.Name = api.HNCConfigSingleton
+	hncConfig.Spec = config.GetDefaultConfigSpec()
+	return hncConfig
+}
+
+func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) {
+	if c.CreationTimestamp.IsZero() {
+		ExpectWithOffset(1, k8sClient.Create(ctx, c)).Should(Succeed())
+	} else {
+		ExpectWithOffset(1, k8sClient.Update(ctx, c)).Should(Succeed())
+	}
+}
+
+func addSecretToHNCConfig(ctx context.Context, c *api.HNCConfiguration) {
+	secSpec := api.TypeSynchronizationSpec{APIVersion: "v1", Kind: "Secret", Mode: api.Propagate}
+	c.Spec.Types = append(c.Spec.Types, secSpec)
+	updateHNCConfig(ctx, c)
 }

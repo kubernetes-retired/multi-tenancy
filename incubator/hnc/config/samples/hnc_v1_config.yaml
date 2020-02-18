@@ -10,3 +10,6 @@ spec:
     - apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
       mode: propagate
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      mode: propagate
