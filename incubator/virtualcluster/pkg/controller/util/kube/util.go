@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
@@ -157,4 +158,48 @@ func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv
 		}
 		return patchErr
 	})
+}
+
+// isAffiliated checks if the given namespace is related to vc, i.e. contains
+// annotation "tenancy.x-k8s.io/cluster":conversion.ToClusterKey(vc)
+// NOTE the root ns doesn't contain this annotation
+func isAffiliated(ns *v1.Namespace, vc *tenancyv1alpha1.Virtualcluster) bool {
+	var tmpVcName string
+	for k, v := range ns.GetAnnotations() {
+		if k == constants.LabelCluster {
+			tmpVcName = v
+			break
+		}
+	}
+	if tmpVcName != "" && tmpVcName == conversion.ToClusterKey(vc) {
+		return true
+	}
+	return false
+
+}
+
+// DeleteAffiliatedNs deletes namespaces affiliated to the target virtualcluster
+func DeleteAffiliatedNs(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, log logr.Logger) error {
+	// delete all related ns, except the root ns
+	nsLst := &v1.NamespaceList{}
+	if err := cli.List(context.TODO(), nsLst); err != nil {
+		log.Error(err, "fail to list all namespaces")
+		return err
+	}
+	for _, ns := range nsLst.Items {
+		if isAffiliated(&ns, vc) {
+			// remove related ns
+			if err := RemoveNS(cli, ns.GetName()); err != nil {
+				log.Error(err, "fail to delete the namespace", "ns", ns.GetName())
+				return err
+			}
+			log.Info("namespace is deleted", "ns", ns.GetName())
+		}
+	}
+	// delete the root ns
+	if err := RemoveNS(cli, conversion.ToClusterKey(vc)); err != nil {
+		log.Error(err, "fail to delete the root namespace", "ns", conversion.ToClusterKey(vc))
+		return err
+	}
+	return nil
 }

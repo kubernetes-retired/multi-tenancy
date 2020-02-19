@@ -131,14 +131,17 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		if strutil.ContainString(vc.ObjectMeta.Finalizers, vcFinalizerName) {
 			// delete the control plane
 			log.Info("Virtualcluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
-			if err = r.mp.DeleteVirtualCluster(vc); err != nil {
-				return
-			}
+			// NOTE we don't want to block the reconciling process due to deletion error
+			r.mp.DeleteVirtualCluster(vc)
 			// remove finalizer from the list and update it.
 			vc.ObjectMeta.Finalizers = strutil.RemoveString(vc.ObjectMeta.Finalizers, vcFinalizerName)
-			if err = r.Update(context.Background(), vc); err != nil {
-				return
-			}
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				updateErr := r.Update(context.TODO(), vc)
+				if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+					log.Info("fail to get vc on update failure", "error", err.Error())
+				}
+				return updateErr
+			})
 		}
 		return
 	}

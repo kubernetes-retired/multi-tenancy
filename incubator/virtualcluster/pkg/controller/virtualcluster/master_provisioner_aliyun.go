@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,6 +41,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
 	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
@@ -60,8 +61,12 @@ const (
 	AliyunASKCfgMpVSID       = "askVswitchID"
 	AliyunASKCfgMpPrivateCfg = "askPrivateKbCfg"
 
-	AnnotationClusterIDKey = "tenancy.x-k8s.io/ask.clusterID"
-	AnnotationSlbIDKey     = "tenancy.x-k8s.io/ask.slbID"
+	// AnnotationClusterID is the cluster id of the remote virtualcluster master on the cloud
+	AnnotationClusterID = "tenancy.x-k8s.io/ask.clusterID"
+	// AnnotationSlbID is the loadbalancer id of the remote virtualcluster master on the cloud
+	AnnotationSlbID = "tenancy.x-k8s.io/ask.slbID"
+	// AnnotationKubeconfig is the admin-kubeconfig to access the remote virtualcluster master on the cloud
+	AnnotationKubeconfig = "tenancy.x-k8s.io/admin-kubeconfig"
 )
 
 type ASKConfig struct {
@@ -328,7 +333,7 @@ func (mpa *MasterProvisionerAliyun) getAliyunAKPair() (keyID string, keySecret s
 		log.Info("can't find NS from inside the pod", "err", err)
 		vcManagerNs = DefaultVcManagerNs
 	}
-	akSrt := &corev1.Secret{}
+	akSrt := &v1.Secret{}
 	if getErr := mpa.Get(context.TODO(), types.NamespacedName{
 		Namespace: vcManagerNs,
 		Name:      AliyunAkSrt,
@@ -359,7 +364,7 @@ func (mpa *MasterProvisionerAliyun) getASKConfigs() (cfg ASKConfig, err error) {
 		vcManagerNs = DefaultVcManagerNs
 	}
 
-	ASKCfgMp := &corev1.ConfigMap{}
+	ASKCfgMp := &v1.ConfigMap{}
 	if getErr := mpa.Get(context.TODO(), types.NamespacedName{
 		Namespace: vcManagerNs,
 		Name:      AliyunASKConfigMap,
@@ -516,18 +521,32 @@ PollASK:
 	}
 	log.Info("admin kubeconfig is created for virtualcluster", "vc", vc.GetName())
 
-	// 7. get the slb id of the ask, and patch an annotation including the slb
-	// id to the vc cr
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationSlbIDKey, clsSlbId, log)
+	// 7. add annotations on vc cr, including,
+	// tenancy.x-k8s.io/ask.clusterID,
+	// tenancy.x-k8s.io/ask.slbID,
+	// tenancy.x-k8s.io/cluster,
+	// tenancy.x-k8s.io/admin-kubeconfig
+	err = kubeutil.AnnotateVC(mpa, vc, AnnotationSlbID, clsSlbId, log)
 	if err != nil {
 		return err
 	}
-	log.Info("slb id has been added to vc as annotation", "vc", vc.GetName(), "id", clsSlbId)
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationClusterIDKey, clsID, log)
+	log.Info("slb id has been added to vc as an annotation", "vc", vc.GetName(), "id", clsSlbId)
+	err = kubeutil.AnnotateVC(mpa, vc, AnnotationClusterID, clsID, log)
 	if err != nil {
 		return err
 	}
-	log.Info("cluster ID has been added to vc as annotation", "vc", vc.GetName(), "cluster-id", clsID)
+	log.Info("cluster ID has been added to vc as an annotation", "vc", vc.GetName(), "cluster-id", clsID)
+	err = kubeutil.AnnotateVC(mpa, vc, AnnotationKubeconfig, kbCfg, log)
+	if err != nil {
+		return err
+	}
+	log.Info("admin-kubeconfig has been added to vc as an annotation", "vc", vc.GetName())
+	// the clusterkey is the vc root ns
+	err = kubeutil.AnnotateVC(mpa, vc, constants.LabelCluster, vcNs, log)
+	if err != nil {
+		return err
+	}
+	log.Info("cluster key has been added to vc as an annotation", "vc", vc.GetName(), "cluster-key", vcNs)
 
 	// 8. delete the node-controller service account to disable the
 	// node periodic check
@@ -553,6 +572,7 @@ PollASK:
 // the ASK will be deleted
 func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
 	log.Info("deleting the ASK of the virtualcluster", "vc-name", vc.Name)
+	defer kubeutil.DeleteAffiliatedNs(mpa, vc, log)
 	aliyunAKID, aliyunAKSrt, err := mpa.getAliyunAKPair()
 	if err != nil {
 		return err
@@ -603,11 +623,7 @@ OuterLoop:
 			return fmt.Errorf("Delete ASK(%s) timeout", vc.Name)
 		}
 	}
-	// delete the root ns
-	err = kubeutil.RemoveNS(mpa, conversion.ToClusterKey(vc))
-	if err != nil {
-		return err
-	}
+
 	return nil
 }
 
