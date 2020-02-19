@@ -363,7 +363,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 }
 
 func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
-	return nil
+	return kubeutil.DeleteAffiliatedNs(mpn, vc, log)
 }
 
 func (mpn *MasterProvisionerNative) GetMasterProvisioner() string {
