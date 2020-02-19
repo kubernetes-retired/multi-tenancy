@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
@@ -55,7 +56,7 @@ func Register(
 	}
 
 	// Create the multi cluster PersistentVolumeClaim controller
-	options := mc.Options{Reconciler: c}
+	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
 	multiClusterPersistentVolumeClaimController, err := mc.NewMCController("tenant-masters-pvc-controller", &v1.PersistentVolumeClaim{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster PersistentVolumeClaim controller %v", err)

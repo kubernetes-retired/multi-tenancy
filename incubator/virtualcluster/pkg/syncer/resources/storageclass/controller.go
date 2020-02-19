@@ -70,7 +70,7 @@ func Register(
 		client:              client,
 		informer:            informer,
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_storageclasses"),
-		workers:             constants.DefaultControllerWorkers,
+		workers:             constants.UwsControllerWorkerLow,
 		periodCheckerPeriod: 60 * time.Second,
 	}
 

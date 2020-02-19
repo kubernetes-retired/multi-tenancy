@@ -83,7 +83,7 @@ func New(
 	syncer := &Syncer{
 		secretClient: secretClient,
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
-		workers:      constants.DefaultControllerWorkers,
+		workers:      constants.UwsControllerWorkerLow,
 		clusterSet:   make(map[string]mc.ClusterInterface),
 	}
 

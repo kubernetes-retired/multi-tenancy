@@ -61,11 +61,11 @@ func Register(
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_service"),
-		workers:             constants.DefaultControllerWorkers,
+		workers:             constants.UwsControllerWorkerLow,
 	}
 
 	// Create the multi cluster service controller
-	options := mc.Options{Reconciler: c}
+	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
 	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster service controller %v", err)
