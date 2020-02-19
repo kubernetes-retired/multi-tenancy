@@ -89,14 +89,14 @@ func Register(
 		client:              client,
 		informer:            informer,
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers:             constants.DefaultControllerWorkers,
+		workers:             constants.UwsControllerWorkerHigh,
 		periodCheckerPeriod: 60 * time.Second,
 		clusterVNodePodMap:  make(map[string]map[string]map[types.UID]struct{}),
 		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
 	}
 
 	// Create the multi cluster pod controller
-	options := mc.Options{Reconciler: c}
+	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerHigh}
 	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster pod controller %v", err)

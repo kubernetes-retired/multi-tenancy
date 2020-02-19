@@ -38,8 +38,15 @@ const (
 	// LabelSecretName is the service account token secret name in tenant namespace.
 	LabelSecretName = "tenancy.x-k8s.io/secret.name"
 
-	// DefaultControllerWorkers is the quantity of the worker routine for a controller.
-	DefaultControllerWorkers = 3
+	// UwsControllerWorkersHigh is the quantity of the worker routine for a resource that generates high number of uws requests.
+	UwsControllerWorkerHigh = 10
+	// UwsControllerWorkersLow is the quantity of the worker routine for a resource that generates low number of uws requests.
+	UwsControllerWorkerLow = 3
+
+	// DwsControllerWorkersHigh is the quantity of the worker routine for a resource that generates high number of dws requests.
+	DwsControllerWorkerHigh = 10
+	// DwsControllerWorkersLow is the quantity of the worker routine for a resource that generates low number of dws requests.
+	DwsControllerWorkerLow = 3
 
 	// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
 	ResourceSyncerUserAgent = "resource-syncer"

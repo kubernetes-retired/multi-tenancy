@@ -63,7 +63,7 @@ func Register(
 		client:   client,
 		informer: informer,
 		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_event"),
-		workers:  constants.DefaultControllerWorkers,
+		workers:  constants.UwsControllerWorkerLow,
 	}
 
 	// Create the multi cluster pod controller
