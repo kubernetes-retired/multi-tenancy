@@ -17,6 +17,7 @@ limitations under the License.
 package reconciler
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
@@ -60,4 +61,11 @@ type Result reconcile.Result
 // Reconciler is the interface used by a Controller to reconcile.
 type Reconciler interface {
 	Reconcile(Request) (Result, error)
+}
+
+type UwsRequest struct {
+	Key              string
+	FirstFailureTime *metav1.Time
+	// Optional, in many cases, the cluster name is unknown when uws request is created
+	ClusterName string
 }

@@ -189,23 +189,15 @@ func TestToClusterKey(t *testing.T) {
 		expectedKey string
 	}{
 		{
-			name: "vc without namespace",
-			vc: &v1alpha1.Virtualcluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "name",
-				},
-			},
-			expectedKey: "name",
-		},
-		{
 			name: "normal vc",
 			vc: &v1alpha1.Virtualcluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "name",
 					Namespace: "ns",
+					UID:       "d64ea0c0-91f8-46f5-8643-c0cab32ab0cd",
 				},
 			},
-			expectedKey: "ns-name",
+			expectedKey: "ns-fd1b34-name",
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {

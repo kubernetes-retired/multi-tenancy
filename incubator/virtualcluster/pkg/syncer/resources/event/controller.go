@@ -115,7 +115,7 @@ func (c *controller) enqueueEvent(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.queue.Add(key)
+	c.queue.Add(reconciler.UwsRequest{Key: key})
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

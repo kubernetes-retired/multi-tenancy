@@ -34,6 +34,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type controller struct {
@@ -129,7 +130,7 @@ func (c *controller) enqueueService(obj interface{}) {
 		return
 	}
 
-	c.queue.Add(key)
+	c.queue.Add(reconciler.UwsRequest{Key: key})
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

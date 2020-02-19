@@ -167,7 +167,7 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	c.queue.Add(key)
+	c.queue.Add(reconciler.UwsRequest{Key: key})
 }
 
 // c.Mutex needs to be Locked before calling addToClusterVNodeGCMap
