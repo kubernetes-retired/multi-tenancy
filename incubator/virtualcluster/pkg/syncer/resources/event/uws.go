@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
@@ -110,7 +110,7 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	vPod, err := tenantClient.CoreV1().Pods(tenantNS).Get(pEvent.InvolvedObject.Name, metav1.GetOptions{})
+	vPodObj, err := c.multiClusterEventController.GetByObjectType(clusterName, tenantNS, pEvent.InvolvedObject.Name, &v1.Pod{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("back populate event: failed to find pod %s/%s in cluster %s", tenantNS, pEvent.InvolvedObject.Name, clusterName)
@@ -118,7 +118,7 @@ func (c *controller) backPopulate(key string) error {
 		}
 		return err
 	}
-
+	vPod := vPodObj.(*v1.Pod)
 	vEvent := conversion.BuildVirtualPodEvent(clusterName, pEvent, vPod)
 	_, err = c.multiClusterEventController.Get(clusterName, tenantNS, vEvent.Name)
 	if err != nil {

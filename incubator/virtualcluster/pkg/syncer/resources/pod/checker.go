@@ -258,18 +258,12 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 // goes to tenant master directly. If this method causes performance issue, we should consider moving it to another
 // periodic thread with a larger check interval.
 func (c *controller) checkNodesOfTenantCluster(clusterName string) {
-	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
-	if err != nil {
-		klog.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
-		return
-	}
-
-	nodeList, err := tenantClient.CoreV1().Nodes().List(metav1.ListOptions{})
+	listObj, err := c.multiClusterPodController.ListByObjectType(clusterName, &v1.Node{})
 	if err != nil {
 		klog.Errorf("failed to list vNode from cluster %s config: %v", clusterName, err)
 		return
 	}
-
+	nodeList := listObj.(*v1.NodeList)
 	for _, vNode := range nodeList.Items {
 		if vNode.Labels[constants.LabelVirtualNode] != "true" {
 			continue

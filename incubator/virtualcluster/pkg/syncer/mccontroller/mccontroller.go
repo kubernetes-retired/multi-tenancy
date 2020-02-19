@@ -195,6 +195,27 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 	return instance, err
 }
 
+// GetByObjectType returns object with specific cluster, namespace and name and object type
+func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name string, objectType runtime.Object) (interface{}, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	instance := getTargetObject(objectType)
+	if instance == nil {
+		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+	}
+	delegatingClient, err := cluster.GetDelegatingClient()
+	if err != nil {
+		return nil, err
+	}
+	err = delegatingClient.Get(context.TODO(), client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, instance)
+	return instance, err
+}
+
 // List returns a list of objects with specific cluster.
 func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
@@ -202,6 +223,24 @@ func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
 	instanceList := getTargetObjectList(c.objectType)
+	delegatingClient, err := cluster.GetDelegatingClient()
+	if err != nil {
+		return nil, err
+	}
+	err = delegatingClient.List(context.TODO(), instanceList)
+	return instanceList, err
+}
+
+// ListByObjectType returns a list of objects with specific cluster and object type.
+func (c *MultiClusterController) ListByObjectType(clusterName string, objectType runtime.Object) (interface{}, error) {
+	cluster := c.getCluster(clusterName)
+	if cluster == nil {
+		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+	}
+	instanceList := getTargetObjectList(objectType)
+	if instanceList == nil {
+		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+	}
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
