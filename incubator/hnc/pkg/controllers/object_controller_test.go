@@ -4,21 +4,18 @@ import (
 	"context"
 	"time"
 
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 )
 
 var _ = Describe("Secret", func() {
 	ctx := context.Background()
-
-	// Setup HNCConfiguration.
-	hncConfig := newHNCConfig()
 
 	var (
 		fooName string
@@ -27,97 +24,94 @@ var _ = Describe("Secret", func() {
 	)
 
 	BeforeEach(func() {
-		// Add secret to HNCConfiguration so that an ObjectReconciler will be created for secret.
-		addSecretToHNCConfig(ctx, hncConfig)
-
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
 
 		// Give them each a secret
-		makeSecret(ctx, fooName, "foo-sec")
-		makeSecret(ctx, barName, "bar-sec")
-		makeSecret(ctx, bazName, "baz-sec")
+		makeRole(ctx, fooName, "foo-role")
+		makeRole(ctx, barName, "bar-role")
+		makeRole(ctx, bazName, "baz-role")
 	})
 
 	It("should be copied to descendents", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
 	})
 
 	It("should be removed if the hierarchy changes", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
 		setParent(ctx, bazName, fooName)
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
 		setParent(ctx, bazName, "")
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should not be propagated if modified", func() {
-		// Set tree as bar -> foo and make sure the first-time propagation of foo-sec
-		// is finished before modifying the foo-sec in bar namespace
+		// Set tree as bar -> foo and make sure the first-time propagation of foo-role
+		// is finished before modifying the foo-role in bar namespace
 		setParent(ctx, barName, fooName)
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
 
 		// Wait 1 second to make sure all enqueued fooName hiers are successfully reconciled
 		// in case the manual modification is overridden by the unfinished propagation.
 		time.Sleep(1 * time.Second)
-		modifySecret(ctx, barName, "foo-sec")
+		modifyRole(ctx, barName, "foo-role")
 
 		// Set as parent. Give the controller a chance to copy the objects and make
 		// sure that at least the correct one was copied. This gives us more confidence
 		// that if the other one *isn't* copied, this is because we decided not to, and
 		// not that we just haven't gotten to it yet.
 		setParent(ctx, bazName, barName)
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
 
 		// Make sure the bad one got overwritte.
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
 	})
 
 	It("should be removed if the source no longer exists", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
 
-		removeSecret(ctx, fooName, "foo-sec")
+		removeRole(ctx, fooName, "foo-role")
 		// Wait 1 second to make sure the propagated objects are removed.
 		time.Sleep(1 * time.Second)
-		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+		Eventually(hasRole(ctx, fooName, "foo-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should overwrite the propagated ones if the source is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeFalse())
+		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Eventually(isModified(ctx, barName, "foo-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeFalse())
 
-		modifySecret(ctx, fooName, "foo-sec")
+		modifyRole(ctx, fooName, "foo-role")
 		// Wait 1 second to make sure the updated source get propagated.
 		time.Sleep(1 * time.Second)
-		Eventually(isModified(ctx, fooName, "foo-sec")).Should(BeTrue())
-		Eventually(isModified(ctx, barName, "foo-sec")).Should(BeTrue())
-		Eventually(isModified(ctx, bazName, "foo-sec")).Should(BeTrue())
+		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeTrue())
+		Eventually(isModified(ctx, barName, "foo-role")).Should(BeTrue())
+		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeTrue())
 	})
 
 	It("shouldn't propagate/delete if the namespace has Crit condition", func() {
@@ -125,13 +119,13 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
 
 		// Set foo's parent to a non-existent namespace.
 		brumpfName := createNSName("brumpf")
@@ -142,25 +136,25 @@ var _ = Describe("Secret", func() {
 		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(Equal(true))
 		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(true))
 
-		// Set baz's parent to foo and add a new sec in foo.
+		// Set baz's parent to foo and add a new role in foo.
 		setParent(ctx, bazName, fooName)
-		makeSecret(ctx, fooName, "foo-sec-2")
+		makeRole(ctx, fooName, "foo-role-2")
 
 		// Wait 1 second to make sure any potential actions are done.
 		time.Sleep(1 * time.Second)
 
-		// Since the sync is frozen, baz should still have bar-sec (no deleting).
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "bar-sec")).Should(Equal(barName))
-		// baz and bar shouldn't have foo-sec-2 (no propagating).
-		Eventually(hasSecret(ctx, bazName, "foo-sec-2")).Should(BeFalse())
-		Eventually(hasSecret(ctx, barName, "foo-sec-2")).Should(BeFalse())
+		// Since the sync is frozen, baz should still have bar-role (no deleting).
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
+		// baz and bar shouldn't have foo-role-2 (no propagating).
+		Eventually(hasRole(ctx, bazName, "foo-role-2")).Should(BeFalse())
+		Eventually(hasRole(ctx, barName, "foo-role-2")).Should(BeFalse())
 
 		// Create the missing parent namespace with one object.
 		brumpfNS := &corev1.Namespace{}
 		brumpfNS.Name = brumpfName
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
-		makeSecret(ctx, brumpfName, "brumpf-sec")
+		makeRole(ctx, brumpfName, "brumpf-role")
 
 		// The Crit conditions should be gone.
 		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(false))
@@ -168,106 +162,56 @@ var _ = Describe("Secret", func() {
 		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(false))
 
 		// Everything should be up to date after the Crit conditions are gone.
-		Eventually(hasSecret(ctx, fooName, "brumpf-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, fooName, "brumpf-sec")).Should(Equal(brumpfName))
+		Eventually(hasRole(ctx, fooName, "brumpf-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, fooName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, barName, "foo-sec-2")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec-2")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, barName, "brumpf-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "brumpf-sec")).Should(Equal(brumpfName))
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "foo-role-2")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "brumpf-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, bazName, "foo-sec-2")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec-2")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, bazName, "brumpf-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "brumpf-sec")).Should(Equal(brumpfName))
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "foo-role-2")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "brumpf-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasSecret(ctx, bazName, "bar-sec")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
 	})
 
 	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
 
 		// Make the secret unpropagateable and verify that it disappears.
-		setFinalizer(ctx, fooName, "foo-sec", true)
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeFalse())
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeFalse())
+		setFinalizer(ctx, fooName, "foo-role", true)
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeFalse())
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
 
 		// Observe the condition on the source namespace
 		want := &api.Condition{
 			Code:    api.CannotPropagate,
-			Affects: []api.AffectedObject{{Version: "v1", Kind: "Secret", Namespace: fooName, Name: "foo-sec"}},
+			Affects: []api.AffectedObject{{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role", Namespace: fooName, Name: "foo-role"}},
 		}
 		Eventually(getCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(want))
 
 		// Fix the problem and verify that the condition vanishes and the secret is propagated again
-		setFinalizer(ctx, fooName, "foo-sec", false)
+		setFinalizer(ctx, fooName, "foo-role", false)
 		Eventually(hasCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(false))
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
-		Eventually(hasSecret(ctx, bazName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, bazName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
 	})
 })
-
-func makeSecret(ctx context.Context, nsName, secretName string) {
-	sec := &corev1.Secret{}
-	sec.Name = secretName
-	sec.Namespace = nsName
-	ExpectWithOffset(1, k8sClient.Create(ctx, sec)).Should(Succeed())
-}
-
-func hasSecret(ctx context.Context, nsName, secretName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-		sec := &corev1.Secret{}
-		err := k8sClient.Get(ctx, nnm, sec)
-		return err == nil
-	}
-}
-
-func secretInheritedFrom(ctx context.Context, nsName, secretName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-	sec := &corev1.Secret{}
-	if err := k8sClient.Get(ctx, nnm, sec); err != nil {
-		// should have been caught above
-		return err.Error()
-	}
-	if sec.ObjectMeta.Labels == nil {
-		return ""
-	}
-	lif, _ := sec.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
-	return lif
-}
-
-func setParent(ctx context.Context, nm string, pnm string) {
-	hier := newOrGetHierarchy(ctx, nm)
-	oldPNM := hier.Spec.Parent
-	hier.Spec.Parent = pnm
-	updateHierarchy(ctx, hier)
-	if oldPNM != "" {
-		EventuallyWithOffset(1, func() []string {
-			pHier := getHierarchyWithOffset(1, ctx, oldPNM)
-			return pHier.Status.Children
-		}).ShouldNot(ContainElement(nm))
-	}
-	if pnm != "" {
-		EventuallyWithOffset(1, func() []string {
-			pHier := getHierarchyWithOffset(1, ctx, pnm)
-			return pHier.Status.Children
-		}).Should(ContainElement(nm))
-	}
-}
 
 func newOrGetHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
 	hier := &api.HierarchyConfiguration{}
@@ -280,66 +224,91 @@ func newOrGetHierarchy(ctx context.Context, nm string) *api.HierarchyConfigurati
 	return hier
 }
 
-func modifySecret(ctx context.Context, nsName, secretName string) {
-	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-	sec := &corev1.Secret{}
-	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+func makeRole(ctx context.Context, nsName, roleName string) {
+	role := &v1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleName,
+			Namespace: nsName,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Role",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
+		Rules: []v1.PolicyRule{
+			// Allow the users to read all secrets, namespaces and configmaps.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "namespaces", "configmaps"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+		},
+	}
+	ExpectWithOffset(1, k8sClient.Create(ctx, role)).Should(Succeed())
+}
 
-	labels := sec.GetLabels()
+func hasRole(ctx context.Context, nsName, roleName string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+		role := &v1.Role{}
+		err := k8sClient.Get(ctx, nnm, role)
+		return err == nil
+	}
+}
+
+func roleInheritedFrom(ctx context.Context, nsName, roleName string) string {
+	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+	role := &v1.Role{}
+	if err := k8sClient.Get(ctx, nnm, role); err != nil {
+		// should have been caught above
+		return err.Error()
+	}
+	if role.ObjectMeta.Labels == nil {
+		return ""
+	}
+	lif, _ := role.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	return lif
+}
+
+func modifyRole(ctx context.Context, nsName, roleName string) {
+	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+	role := &v1.Role{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, role)).Should(Succeed())
+
+	labels := role.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
 	}
 	labels["modify"] = "make-a-change"
-	sec.SetLabels(labels)
-	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
+	role.SetLabels(labels)
+	ExpectWithOffset(1, k8sClient.Update(ctx, role)).Should(Succeed())
 }
 
-func setFinalizer(ctx context.Context, nsName, secretName string, set bool) {
-	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-	sec := &corev1.Secret{}
-	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+func setFinalizer(ctx context.Context, nsName, roleName string, set bool) {
+	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+	role := &v1.Role{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, role)).Should(Succeed())
 	if set {
-		sec.ObjectMeta.Finalizers = []string{"example.com/foo"}
+		role.ObjectMeta.Finalizers = []string{"example.com/foo"}
 	} else {
-		sec.ObjectMeta.Finalizers = nil
+		role.ObjectMeta.Finalizers = nil
 	}
-	ExpectWithOffset(1, k8sClient.Update(ctx, sec)).Should(Succeed())
+	ExpectWithOffset(1, k8sClient.Update(ctx, role)).Should(Succeed())
 }
 
-func isModified(ctx context.Context, nsName, secretName string) bool {
-	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-	sec := &corev1.Secret{}
-	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, sec)).Should(Succeed())
+func isModified(ctx context.Context, nsName, roleName string) bool {
+	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+	role := &v1.Role{}
+	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, role)).Should(Succeed())
 
-	labels := sec.GetLabels()
+	labels := role.GetLabels()
 	_, ok := labels["modify"]
 	return ok
 }
 
-func removeSecret(ctx context.Context, nsName, secretName string) {
-	sec := &corev1.Secret{}
-	sec.Name = secretName
-	sec.Namespace = nsName
-	ExpectWithOffset(1, k8sClient.Delete(ctx, sec)).Should(Succeed())
-}
-
-func newHNCConfig() *api.HNCConfiguration {
-	hncConfig := &api.HNCConfiguration{}
-	hncConfig.ObjectMeta.Name = api.HNCConfigSingleton
-	hncConfig.Spec = config.GetDefaultConfigSpec()
-	return hncConfig
-}
-
-func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) {
-	if c.CreationTimestamp.IsZero() {
-		ExpectWithOffset(1, k8sClient.Create(ctx, c)).Should(Succeed())
-	} else {
-		ExpectWithOffset(1, k8sClient.Update(ctx, c)).Should(Succeed())
-	}
-}
-
-func addSecretToHNCConfig(ctx context.Context, c *api.HNCConfiguration) {
-	secSpec := api.TypeSynchronizationSpec{APIVersion: "v1", Kind: "Secret", Mode: api.Propagate}
-	c.Spec.Types = append(c.Spec.Types, secSpec)
-	updateHNCConfig(ctx, c)
+func removeRole(ctx context.Context, nsName, roleName string) {
+	role := &v1.Role{}
+	role.Name = roleName
+	role.Namespace = nsName
+	ExpectWithOffset(1, k8sClient.Delete(ctx, role)).Should(Succeed())
 }

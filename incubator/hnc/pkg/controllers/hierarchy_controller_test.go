@@ -3,7 +3,6 @@ package controllers_test
 import (
 	"context"
 	"fmt"
-	"math/rand"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -384,41 +383,6 @@ func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
 	} else {
 		ExpectWithOffset(1, k8sClient.Update(ctx, h)).Should(Succeed())
 	}
-}
-
-// createNSName generates random namespace names. Namespaces are never deleted in test-env because
-// the building Namespace controller (which finalizes namespaces) doesn't run; I searched Github and
-// found that everyone who was deleting namespaces was *also* very intentionally generating random
-// names, so I guess this problem is widespread.
-func createNSName(prefix string) string {
-	suffix := make([]byte, 10)
-	rand.Read(suffix)
-	return fmt.Sprintf("%s-%x", prefix, suffix)
-}
-
-// createNSWithLabel has similar function to createNS with label as additional parameter
-func createNSWithLabel(ctx context.Context, prefix string, label map[string]string) string {
-	nm := createNSName(prefix)
-
-	// Create the namespace
-	ns := &corev1.Namespace{}
-	ns.SetLabels(label)
-	ns.Name = nm
-	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
-	return nm
-}
-
-// createNS is a convenience function to create a namespace and wait for its singleton to be
-// created. It's used in other tests in this package, but basically duplicates the code in this test
-// (it didn't originally). TODO: refactor.
-func createNS(ctx context.Context, prefix string) string {
-	nm := createNSName(prefix)
-
-	// Create the namespace
-	ns := &corev1.Namespace{}
-	ns.Name = nm
-	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
-	return nm
 }
 
 func getLabel(ctx context.Context, from, label string) func() string {

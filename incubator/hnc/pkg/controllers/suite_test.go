@@ -16,6 +16,7 @@ limitations under the License.
 package controllers_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -34,6 +35,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
@@ -90,6 +92,12 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
+	// Setup HNCConfiguration object here because it is a cluster-wide singleton shared by all reconcilers.
+	hncConfig := newHNCConfig()
+	Expect(hncConfig).ToNot(BeNil())
+	ctx := context.Background()
+	updateHNCConfig(ctx, hncConfig)
+
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
@@ -103,3 +111,10 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func newHNCConfig() *api.HNCConfiguration {
+	hncConfig := &api.HNCConfiguration{}
+	hncConfig.ObjectMeta.Name = api.HNCConfigSingleton
+	hncConfig.Spec = config.GetDefaultConfigSpec()
+	return hncConfig
+}
