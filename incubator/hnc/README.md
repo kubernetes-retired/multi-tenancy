@@ -58,6 +58,20 @@ scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m
 to get an idea of what HNC can do. For a more in-depth understanding, check out
 the [HNC Concepts doc](http://bit.ly/38YYhE0).
 
+### Viewing metrics
+You should be able to view all HNC metrics in your preferred backend:
+* [Stackdriver on GKE](doc/metrics/stackdriver-gke.md)
+* Prometheus (see [#433](https://github.com/kubernetes-sigs/multi-tenancy/issues/433))
+
+|Metric                                              |Description   |
+|:-------------------------------------------------- |:-------------|
+| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened | 
+| hnc/reconcilers/hierconfig/concurrent_peak         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
+| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations | 
+| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations | 
+| hnc/reconcilers/object/total                       | The total number of object reconciliations happened |
+| hnc/reconcilers/object/concurrent_peak             | The peak concurrent object reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
+
 ### Uninstalling HNC
 **WARNING:** this will also delete all the hierarchical relationships between
 your namespaces. Reinstalling HNC will _not_ recreate these relationships. There
