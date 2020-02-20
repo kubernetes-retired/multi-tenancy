@@ -34,6 +34,13 @@ var _ = Describe("Secret", func() {
 		makeRole(ctx, bazName, "baz-role")
 	})
 
+	AfterEach(func() {
+		// Change current config back to the default value.
+		Eventually(func() error {
+			return resetHNCConfigToDefault(ctx)
+		}).Should(Succeed())
+	})
+
 	It("should be copied to descendents", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -46,6 +53,18 @@ var _ = Describe("Secret", func() {
 
 		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
 		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
+	})
+
+	It("should be copied to descendents when source object is empty", func() {
+		setParent(ctx, barName, fooName)
+		// Creates an empty ConfigMap. We use ConfigMap for this test because the apiserver will not
+		// add additional fields to an empty ConfigMap object to make it non-empty.
+		makeConfigMap(ctx, fooName, "foo-config")
+		addConfigMapToHNCConfig(ctx)
+
+		// "foo-config" should now be propagated from foo to bar.
+		Eventually(hasConfigMap(ctx, barName, "foo-config")).Should(BeTrue())
+		Expect(configMapInheritedFrom(ctx, barName, "foo-config")).Should(Equal(fooName))
 	})
 
 	It("should be removed if the hierarchy changes", func() {
@@ -311,4 +330,45 @@ func removeRole(ctx context.Context, nsName, roleName string) {
 	role.Name = roleName
 	role.Namespace = nsName
 	ExpectWithOffset(1, k8sClient.Delete(ctx, role)).Should(Succeed())
+}
+
+func addConfigMapToHNCConfig(ctx context.Context) {
+	Eventually(func() error {
+		c := getHNCConfig(ctx)
+		configMap := api.TypeSynchronizationSpec{APIVersion: "v1", Kind: "ConfigMap", Mode: api.Propagate}
+		c.Spec.Types = append(c.Spec.Types, configMap)
+		return updateHNCConfig(ctx, c)
+	}).Should(Succeed())
+}
+
+// Makes an empty ConfigMap object.
+func makeConfigMap(ctx context.Context, nsName, configMapName string) {
+	configMap := &corev1.ConfigMap{}
+	configMap.Name = configMapName
+	configMap.Namespace = nsName
+	ExpectWithOffset(1, k8sClient.Create(ctx, configMap)).Should(Succeed())
+}
+
+func hasConfigMap(ctx context.Context, nsName, configMapName string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nsName, Name: configMapName}
+		configMap := &corev1.ConfigMap{}
+		err := k8sClient.Get(ctx, nnm, configMap)
+		return err == nil
+	}
+}
+
+func configMapInheritedFrom(ctx context.Context, nsName, configMapName string) string {
+	nnm := types.NamespacedName{Namespace: nsName, Name: configMapName}
+	configMap := &corev1.ConfigMap{}
+	if err := k8sClient.Get(ctx, nnm, configMap); err != nil {
+		// should have been caught above
+		return err.Error()
+	}
+	if configMap.ObjectMeta.Labels == nil {
+		return ""
+	}
+	lif, _ := configMap.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	return lif
 }

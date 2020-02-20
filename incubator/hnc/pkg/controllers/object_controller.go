@@ -218,8 +218,11 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 		return remove, nil
 	}
 
-	// If the copy is different from the source, return the write action and the source instance.
-	if !reflect.DeepEqual(object.Canonical(inst), object.Canonical(srcInst)) {
+	// If an object doesn't exist, assume it's been deleted or not yet created.
+	exist := inst.GetCreationTimestamp() != v1.Time{}
+
+	// If the copy does not exist or is different from the source, return the write action and the source instance.
+	if !exist || !reflect.DeepEqual(object.Canonical(inst), object.Canonical(srcInst)) {
 		metadata.SetLabel(inst, api.LabelInheritedFrom, srcInst.GetNamespace())
 		return write, srcInst
 	}

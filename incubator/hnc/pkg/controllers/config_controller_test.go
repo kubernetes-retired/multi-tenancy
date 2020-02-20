@@ -5,7 +5,6 @@ import (
 	"time"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -53,25 +52,6 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
 	})
 })
-
-func resetHNCConfigToDefault(ctx context.Context) error {
-	c := getHNCConfig(ctx)
-	c.Spec = config.GetDefaultConfigSpec()
-	return k8sClient.Update(ctx, c)
-}
-
-func getHNCConfig(ctx context.Context) *api.HNCConfiguration {
-	return getHNCConfigWithOffset(1, ctx)
-}
-
-func getHNCConfigWithOffset(offset int, ctx context.Context) *api.HNCConfiguration {
-	snm := types.NamespacedName{Name: api.HNCConfigSingleton}
-	config := &api.HNCConfiguration{}
-	EventuallyWithOffset(offset+1, func() error {
-		return k8sClient.Get(ctx, snm, config)
-	}).Should(Succeed())
-	return config
-}
 
 func addSecretToHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 	secSpec := api.TypeSynchronizationSpec{APIVersion: "v1", Kind: "Secret", Mode: api.Propagate}
