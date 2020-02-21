@@ -249,8 +249,6 @@ func mutateClusterFirstDNS(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameSer
 		return
 	}
 
-	existingDNSConfig := p.pPod.Spec.DNSConfig
-
 	// For a pod with DNSClusterFirst policy, the cluster DNS server is
 	// the only nameserver configured for the pod. The cluster DNS server
 	// itself will forward queries to other nameservers that is configured
@@ -273,9 +271,10 @@ func mutateClusterFirstDNS(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameSer
 		dnsConfig.Searches = []string{nsSvcDomain, svcDomain, clusterDomain}
 	}
 
+	existingDNSConfig := p.pPod.Spec.DNSConfig
 	if existingDNSConfig != nil {
-		dnsConfig.Nameservers = omitDuplicates(append(existingDNSConfig.Nameservers, dnsConfig.Nameservers...))
-		dnsConfig.Searches = omitDuplicates(append(existingDNSConfig.Searches, dnsConfig.Searches...))
+		dnsConfig.Nameservers = omitDuplicates(append(dnsConfig.Nameservers, existingDNSConfig.Nameservers...))
+		dnsConfig.Searches = omitDuplicates(append(dnsConfig.Searches, existingDNSConfig.Searches...))
 	}
 
 	p.pPod.Spec.DNSPolicy = v1.DNSNone
