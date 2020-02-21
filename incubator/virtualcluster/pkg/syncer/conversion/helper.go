@@ -155,7 +155,6 @@ func ResetMetadata(obj metav1.Object) {
 	obj.SetOwnerReferences(nil)
 	obj.SetFinalizers(nil)
 	obj.SetClusterName("")
-	obj.SetInitializers(nil)
 }
 
 func BuildVirtualPodEvent(cluster string, pEvent *v1.Event, vPod *v1.Pod) *v1.Event {
