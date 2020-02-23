@@ -28,6 +28,8 @@ const (
 	PodOperationsKey         = "pod_operations_total"
 	PodOperationsDurationKey = "pod_operations_duration_seconds"
 	PodOperationsErrorsKey   = "pod_operations_errors_total"
+	CheckerMissMatchKey      = "checker_missmatch_count"
+	CheckerRemedyKey         = "checker_remedy_count"
 )
 
 var (
@@ -56,6 +58,22 @@ var (
 		},
 		[]string{"operation_type"},
 	)
+	CheckerMissMatchStats = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      CheckerMissMatchKey,
+			Help:      "Last checker scan results for mismatched resources.",
+		},
+		[]string{"counter_name"},
+	)
+	CheckerRemedyStats = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      CheckerRemedyKey,
+			Help:      "Cumulative number of checker remediation actions.",
+		},
+		[]string{"counter_name"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -66,6 +84,8 @@ func Register() {
 		prometheus.MustRegister(PodOperations)
 		prometheus.MustRegister(PodOperationsDuration)
 		prometheus.MustRegister(PodOperationsErrors)
+		prometheus.MustRegister(CheckerMissMatchStats)
+		prometheus.MustRegister(CheckerRemedyStats)
 	})
 }
 

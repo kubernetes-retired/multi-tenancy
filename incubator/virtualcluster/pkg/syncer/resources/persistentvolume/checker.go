@@ -19,6 +19,7 @@ package persistentvolume
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +31,11 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
+
+var numClaimMissMatchedPVs uint64
+var numSpecMissMatchedPVs uint64
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvSynced, c.pvcSynced) {
@@ -49,6 +54,8 @@ func (c *controller) checkPVs() {
 		return
 	}
 	wg := sync.WaitGroup{}
+	numClaimMissMatchedPVs = 0
+	numSpecMissMatchedPVs = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -84,6 +91,7 @@ func (c *controller) checkPVs() {
 		vPVObj, err := c.multiClusterPersistentVolumeController.Get(clusterName, "", pPV.Name)
 		if err != nil {
 			if errors.IsNotFound(err) {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterPVs").Inc()
 				c.queue.Add(pPV.Name)
 			}
 			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
@@ -92,9 +100,13 @@ func (c *controller) checkPVs() {
 			vPV := vPVObj.(*v1.PersistentVolume)
 			if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
 				klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
+				numClaimMissMatchedPVs++
 			}
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numClaimMissMatchedPVs").Set(float64(numClaimMissMatchedPVs))
+	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPVs").Set(float64(numSpecMissMatchedPVs))
 }
 
 func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
@@ -124,6 +136,8 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 				}
 				if err := tenantClient.CoreV1().PersistentVolumes().Delete(vPV.Name, opts); err != nil {
 					klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantPVs").Inc()
 				}
 			} else {
 				klog.Errorf("failed to get pPV %s from super master cache: %v", vPV.Name, err)
@@ -132,6 +146,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 		}
 		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
+			atomic.AddUint64(&numSpecMissMatchedPVs, 1)
 			klog.Warningf("spec of pv %v diff in super&tenant master %s", vPV.Name, clusterName)
 		}
 	}

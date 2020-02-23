@@ -19,6 +19,7 @@ package persistentvolumeclaim
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +30,11 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
+
+var numMissMatchedPVCs uint64
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvcSynced) {
@@ -51,6 +55,7 @@ func (c *controller) checkPVCs() {
 	}
 
 	wg := sync.WaitGroup{}
+	numMissMatchedPVCs = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -78,10 +83,14 @@ func (c *controller) checkPVCs() {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pPVC.UID))
 			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(pPVC.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pPVC %s/%s in super master: %v", pPVC.Namespace, pPVC.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPVCs").Inc()
 			}
 			continue
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedPVCs").Set(float64(numMissMatchedPVCs))
 }
 
 func (c *controller) checkPVCOfTenantCluster(clusterName string) {
@@ -98,6 +107,8 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 		if errors.IsNotFound(err) {
 			if err := c.multiClusterPersistentVolumeClaimController.RequeueObject(clusterName, &pvcList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vPVC %v/%v in cluster %s: %v", vPVC.Namespace, vPVC.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPVCs").Inc()
 			}
 			continue
 		}
@@ -114,6 +125,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 		}
 		updatedPVC := conversion.Equality(spec).CheckPVCEquality(pPVC, &vPVC)
 		if updatedPVC != nil {
+			atomic.AddUint64(&numMissMatchedPVCs, 1)
 			klog.Warningf("spec of pvc %v/%v diff in super&tenant master", vPVC.Namespace, vPVC.Name)
 		}
 	}

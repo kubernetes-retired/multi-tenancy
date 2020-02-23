@@ -19,6 +19,7 @@ package secret
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,8 +31,12 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
+
+var numMissMatchedOpaqueSecrets uint64
+var numMissMatchedSASecrets uint64
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
@@ -50,11 +55,14 @@ func (c *controller) checkSecrets() {
 	}
 
 	var wg sync.WaitGroup
+	numMissMatchedOpaqueSecrets = 0
+	numMissMatchedSASecrets = 0
+
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
 		go func(clusterName string) {
 			defer wg.Done()
-			c.checkNormalSecretOfTenantCluster(clusterName)
+			c.checkSecretOfTenantCluster(clusterName)
 		}(clusterName)
 	}
 	wg.Wait()
@@ -104,12 +112,17 @@ func (c *controller) checkSecrets() {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pSecret.UID))
 			if err := c.secretClient.Secrets(pSecret.Namespace).Delete(pSecret.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pSecret %s/%s in super master: %v", pSecret.Namespace, pSecret.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterSecrets").Inc()
 			}
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedOpaqueSecrets").Set(float64(numMissMatchedOpaqueSecrets))
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedSASecrets").Set(float64(numMissMatchedSASecrets))
 }
 
-func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
+func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 	listObj, err := c.multiClusterSecretController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing secrets from cluster %s informer cache: %v", clusterName, err)
@@ -129,6 +142,8 @@ func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
 		if errors.IsNotFound(err) {
 			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantOpaqueSecrets").Inc()
 			}
 			continue
 		}
@@ -146,6 +161,7 @@ func (c *controller) checkNormalSecretOfTenantCluster(clusterName string) {
 
 		updatedSecret := conversion.Equality(spec).CheckSecretEquality(pSecret, &secretList.Items[i])
 		if updatedSecret != nil {
+			atomic.AddUint64(&numMissMatchedOpaqueSecrets, 1)
 			klog.Warningf("spec of secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
 		}
 	}
@@ -158,6 +174,8 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 	if errors.IsNotFound(err) || len(secretList) == 0 {
 		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret, reconciler.AddEvent); err != nil {
 			klog.Errorf("error requeue service account type vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantSASecrets").Inc()
 		}
 		return
 	}
@@ -180,6 +198,7 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 
 	updatedSecret := conversion.Equality(spec).CheckSecretEquality(secretList[0], vSecret)
 	if updatedSecret != nil {
+		atomic.AddUint64(&numMissMatchedSASecrets, 1)
 		klog.Warningf("spec of service account token type secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
 	}
 }

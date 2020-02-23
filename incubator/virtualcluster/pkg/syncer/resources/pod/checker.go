@@ -19,6 +19,7 @@ package pod
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -39,6 +41,10 @@ const (
 	// Default grace period in seconds
 	minimumGracePeriodInSeconds = 30
 )
+
+var numStatusMissMatchedPods uint64
+var numSpecMissMatchedPods uint64
+var numUWMetaMissMatchedPods uint64
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
@@ -141,6 +147,10 @@ func (c *controller) checkPods() {
 
 	wg := sync.WaitGroup{}
 
+	numStatusMissMatchedPods = 0
+	numSpecMissMatchedPods = 0
+	numUWMetaMissMatchedPods = 0
+
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
 		go func(clusterName string) {
@@ -179,6 +189,8 @@ func (c *controller) checkPods() {
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
 				if err = c.client.Pods(pPod.Namespace).Delete(pPod.Name, deleteOptions); err != nil {
 					klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPods").Inc()
 				}
 			}
 			continue
@@ -187,9 +199,14 @@ func (c *controller) checkPods() {
 
 		// pod has been updated by super master
 		if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
+			numStatusMissMatchedPods++
 			klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedPods").Set(float64(numStatusMissMatchedPods))
+	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPods").Set(float64(numSpecMissMatchedPods))
+	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedPods").Set(float64(numUWMetaMissMatchedPods))
 }
 
 // checkPodsOfTenantCluster checks to see if pods in specific cluster keeps consistency.
@@ -226,6 +243,8 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 				// pPod not found and vPod still exists, we need to create pPod again
 				if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i], reconciler.AddEvent); err != nil {
 					klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPods").Inc()
 				}
 			}
 			continue
@@ -242,11 +261,13 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		}
 		updatedPod := conversion.Equality(spec).CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
+			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
 		}
 
 		updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
+			atomic.AddUint64(&numUWMetaMissMatchedPods, 1)
 			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
 		}
 	}
