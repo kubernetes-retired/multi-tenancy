@@ -1,12 +1,12 @@
-# # cluster admin kubeconfig file
+# # path to cluster administrator's kubeconfig file
 # adminKubeconfig: 
 
-# # the tenant kubeconfig and its namespace
+# # path to the tenant's kubeconfig and its namespace
 # tenantA:
 #   kubeconfig: 
 #   namespace: 
 
-# # the tenant kubeconfig and its namespace
+# # path to the tenant's kubeconfig and its namespace
 # tenantB:
 #   kubeconfig: 
 #   namespace: 
