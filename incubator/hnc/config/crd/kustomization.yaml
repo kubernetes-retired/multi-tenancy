@@ -4,6 +4,7 @@
 resources:
 - bases/hnc.x-k8s.io_hierarchyconfigurations.yaml
 - bases/hnc.x-k8s.io_hncconfigurations.yaml
+- bases/hnc.x-k8s.io_hierarchicalnamespaces.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
