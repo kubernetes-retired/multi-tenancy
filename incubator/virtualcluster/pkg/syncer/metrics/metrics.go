@@ -30,6 +30,8 @@ const (
 	PodOperationsErrorsKey   = "pod_operations_errors_total"
 	CheckerMissMatchKey      = "checker_missmatch_count"
 	CheckerRemedyKey         = "checker_remedy_count"
+	CheckerScanDurationKey   = "checker_scan_duaration"
+	UWSOperationDurationKey  = "uws_operations_duration_seconds"
 )
 
 var (
@@ -74,6 +76,24 @@ var (
 		},
 		[]string{"counter_name"},
 	)
+	CheckerScanDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      CheckerScanDurationKey,
+			Help:      "Duration in seconds of each resource checker's scan time.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"checker_target"},
+	)
+	UWSOperationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      UWSOperationDurationKey,
+			Help:      "Duration in seconds of resource uws operation time.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"uws_resource"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -86,6 +106,8 @@ func Register() {
 		prometheus.MustRegister(PodOperationsErrors)
 		prometheus.MustRegister(CheckerMissMatchStats)
 		prometheus.MustRegister(CheckerRemedyStats)
+		prometheus.MustRegister(CheckerScanDuration)
+		prometheus.MustRegister(UWSOperationDuration)
 	})
 }
 
@@ -97,4 +119,12 @@ func SinceInMicroseconds(start time.Time) float64 {
 // SinceInSeconds gets the time since the specified start in seconds.
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
+}
+
+func RecordCheckerScanDuration(checkerTarget string, start time.Time) {
+	CheckerScanDuration.WithLabelValues(checkerTarget).Observe(SinceInSeconds(start))
+}
+
+func RecordUWSOperationDuration(resource string, start time.Time) {
+	UWSOperationDuration.WithLabelValues(resource).Observe(SinceInSeconds(start))
 }

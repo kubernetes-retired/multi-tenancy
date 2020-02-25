@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -53,6 +54,7 @@ func (c *controller) checkPVs() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
+	defer metrics.RecordCheckerScanDuration("PV", time.Now())
 	wg := sync.WaitGroup{}
 	numClaimMissMatchedPVs = 0
 	numSpecMissMatchedPVs = 0

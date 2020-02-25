@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	v1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,6 +55,7 @@ func (c *controller) checkStorageClass() {
 		return
 	}
 
+	defer metrics.RecordCheckerScanDuration("storageClass", time.Now())
 	wg := sync.WaitGroup{}
 	numMissMatchedStorageClasses = 0
 
