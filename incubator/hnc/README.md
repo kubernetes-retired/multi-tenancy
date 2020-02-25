@@ -177,16 +177,18 @@ interesting directories are probably:
 
 * `/api`: the API definition.
 * `/cmd`: top-level executables. Currently the manager and the kubectl plugin.
-* `/pkg/controllers`: the reconcilers and their tests
+* `/pkg/reconcilers`: the reconcilers and their tests
 * `/pkg/validators`: validating admission controllers
-* `/pkg/forest`: the in-memory data structure, shared between the controllers
+* `/pkg/forest`: the in-memory data structure, shared between the reconcilers
   and validators.
 
-Within the `controllers` directory, there are two controller:
+Within the `reconcilers` directory, there are three reconcilers:
 
-* **Hierarchy controller:** manages the hierarchy via the `Hierarchy` singleton
+* **HNCConfiguration reconciler:** manages the HNCConfiguration via the
+  cluster-wide `config` singleton.
+* **Hierarchy reconciler:** manages the hierarchy via the `Hierarchy` singleton
   as well as the namespace in which it lives.
-* **Object controller:** Propagates (copies and deletes) the relevant objects
+* **Object reconciler:** Propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 
