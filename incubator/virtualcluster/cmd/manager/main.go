@@ -35,7 +35,7 @@ func main() {
 		metricsAddr       string
 		masterProvisioner string
 	)
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
 	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
