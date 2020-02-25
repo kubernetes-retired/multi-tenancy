@@ -35,8 +35,8 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
 )
@@ -131,7 +131,7 @@ func main() {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := controllers.Create(mgr, f, maxReconciles); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}

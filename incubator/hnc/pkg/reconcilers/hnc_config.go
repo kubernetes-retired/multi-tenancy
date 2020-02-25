@@ -1,4 +1,4 @@
-package controllers
+package reconcilers
 
 import (
 	"context"
@@ -153,7 +153,7 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind) e
 
 	or := &ObjectReconciler{
 		Client:            r.Client,
-		Log:               ctrl.Log.WithName("controllers").WithName(gvk.Kind),
+		Log:               ctrl.Log.WithName("reconcilers").WithName(gvk.Kind),
 		Forest:            r.Forest,
 		GVK:               gvk,
 		Affected:          make(chan event.GenericEvent),

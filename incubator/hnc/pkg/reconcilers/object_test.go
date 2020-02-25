@@ -1,4 +1,4 @@
-package controllers_test
+package reconcilers_test
 
 import (
 	"context"
@@ -91,7 +91,7 @@ var _ = Describe("Secret", func() {
 		time.Sleep(1 * time.Second)
 		modifyRole(ctx, barName, "foo-role")
 
-		// Set as parent. Give the controller a chance to copy the objects and make
+		// Set as parent. Give the reconciler a chance to copy the objects and make
 		// sure that at least the correct one was copied. This gives us more confidence
 		// that if the other one *isn't* copied, this is because we decided not to, and
 		// not that we just haven't gotten to it yet.
