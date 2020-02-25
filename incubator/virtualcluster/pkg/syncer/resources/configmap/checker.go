@@ -18,6 +18,7 @@ package configmap
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +30,11 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
+
+var numMissMatchedConfigMaps uint64
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
@@ -58,6 +62,7 @@ func (c *controller) checkConfigMaps() {
 	}
 
 	wg := sync.WaitGroup{}
+	numMissMatchedConfigMaps = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -88,12 +93,16 @@ func (c *controller) checkConfigMaps() {
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pConfigMap.UID))
 				if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(pConfigMap.Name, deleteOptions); err != nil {
 					klog.Errorf("error deleting pConfigMap %v/%v in super master: %v", pConfigMap.Namespace, pConfigMap.Name, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterConfigMaps").Inc()
 				}
 				continue
 			}
 			klog.Errorf("error getting vConfigMap %s/%s from cluster %s cache: %v", vNamespace, pConfigMap.Name, clusterName, err)
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedConfigMaps").Set(float64(numMissMatchedConfigMaps))
 }
 
 // checkConfigMapsOfTenantCluster checks to see if configmaps in specific cluster keeps consistency.
@@ -112,6 +121,8 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 			// pConfigMap not found and vConfigMap still exists, we need to create pConfigMap again
 			if err := c.multiClusterConfigMapController.RequeueObject(clusterName, &configMapList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vConfigMap %v/%v in cluster %s: %v", vConfigMap.Namespace, vConfigMap.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantConfigMaps").Inc()
 			}
 			continue
 		}
@@ -127,6 +138,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 		}
 		updated := conversion.Equality(spec).CheckConfigMapEquality(pConfigMap, &vConfigMap)
 		if updated != nil {
+			atomic.AddUint64(&numMissMatchedConfigMaps, 1)
 			klog.Warningf("ConfigMap %v/%v diff in super&tenant master", vConfigMap.Namespace, vConfigMap.Name)
 		}
 	}

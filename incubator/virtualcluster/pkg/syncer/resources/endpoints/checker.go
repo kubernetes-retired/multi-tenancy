@@ -18,6 +18,7 @@ package endpoints
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -27,7 +28,11 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
+
+var numMissingEndPoints uint64
+var numMissMatchedEndPoints uint64
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
@@ -54,7 +59,8 @@ func (c *controller) checkEndPoints() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
+	numMissingEndPoints = 0
+	numMissMatchedEndPoints = 0
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
@@ -65,6 +71,8 @@ func (c *controller) checkEndPoints() {
 		}(clusterName)
 	}
 	wg.Wait()
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissingEndPoints").Set(float64(numMissingEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
 }
 
 // checkEndPointsOfTenantCluster checks to see if endpoints controller in tenant and super master working consistently.
@@ -82,6 +90,7 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 		if errors.IsNotFound(err) {
 			// pEp not found and vEp still exists, report the inconsistent ep controller behavior
 			klog.Errorf("Cannot find pEp %v/%v in super master", targetNamespace, vEp.Name)
+			atomic.AddUint64(&numMissingEndPoints, 1)
 			continue
 		}
 		if err != nil {
@@ -89,6 +98,7 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 		}
 		updated := conversion.Equality(nil).CheckEndpointsEquality(pEp, &vEp)
 		if updated != nil {
+			atomic.AddUint64(&numMissMatchedEndPoints, 1)
 			klog.Warningf("Endpoint %v/%v diff in super&tenant master", targetNamespace, vEp.Name)
 		}
 	}
