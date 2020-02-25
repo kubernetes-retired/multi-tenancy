@@ -30,7 +30,7 @@ const (
 	PodOperationsErrorsKey   = "pod_operations_errors_total"
 	CheckerMissMatchKey      = "checker_missmatch_count"
 	CheckerRemedyKey         = "checker_remedy_count"
-	CheckerScanDurationKey   = "checker_scan_duaration"
+	CheckerScanDurationKey   = "checker_scan_duaration_seconds"
 	UWSOperationDurationKey  = "uws_operations_duration_seconds"
 )
 
