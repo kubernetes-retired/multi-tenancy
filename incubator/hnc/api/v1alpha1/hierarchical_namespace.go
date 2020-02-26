@@ -20,14 +20,15 @@ import (
 )
 
 // HNSState describes the state of a hierarchical namespace. The state could be
-// "missing", "ok" or "conflict". The definitions will be described below.
+// "missing", "ok", "conflict" or "forbidden". The definitions will be described below.
 type HNSState string
 
 // HNSStates, which are documented in the comment to HierarchicalNamespaceStatus.State.
 const (
-	Missing  HNSState = "missing"
-	Ok       HNSState = "ok"
-	Conflict HNSState = "conflict"
+	Missing   HNSState = "missing"
+	Ok        HNSState = "ok"
+	Conflict  HNSState = "conflict"
+	Forbidden HNSState = "forbidden"
 )
 
 // HierarchicalNamespaceStatus defines the observed state of HierarchicalNamespace.
@@ -41,8 +42,11 @@ type HierarchicalNamespaceStatus struct {
 	//
 	// - "ok": the child namespace exists.
 	//
-	// - "conflict": a namespace of the same name already exists. If the validation webhook
-	// works properly, this should never happen since the HNS won't be created at the first place.
+	// - "conflict": a namespace of the same name already exists. The admission controller
+	// will attempt to prevent this.
+	//
+	// - "forbidden": the HNS was created in a namespace that doesn't allow children, such
+	// as kube-system or hnc-system. The admission controller will attempt to prevent this.
 	State HNSState `json:"status,omitempty"`
 }
 

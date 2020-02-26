@@ -41,16 +41,16 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 )
 
-// HierarchyReconciler is responsible for determining the forest structure from the Hierarchy CRs,
+// HierarchyConfigReconciler is responsible for determining the forest structure from the Hierarchy CRs,
 // as well as ensuring all objects in the forest are propagated correctly when the hierarchy
 // changes. It can also set the status of the Hierarchy CRs, as well as (in rare cases) override
 // part of its spec (i.e., if a parent namespace no longer exists).
-type HierarchyReconciler struct {
+type HierarchyConfigReconciler struct {
 	client.Client
 	Log logr.Logger
 
 	// Forest is the in-memory data structure that is shared with all other reconcilers.
-	// HierarchyReconciler is responsible for keeping it up-to-date, but the other reconcilers
+	// HierarchyConfigReconciler is responsible for keeping it up-to-date, but the other reconcilers
 	// use it to determine how to propagate objects.
 	Forest *forest.Forest
 
@@ -70,7 +70,7 @@ type HierarchyReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch;update;patch
 
 // Reconcile sets up some basic variables and then calls the business logic.
-func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if ex[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
@@ -86,7 +86,7 @@ func (r *HierarchyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 
-func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
+func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
 	// Get the singleton and namespace.
 	inst, nsInst, err := r.getInstances(ctx, log, nm)
 	if err != nil {
@@ -137,7 +137,7 @@ func (r *HierarchyReconciler) reconcile(ctx context.Context, log logr.Logger, nm
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -165,7 +165,7 @@ func (r *HierarchyReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Nam
 	r.syncConditions(log, inst, ns, hadCrit)
 }
 
-func (r *HierarchyReconciler) onMissingNamespace(log logr.Logger, ns *forest.Namespace, nsInst *corev1.Namespace) bool {
+func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *forest.Namespace, nsInst *corev1.Namespace) bool {
 	if nsInst.Name != "" {
 		return false
 	}
@@ -189,7 +189,7 @@ func (r *HierarchyReconciler) onMissingNamespace(log logr.Logger, ns *forest.Nam
 
 // markExisting marks the namespace as existing. If this is the first time we're reconciling this namespace,
 // mark all possible relatives as being affected since they may have been waiting for this namespace.
-func (r *HierarchyReconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
@@ -202,7 +202,7 @@ func (r *HierarchyReconciler) markExisting(log logr.Logger, ns *forest.Namespace
 // syncRequiredChildOf propagates the required child value from the forest to the spec if possible
 // (the spec itself will be synced next), or removes the requiredChildOf value if there's a problem
 // and notifies the would-be parent namespace.
-func (r *HierarchyReconciler) syncRequiredChildOf(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) syncRequiredChildOf(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	if ns.RequiredChildOf == "" {
 		return
 	}
@@ -224,7 +224,7 @@ func (r *HierarchyReconciler) syncRequiredChildOf(log logr.Logger, inst *api.Hie
 	// stealing this after it's "released" from another parent.
 }
 
-func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	// Sync this namespace with its current parent.
 	var curParent *forest.Namespace
 	if inst.Spec.Parent != "" {
@@ -260,7 +260,7 @@ func (r *HierarchyReconciler) syncParent(log logr.Logger, inst *api.HierarchyCon
 	}
 }
 
-func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Depth label only makes sense if there's no error condition.
 	if ns.HasCritCondition() {
 		return
@@ -288,7 +288,7 @@ func (r *HierarchyReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespac
 // syncChildren looks at the current list of children and compares it to the children that
 // have been marked as required. If any required children are missing, we add them to the in-memory
 // forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
-func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	// Update the most recent list of children from the forest
 	inst.Status.Children = ns.ChildNames()
 
@@ -367,7 +367,7 @@ func (r *HierarchyReconciler) syncChildren(log logr.Logger, inst *api.HierarchyC
 	}
 }
 
-func (r *HierarchyReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
+func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
 	// Sync critical conditions after all locally-set conditions are updated.
 	r.syncCritConditions(log, ns, hadCrit)
 
@@ -378,7 +378,7 @@ func (r *HierarchyReconciler) syncConditions(log logr.Logger, inst *api.Hierarch
 
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
 // namespace are gone or critical conditions are newly found.
-func (r *HierarchyReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
+func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
 	hasCrit := ns.HasLocalCritCondition()
 
 	// Early exit if there's no need to enqueue relatives.
@@ -416,7 +416,7 @@ func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration,
 // enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
 // goroutine so the caller doesn't block; since the reconciler is never garbage-collected, this is
 // safe.
-func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, affected ...string) {
+func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason string, affected ...string) {
 	go func() {
 		for _, nm := range affected {
 			log.Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
@@ -429,7 +429,7 @@ func (r *HierarchyReconciler) enqueueAffected(log logr.Logger, reason string, af
 	}()
 }
 
-func (r *HierarchyReconciler) getInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
+func (r *HierarchyConfigReconciler) getInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
 	inst, err = r.getSingleton(ctx, nm)
 	if err != nil {
 		log.Error(err, "Couldn't read singleton")
@@ -444,7 +444,7 @@ func (r *HierarchyReconciler) getInstances(ctx context.Context, log logr.Logger,
 	return inst, ns, nil
 }
 
-func (r *HierarchyReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
+func (r *HierarchyConfigReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
 	ret := false
 	if updated, err := r.writeHierarchy(ctx, log, oldHC, newHC); err != nil {
 		return false, err
@@ -460,7 +460,7 @@ func (r *HierarchyReconciler) writeInstances(ctx context.Context, log logr.Logge
 	return ret, nil
 }
 
-func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) (bool, error) {
+func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
 		return false, nil
 	}
@@ -483,7 +483,7 @@ func (r *HierarchyReconciler) writeHierarchy(ctx context.Context, log logr.Logge
 	return true, nil
 }
 
-func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
+func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
 		return false, nil
 	}
@@ -507,7 +507,7 @@ func (r *HierarchyReconciler) writeNamespace(ctx context.Context, log logr.Logge
 }
 
 // updateObjects calls all type reconcillers in this namespace.
-func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
+func (r *HierarchyConfigReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
 	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
 	// from modifying the list at the same time.
 	r.Forest.Lock()
@@ -523,7 +523,7 @@ func (r *HierarchyReconciler) updateObjects(ctx context.Context, log logr.Logger
 }
 
 // getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
-func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, error) {
+func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, error) {
 	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	inst := &api.HierarchyConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
@@ -542,7 +542,7 @@ func (r *HierarchyReconciler) getSingleton(ctx context.Context, nm string) (*api
 // getNamespace returns the namespace if it exists, or returns an invalid, blank, unnamed one if it
 // doesn't. This allows it to be trivially identified as a namespace that doesn't exist, and also
 // allows us to easily modify it if we want to create it.
-func (r *HierarchyReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
+func (r *HierarchyConfigReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {
@@ -554,7 +554,7 @@ func (r *HierarchyReconciler) getNamespace(ctx context.Context, nm string) (*cor
 	return ns, nil
 }
 
-func (r *HierarchyReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
+func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
 	// Maps namespaces to their singletons
 	nsMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
