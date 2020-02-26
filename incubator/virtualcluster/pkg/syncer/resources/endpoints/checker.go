@@ -85,7 +85,7 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing endpoints from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check endpoints consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check endpoints consistency in cluster %s", clusterName)
 	epList := listObj.(*v1.EndpointsList)
 	for _, vEp := range epList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vEp.Namespace)

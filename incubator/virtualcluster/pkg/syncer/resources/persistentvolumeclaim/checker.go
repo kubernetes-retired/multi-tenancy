@@ -100,7 +100,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing PVCs from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check PVCs consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check PVCs consistency in cluster %s", clusterName)
 	pvcList := listObj.(*v1.PersistentVolumeClaimList)
 	for i, vPVC := range pvcList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPVC.Namespace)

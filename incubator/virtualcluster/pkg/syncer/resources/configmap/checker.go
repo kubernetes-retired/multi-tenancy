@@ -115,7 +115,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing configmaps from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check configmaps consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check configmaps consistency in cluster %s", clusterName)
 	configMapList := listObj.(*v1.ConfigMapList)
 	for i, vConfigMap := range configMapList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vConfigMap.Namespace)

@@ -31,6 +31,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/node"
 )
@@ -77,7 +78,7 @@ func (c *controller) processNextWorkItem() bool {
 		return true
 	}
 
-	klog.Infof("back populate pod %+v", req.Key)
+	klog.V(4).Infof("back populate pod %+v", req.Key)
 	err := c.backPopulate(req.Key)
 	if err == nil {
 		c.queue.Forget(obj)
@@ -106,6 +107,7 @@ func (c *controller) backPopulate(key string) error {
 		return nil
 	}
 
+	defer metrics.RecordUWSOperationDuration("pod", time.Now())
 	pPod, err := c.podLister.Pods(pNamespace).Get(pName)
 	if err != nil {
 		if errors.IsNotFound(err) {

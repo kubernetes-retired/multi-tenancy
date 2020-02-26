@@ -107,7 +107,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing serviceaccounts from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check serviceaccounts consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check serviceaccounts consistency in cluster %s", clusterName)
 	saList := listObj.(*v1.ServiceAccountList)
 	for i, vSa := range saList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSa.Namespace)

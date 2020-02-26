@@ -94,7 +94,7 @@ func (c *controller) backPopulate(nodeName string) error {
 		return err
 	}
 	defer metrics.RecordUWSOperationDuration("node", time.Now())
-	klog.Infof("back populate node %s/%s", node.Namespace, node.Name)
+	klog.V(4).Infof("back populate node %s/%s", node.Namespace, node.Name)
 	c.Lock()
 	clusterList := c.nodeNameToCluster[node.Name]
 	c.Unlock()

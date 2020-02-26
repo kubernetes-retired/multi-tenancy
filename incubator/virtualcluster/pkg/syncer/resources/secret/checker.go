@@ -74,7 +74,7 @@ func (c *controller) checkSecrets() {
 		return
 	}
 
-	klog.Infof("check secrets consistency in super")
+	klog.V(4).Infof("check secrets consistency in super")
 	for _, pSecret := range secretList {
 		// service account token type secret are managed by super individually.
 		if pSecret.Type == v1.SecretTypeServiceAccountToken {
@@ -129,7 +129,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing secrets from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check secrets consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check secrets consistency in cluster %s", clusterName)
 	secretList := listObj.(*v1.SecretList)
 	for i, vSecret := range secretList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSecret.Namespace)
