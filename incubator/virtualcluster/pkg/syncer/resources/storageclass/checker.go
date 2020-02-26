@@ -99,7 +99,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing storageclass from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check storageclass consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check storageclass consistency in cluster %s", clusterName)
 	scList := listObj.(*v1.StorageClassList)
 	for i, vStorageClass := range scList.Items {
 		pStorageClass, err := c.storageclassLister.Get(vStorageClass.Name)

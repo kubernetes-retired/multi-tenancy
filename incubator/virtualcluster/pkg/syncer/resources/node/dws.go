@@ -31,7 +31,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 // The reconcile logic for tenant master node informer, the main purpose is to maintain
 // the nodeNameToCluster mapping
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile node %s %s event for cluster %s", request.Name, request.Event, request.Cluster.Name)
+	klog.V(4).Infof("reconcile node %s %s event for cluster %s", request.Name, request.Event, request.Cluster.Name)
 	vNode := request.Obj.(*v1.Node)
 	if vNode.Labels[constants.LabelVirtualNode] != "true" {
 		// We only handle virtual nodes created by syncer

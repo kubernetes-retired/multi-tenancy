@@ -41,7 +41,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master secret informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile secret %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.V(4).Infof("reconcile secret %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
 
 	switch request.Event {
 	case reconciler.AddEvent:

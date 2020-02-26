@@ -77,12 +77,12 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 
-	fs := fss.FlagSet("")
+	fs := fss.FlagSet("server")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 
-	serverFlags := fss.FlagSet("server")
+	serverFlags := fss.FlagSet("metricsServer")
 	serverFlags.StringVar(&o.Address, "address", o.Address, "The server address.")
 	serverFlags.StringVar(&o.Port, "port", o.Port, "The server port.")
 	serverFlags.StringVar(&o.CertFile, "cert-file", o.CertFile, "CertFile is the file containing x509 Certificate for HTTPS.")

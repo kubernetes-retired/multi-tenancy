@@ -117,7 +117,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing pv from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check pv consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check pv consistency in cluster %s", clusterName)
 	pvList := listObj.(*v1.PersistentVolumeList)
 	for _, vPV := range pvList.Items {
 		pPV, err := c.pvLister.Get(vPV.Name)

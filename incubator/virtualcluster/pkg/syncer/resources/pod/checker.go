@@ -217,7 +217,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing pods from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check pods consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check pods consistency in cluster %s", clusterName)
 	podList := listObj.(*v1.PodList)
 	for i, vPod := range podList.Items {
 		if vPod.Spec.NodeName != "" && !isPodScheduled(&vPod) {

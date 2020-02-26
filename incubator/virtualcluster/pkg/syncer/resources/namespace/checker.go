@@ -109,7 +109,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing namespaces from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check namespaces consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check namespaces consistency in cluster %s", clusterName)
 	namespaceList := listObj.(*v1.NamespaceList)
 	for i, vNamespace := range namespaceList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vNamespace.Name)
