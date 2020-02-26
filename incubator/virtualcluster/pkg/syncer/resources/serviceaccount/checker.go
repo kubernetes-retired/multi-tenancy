@@ -18,6 +18,7 @@ package serviceaccount
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -57,7 +58,7 @@ func (c *controller) checkServiceAccounts() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
+	defer metrics.RecordCheckerScanDuration("serviceaccount", time.Now())
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
