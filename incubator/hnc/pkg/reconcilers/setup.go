@@ -24,8 +24,8 @@ var ex = map[string]bool{
 func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	hcChan := make(chan event.GenericEvent)
 
-	// Create the HierarchyReconciler.
-	hr := &HierarchyReconciler{
+	// Create the HierarchyConfigReconciler.
+	hr := &HierarchyConfigReconciler{
 		Client:   mgr.GetClient(),
 		Log:      ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
 		Forest:   f,
@@ -45,6 +45,15 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	}
 	if err := cr.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Config reconciler: %s", err.Error())
+	}
+
+	// Create HierarchicalNamespaceReconciler.
+	hnsr := &HierarchicalNamespaceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("reconcilers").WithName("HierarchicalNamespace"),
+	}
+	if err := hnsr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create HierarchicalNamespace reconciler: %s", err.Error())
 	}
 
 	return nil

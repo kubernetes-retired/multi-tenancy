@@ -126,8 +126,8 @@ func (r *ConfigReconciler) createObjectReconcilers(inst *api.HNCConfiguration) e
 	// reconcilers. It is sufficient because both write and read access to the list are guarded by the same mutex.
 	//
 	// We use the forest mutex to guard ObjectReconciler creation together with types list modification so that the
-	// forest cannot be changed by the HierarchyReconciler until both actions are finished. If we do not use the
-	// forest mutex to guard both actions, HierarchyReconciler might change the forest structure and read the types list
+	// forest cannot be changed by the HierarchyConfigReconciler until both actions are finished. If we do not use the
+	// forest mutex to guard both actions, HierarchyConfigReconciler might change the forest structure and read the types list
 	// from the forest for the object reconciliation, after we create ObjectReconcilers but before we write the
 	// ObjectReconcilers to the types list. As a result, objects of the newly added types might not be propagated correctly
 	// using the latest forest structure.

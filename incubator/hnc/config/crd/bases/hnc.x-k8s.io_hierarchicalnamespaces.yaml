@@ -42,9 +42,10 @@ spec:
                 the supported values are: \n - \"missing\": the child namespace has
                 not been created yet. This should be the default state when the HNS
                 is just created. \n - \"ok\": the child namespace exists. \n - \"conflict\":
-                a namespace of the same name already exists. If the validation webhook
-                works properly, this should never happen since the HNS won't be created
-                at the first place."
+                a namespace of the same name already exists. The admission controller
+                will attempt to prevent this. \n - \"forbidden\": the HNS was created
+                in a namespace that doesn't allow children, such as kube-system or
+                hnc-system. The admission controller will attempt to prevent this."
               type: string
           type: object
       type: object
