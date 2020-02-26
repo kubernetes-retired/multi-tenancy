@@ -43,6 +43,7 @@ type realClient struct{}
 type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
+	createHierarchicalNamespace(nnm string, hnnm string)
 }
 
 func init() {
@@ -87,6 +88,7 @@ func init() {
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
 	rootCmd.AddCommand(newCreateCmd())
+	rootCmd.AddCommand(newCreate2Cmd())
 }
 
 func Execute() {
@@ -111,7 +113,7 @@ func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 	hier := &api.HierarchyConfiguration{}
 	hier.Name = api.Singleton
 	hier.Namespace = nnm
-	err := hncClient.Get().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Do().Into(hier)
+	err := hncClient.Get().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Do().Into(hier)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error reading hierarchy for %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -123,14 +125,26 @@ func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason s
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {
-		err = hncClient.Post().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
+		err = hncClient.Post().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
 	} else {
-		err = hncClient.Put().Resource(api.Resource).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
+		err = hncClient.Put().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
 	}
 	if err != nil {
 		fmt.Printf("\nCould not %s.\nReason: %s\n", reason, err)
 		os.Exit(1)
 	}
+}
+
+func (cl *realClient) createHierarchicalNamespace(nnm string, hnnm string) {
+	hns := &api.HierarchicalNamespace{}
+	hns.Name = hnnm
+	hns.Namespace = nnm
+	err := hncClient.Post().Resource(api.HierarchicalNamespaces).Namespace(nnm).Name(hnnm).Body(hns).Do().Error()
+	if err != nil {
+		fmt.Printf("\nCould not create hierarchicalnamespace instance.\nReason: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Successfully created \"%s\" hierarchicalnamespace instance in \"%s\" namespace\n", hnnm, nnm)
 }
 
 func childNamespaceExists(hier *api.HierarchyConfiguration, cn string) bool {
