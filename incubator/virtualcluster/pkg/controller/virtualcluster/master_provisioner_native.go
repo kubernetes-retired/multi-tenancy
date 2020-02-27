@@ -23,10 +23,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,47 +72,10 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		return err
 	}
 	rootNS := conversion.ToClusterKey(vc)
-	defer func() {
-		if err != nil {
-			log.Error(err, "fail to create virtualcluster, removing namespaces for deleting related resources")
-			// we keep the rootNS for debugging purpose
-			if rmNSErr := kubeutil.RemoveNS(mpn, rootNS+"-default"); rmNSErr != nil {
-				log.Error(err, "fail to remove namespace", "namespace", rootNS+"-default")
-			}
-		}
-	}()
 
 	// 1. create the root ns
 	err = kubeutil.CreateNS(mpn, rootNS)
 	if err != nil {
-		return err
-	}
-
-	// 2. create the default ns and default/kubernetes svc
-	err = kubeutil.CreateVCNS(mpn, rootNS, "default")
-	if err != nil {
-		return err
-	}
-
-	err = mpn.Create(context.TODO(), &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kubernetes",
-			Namespace: rootNS + "-default",
-		},
-		Spec: v1.ServiceSpec{
-			Ports: []v1.ServicePort{
-				{
-					Name:       "https",
-					Port:       443,
-					Protocol:   "TCP",
-					TargetPort: intstr.FromInt(6443),
-				},
-			},
-			SessionAffinity: v1.ServiceAffinityNone,
-			Type:            v1.ServiceTypeClusterIP,
-		},
-	})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
 
@@ -309,20 +269,8 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	}
 	caGroup.ETCD = etcdCAPair
 
-	// create crt, key for apiserver
-	// get the clusterIP of the kubernetes service in the default namespace
-	defaultNS := conversion.ToClusterKey(vc) + "-default"
-	kubeClusterIP, err := kubeutil.GetSvcClusterIP(mpn, defaultNS, "kubernetes")
-	if err != nil {
-		return err
-	}
-	log.Info("the clusterIP will be added to the certificate",
-		"vc", vc.GetName(),
-		"clusterIP", kubeClusterIP,
-		"service", defaultNS+"/kubernetes")
-
 	apiserverDomain := cv.GetAPIServerDomain(ns)
-	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain, kubeClusterIP)
+	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
 	if err != nil {
 		return err
 	}
