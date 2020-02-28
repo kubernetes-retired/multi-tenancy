@@ -157,9 +157,16 @@ func (c *controller) backPopulate(key string) error {
 			return err
 		}
 
-		_, err = tenantClient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
-		if err != nil && !errors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
+		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, vNamespace, n.GetName(), &v1.Node{}); err != nil {
+			// check if target node has already registered on the vc
+			// before creating
+			if !errors.IsNotFound(err) {
+				return err
+			}
+			_, err = tenantClient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
+			if err != nil && !errors.IsAlreadyExists(err) {
+				return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
+			}
 		}
 
 		err = tenantClient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
@@ -176,9 +183,10 @@ func (c *controller) backPopulate(key string) error {
 		if err != nil {
 			return fmt.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pPod.Spec.NodeName, err)
 		}
-		// virtual pod has been updated, return and waiting for next loop.
-		c.queue.AddAfter(key, 1*time.Second)
-		return nil
+		// virtual pod has been updated, refetch the latest version
+		if vPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
+			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+		}
 	} else {
 		// Check if the vNode exists in Tenant master.
 		if _, err := tenantClient.CoreV1().Nodes().Get(vPod.Spec.NodeName, metav1.GetOptions{}); err != nil {
