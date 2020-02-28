@@ -32,11 +32,15 @@ import (
 
 func main() {
 	var (
-		metricsAddr       string
-		masterProvisioner string
+		metricsAddr          string
+		masterProvisioner    string
+		leaderElection       bool
+		leaderElectionCmName string
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
 	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
+	flag.BoolVar(&leaderElection, "leader-election", true, "If enable leaderelection for vc-manager")
+	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
@@ -51,7 +55,11 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
-	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: metricsAddr})
+	mgr, err := manager.New(cfg, manager.Options{
+		MetricsBindAddress: metricsAddr,
+		LeaderElection:     leaderElection,
+		LeaderElectionID:   leaderElectionCmName,
+	})
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
