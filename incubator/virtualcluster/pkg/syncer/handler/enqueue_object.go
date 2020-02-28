@@ -27,27 +27,29 @@ type EnqueueRequestForObject struct {
 	Queue   Queue
 }
 
-func (e *EnqueueRequestForObject) enqueue(obj interface{}, event reconciler.EventType) {
+func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
 	o, err := meta.Accessor(obj)
 	if err != nil {
 		return
 	}
 
-	r := reconciler.Request{Cluster: e.Cluster, Event: event, Obj: obj}
+	r := reconciler.Request{}
+	r.ClusterName = e.Cluster.Name
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
+	r.UID = string(o.GetUID())
 
 	e.Queue.Add(r)
 }
 
 func (e *EnqueueRequestForObject) OnAdd(obj interface{}) {
-	e.enqueue(obj, reconciler.AddEvent)
+	e.enqueue(obj)
 }
 
 func (e *EnqueueRequestForObject) OnUpdate(oldObj, newObj interface{}) {
-	e.enqueue(newObj, reconciler.UpdateEvent)
+	e.enqueue(newObj)
 }
 
 func (e *EnqueueRequestForObject) OnDelete(obj interface{}) {
-	e.enqueue(obj, reconciler.DeleteEvent)
+	e.enqueue(obj)
 }

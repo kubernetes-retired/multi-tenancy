@@ -82,22 +82,29 @@ func (c *controller) checkNamespaces() {
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
-
-		_, err := c.multiClusterNamespaceController.Get(clusterName, "", vNamespace)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// vNamespace not found and pNamespace still exist, we need to delete pNamespace manually
-				opts := &metav1.DeleteOptions{
-					PropagationPolicy: &constants.DefaultDeletionPolicy,
-				}
-				if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
-					klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
-				} else {
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterNamespaces").Inc()
-				}
-				continue
+		shouldDelete := false
+		vNamespaceObj, err := c.multiClusterNamespaceController.Get(clusterName, "", vNamespace)
+		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vNs := vNamespaceObj.(*v1.Namespace)
+			if pNamespace.Annotations[constants.LabelUID] != string(vNs.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pNamespace %s delegated UID is different from tenant object.", pNamespace.Name)
 			}
-			klog.Errorf("error getting vNamespace %s from cluster %s cache: %v", vNamespace, clusterName, err)
+		}
+		if shouldDelete {
+			// vNamespace not found and pNamespace still exist, we need to delete pNamespace manually
+			opts := &metav1.DeleteOptions{
+				PropagationPolicy: &constants.DefaultDeletionPolicy,
+				Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),
+			}
+			if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
+				klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterNamespaces").Inc()
+			}
 		}
 	}
 }
@@ -113,7 +120,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 	namespaceList := listObj.(*v1.NamespaceList)
 	for i, vNamespace := range namespaceList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vNamespace.Name)
-		_, err := c.nsLister.Get(targetNamespace)
+		pNamespace, err := c.nsLister.Get(targetNamespace)
 		if errors.IsNotFound(err) {
 			// pNamespace not found and vNamespace still exists, we need to create pNamespace again
 			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i], reconciler.AddEvent); err != nil {
@@ -126,6 +133,10 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 
 		if err != nil {
 			klog.Errorf("error getting pNamespace %s from super master cache: %v", targetNamespace, err)
+		}
+
+		if pNamespace.Annotations[constants.LabelUID] != string(vNamespace.UID) {
+			klog.Errorf("Found pNamespace %s delegated UID is different from tenant object.", targetNamespace)
 		}
 	}
 }

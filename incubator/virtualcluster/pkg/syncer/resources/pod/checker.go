@@ -174,34 +174,40 @@ func (c *controller) checkPods() {
 			continue
 		}
 
+		shouldDelete := false
 		vPodObj, err := c.multiClusterPodController.Get(clusterName, vNamespace, pPod.Name)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				if pPod.DeletionTimestamp != nil {
-					// pPod is under deletion, waiting for UWS bock populate the pod status.
-					continue
-				}
-				// vPod not found and pPod not under deletion, we need to delete pPod manually
-				gracePeriod := int64(minimumGracePeriodInSeconds)
-				if pPod.Spec.TerminationGracePeriodSeconds != nil {
-					gracePeriod = *pPod.Spec.TerminationGracePeriodSeconds
-				}
-				deleteOptions := metav1.NewDeleteOptions(gracePeriod)
-				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
-				if err = c.client.Pods(pPod.Namespace).Delete(pPod.Name, deleteOptions); err != nil {
-					klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
-				} else {
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPods").Inc()
+		if errors.IsNotFound(err) && pPod.DeletionTimestamp == nil {
+			shouldDelete = true
+		}
+		if err == nil {
+			vPod := vPodObj.(*v1.Pod)
+			if pPod.Annotations[constants.LabelUID] != string(vPod.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pPod %s/%s delegated UID is different from tenant object.", pPod.Namespace, pPod.Name)
+			} else {
+				if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
+					numStatusMissMatchedPods++
+					klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
 				}
 			}
-			continue
 		}
-		vPod := vPodObj.(*v1.Pod)
-
-		// pod has been updated by super master
-		if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
-			numStatusMissMatchedPods++
-			klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
+		if shouldDelete {
+			if pPod.DeletionTimestamp != nil {
+				// pPod is under deletion, waiting for UWS bock populate the pod status.
+				continue
+			}
+			// vPod not found and pPod not under deletion, we need to delete pPod manually
+			gracePeriod := int64(minimumGracePeriodInSeconds)
+			if pPod.Spec.TerminationGracePeriodSeconds != nil {
+				gracePeriod = *pPod.Spec.TerminationGracePeriodSeconds
+			}
+			deleteOptions := metav1.NewDeleteOptions(gracePeriod)
+			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
+			if err = c.client.Pods(pPod.Namespace).Delete(pPod.Name, deleteOptions); err != nil {
+				klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPods").Inc()
+			}
 		}
 	}
 
@@ -255,6 +261,11 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			klog.Errorf("error getting pPod %s/%s from super master cache: %v", targetNamespace, vPod.Name, err)
 			continue
 		}
+		if pPod.Annotations[constants.LabelUID] != string(vPod.UID) {
+			klog.Errorf("Found pPod %s/%s delegated UID is different from tenant object.", targetNamespace, pPod.Name)
+			continue
+		}
+
 		spec, err := c.multiClusterPodController.GetSpec(clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)

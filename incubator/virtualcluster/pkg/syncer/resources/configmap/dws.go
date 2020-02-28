@@ -39,62 +39,68 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master configMap informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.V(4).Infof("reconcile configmap %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.V(4).Infof("reconcile configmap %s/%s event for cluster %s", request.Namespace, request.Name, request.ClusterName)
 
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileConfigMapCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.ConfigMap))
-		if err != nil {
-			klog.Errorf("failed reconcile configmap %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, nil
-		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileConfigMapUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.ConfigMap))
-		if err != nil {
-			klog.Errorf("failed reconcile configmap %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+	pConfigMap, err := c.configMapLister.ConfigMaps(targetNamespace).Get(request.Name)
+	pExists := true
+	if err != nil {
+		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileConfigMapRemove(request.Cluster.Name, request.Namespace, request.Name)
-		if err != nil {
-			klog.Errorf("failed reconcile configmap %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+		pExists = false
+	}
+	vExists := true
+	vConfigMapObj, err := c.multiClusterConfigMapController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err
 		}
+		vExists = false
+	}
+
+	if vExists && !pExists {
+		vConfigMap := vConfigMapObj.(*v1.ConfigMap)
+		err := c.reconcileConfigMapCreate(request.ClusterName, targetNamespace, vConfigMap)
+		if err != nil {
+			klog.Errorf("failed reconcile configmap %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
+		}
+	} else if !vExists && pExists {
+		err := c.reconcileConfigMapRemove(request.ClusterName, targetNamespace, request.Name)
+		if err != nil {
+			klog.Errorf("failed reconcile configmap %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
+		}
+	} else if vExists && pExists {
+		vConfigMap := vConfigMapObj.(*v1.ConfigMap)
+		err := c.reconcileConfigMapUpdate(request.ClusterName, targetNamespace, pConfigMap, vConfigMap)
+		if err != nil {
+			klog.Errorf("failed reconcile configmap %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
+		}
+	} else {
+		// object is gone.
 	}
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileConfigMapCreate(cluster, namespace, name string, configMap *v1.ConfigMap) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	_, err := c.configMapLister.ConfigMaps(targetNamespace).Get(name)
-	if err == nil {
-		return c.reconcileConfigMapUpdate(cluster, namespace, name, configMap)
-	}
-
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, configMap)
+func (c *controller) reconcileConfigMapCreate(clusterName, targetNamespace string, configMap *v1.ConfigMap) error {
+	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, configMap)
 	if err != nil {
 		return err
 	}
 
 	_, err = c.configMapClient.ConfigMaps(targetNamespace).Create(newObj.(*v1.ConfigMap))
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("configmap %s/%s of cluster %s already exist in super master", namespace, name, cluster)
+		klog.Infof("configmap %s/%s of cluster %s already exist in super master", targetNamespace, configMap.Name, clusterName)
 		return nil
 	}
 	return err
 }
 
-func (c *controller) reconcileConfigMapUpdate(cluster, namespace, name string, vConfigMap *v1.ConfigMap) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	pConfigMap, err := c.configMapLister.ConfigMaps(targetNamespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	spec, err := c.multiClusterConfigMapController.GetSpec(cluster)
+func (c *controller) reconcileConfigMapUpdate(clusterName, targetNamespace string, pConfigMap, vConfigMap *v1.ConfigMap) error {
+	spec, err := c.multiClusterConfigMapController.GetSpec(clusterName)
 	if err != nil {
 		return err
 	}
@@ -105,18 +111,16 @@ func (c *controller) reconcileConfigMapUpdate(cluster, namespace, name string, v
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (c *controller) reconcileConfigMapRemove(cluster, namespace, name string) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+func (c *controller) reconcileConfigMapRemove(clusterName, targetNamespace, name string) error {
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.configMapClient.ConfigMaps(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("configmap %s/%s of cluster %s not found in super master", namespace, name, cluster)
+		klog.Warningf("configmap %s/%s of cluster %s not found in super master", targetNamespace, name, clusterName)
 		return nil
 	}
 	return err

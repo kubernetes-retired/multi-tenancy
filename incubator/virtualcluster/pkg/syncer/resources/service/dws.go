@@ -38,39 +38,53 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.V(4).Infof("reconcile service %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.V(4).Infof("reconcile service %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
+	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+	pService, err := c.serviceLister.Services(targetNamespace).Get(request.Name)
+	pExists := true
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		pExists = false
+	}
+	vExists := true
+	vServiceObj, err := c.multiClusterServiceController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		vExists = false
+	}
 
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileServiceCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+	if vExists && !pExists {
+		vService := vServiceObj.(*v1.Service)
+		err := c.reconcileServiceCreate(request.ClusterName, targetNamespace, request.UID, vService)
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile service %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileServiceUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+	} else if !vExists && pExists {
+		err := c.reconcileServiceRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pService)
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile service %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileServiceRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Service))
+	} else if vExists && pExists {
+		vService := vServiceObj.(*v1.Service)
+		err := c.reconcileServiceUpdate(request.ClusterName, targetNamespace, request.UID, pService, vService)
 		if err != nil {
-			klog.Errorf("failed reconcile service %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile service %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
+	} else {
+		// object is gone.
 	}
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileServiceCreate(cluster, namespace, name string, service *v1.Service) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	_, err := c.serviceLister.Services(targetNamespace).Get(name)
-	if err == nil {
-		return c.reconcileServiceUpdate(cluster, namespace, name, service)
-	}
-
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, service)
+func (c *controller) reconcileServiceCreate(clusterName, targetNamespace, requestUID string, service *v1.Service) error {
+	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, service)
 	if err != nil {
 		return err
 	}
@@ -78,25 +92,24 @@ func (c *controller) reconcileServiceCreate(cluster, namespace, name string, ser
 	pService := newObj.(*v1.Service)
 	conversion.VC(nil, "").Service(pService).Mutate(service)
 
-	_, err = c.serviceClient.Services(targetNamespace).Create(pService)
+	pService, err = c.serviceClient.Services(targetNamespace).Create(pService)
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("service %s/%s of cluster %s already exist in super master", namespace, name, cluster)
-		return nil
+		if pService.Annotations[constants.LabelUID] == requestUID {
+			klog.Infof("service %s/%s of cluster %s already exist in super master", targetNamespace, pService.Name, clusterName)
+			return nil
+		} else {
+			return fmt.Errorf("pService %s/%s exists but its delegated object UID is different.", targetNamespace, pService.Name)
+		}
 	}
 	return err
 }
 
-func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, vService *v1.Service) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	pService, err := c.serviceLister.Services(targetNamespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
+func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, requestUID string, pService, vService *v1.Service) error {
+	if pService.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("pService %s/%s delegated UID is different from updated object.", targetNamespace, pService.Name)
 	}
 
-	spec, err := c.multiClusterServiceController.GetSpec(cluster)
+	spec, err := c.multiClusterServiceController.GetSpec(clusterName)
 	if err != nil {
 		return err
 	}
@@ -110,14 +123,18 @@ func (c *controller) reconcileServiceUpdate(cluster, namespace, name string, vSe
 	return nil
 }
 
-func (c *controller) reconcileServiceRemove(cluster, namespace, name string, service *v1.Service) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+func (c *controller) reconcileServiceRemove(clusterName, targetNamespace, requestUID, name string, pService *v1.Service) error {
+	if pService.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("To be deleted pService %s/%s delegated UID is different from deleted object.", targetNamespace, name)
+	}
+
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
+		Preconditions:     metav1.NewUIDPreconditions(string(pService.UID)),
 	}
 	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("service %s/%s of cluster not found in super master", namespace, name)
+		klog.Warningf("To be deleted service %s/%s not found in super master", targetNamespace, name)
 		return nil
 	}
 	return err

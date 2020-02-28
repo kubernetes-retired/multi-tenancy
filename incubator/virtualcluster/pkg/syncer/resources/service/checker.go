@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -78,16 +79,26 @@ func (c *controller) checkServices() {
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
-
-		_, err := c.multiClusterServiceController.Get(clusterName, vNamespace, pService.Name)
+		shouldDelete := false
+		vServiceObj, err := c.multiClusterServiceController.Get(clusterName, vNamespace, pService.Name)
 		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vService := vServiceObj.(*v1.Service)
+			if pService.Annotations[constants.LabelUID] != string(vService.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pService %s/%s delegated UID is different from tenant object.", pService.Namespace, pService.Name)
+			}
+
+		}
+		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pService.UID))
 			if err = c.serviceClient.Services(pService.Namespace).Delete(pService.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServices").Inc()
 			}
-			continue
 		}
 	}
 
@@ -118,6 +129,12 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			klog.Errorf("failed to get pService %s/%s from super master cache: %v", targetNamespace, vService.Name, err)
 			continue
 		}
+
+		if pService.Annotations[constants.LabelUID] != string(vService.UID) {
+			klog.Errorf("Found pService %s/%s delegated UID is different from tenant object.", targetNamespace, pService.Name)
+			continue
+		}
+
 		spec, err := c.multiClusterServiceController.GetSpec(clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)

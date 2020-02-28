@@ -130,6 +130,9 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("could not find pPod %s/%s's vPod in controller cache %v", vNamespace, pName, err)
 	}
 	vPod := vPodObj.(*v1.Pod)
+	if pPod.Annotations[constants.LabelUID] != string(vPod.UID) {
+		return fmt.Errorf("BackPopulated pPod %s/%s delegated UID is different from updated object.", pPod.Namespace, pPod.Name)
+	}
 
 	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
 	if err != nil {
