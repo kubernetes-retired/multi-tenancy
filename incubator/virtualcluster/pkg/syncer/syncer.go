@@ -286,12 +286,12 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	s.clusterSet[key] = tenantCluster
 	s.mu.Unlock()
 
-	go s.runCluster(tenantCluster)
+	go s.runCluster(tenantCluster, vc)
 
 	return nil
 }
 
-func (s *Syncer) runCluster(cluster *cluster.Cluster) {
+func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.Virtualcluster) {
 	go func() {
 		err := cluster.Start()
 		klog.Infof("cluster %s shutdown: %v", cluster.GetClusterName(), err)
@@ -299,8 +299,9 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster) {
 
 	if !cluster.WaitForCacheSync() {
 		klog.Warningf("failed to sync cache for cluster %s, retry", cluster.GetClusterName())
-		s.removeCluster(cluster.GetClusterName())
-		s.queue.AddAfter(cluster.GetClusterName(), 5*time.Second)
+		key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(vc)
+		s.removeCluster(key)
+		s.queue.AddAfter(key, 5*time.Second)
 		return
 	}
 	cluster.SetSynced()
