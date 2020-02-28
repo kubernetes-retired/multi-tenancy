@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -33,6 +35,11 @@ type ConfigReconciler struct {
 	// ObjectReconcilers. It is passed on to ObjectReconcilers for the updates. The ConfigReconciler itself does
 	// not use it.
 	HierarchyConfigUpdates chan event.GenericEvent
+
+	// Igniter is a channel of event.GenericEvent (see "Watching Channels" in
+	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html)
+	// that is used to enqueue the singleton for initial reconciliation.
+	Igniter chan event.GenericEvent
 }
 
 // Reconcile sets up some basic variable and logs the Spec.
@@ -56,7 +63,7 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// achieve the reconciliation.
 	r.Log.Info("Reconciling cluster-wide HNC configuration.")
 
-	// Create cooresponding ObjectReconcilers for newly added types, if needed.
+	// Create corresponding ObjectReconcilers for newly added types, if needed.
 	// TODO: Returning an error here will make controller-runtime to requeue the object to be reconciled again.
 	// A better way to handle this is to display the error as part of the HNCConfig.status field to suggest the error is a
 	// permanent problem and to stop controller-runtime from retrying.
@@ -171,9 +178,39 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind) e
 	return nil
 }
 
+// forceInitialReconcile forces reconciliation to start after setting up the
+// controller with the manager. This is used to create a default singleton if
+// there is no singleton in the cluster. This occurs in a goroutine so the
+// caller doesn't block; since the reconciler is never garbage-collected,
+// this is safe.
+func (r *ConfigReconciler) forceInitialReconcile(log logr.Logger, reason string) {
+	go func() {
+		log.Info("Enqueuing for reconciliation", "reason", reason)
+		// The watch handler doesn't care about anything except the metadata.
+		inst := &api.HNCConfiguration{}
+		inst.ObjectMeta.Name = api.HNCConfigSingleton
+		r.Igniter <- event.GenericEvent{Meta: inst}
+	}()
+}
+
 // SetupWithManager builds a controller with the reconciler.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
+		Watches(&source.Channel{Source: r.Igniter}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
+	if err != nil {
+		return err
+	}
+	// Create a default singleton if there is no singleton in the cluster.
+	//
+	// The cache used by the client to retrieve objects might not be populated
+	// at this point. As a result, we cannot use r.Get() to determine the existence
+	// of the singleton and then use r.Create() to create the singleton if
+	// it does not exist. As a workaround, we decide to enforce reconciliation. The
+	// cache is populated at the reconciliation stage. A default singleton will be
+	// created during the reconciliation if there is no singleton in the cluster.
+	r.forceInitialReconcile(r.Log, "Enforce reconciliation to create a default"+
+		"HNCConfiguration singleton if it does not exist.")
+	return nil
 }

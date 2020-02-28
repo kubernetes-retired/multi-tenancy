@@ -16,7 +16,6 @@ limitations under the License.
 package reconcilers_test
 
 import (
-	"context"
 	"flag"
 	"path/filepath"
 	"testing"
@@ -37,7 +36,6 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -68,6 +66,8 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{envtest.NewlineReporter{}})
 }
 
+// All tests in reconcilers_test package are in the same suite, which means they share
+// the same test environment (e.g., apiserver).
 var _ = BeforeSuite(func(done Done) {
 	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
@@ -101,12 +101,6 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
 
-	// Setup HNCConfiguration object here because it is a cluster-wide singleton shared by all reconcilers.
-	hncConfig := newHNCConfig()
-	Expect(hncConfig).ToNot(BeNil())
-	ctx := context.Background()
-	updateHNCConfig(ctx, hncConfig)
-
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
@@ -120,10 +114,3 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
-
-func newHNCConfig() *api.HNCConfiguration {
-	hncConfig := &api.HNCConfiguration{}
-	hncConfig.ObjectMeta.Name = api.HNCConfigSingleton
-	hncConfig.Spec = config.GetDefaultConfigSpec()
-	return hncConfig
-}
