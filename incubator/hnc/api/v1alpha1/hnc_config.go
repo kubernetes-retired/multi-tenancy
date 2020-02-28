@@ -24,7 +24,7 @@ const (
 	HNCConfigSingleton = "config"
 )
 
-// SynchronizationMode describes propogation mode of objects of the same kind.
+// SynchronizationMode describes propagation mode of objects of the same kind.
 // The only three modes currently supported are "propagate", "ignore", and "remove".
 // See detailed definition below. An unsupported mode will be treated as "ignore".
 type SynchronizationMode string
@@ -40,6 +40,13 @@ const (
 
 	// Remove all existing propagated copies.
 	Remove SynchronizationMode = "remove"
+)
+
+// HNCConfigurationCondition codes. *All* codes must also be documented in the
+// comment to HNCConfigurationCondition.Code.
+const (
+	CritSingletonNameInvalid       HNCConfigurationCode = "critSingletonNameInvalid"
+	ObjectReconcilerCreationFailed HNCConfigurationCode = "objectReconcilerCreationFailed"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
@@ -88,6 +95,9 @@ type HNCConfigurationSpec struct {
 type HNCConfigurationStatus struct {
 	// Types indicates the observed synchronization states of kinds, if any.
 	Types []TypeSynchronizationStatus `json:"types,omitempty"`
+
+	// Conditions describes the errors, if any.
+	Conditions []HNCConfigurationCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -97,6 +107,37 @@ type HNCConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HNCConfiguration `json:"items"`
+}
+
+// HNCConfigurationCode is the machine-readable, enum-like type of `HNCConfigurationCondition.Code`.
+// See that field for more information.
+type HNCConfigurationCode string
+
+// HNCConfigurationCondition specifies the code and the description of an error condition.
+type HNCConfigurationCondition struct {
+	// Describes the condition in a machine-readable string value. The currently valid values are
+	// shown below, but new values may be added over time. This field is always present in a
+	// condition.
+	//
+	// All codes that begin with the prefix `crit` indicate that reconciliation has
+	// been paused for this configuration. Future changes of the configuration will be
+	// ignored by HNC until the condition has been resolved. Non-critical conditions
+	// typically indicate some kinds of error that HNC itself can ignore. However,
+	// the behaviors of some types might be out-of-sync with the users' expectations.
+	//
+	// Currently, the supported values are:
+	//
+	// - "critSingletonNameInvalid": the specified singleton name is invalid. The name should be the
+	// same as HNCConfigSingleton.
+	//
+	// - "objectReconcilerCreationFailed": an error exists when creating the object
+	// reconciler for the type specified in Msg.
+	Code HNCConfigurationCode `json:"code"`
+
+	// A human-readable description of the condition, if the `code` field is not
+	// sufficiently clear on their own. If the condition is only for specific types,
+	// Msg will include information about the types (e.g., GVK).
+	Msg string `json:"msg,omitempty"`
 }
 
 func init() {

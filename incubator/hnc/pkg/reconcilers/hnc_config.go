@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +31,11 @@ type ConfigReconciler struct {
 	// Forest is the in-memory data structure that is shared with all other reconcilers.
 	Forest *forest.Forest
 
+	// Igniter is a channel of event.GenericEvent (see "Watching Channels" in
+	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html)
+	// that is used to enqueue the singleton for initial reconciliation.
+	Igniter chan event.GenericEvent
+
 	// HierarchyConfigUpdates is a channel of events used to update hierarchy configuration changes performed by
 	// ObjectReconcilers. It is passed on to ObjectReconcilers for the updates. The ConfigReconciler itself does
 	// not use it.
@@ -38,34 +45,32 @@ type ConfigReconciler struct {
 // Reconcile sets up some basic variable and logs the Spec.
 // TODO: Updates the comment above when adding more logic to the Reconcile method.
 func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	// TODO: Surface the error more prominently and add a validating admission controller to prevent
-	// the problem in the first place.
-	if req.NamespacedName.Name != api.HNCConfigSingleton {
-		r.Log.Error(nil, "Singleton name is wrong. It should be 'config'.")
+	ctx := context.Background()
+
+	// Validate the singleton name.
+	// TODO: Add a validating admission controller to prevent the problem in the first place.
+	if err := r.validateSingletonName(ctx, req.NamespacedName.Name); err != nil {
+		r.Log.Error(err, "Singleton name validation failed.")
 		return ctrl.Result{}, nil
 	}
 
-	ctx := context.Background()
 	inst, err := r.getSingleton(ctx)
 	if err != nil {
 		r.Log.Error(err, "Couldn't read singleton.")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 
 	// TODO: Modify this and other reconcilers (e.g., hierarchy and object reconcilers) to
 	// achieve the reconciliation.
 	r.Log.Info("Reconciling cluster-wide HNC configuration.")
 
-	// Create cooresponding ObjectReconcilers for newly added types, if needed.
-	// TODO: Returning an error here will make controller-runtime to requeue the object to be reconciled again.
-	// A better way to handle this is to display the error as part of the HNCConfig.status field to suggest the error is a
-	// permanent problem and to stop controller-runtime from retrying.
+	// Clear the existing conditions because we will reconstruct the latest conditions.
+	inst.Status.Conditions = nil
+
+	// Create corresponding ObjectReconcilers for newly added types, if needed.
 	// TODO: Rename the method syncObjectReconcilers because we might need more than creating ObjectReconcilers in future.
 	// For example, we might need to delete an ObjectReconciler if its corresponding type is deleted in the HNCConfiguration.
-	if err := r.createObjectReconcilers(inst); err != nil {
-		r.Log.Error(err, "Couldn't create the new object reconciler.")
-		return ctrl.Result{}, nil
-	}
+	r.createObjectReconcilers(inst)
 
 	// Write back to the apiserver.
 	// TODO: Update HNCConfiguration.Status before writing the singleton back to the apiserver.
@@ -117,8 +122,8 @@ func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConf
 
 // createObjectReconcilers creates corresponding ObjectReconcilers for the newly added types in the
 // HNC configuration, if there is any. It also informs the in-memory forest about the newly created
-// ObjectReconcilers.
-func (r *ConfigReconciler) createObjectReconcilers(inst *api.HNCConfiguration) error {
+// ObjectReconcilers. If a type is misconfigured, the corresponding object reconciler will not be created.
+func (r *ConfigReconciler) createObjectReconcilers(inst *api.HNCConfiguration) {
 	// This method is guarded by the forest mutex. The mutex is guarding two actions: creating ObjectReconcilers for
 	// the newly added types and adding the created ObjectReconcilers to the types list in the Forest (r.Forest.types).
 	//
@@ -133,22 +138,19 @@ func (r *ConfigReconciler) createObjectReconcilers(inst *api.HNCConfiguration) e
 	// using the latest forest structure.
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
+
 	for _, t := range inst.Spec.Types {
 		gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 		if r.Forest.HasTypeSyncer(gvk) {
 			continue
 		}
-		if err := r.createObjectReconciler(gvk); err != nil {
-			return fmt.Errorf("Error while trying to create ObjectReconciler: %s", err)
-		}
+		r.createObjectReconciler(gvk, inst)
 	}
-
-	return nil
 }
 
 // createObjectReconciler creates an ObjectReconciler for the given GVK and informs forest about the reconciler.
 // TODO: May need to pass in spec instead to provide information about Mode to the ObjectReconciler in future.
-func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind) error {
+func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, inst *api.HNCConfiguration) {
 	r.Log.Info("Creating an object reconciler.", "GVK", gvk)
 
 	or := &ObjectReconciler{
@@ -162,18 +164,77 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind) e
 
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
-		return fmt.Errorf("Cannot create %v reconciler: %s", gvk, err.Error())
+		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
+		condition := api.HNCConfigurationCondition{
+			Code: api.ObjectReconcilerCreationFailed,
+			Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
+		}
+		inst.Status.Conditions = append(inst.Status.Conditions, condition)
+		return
 	}
 
 	// Informs the in-memory forest about the new reconciler by adding it to the types list.
 	r.Forest.AddTypeSyncer(or)
+}
 
-	return nil
+func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) error {
+	if nm == api.HNCConfigSingleton {
+		return nil
+	}
+
+	nnm := types.NamespacedName{Name: nm}
+	inst := &api.HNCConfiguration{}
+	if err := r.Get(ctx, nnm, inst); err != nil {
+		return err
+	}
+
+	msg := "Singleton name is wrong. It should be 'config'."
+	condition := api.HNCConfigurationCondition{
+		Code: api.CritSingletonNameInvalid,
+		Msg:  msg,
+	}
+	inst.Status.Conditions = nil
+	inst.Status.Conditions = append(inst.Status.Conditions, condition)
+
+	if err := r.writeSingleton(ctx, inst); err != nil {
+		return err
+	}
+
+	return fmt.Errorf("Error while validating singleton name: %s", msg)
+}
+
+// forceInitialReconcile forces reconciliation to start after setting up the
+// controller with the manager. This is used to create a default singleton if
+// there is no singleton in the cluster. This occurs in a goroutine so the
+// caller doesn't block; since the reconciler is never garbage-collected,
+// this is safe.
+func (r *ConfigReconciler) forceInitialReconcile(log logr.Logger, reason string) {
+	go func() {
+		log.Info("Enqueuing for reconciliation", "reason", reason)
+		// The watch handler doesn't care about anything except the metadata.
+		inst := &api.HNCConfiguration{}
+		inst.ObjectMeta.Name = api.HNCConfigSingleton
+		r.Igniter <- event.GenericEvent{Meta: inst}
+	}()
 }
 
 // SetupWithManager builds a controller with the reconciler.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
-		Complete(r)
+		Watches(&source.Channel{Source: r.Igniter}, &handler.EnqueueRequestForObject{}).
+		Complete(r); err != nil {
+		return err
+	}
+	// Create a default singleton if there is no singleton in the cluster.
+	//
+	// The cache used by the client to retrieve objects might not be populated
+	// at this point. As a result, we cannot use r.Get() to determine the existence
+	// of the singleton and then use r.Create() to create the singleton if
+	// it does not exist. As a workaround, we decide to enforce reconciliation. The
+	// cache is populated at the reconciliation stage. A default singleton will be
+	// created during the reconciliation if there is no singleton in the cluster.
+	r.forceInitialReconcile(r.Log, "Enforce reconciliation to create a default"+
+		"HNCConfiguration singleton if it does not exist.")
+	return nil
 }

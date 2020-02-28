@@ -7,6 +7,8 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
@@ -78,18 +80,75 @@ func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 func resetHNCConfigToDefault(ctx context.Context) error {
 	c := getHNCConfig(ctx)
 	c.Spec = config.GetDefaultConfigSpec()
+	c.Status.Types = nil
+	c.Status.Conditions = nil
 	return k8sClient.Update(ctx, c)
 }
 
 func getHNCConfig(ctx context.Context) *api.HNCConfiguration {
-	return getHNCConfigWithOffset(1, ctx)
+	return getHNCConfigWithOffsetAndName(1, ctx, api.HNCConfigSingleton)
 }
 
-func getHNCConfigWithOffset(offset int, ctx context.Context) *api.HNCConfiguration {
-	snm := types.NamespacedName{Name: api.HNCConfigSingleton}
+func getHNCConfigWithOffsetAndName(offset int, ctx context.Context, nm string) *api.HNCConfiguration {
+	snm := types.NamespacedName{Name: nm}
 	config := &api.HNCConfiguration{}
 	EventuallyWithOffset(offset+1, func() error {
 		return k8sClient.Get(ctx, snm, config)
 	}).Should(Succeed())
 	return config
+}
+
+func addToHNCConfig(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	Eventually(func() error {
+		c := getHNCConfig(ctx)
+		spec := api.TypeSynchronizationSpec{APIVersion: apiVersion, Kind: kind, Mode: mode}
+		c.Spec.Types = append(c.Spec.Types, spec)
+		return updateHNCConfig(ctx, c)
+	}).Should(Succeed())
+}
+
+func makeRole(ctx context.Context, nsName, roleName string) {
+	role := &v1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      roleName,
+			Namespace: nsName,
+		},
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Role",
+			APIVersion: "rbac.authorization.k8s.io/v1",
+		},
+		Rules: []v1.PolicyRule{
+			// Allow the users to read all secrets, namespaces and configmaps.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "namespaces", "configmaps"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+		},
+	}
+	ExpectWithOffset(1, k8sClient.Create(ctx, role)).Should(Succeed())
+}
+
+func hasRole(ctx context.Context, nsName, roleName string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+		role := &v1.Role{}
+		err := k8sClient.Get(ctx, nnm, role)
+		return err == nil
+	}
+}
+
+func roleInheritedFrom(ctx context.Context, nsName, roleName string) string {
+	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+	role := &v1.Role{}
+	if err := k8sClient.Get(ctx, nnm, role); err != nil {
+		// should have been caught above
+		return err.Error()
+	}
+	if role.ObjectMeta.Labels == nil {
+		return ""
+	}
+	lif, _ := role.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	return lif
 }
