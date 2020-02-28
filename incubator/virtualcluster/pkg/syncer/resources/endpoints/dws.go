@@ -43,39 +43,53 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		// For now, we bypass all ep events beside the default kubernetes ep. The tenant/master ep controllers handle ep lifecycle independently.
 		return reconciler.Result{}, nil
 	}
-	klog.Infof("reconcile endpoints %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
+	klog.Infof("reconcile endpoints %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
+	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+	pEndpoints, err := c.endpointsLister.Endpoints(targetNamespace).Get(request.Name)
+	pExists := true
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		pExists = false
+	}
+	vExists := true
+	vEndpointsObj, err := c.multiClusterEndpointsController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		vExists = false
+	}
 
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileEndpointsCreate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
+	if vExists && !pExists {
+		vEndpoints := vEndpointsObj.(*v1.Endpoints)
+		err := c.reconcileEndpointsCreate(request.ClusterName, targetNamespace, vEndpoints)
 		if err != nil {
-			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileEndpointsUpdate(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
+	} else if !vExists && pExists {
+		err := c.reconcileEndpointsRemove(request.ClusterName, targetNamespace, request.Name)
 		if err != nil {
-			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileEndpointsRemove(request.Cluster.Name, request.Namespace, request.Name, request.Obj.(*v1.Endpoints))
+	} else if vExists && pExists {
+		vEndpoints := vEndpointsObj.(*v1.Endpoints)
+		err := c.reconcileEndpointsUpdate(request.ClusterName, targetNamespace, pEndpoints, vEndpoints)
 		if err != nil {
-			klog.Errorf("failed reconcile endpoints %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile endpoints %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
+	} else {
+		// object is gone.
 	}
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileEndpointsCreate(cluster, namespace, name string, ep *v1.Endpoints) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	_, err := c.endpointsLister.Endpoints(targetNamespace).Get(name)
-	if err == nil {
-		return c.reconcileEndpointsUpdate(cluster, namespace, name, ep)
-	}
-
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, ep)
+func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace string, ep *v1.Endpoints) error {
+	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, ep)
 	if err != nil {
 		return err
 	}
@@ -84,23 +98,14 @@ func (c *controller) reconcileEndpointsCreate(cluster, namespace, name string, e
 
 	_, err = c.endpointClient.Endpoints(targetNamespace).Create(pEndpoints)
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("endpoints %s/%s of cluster %s already exist in super master", namespace, name, cluster)
+		klog.Infof("endpoints %s/%s of cluster %s already exist in super master", targetNamespace, pEndpoints.Name, clusterName)
 		return nil
 	}
 	return err
 }
 
-func (c *controller) reconcileEndpointsUpdate(cluster, namespace, name string, vEP *v1.Endpoints) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	pEP, err := c.endpointsLister.Endpoints(targetNamespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	spec, err := c.multiClusterEndpointsController.GetSpec(cluster)
+func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace string, pEP, vEP *v1.Endpoints) error {
+	spec, err := c.multiClusterEndpointsController.GetSpec(clusterName)
 	if err != nil {
 		return err
 	}
@@ -111,18 +116,16 @@ func (c *controller) reconcileEndpointsUpdate(cluster, namespace, name string, v
 			return err
 		}
 	}
-
 	return nil
 }
 
-func (c *controller) reconcileEndpointsRemove(cluster, namespace, name string, ep *v1.Endpoints) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+func (c *controller) reconcileEndpointsRemove(clusterName, targetNamespace, name string) error {
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.endpointClient.Endpoints(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("endpoints %s/%s of cluster not found in super master", namespace, name)
+		klog.Warningf("endpoints %s/%s of %s cluster not found in super master", targetNamespace, name, clusterName)
 		return nil
 	}
 	return err

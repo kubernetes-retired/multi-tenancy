@@ -18,7 +18,6 @@ package namespace
 
 import (
 	"fmt"
-	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -40,64 +39,85 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master namespace informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.V(4).Infof("reconcile namespace %s %s event for cluster %s", request.Name, request.Event, request.Cluster.Name)
+	klog.V(4).Infof("reconcile namespace %s for cluster %s", request.Name, request.ClusterName)
+	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Name)
+	pNamespace, err := c.nsLister.Get(targetNamespace)
+	pExists := true
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		pExists = false
+	}
+	vExists := true
+	vNamespaceObj, err := c.multiClusterNamespaceController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		vExists = false
+	}
 
-	switch request.Event {
-	case reconciler.AddEvent:
-		err := c.reconcileNamespaceCreate(request.Cluster.Name, request.Name, request.Obj.(*v1.Namespace))
+	if vExists && !pExists {
+		vNamespace := vNamespaceObj.(*v1.Namespace)
+		err := c.reconcileNamespaceCreate(request.ClusterName, targetNamespace, request.UID, vNamespace)
 		if err != nil {
-			klog.Errorf("failed reconcile namespace %s CREATE of cluster %s %v", request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, nil
+			klog.Errorf("failed reconcile namespace %s CREATE of cluster %s %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.UpdateEvent:
-		err := c.reconcileNamespaceUpdate(request.Cluster.Name, request.Name, request.Obj.(*v1.Namespace))
+	} else if !vExists && pExists {
+		err := c.reconcileNamespaceRemove(request.ClusterName, targetNamespace, request.UID, pNamespace)
 		if err != nil {
-			klog.Errorf("failed reconcile namespace %s UPDATE of cluster %s %v", request.Name, request.Cluster.Name, err)
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile namespace %s DELETE of cluster %s %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.DeleteEvent:
-		err := c.reconcileNamespaceRemove(request.Cluster.Name, request.Name)
+	} else if vExists && pExists {
+		vNamespace := vNamespaceObj.(*v1.Namespace)
+		err := c.reconcileNamespaceUpdate(request.ClusterName, targetNamespace, request.UID, pNamespace, vNamespace)
 		if err != nil {
-			klog.Errorf("failed reconcile namespace %s DELETE of cluster %s %v", request.Name, request.Cluster.Name, err)
-			return reconciler.Result{}, err
+			klog.Errorf("failed reconcile namespace %s UPDATE of cluster %s %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
 		}
+	} else {
+		// object is gone.
 	}
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileNamespaceCreate(cluster, name string, namespace *v1.Namespace) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, name)
-	_, err := c.nsLister.Get(targetNamespace)
-	if err == nil {
-		// namespace is ready.
-		return nil
-	}
-
-	newObj, err := conversion.BuildSuperMasterNamespace(cluster, namespace)
+func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requestUID string, vNamespace *v1.Namespace) error {
+	newObj, err := conversion.BuildSuperMasterNamespace(clusterName, vNamespace)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
+	pNamespace, err := c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("namespace %s of cluster %s already exist in super master", name, cluster)
-		return nil
+		if pNamespace.Annotations[constants.LabelUID] == requestUID {
+			klog.Infof("namespace %s of cluster %s already exist in super master", targetNamespace, clusterName)
+			return nil
+		} else {
+			return fmt.Errorf("pNamespace %s exists but its delegated object UID is different.", targetNamespace)
+		}
 	}
 	return err
 }
 
-func (c *controller) reconcileNamespaceUpdate(cluster, name string, namespace *v1.Namespace) error {
+func (c *controller) reconcileNamespaceUpdate(clusterName, targetNamespace, requestUID string, pNamespace, vNamespace *v1.Namespace) error {
 	return nil
 }
 
-func (c *controller) reconcileNamespaceRemove(cluster, name string) error {
-	targetName := strings.Join([]string{cluster, name}, "-")
+func (c *controller) reconcileNamespaceRemove(clusterName, targetNamespace, requestUID string, pNamespace *v1.Namespace) error {
+	if pNamespace.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("To be deleted pNamespace %s delegated UID is different from deleted object.", targetNamespace)
+	}
+
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
+		Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),
 	}
-	err := c.namespaceClient.Namespaces().Delete(targetName, opts)
+	err := c.namespaceClient.Namespaces().Delete(targetNamespace, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("namespace %s of cluster %s not found in super master", name, cluster)
+		klog.Warningf("namespace %s of cluster %s not found in super master", targetNamespace, clusterName)
 		return nil
 	}
 	return err

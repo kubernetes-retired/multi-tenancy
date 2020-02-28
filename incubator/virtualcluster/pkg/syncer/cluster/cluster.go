@@ -29,6 +29,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -291,6 +292,7 @@ func (c *Cluster) Start() error {
 func (c *Cluster) WaitForCacheSync() bool {
 	ca, err := c.getCache()
 	if err != nil {
+		klog.Errorf("Fail to get cache: %v", err)
 		return false
 	}
 	return ca.WaitForCacheSync(c.stopCh)

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -43,39 +42,58 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.V(4).Infof("reconcile pod %s/%s %s event for cluster %s", request.Namespace, request.Name, request.Event, request.Cluster.Name)
-	vPod := request.Obj.(*v1.Pod)
-	c.updateClusterVNodePodMap(request.Cluster.Name, vPod, request.Event)
+	klog.V(4).Infof("reconcile pod %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
+	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+	pPod, err := c.podLister.Pods(targetNamespace).Get(request.Name)
+	pExists := true
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		pExists = false
+	}
+	vExists := true
+	vPodObj, err := c.multiClusterPodController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		vExists = false
+	}
 
 	var operation string
-	switch request.Event {
-	case reconciler.AddEvent:
+	if vExists && !pExists {
 		operation = "pod_add"
 		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodCreate(request.Cluster.Name, request.Namespace, request.Name, vPod)
-		recordError(operation, err)
+		vPod := vPodObj.(*v1.Pod)
+		err := c.reconcilePodCreate(request.ClusterName, targetNamespace, request.UID, vPod)
 		if err != nil {
-			klog.Errorf("failed reconcile pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile Pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	case reconciler.UpdateEvent:
-		operation = "pod_update"
-		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodUpdate(request.Cluster.Name, request.Namespace, request.Name, vPod)
-		recordError(operation, err)
-		if err != nil {
-			klog.Errorf("failed reconcile pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
-			return reconciler.Result{Requeue: true}, err
-		}
-	case reconciler.DeleteEvent:
+	} else if !vExists && pExists {
 		operation = "pod_delete"
 		defer recordOperation(operation, time.Now())
-		err := c.reconcilePodRemove(request.Cluster.Name, request.Namespace, request.Name, vPod)
-		recordError(operation, err)
+		// FIXME: For Pod, this should not be reached. So we need to call updateClusterVNodePodMap to remove pod from node in UWS.
+		err := c.reconcilePodRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pPod)
 		if err != nil {
-			klog.Errorf("failed reconcile pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.Cluster.Name, err)
+			klog.Errorf("failed reconcile Pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
+	} else if vExists && pExists {
+		operation = "pod_update"
+		defer recordOperation(operation, time.Now())
+		vPod := vPodObj.(*v1.Pod)
+		err := c.reconcilePodUpdate(request.ClusterName, targetNamespace, request.UID, pPod, vPod)
+		if err != nil {
+			klog.Errorf("failed reconcile Pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
+			return reconciler.Result{Requeue: true}, err
+		}
+		if vPod.Spec.NodeName != "" && isPodScheduled(vPod) {
+			c.updateClusterVNodePodMap(request.ClusterName, vPod.Spec.NodeName, request.UID, reconciler.UpdateEvent)
+		}
+	} else {
+		// object is gone.
 	}
 	return reconciler.Result{}, nil
 }
@@ -105,31 +123,25 @@ func createNotSupportEvent(pod *v1.Pod) *v1.Event {
 	}
 }
 
-func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v1.Pod) error {
+func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID string, vPod *v1.Pod) error {
 	// load deleting pod, don't create any pod on super master.
 	if vPod.DeletionTimestamp != nil {
-		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
-	}
-
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	_, err := c.podLister.Pods(targetNamespace).Get(name)
-	if err == nil {
-		return c.reconcilePodUpdate(cluster, namespace, name, vPod)
+		return nil
 	}
 
 	if vPod.Spec.NodeName != "" && !isPodScheduled(vPod) {
 		// For now, we skip vPod that has NodeName set to prevent tenant from deploying DaemonSet or DaemonSet alike CRDs.
-		tenantClient, err := c.multiClusterPodController.GetClusterClient(cluster)
+		tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
 		if err != nil {
-			return fmt.Errorf("failed to create client from cluster %s config: %v", cluster, err)
+			return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 		}
 		event := createNotSupportEvent(vPod)
-		vEvent := conversion.BuildVirtualPodEvent(cluster, event, vPod)
+		vEvent := conversion.BuildVirtualPodEvent(clusterName, event, vPod)
 		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(vEvent)
 		return err
 	}
 
-	newObj, err := conversion.BuildMetadata(cluster, targetNamespace, vPod)
+	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, vPod)
 	if err != nil {
 		return err
 	}
@@ -138,15 +150,15 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 
 	pSecret, err := c.getPodServiceAccountSecret(pPod)
 	if err != nil {
-		return fmt.Errorf("failed to get service account secret from cluster %s cache: %v", cluster, err)
+		return fmt.Errorf("failed to get service account secret from cluster %s cache: %v", clusterName, err)
 	}
 
-	services, err := c.getPodRelatedServices(cluster, pPod)
+	services, err := c.getPodRelatedServices(clusterName, pPod)
 	if err != nil {
-		return fmt.Errorf("failed to list services from cluster %s cache: %v", cluster, err)
+		return fmt.Errorf("failed to list services from cluster %s cache: %v", clusterName, err)
 	}
 
-	nameServer, err := c.getClusterNameServer(cluster)
+	nameServer, err := c.getClusterNameServer(clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to find nameserver: %v", err)
 	}
@@ -158,14 +170,18 @@ func (c *controller) reconcilePodCreate(cluster, namespace, name string, vPod *v
 		//conversion.PodAddExtensionMeta(vPod),
 	}
 
-	err = conversion.VC(c.multiClusterPodController, cluster).Pod(pPod).Mutate(ms...)
+	err = conversion.VC(c.multiClusterPodController, clusterName).Pod(pPod).Mutate(ms...)
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}
-	_, err = c.client.Pods(targetNamespace).Create(pPod)
+	pPod, err = c.client.Pods(targetNamespace).Create(pPod)
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("pod %s/%s of cluster %s already exist in super master", namespace, name, cluster)
-		return nil
+		if pPod.Annotations[constants.LabelUID] == requestUID {
+			klog.Infof("pod %s/%s of cluster %s already exist in super master", targetNamespace, pPod.Name, clusterName)
+			return nil
+		} else {
+			return fmt.Errorf("pPod %s/%s exists but the UID is different from tenant master.", targetNamespace, pPod.Name)
+		}
 	}
 
 	return err
@@ -219,17 +235,9 @@ func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.
 	return services, nil
 }
 
-func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v1.Pod) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
-	pPod, err := c.podLister.Pods(targetNamespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// if the pod on super master has been deleted and syncer has not
-			// deleted virtual pod with 0 grace period second successfully.
-			// we depends on periodic check to do gc.
-			return nil
-		}
-		return err
+func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID string, pPod, vPod *v1.Pod) error {
+	if pPod.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("pPod %s/%s delegated UID is different from updated object.", targetNamespace, pPod.Name)
 	}
 
 	if vPod.DeletionTimestamp != nil {
@@ -239,14 +247,14 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v
 		}
 		deleteOptions := metav1.NewDeleteOptions(*vPod.DeletionGracePeriodSeconds)
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
-		err = c.client.Pods(targetNamespace).Delete(name, deleteOptions)
+		err := c.client.Pods(targetNamespace).Delete(pPod.Name, deleteOptions)
 		if errors.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
 
-	spec, err := c.multiClusterPodController.GetSpec(cluster)
+	spec, err := c.multiClusterPodController.GetSpec(clusterName)
 	if err != nil {
 		return err
 	}
@@ -257,23 +265,21 @@ func (c *controller) reconcilePodUpdate(cluster, namespace, name string, vPod *v
 			return err
 		}
 	}
-
-	// pod has been updated by tenant controller
-	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
-		c.enqueuePod(pPod)
-	}
-
 	return nil
 }
 
-func (c *controller) reconcilePodRemove(cluster, namespace, name string, vPod *v1.Pod) error {
-	targetNamespace := conversion.ToSuperMasterNamespace(cluster, namespace)
+func (c *controller) reconcilePodRemove(clusterName, targetNamespace, requestUID, name string, pPod *v1.Pod) error {
+	if pPod.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("To be deleted pPod %s/%s delegated UID is different from deleted object.", targetNamespace, name)
+	}
+
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
+		Preconditions:     metav1.NewUIDPreconditions(string(pPod.UID)),
 	}
 	err := c.client.Pods(targetNamespace).Delete(name, opts)
 	if errors.IsNotFound(err) {
-		klog.Warningf("pod %s/%s of cluster (%s) is not found in super master", namespace, name, cluster)
+		klog.Warningf("To be deleted pod %s/%s of cluster (%s) is not found in super master", targetNamespace, name, clusterName)
 		return nil
 	}
 	return err

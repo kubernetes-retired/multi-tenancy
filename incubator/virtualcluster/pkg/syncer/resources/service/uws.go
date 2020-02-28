@@ -128,6 +128,9 @@ func (c *controller) backPopulate(key string) error {
 		return fmt.Errorf("could not find pService %s/%s's vService in controller cache %v", vNamespace, pName, err)
 	}
 	vService := vServiceObj.(*v1.Service)
+	if pService.Annotations[constants.LabelUID] != string(vService.UID) {
+		return fmt.Errorf("BackPopulated pService %s/%s delegated UID is different from updated object.", pService.Namespace, pService.Name)
+	}
 
 	tenantClient, err := c.multiClusterServiceController.GetClusterClient(clusterName)
 	if err != nil {

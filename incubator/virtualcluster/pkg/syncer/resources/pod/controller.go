@@ -23,7 +23,6 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -62,7 +61,7 @@ type controller struct {
 	periodCheckerPeriod time.Duration
 	// Cluster vNode PodMap and GCMap, needed for vNode garbage collection
 	sync.Mutex
-	clusterVNodePodMap map[string]map[string]map[types.UID]struct{}
+	clusterVNodePodMap map[string]map[string]map[string]struct{}
 	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
 }
 
@@ -91,7 +90,7 @@ func Register(
 		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
 		workers:             constants.UwsControllerWorkerHigh,
 		periodCheckerPeriod: 60 * time.Second,
-		clusterVNodePodMap:  make(map[string]map[string]map[types.UID]struct{}),
+		clusterVNodePodMap:  make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
 	}
 
@@ -196,44 +195,38 @@ func (c *controller) removeQuiescingNodeFromClusterVNodeGCMap(cluster string, no
 	return true
 }
 
-func (c *controller) updateClusterVNodePodMap(cluster string, vPod *v1.Pod, event reconciler.EventType) {
-	nodeName := vPod.Spec.NodeName
-	if nodeName == "" || !isPodScheduled(vPod) {
-		return
-	}
-	func() {
-		c.Lock()
-		defer c.Unlock()
-		if event == reconciler.AddEvent || event == reconciler.UpdateEvent {
-			if _, exist := c.clusterVNodePodMap[cluster]; !exist {
-				c.clusterVNodePodMap[cluster] = make(map[string]map[types.UID]struct{})
-			}
-			if _, exist := c.clusterVNodePodMap[cluster][nodeName]; !exist {
-				c.clusterVNodePodMap[cluster][nodeName] = make(map[types.UID]struct{})
-			}
-			c.clusterVNodePodMap[cluster][nodeName][vPod.UID] = struct{}{}
-			if !c.removeQuiescingNodeFromClusterVNodeGCMap(cluster, nodeName) {
-				// We have consistency issue here. TODO: add to metrics
-				klog.Errorf("Cluster %s has vPods in vNode %s which is being GCed!", cluster, nodeName)
-			}
-		} else { // delete
-			if _, exist := c.clusterVNodePodMap[cluster][nodeName]; exist {
-				if _, exist := c.clusterVNodePodMap[cluster][nodeName][vPod.UID]; exist {
-					delete(c.clusterVNodePodMap[cluster][nodeName], vPod.UID)
-				} else {
-					klog.Warningf("Deleted pod %s of cluster (%s) is not found in clusterVNodePodMap", vPod.Name, cluster)
-				}
-
-				// If vNode does not have any Pod left, put it into gc map
-				if len(c.clusterVNodePodMap[cluster][nodeName]) == 0 {
-					c.addToClusterVNodeGCMap(cluster, nodeName)
-					delete(c.clusterVNodePodMap[cluster], nodeName)
-				}
-			} else {
-				klog.Warningf("The nodename %s of deleted pod %s in cluster (%s) is not found in clusterVNodePodMap", nodeName, vPod.Name, cluster)
-			}
+func (c *controller) updateClusterVNodePodMap(clusterName, nodeName, requestUID string, event reconciler.EventType) {
+	c.Lock()
+	defer c.Unlock()
+	if event == reconciler.UpdateEvent {
+		if _, exist := c.clusterVNodePodMap[clusterName]; !exist {
+			c.clusterVNodePodMap[clusterName] = make(map[string]map[string]struct{})
 		}
-	}()
+		if _, exist := c.clusterVNodePodMap[clusterName][nodeName]; !exist {
+			c.clusterVNodePodMap[clusterName][nodeName] = make(map[string]struct{})
+		}
+		c.clusterVNodePodMap[clusterName][nodeName][requestUID] = struct{}{}
+		if !c.removeQuiescingNodeFromClusterVNodeGCMap(clusterName, nodeName) {
+			// We have consistency issue here. TODO: add to metrics
+			klog.Errorf("Cluster %s has vPods in vNode %s which is being GCed!", clusterName, nodeName)
+		}
+	} else { // delete
+		if _, exist := c.clusterVNodePodMap[clusterName][nodeName]; exist {
+			if _, exist := c.clusterVNodePodMap[clusterName][nodeName][requestUID]; exist {
+				delete(c.clusterVNodePodMap[clusterName][nodeName], requestUID)
+			} else {
+				klog.Warningf("Deleted pod %s of cluster (%s) is not found in clusterVNodePodMap", requestUID, clusterName)
+			}
+
+			// If vNode does not have any Pod left, put it into gc map
+			if len(c.clusterVNodePodMap[clusterName][nodeName]) == 0 {
+				c.addToClusterVNodeGCMap(clusterName, nodeName)
+				delete(c.clusterVNodePodMap[clusterName], nodeName)
+			}
+		} else {
+			klog.Warningf("The nodename %s of deleted pod %s in cluster (%s) is not found in clusterVNodePodMap", nodeName, requestUID, clusterName)
+		}
+	}
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

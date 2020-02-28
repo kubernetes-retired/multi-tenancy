@@ -321,9 +321,12 @@ func (c *MultiClusterController) RequeueObject(clusterName string, obj interface
 	if cluster == nil {
 		return fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	r := reconciler.Request{Cluster: cluster.GetClientInfo(), Event: event, Obj: obj}
+	//FIXME: we dont need event here.
+	r := reconciler.Request{}
+	r.ClusterName = clusterName
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
+	r.UID = string(o.GetUID())
 
 	c.Queue.Add(r)
 	return nil
@@ -369,9 +372,9 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		// Return true, don't take a break
 		return true
 	}
-	if c.getCluster(req.Cluster.Name) == nil {
+	if c.getCluster(req.ClusterName) == nil {
 		// The virtual cluster has been removed, do not reconcile for its dws requests.
-		klog.Warningf("The cluster %s has been removed, drop the dws request %v", req.Cluster.Name, req)
+		klog.Warningf("The cluster %s has been removed, drop the dws request %v", req.ClusterName, req)
 		c.Queue.Forget(obj)
 		return true
 	}

@@ -18,6 +18,7 @@ package node
 
 import (
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -31,49 +32,35 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 // The reconcile logic for tenant master node informer, the main purpose is to maintain
 // the nodeNameToCluster mapping
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.V(4).Infof("reconcile node %s %s event for cluster %s", request.Name, request.Event, request.Cluster.Name)
-	vNode := request.Obj.(*v1.Node)
-	if vNode.Labels[constants.LabelVirtualNode] != "true" {
-		// We only handle virtual nodes created by syncer
-		return reconciler.Result{}, nil
+	klog.V(4).Infof("reconcile node %s for cluster %s", request.Name, request.ClusterName)
+	vExists := true
+	vNodeObj, err := c.multiClusterNodeController.Get(request.ClusterName, request.Namespace, request.Name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		vExists = false
 	}
 
-	switch request.Event {
-	case reconciler.AddEvent:
-		c.reconcileCreate(request.Cluster.Name, request.Namespace, request.Name, vNode)
-	case reconciler.UpdateEvent:
-		c.reconcileUpdate(request.Cluster.Name, request.Namespace, request.Name, vNode)
-	case reconciler.DeleteEvent:
-		c.reconcileRemove(request.Cluster.Name, request.Namespace, request.Name, vNode)
+	if vExists {
+		vNode := vNodeObj.(*v1.Node)
+		if vNode.Labels[constants.LabelVirtualNode] != "true" {
+			// We only handle virtual nodes created by syncer
+			return reconciler.Result{}, nil
+		}
+		c.Lock()
+		if _, exist := c.nodeNameToCluster[request.Name]; !exist {
+			c.nodeNameToCluster[request.Name] = make(map[string]struct{})
+		}
+		c.nodeNameToCluster[request.Name][request.ClusterName] = struct{}{}
+		c.Unlock()
+	} else {
+		c.Lock()
+		if _, exists := c.nodeNameToCluster[request.Name]; exists {
+			delete(c.nodeNameToCluster[request.Name], request.ClusterName)
+		}
+		c.Unlock()
+
 	}
 	return reconciler.Result{}, nil
-}
-
-func (c *controller) reconcileCreate(cluster, namespace, name string, node *v1.Node) {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exist := c.nodeNameToCluster[name]; !exist {
-		c.nodeNameToCluster[name] = make(map[string]struct{})
-	}
-	c.nodeNameToCluster[name][cluster] = struct{}{}
-}
-
-func (c *controller) reconcileUpdate(cluster, namespace, name string, node *v1.Node) {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exist := c.nodeNameToCluster[name]; !exist {
-		c.nodeNameToCluster[name] = make(map[string]struct{})
-	}
-	c.nodeNameToCluster[name][cluster] = struct{}{}
-}
-
-func (c *controller) reconcileRemove(cluster, namespace, name string, node *v1.Node) {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, exists := c.nodeNameToCluster[name]; exists {
-		delete(c.nodeNameToCluster[name], cluster)
-	}
 }

@@ -45,17 +45,13 @@ const (
 )
 
 // Request contains the information needed by a multicluster Reconciler to Reconcile:
-// a context, namespace, and name.
+// It ONLY contains the meta that can uniquely identify an object without any state information which can lead to parallel reconcile.
 type Request struct {
-	Cluster *ClusterInfo
+	ClusterName string
 	types.NamespacedName
-	Event EventType
-	Obj   interface{}
+	UID string
 }
 
-// Result is the return type of a Reconciler's Reconcile method.
-// By default, the Request is forgotten after it's been processed,
-// but you can also requeue it immediately, or after some time.
 type Result reconcile.Result
 
 // Reconciler is the interface used by a Controller to reconcile.
