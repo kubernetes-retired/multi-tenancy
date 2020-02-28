@@ -17,8 +17,8 @@ package namespace
 
 import (
 	"fmt"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +29,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -57,7 +59,7 @@ func (c *controller) checkNamespaces() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
+	defer metrics.RecordCheckerScanDuration("namespace", time.Now())
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
@@ -90,6 +92,8 @@ func (c *controller) checkNamespaces() {
 				}
 				if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
 					klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterNamespaces").Inc()
 				}
 				continue
 			}
@@ -105,7 +109,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing namespaces from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check namespaces consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check namespaces consistency in cluster %s", clusterName)
 	namespaceList := listObj.(*v1.NamespaceList)
 	for i, vNamespace := range namespaceList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vNamespace.Name)
@@ -114,6 +118,8 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 			// pNamespace not found and vNamespace still exists, we need to create pNamespace again
 			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantNamespaces").Inc()
 			}
 			continue
 		}

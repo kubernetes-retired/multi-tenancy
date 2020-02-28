@@ -18,6 +18,7 @@ package virtualcluster
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -440,7 +441,7 @@ func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		clsState string
 		clsSlbId string
 	)
-	creationTimeout := time.After(100 * time.Second)
+	creationTimeout := time.After(600 * time.Second)
 	clsID, err = sendCreationRequest(cli, vc.Name, askCfg)
 	if err != nil {
 		if !isSDKErr(err) {
@@ -536,7 +537,8 @@ PollASK:
 		return err
 	}
 	log.Info("cluster ID has been added to vc as an annotation", "vc", vc.GetName(), "cluster-id", clsID)
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationKubeconfig, kbCfg, log)
+	kbCfgB64 := base64.StdEncoding.EncodeToString([]byte(kbCfg))
+	err = kubeutil.AnnotateVC(mpa, vc, AnnotationKubeconfig, kbCfgB64, log)
 	if err != nil {
 		return err
 	}

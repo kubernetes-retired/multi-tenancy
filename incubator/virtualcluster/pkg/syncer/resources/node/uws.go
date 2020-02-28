@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
 // StartUWS starts the upward syncer
@@ -91,8 +93,8 @@ func (c *controller) backPopulate(nodeName string) error {
 		}
 		return err
 	}
-
-	klog.Infof("back populate node %s/%s", node.Namespace, node.Name)
+	defer metrics.RecordUWSOperationDuration("node", time.Now())
+	klog.V(4).Infof("back populate node %s/%s", node.Namespace, node.Name)
 	c.Lock()
 	clusterList := c.nodeNameToCluster[node.Name]
 	c.Unlock()

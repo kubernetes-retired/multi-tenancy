@@ -1,4 +1,4 @@
-package controllers
+package reconcilers
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
-// The ex map is used by controllers to exclude namespaces to reconcile. We explicitly
+// The ex map is used by reconcilers to exclude namespaces to reconcile. We explicitly
 // exclude some default namespaces with constantly changing objects.
 // TODO make the exclusion configurable - https://github.com/kubernetes-sigs/multi-tenancy/issues/374
 var ex = map[string]bool{
@@ -24,27 +24,36 @@ var ex = map[string]bool{
 func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	hcChan := make(chan event.GenericEvent)
 
-	// Create the HierarchyReconciler.
-	hr := &HierarchyReconciler{
+	// Create the HierarchyConfigReconciler.
+	hr := &HierarchyConfigReconciler{
 		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("controllers").WithName("Hierarchy"),
+		Log:      ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
 		Forest:   f,
 		Affected: hcChan,
 	}
 	if err := hr.SetupWithManager(mgr, maxReconciles); err != nil {
-		return fmt.Errorf("cannot create Hierarchy controller: %s", err.Error())
+		return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())
 	}
 
 	// Create the ConfigReconciler.
 	cr := &ConfigReconciler{
 		Client:                 mgr.GetClient(),
-		Log:                    ctrl.Log.WithName("controllers").WithName("HNCConfiguration"),
+		Log:                    ctrl.Log.WithName("reconcilers").WithName("HNCConfiguration"),
 		Manager:                mgr,
 		Forest:                 f,
 		HierarchyConfigUpdates: hcChan,
 	}
 	if err := cr.SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("cannot create Config controller: %s", err.Error())
+		return fmt.Errorf("cannot create Config reconciler: %s", err.Error())
+	}
+
+	// Create HierarchicalNamespaceReconciler.
+	hnsr := &HierarchicalNamespaceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("reconcilers").WithName("HierarchicalNamespace"),
+	}
+	if err := hnsr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create HierarchicalNamespace reconciler: %s", err.Error())
 	}
 
 	return nil

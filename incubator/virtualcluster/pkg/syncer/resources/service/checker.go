@@ -19,6 +19,8 @@ package service
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +31,11 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
+
+var numMissMatchedServices uint64
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
@@ -49,8 +54,9 @@ func (c *controller) checkServices() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
+	defer metrics.RecordCheckerScanDuration("service", time.Now())
 	wg := sync.WaitGroup{}
+	numMissMatchedServices = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -78,10 +84,14 @@ func (c *controller) checkServices() {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pService.UID))
 			if err = c.serviceClient.Services(pService.Namespace).Delete(pService.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServices").Inc()
 			}
 			continue
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedServices").Set(float64(numMissMatchedServices))
 }
 
 func (c *controller) checkServicesOfTenantCluster(clusterName string) {
@@ -90,7 +100,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing services from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check services consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check services consistency in cluster %s", clusterName)
 	svcList := listObj.(*v1.ServiceList)
 	for i, vService := range svcList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vService.Namespace)
@@ -98,6 +108,8 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		if errors.IsNotFound(err) {
 			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
 			}
 			continue
 		}
@@ -113,6 +125,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		}
 		updatedService := conversion.Equality(spec).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
+			atomic.AddUint64(&numMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
 		}
 	}

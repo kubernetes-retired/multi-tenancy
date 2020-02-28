@@ -1,4 +1,4 @@
-package controllers_test
+package reconcilers_test
 
 import (
 	"context"

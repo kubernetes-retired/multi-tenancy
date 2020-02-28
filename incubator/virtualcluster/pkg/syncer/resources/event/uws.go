@@ -75,7 +75,7 @@ func (c *controller) processNextWorkItem() bool {
 		return true
 	}
 
-	klog.Infof("back populate event %+v", req.Key)
+	klog.V(4).Infof("back populate event %+v", req.Key)
 	err := c.backPopulate(req.Key)
 	if err == nil {
 		c.queue.Forget(obj)

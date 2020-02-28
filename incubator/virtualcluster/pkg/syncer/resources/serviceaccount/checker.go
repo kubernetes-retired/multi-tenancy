@@ -18,6 +18,7 @@ package serviceaccount
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +30,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -56,7 +58,7 @@ func (c *controller) checkServiceAccounts() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
+	defer metrics.RecordCheckerScanDuration("serviceaccount", time.Now())
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
@@ -88,6 +90,8 @@ func (c *controller) checkServiceAccounts() {
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pSa.UID))
 				if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
 					klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServiceAccounts").Inc()
 				}
 				continue
 			}
@@ -103,7 +107,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing serviceaccounts from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check serviceaccounts consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check serviceaccounts consistency in cluster %s", clusterName)
 	saList := listObj.(*v1.ServiceAccountList)
 	for i, vSa := range saList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSa.Namespace)
@@ -112,6 +116,8 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 			// pSa not found and vSa still exists, we need to create pSa again
 			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i], reconciler.AddEvent); err != nil {
 				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServiceAccounts").Inc()
 			}
 			continue
 		}

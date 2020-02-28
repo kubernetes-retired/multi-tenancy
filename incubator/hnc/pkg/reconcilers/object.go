@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package reconcilers
 
 import (
 	"context"
@@ -57,7 +57,7 @@ type ObjectReconciler struct {
 	client.Client
 	Log logr.Logger
 
-	// Forest is the in-memory forest managed by the HierarchyReconciler.
+	// Forest is the in-memory forest managed by the HierarchyConfigReconciler.
 	Forest *forest.Forest
 
 	// GVK is the group/version/kind handled by this reconciler.
@@ -74,7 +74,7 @@ type ObjectReconciler struct {
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete
 
-// SyncNamespace can be called manually by the HierarchyReconciler when the hierarchy changes.
+// SyncNamespace can be called manually by the HierarchyConfigReconciler when the hierarchy changes.
 // It enqueues all the current objects in the namespace and local copies of the original objects
 // in the ancestors.
 func (r *ObjectReconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {

@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers_test
+package reconcilers_test
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +37,6 @@ import (
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/controllers"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -55,7 +55,7 @@ func TestAPIs(t *testing.T) {
 
 	SetDefaultEventuallyTimeout(time.Second * 2)
 	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
+		"Reconciler Suite",
 		[]Reporter{envtest.NewlineReporter{}})
 }
 
@@ -86,7 +86,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = controllers.Create(k8sManager, forest.NewForest(), 100)
+	err = reconcilers.Create(k8sManager, forest.NewForest(), 100)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()

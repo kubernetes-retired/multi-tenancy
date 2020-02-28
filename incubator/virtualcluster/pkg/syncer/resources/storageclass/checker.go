@@ -19,6 +19,8 @@ package storageclass
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	v1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,8 +32,11 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
+
+var numMissMatchedStorageClasses uint64
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.storageclassSynced) {
@@ -50,7 +55,9 @@ func (c *controller) checkStorageClass() {
 		return
 	}
 
+	defer metrics.RecordCheckerScanDuration("storageClass", time.Now())
 	wg := sync.WaitGroup{}
+	numMissMatchedStorageClasses = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -75,12 +82,15 @@ func (c *controller) checkStorageClass() {
 			_, err := c.multiClusterStorageClassController.Get(clusterName, "", pStorageClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
+					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
 					c.queue.Add(reconciler.UwsRequest{Key: pStorageClass.Name, ClusterName: clusterName})
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}
 		}
 	}
+
+	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedStorageClasses").Set(float64(numMissMatchedStorageClasses))
 }
 
 func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
@@ -89,7 +99,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing storageclass from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.Infof("check storageclass consistency in cluster %s", clusterName)
+	klog.V(4).Infof("check storageclass consistency in cluster %s", clusterName)
 	scList := listObj.(*v1.StorageClassList)
 	for i, vStorageClass := range scList.Items {
 		pStorageClass, err := c.storageclassLister.Get(vStorageClass.Name)
@@ -105,6 +115,8 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			}
 			if err := tenantClient.StorageV1().StorageClasses().Delete(vStorageClass.Name, opts); err != nil {
 				klog.Errorf("error deleting storageclass %v in cluster %s: %v", vStorageClass.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantStorageClasses").Inc()
 			}
 			continue
 		}
@@ -116,6 +128,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 
 		updatedStorageClass := conversion.Equality(nil).CheckStorageClassEquality(pStorageClass, &scList.Items[i])
 		if updatedStorageClass != nil {
+			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 		}
 	}
