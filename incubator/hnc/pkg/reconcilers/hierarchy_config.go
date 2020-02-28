@@ -63,6 +63,12 @@ type HierarchyConfigReconciler struct {
 	// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
 	// simply hard to tell when one ends and another begins).
 	reconcileID int32
+
+	// This is a temporary field to toggle different behaviours of this HierarchyConfigurationReconciler
+	// depending on if the HierarchicalNamespaceReconciler is enabled or not. It will be removed after
+	// the GitHub issue "Implement self-service namespace" is resolved
+	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/457)
+	HNSReconcilerEnabled bool
 }
 
 // +kubebuilder:rbac:groups=hnc.x-k8s.io,resources=hierarchies,verbs=get;list;watch;create;update;patch;delete
@@ -83,6 +89,12 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 	rid := (int)(atomic.AddInt32(&r.reconcileID, 1))
 	log := r.Log.WithValues("ns", ns, "rid", rid)
+
+	// TODO remove this log and use the HNSReconcilerEnabled to toggle the behavour of this
+	//  reconciler accordingly. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/467
+	// Output a log for testing.
+	log.Info("HC will be reconciled with", "HNSReconcilerEnabled", r.HNSReconcilerEnabled)
+
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 

@@ -63,6 +63,7 @@ func main() {
 		debugLogs            bool
 		testLog              bool
 		qps                  int
+		enableHNSReconciler  bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -72,6 +73,7 @@ func main() {
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
+	flag.BoolVar(&enableHNSReconciler, "enable-hierarchicalnamespace-reconciler", false, "Enables hierarchicalnamespace reconciler.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -131,7 +133,7 @@ func main() {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles, enableHNSReconciler); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
