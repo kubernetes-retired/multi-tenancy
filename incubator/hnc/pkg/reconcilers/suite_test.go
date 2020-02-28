@@ -17,6 +17,7 @@ package reconcilers_test
 
 import (
 	"context"
+	"flag"
 	"path/filepath"
 	"testing"
 	"time"
@@ -44,11 +45,19 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg        *rest.Config
-	k8sClient  client.Client
-	testEnv    *envtest.Environment
-	k8sManager ctrl.Manager
+	cfg                 *rest.Config
+	k8sClient           client.Client
+	testEnv             *envtest.Environment
+	k8sManager          ctrl.Manager
+	enableHNSReconciler bool
 )
+
+func init() {
+	// This is a temporary flag to enable the hierarchicalnamespace reconciler for testing.
+	// It will be removed after the GitHub issue "Implement self-service namespace" is resolved
+	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/457)
+	flag.BoolVar(&enableHNSReconciler, "enable-hierarchicalnamespace-reconciler", false, "Enables hierarchicalnamespace reconciler.")
+}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -86,7 +95,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = reconcilers.Create(k8sManager, forest.NewForest(), 100)
+	err = reconcilers.Create(k8sManager, forest.NewForest(), 100, enableHNSReconciler)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
