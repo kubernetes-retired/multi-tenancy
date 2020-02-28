@@ -21,8 +21,8 @@ import (
 
 // Constants for types and well-known names
 const (
-	Singleton = "hierarchy"
-	Resource  = "hierarchyconfigurations"
+	Singleton               = "hierarchy"
+	HierarchyConfigurations = "hierarchyconfigurations"
 )
 
 // Constants for labels and annotations
