@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -171,18 +170,9 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 		return err
 	}
 
-	err = controllerutil.SetControllerReference(vc, ssBdl.StatefulSet, mpn.scheme)
-	if err != nil {
-		return err
-	}
-
 	if ssBdl.Service != nil {
 		log.Info("deploying Service for master component", "component", ssBdl.Name)
 		err = mpn.Create(context.TODO(), ssBdl.Service)
-		if err != nil {
-			return err
-		}
-		err := controllerutil.SetControllerReference(vc, ssBdl.Service, mpn.scheme)
 		if err != nil {
 			return err
 		}

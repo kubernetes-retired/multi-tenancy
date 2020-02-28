@@ -92,6 +92,26 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - configmaps/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - namespaces
   verbs:
   - get
@@ -190,7 +210,7 @@ spec:
       containers:
       - command:
         - manager
-        image: virtualcluster/manager-amd64 
+        image: virtualcluster/manager-amd64
         imagePullPolicy: Always
         name: vc-manager
 ---
