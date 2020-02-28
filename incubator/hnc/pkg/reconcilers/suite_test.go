@@ -1,11 +1,8 @@
 /*
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,7 +13,7 @@ limitations under the License.
 package reconcilers_test
 
 import (
-	"context"
+	"flag"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,7 +33,6 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -44,11 +40,19 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	cfg        *rest.Config
-	k8sClient  client.Client
-	testEnv    *envtest.Environment
-	k8sManager ctrl.Manager
+	cfg                 *rest.Config
+	k8sClient           client.Client
+	testEnv             *envtest.Environment
+	k8sManager          ctrl.Manager
+	enableHNSReconciler bool
 )
+
+func init() {
+	// This is a temporary flag to enable the hierarchicalnamespace reconciler for testing.
+	// It will be removed after the GitHub issue "Implement self-service namespace" is resolved
+	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/457)
+	flag.BoolVar(&enableHNSReconciler, "enable-hierarchicalnamespace-reconciler", false, "Enables hierarchicalnamespace reconciler.")
+}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -86,17 +90,11 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = reconcilers.Create(k8sManager, forest.NewForest(), 100)
+	err = reconcilers.Create(k8sManager, forest.NewForest(), 100, enableHNSReconciler)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
 	Expect(k8sClient).ToNot(BeNil())
-
-	// Setup HNCConfiguration object here because it is a cluster-wide singleton shared by all reconcilers.
-	hncConfig := newHNCConfig()
-	Expect(hncConfig).ToNot(BeNil())
-	ctx := context.Background()
-	updateHNCConfig(ctx, hncConfig)
 
 	go func() {
 		err = k8sManager.Start(ctrl.SetupSignalHandler())
@@ -111,10 +109,3 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
-
-func newHNCConfig() *api.HNCConfiguration {
-	hncConfig := &api.HNCConfiguration{}
-	hncConfig.ObjectMeta.Name = api.HNCConfigSingleton
-	hncConfig.Spec = config.GetDefaultConfigSpec()
-	return hncConfig
-}
