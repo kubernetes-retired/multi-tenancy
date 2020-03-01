@@ -130,6 +130,10 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 		if updatedStorageClass != nil {
 			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
+			if publicStorageClass(pStorageClass) {
+				key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(pStorageClass)
+				c.queue.Add(reconciler.UwsRequest{Key: key, ClusterName: clusterName})
+			}
 		}
 	}
 }

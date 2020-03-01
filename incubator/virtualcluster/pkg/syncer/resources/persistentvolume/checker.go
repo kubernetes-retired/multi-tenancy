@@ -150,6 +150,9 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 		if updatedPVSpec != nil {
 			atomic.AddUint64(&numSpecMissMatchedPVs, 1)
 			klog.Warningf("spec of pv %v diff in super&tenant master %s", vPV.Name, clusterName)
+			if boundPersistentVolume(pPV) {
+				c.enqueuePersistentVolume(pPV)
+			}
 		}
 	}
 }

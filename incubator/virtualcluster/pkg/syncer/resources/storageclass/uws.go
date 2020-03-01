@@ -83,15 +83,10 @@ func (c *controller) processNextWorkItem() bool {
 	}
 
 	utilruntime.HandleError(fmt.Errorf("error processing storageclass %v (will retry): %v", req.Key, err))
-	if req.FirstFailureTime == nil {
-		now := metav1.Now()
-		req.FirstFailureTime = &now
-	} else {
-		if metav1.Now().After(req.FirstFailureTime.Add(constants.DefaultUwsRetryTimePeriod)) {
-			klog.Warningf("StorageClass uws request is dropped due to timeout: %v", req)
-			c.queue.Forget(obj)
-			return true
-		}
+	if c.queue.NumRequeues(req) >= constants.MaxUwsRetryAttempts {
+		klog.Warningf("StorageClass uws request is dropped due to reaching max retry limit: %v", req)
+		c.queue.Forget(obj)
+		return true
 	}
 	c.queue.AddRateLimited(obj)
 	return true

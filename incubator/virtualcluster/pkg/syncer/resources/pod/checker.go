@@ -275,12 +275,18 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
+			if assignedPod(pPod) {
+				c.enqueuePod(pPod)
+			}
 		}
 
 		updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedPods, 1)
 			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
+			if assignedPod(pPod) {
+				c.enqueuePod(pPod)
+			}
 		}
 	}
 }
