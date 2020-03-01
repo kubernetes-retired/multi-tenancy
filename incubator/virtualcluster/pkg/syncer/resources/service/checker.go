@@ -144,6 +144,9 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		if updatedService != nil {
 			atomic.AddUint64(&numMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
+			if isLoadBalancerService(pService) {
+				c.enqueueService(pService)
+			}
 		}
 	}
 }

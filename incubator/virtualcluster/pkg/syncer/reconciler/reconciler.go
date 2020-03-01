@@ -17,7 +17,6 @@ limitations under the License.
 package reconciler
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 
@@ -60,8 +59,7 @@ type Reconciler interface {
 }
 
 type UwsRequest struct {
-	Key              string
-	FirstFailureTime *metav1.Time
+	Key string
 	// Optional, in many cases, the cluster name is unknown when uws request is created
 	ClusterName string
 }
