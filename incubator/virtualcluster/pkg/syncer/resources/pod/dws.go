@@ -74,11 +74,13 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	} else if !vExists && pExists {
 		operation = "pod_delete"
 		defer recordOperation(operation, time.Now())
-		// FIXME: For Pod, this should not be reached. So we need to call updateClusterVNodePodMap to remove pod from node in UWS.
 		err := c.reconcilePodRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pPod)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
+		}
+		if pPod.Spec.NodeName != "" && isPodScheduled(pPod) {
+			c.updateClusterVNodePodMap(request.ClusterName, pPod.Spec.NodeName, request.UID, reconciler.DeleteEvent)
 		}
 	} else if vExists && pExists {
 		operation = "pod_update"
