@@ -245,6 +245,8 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
 				if err = client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
 					klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+				} else if vPod.Spec.NodeName != "" && isPodScheduled(&vPod) {
+					c.updateClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID), reconciler.DeleteEvent)
 				}
 			} else {
 				// pPod not found and vPod still exists, we need to create pPod again
