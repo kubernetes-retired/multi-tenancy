@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -99,8 +100,8 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 }
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
-	// Get the singleton and namespace.
-	inst, nsInst, err := r.getInstances(ctx, log, nm)
+	// Get the singleton, the namespace and a list of the names of the hns instances in the namespace.
+	inst, nsInst, hnsnms, err := r.getInstances(ctx, log, nm)
 	if err != nil {
 		return err
 	}
@@ -119,7 +120,7 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	}
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst)
+	r.syncWithForest(log, nsInst, inst, hnsnms)
 
 	// Early exit if we don't need to write anything back.
 	if !update {
@@ -149,7 +150,7 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, hnsnms []string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -169,7 +170,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncParent(log, inst, ns)
 
 	// Update the list of actual children, then resolve it versus the list of required children.
-	r.syncChildren(log, inst, ns)
+	r.syncChildren(log, inst, ns, hnsnms)
 
 	r.syncLabel(log, nsInst, ns)
 
@@ -300,7 +301,7 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 // syncChildren looks at the current list of children and compares it to the children that
 // have been marked as required. If any required children are missing, we add them to the in-memory
 // forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
-func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hnsnms []string) {
 	// Update the most recent list of children from the forest
 	inst.Status.Children = ns.ChildNames()
 
@@ -309,7 +310,13 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 
 	// Make a set to make it easy to look up if a child is required or not
 	isRequired := map[string]bool{}
-	for _, r := range inst.Spec.RequiredChildren {
+	// TODO remove the spec.requiredChildren lines below when the hns reconciler is in use.
+	//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/457
+	// Use the old spec.requiredChildren field to get the list of the self-serve subnamespaces.
+	if !r.HNSReconcilerEnabled {
+		hnsnms = inst.Spec.RequiredChildren
+	}
+	for _, r := range hnsnms {
 		isRequired[r] = true
 	}
 
@@ -334,6 +341,7 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 			// wrong (eg, the error shown above).
 			delete(isRequired, cn)
 			cns.RequiredChildOf = ns.Name()
+			log.Info("owner set", "owner", ns.Name(), "hns", cns.Name())
 		} else {
 			// This isn't a required child, but it looks like it *used* to be a required child of this
 			// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
@@ -441,19 +449,24 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 	}()
 }
 
-func (r *HierarchyConfigReconciler) getInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
+func (r *HierarchyConfigReconciler) getInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, hnsnms []string, err error) {
 	inst, err = r.getSingleton(ctx, nm)
 	if err != nil {
 		log.Error(err, "Couldn't read singleton")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	ns, err = r.getNamespace(ctx, nm)
 	if err != nil {
 		log.Error(err, "Couldn't read namespace")
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	hnsnms, err = r.getHierarchicalNamespaceNames(ctx, nm)
+	if err != nil {
+		log.Error(err, "Couldn't read hierarchicalnamespaces")
+		return nil, nil, nil, err
 	}
 
-	return inst, ns, nil
+	return inst, ns, hnsnms, nil
 }
 
 func (r *HierarchyConfigReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
@@ -564,6 +577,30 @@ func (r *HierarchyConfigReconciler) getNamespace(ctx context.Context, nm string)
 		return &corev1.Namespace{}, nil
 	}
 	return ns, nil
+}
+
+// getHierarchicalNamespaceNames returns a list of the HierarchicalNamespace instance names in the
+// given namespace.
+func (r *HierarchyConfigReconciler) getHierarchicalNamespaceNames(ctx context.Context, nm string) ([]string, error) {
+	var hnsnms []string
+
+	// List all the hns instance in the namespace.
+	ul := &unstructured.UnstructuredList{}
+	ul.SetKind(api.HierarchicalNamespacesKind)
+	ul.SetAPIVersion(api.HierarchicalNamespacesAPIVersion)
+	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		return hnsnms, nil
+	}
+
+	// Create a list of strings of the hns names.
+	for _, inst := range ul.Items {
+		hnsnms = append(hnsnms, inst.GetName())
+	}
+
+	return hnsnms, nil
 }
 
 func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {

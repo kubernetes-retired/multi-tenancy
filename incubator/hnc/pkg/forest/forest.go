@@ -143,6 +143,7 @@ type Namespace struct {
 
 	// RequiredChildOf indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
+	// TODO rename it to Owner. See issue - https://github.com/kubernetes-sigs/multi-tenancy/issues/469
 	RequiredChildOf string
 }
 
