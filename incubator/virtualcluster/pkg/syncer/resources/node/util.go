@@ -19,7 +19,6 @@ package node
 import (
 	"encoding/json"
 	"fmt"
-	"runtime"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,16 +29,17 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
+var wellKnownNodeLabelsMap = map[string]struct{}{
+	v1.LabelOSStable:   {},
+	v1.LabelArchStable: {},
+	v1.LabelHostname:   {},
+}
+
 func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 	now := metav1.Now()
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: superMasterNode.Name,
-			Labels: map[string]string{
-				constants.LabelVirtualNode: "true",
-				v1.LabelOSStable:           runtime.GOOS,
-				v1.LabelArchStable:         runtime.GOARCH,
-			},
 		},
 		Spec: v1.NodeSpec{
 			Unschedulable: true,
@@ -52,6 +52,16 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 			},
 		},
 	}
+
+	labels := map[string]string{
+		constants.LabelVirtualNode: "true",
+	}
+	for k, v := range superMasterNode.GetLabels() {
+		if _, isWellKnown := wellKnownNodeLabelsMap[k]; isWellKnown {
+			labels[k] = v
+		}
+	}
+	n.SetLabels(labels)
 
 	n.Status.Conditions = nodeConditions()
 	n.Status.NodeInfo.OperatingSystem = "Linux"
