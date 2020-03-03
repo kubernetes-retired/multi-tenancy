@@ -137,6 +137,9 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should create a child namespace if requested", func() {
+		if enableHNSReconciler {
+			return
+		}
 		// Create a namespace with a required child
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.RequiredChildren = []string{barName}
@@ -152,6 +155,9 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should set RequiredChildConflict condition if a required child cannot be set", func() {
+		if enableHNSReconciler {
+			return
+		}
 		bazName := createNS(ctx, "baz")
 
 		// Make baz a child of foo
@@ -178,6 +184,9 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should clear RequiredChildConflict condition if the parent removes the required child", func() {
+		if enableHNSReconciler {
+			return
+		}
 		bazName := createNS(ctx, "baz")
 
 		// Make baz a child of foo

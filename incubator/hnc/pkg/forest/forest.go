@@ -141,6 +141,7 @@ type Namespace struct {
 	// on this namespace.
 	conditions conditions
 
+	// TODO rename it to Owner. See issue - https://github.com/kubernetes-sigs/multi-tenancy/issues/469
 	// RequiredChildOf indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
 	RequiredChildOf string
@@ -247,6 +248,20 @@ func (ns *Namespace) ChildNames() []string {
 		nms = append(nms, k)
 	}
 	sort.Strings(nms)
+	return nms
+}
+
+// OwnedNames returns a list of names of the owned namespaces or nil if there's none.
+func (ns *Namespace) OwnedNames() []string {
+	if len(ns.forest.namespaces) == 0 {
+		return nil
+	}
+	nms := []string{}
+	for nm, ns := range ns.forest.namespaces {
+		if ns.RequiredChildOf == ns.name {
+			nms = append(nms, nm)
+		}
+	}
 	return nms
 }
 
