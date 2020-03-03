@@ -64,20 +64,20 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 	if vExists && !pExists {
 		vEndpoints := vEndpointsObj.(*v1.Endpoints)
-		err := c.reconcileEndpointsCreate(request.ClusterName, targetNamespace, vEndpoints)
+		err := c.reconcileEndpointsCreate(request.ClusterName, targetNamespace, request.UID, vEndpoints)
 		if err != nil {
 			klog.Errorf("failed reconcile endpoints %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	} else if !vExists && pExists {
-		err := c.reconcileEndpointsRemove(request.ClusterName, targetNamespace, request.Name)
+		err := c.reconcileEndpointsRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pEndpoints)
 		if err != nil {
 			klog.Errorf("failed reconcile endpoints %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	} else if vExists && pExists {
 		vEndpoints := vEndpointsObj.(*v1.Endpoints)
-		err := c.reconcileEndpointsUpdate(request.ClusterName, targetNamespace, pEndpoints, vEndpoints)
+		err := c.reconcileEndpointsUpdate(request.ClusterName, targetNamespace, request.UID, pEndpoints, vEndpoints)
 		if err != nil {
 			klog.Errorf("failed reconcile endpoints %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
@@ -88,7 +88,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace string, ep *v1.Endpoints) error {
+func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace, requestUID string, ep *v1.Endpoints) error {
 	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, ep)
 	if err != nil {
 		return err
@@ -96,15 +96,22 @@ func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace strin
 
 	pEndpoints := newObj.(*v1.Endpoints)
 
-	_, err = c.endpointClient.Endpoints(targetNamespace).Create(pEndpoints)
+	pEndpoints, err = c.endpointClient.Endpoints(targetNamespace).Create(pEndpoints)
 	if errors.IsAlreadyExists(err) {
-		klog.Infof("endpoints %s/%s of cluster %s already exist in super master", targetNamespace, pEndpoints.Name, clusterName)
-		return nil
+		if pEndpoints.Annotations[constants.LabelUID] == requestUID {
+			klog.Infof("endpoints %s/%s of cluster %s already exist in super master", targetNamespace, pEndpoints.Name, clusterName)
+			return nil
+		} else {
+			return fmt.Errorf("pEndpoints %s/%s exists but its delegated object UID is different.", targetNamespace, pEndpoints.Name)
+		}
 	}
 	return err
 }
 
-func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace string, pEP, vEP *v1.Endpoints) error {
+func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace, requestUID string, pEP, vEP *v1.Endpoints) error {
+	if pEP.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pEP.Name)
+	}
 	spec, err := c.multiClusterEndpointsController.GetSpec(clusterName)
 	if err != nil {
 		return err
@@ -119,7 +126,10 @@ func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace strin
 	return nil
 }
 
-func (c *controller) reconcileEndpointsRemove(clusterName, targetNamespace, name string) error {
+func (c *controller) reconcileEndpointsRemove(clusterName, targetNamespace, requestUID, name string, pEP *v1.Endpoints) error {
+	if pEP.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("To be deleted pEndpoints %s/%s delegated UID is different from deleted object.", targetNamespace, pEP.Name)
+	}
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}

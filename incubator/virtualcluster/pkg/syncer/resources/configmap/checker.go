@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -87,21 +88,28 @@ func (c *controller) checkConfigMaps() {
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
-
-		_, err := c.multiClusterConfigMapController.Get(clusterName, vNamespace, pConfigMap.Name)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// vConfigMap not found and pConfigMap still exist, we need to delete pConfigMap manually
-				deleteOptions := &metav1.DeleteOptions{}
-				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pConfigMap.UID))
-				if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(pConfigMap.Name, deleteOptions); err != nil {
-					klog.Errorf("error deleting pConfigMap %v/%v in super master: %v", pConfigMap.Namespace, pConfigMap.Name, err)
-				} else {
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterConfigMaps").Inc()
-				}
-				continue
+		shouldDelete := false
+		vConfigMapObj, err := c.multiClusterConfigMapController.Get(clusterName, vNamespace, pConfigMap.Name)
+		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vConfigMap := vConfigMapObj.(*v1.ConfigMap)
+			if pConfigMap.Annotations[constants.LabelUID] != string(vConfigMap.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pConfigMap %s/%s delegated UID is different from tenant object.", pConfigMap.Namespace, pConfigMap.Name)
 			}
-			klog.Errorf("error getting vConfigMap %s/%s from cluster %s cache: %v", vNamespace, pConfigMap.Name, clusterName, err)
+		}
+
+		if shouldDelete {
+			// vConfigMap not found and pConfigMap still exist, we need to delete pConfigMap manually
+			deleteOptions := &metav1.DeleteOptions{}
+			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pConfigMap.UID))
+			if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(pConfigMap.Name, deleteOptions); err != nil {
+				klog.Errorf("error deleting pConfigMap %v/%v in super master: %v", pConfigMap.Namespace, pConfigMap.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterConfigMaps").Inc()
+			}
 		}
 	}
 
@@ -132,8 +140,13 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 
 		if err != nil {
 			klog.Errorf("error getting pConfigMap %s/%s from super master cache: %v", targetNamespace, vConfigMap.Name, err)
+			continue
 		}
 
+		if pConfigMap.Annotations[constants.LabelUID] != string(vConfigMap.UID) {
+			klog.Errorf("Found pConfigMap %s/%s delegated UID is different from tenant object.", targetNamespace, pConfigMap.Name)
+			continue
+		}
 		spec, err := c.multiClusterConfigMapController.GetSpec(clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)

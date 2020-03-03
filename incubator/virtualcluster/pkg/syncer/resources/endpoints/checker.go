@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
@@ -98,6 +99,11 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 		}
 		if err != nil {
 			klog.Errorf("error getting pEp %s/%s from super master cache: %v", targetNamespace, vEp.Name, err)
+			continue
+		}
+		if pEp.Annotations[constants.LabelUID] != string(vEp.UID) {
+			klog.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pEp.Name)
+			continue
 		}
 		updated := conversion.Equality(nil).CheckEndpointsEquality(pEp, &vEp)
 		if updated != nil {
