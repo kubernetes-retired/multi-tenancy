@@ -28,10 +28,11 @@ import (
 
 //hcUpdates struct stores name of namespaces against type of flag passed
 type hcUpdates struct {
-	root             bool
-	parent           string
-	requiredChildren []string
-	optionalChildren []string
+	root                 bool
+	parent               string
+	allowCascadingDelete bool
+	requiredChildren     []string
+	optionalChildren     []string
 }
 
 var setCmd = &cobra.Command{
@@ -42,16 +43,18 @@ var setCmd = &cobra.Command{
 		nnm := args[0]
 		flags := cmd.Flags()
 		parent, _ := flags.GetString("parent")
+		allowCascadingDelete, _ := flags.GetBool("allowCascadingDelete")
 		requiredChildren, _ := flags.GetStringArray("requiredChild")
 		optionalChildren, _ := flags.GetStringArray("optionalChild")
 		requiredChildren = normalizeStringArray(requiredChildren)
 		optionalChildren = normalizeStringArray(optionalChildren)
 
 		updates := hcUpdates{
-			root:             flags.Changed("root"),
-			parent:           parent,
-			requiredChildren: requiredChildren,
-			optionalChildren: optionalChildren,
+			root:                 flags.Changed("root"),
+			parent:               parent,
+			allowCascadingDelete: allowCascadingDelete,
+			requiredChildren:     requiredChildren,
+			optionalChildren:     optionalChildren,
 		}
 
 		updateHC(client, updates, nnm)
@@ -61,6 +64,7 @@ var setCmd = &cobra.Command{
 func updateHC(cl Client, updates hcUpdates, nnm string) {
 	hc := cl.getHierarchy(nnm)
 	oldpnm := hc.Spec.Parent
+	oldacd := hc.Spec.AllowCascadingDelete
 	numChanges := 0
 
 	if updates.root && updates.parent != "" {
@@ -75,6 +79,8 @@ func updateHC(cl Client, updates hcUpdates, nnm string) {
 	if updates.parent != "" {
 		setParent(hc, oldpnm, updates.parent, nnm, &numChanges)
 	}
+
+	setAllowCascadingDelete(hc, nnm, oldacd, updates.allowCascadingDelete, &numChanges)
 
 	if len(updates.requiredChildren) != 0 {
 		setRequiredChildren(hc, updates.requiredChildren, nnm, &numChanges)
@@ -116,6 +122,16 @@ func setParent(hc *api.HierarchyConfiguration, oldpnm, pnm, nnm string, numChang
 		} else {
 			fmt.Printf("Changing the parent of %s from %s to %s\n", nnm, oldpnm, pnm)
 		}
+		*numChanges++
+	}
+}
+
+func setAllowCascadingDelete(hc *api.HierarchyConfiguration, nnm string, oldacd, acd bool, numChanges *int) {
+	if oldacd == acd {
+		fmt.Printf("%s allowCascadingDelete is already %t; unchanged\n", nnm, acd)
+	} else {
+		hc.Spec.AllowCascadingDelete = acd
+		fmt.Printf("Changing %s allowCascadingDelete to %t\n", nnm, acd)
 		*numChanges++
 	}
 }
@@ -174,6 +190,7 @@ func normalizeStringArray(in []string) []string {
 func newSetCmd() *cobra.Command {
 	setCmd.Flags().Bool("root", false, "Turns namespace into root namespace")
 	setCmd.Flags().String("parent", "", "Parent namespace")
+	setCmd.Flags().Bool("allowCascadingDelete", false, "Allows cascading deletion of its self-serve subnamespaces.")
 	setCmd.Flags().StringArray("requiredChild", []string{""}, "Specifies a required child (subnamespace). If the child does not exist, it will be created. Multiple values may be comma delimited.")
 	setCmd.Flags().StringArray("optionalChild", []string{""}, "Turns a required child namespaces into optional child namespaces. Multiple values may be comma delimited.")
 	return setCmd
