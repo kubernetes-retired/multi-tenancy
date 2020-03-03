@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -78,16 +79,25 @@ func (c *controller) checkPVCs() {
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
-
-		_, err := c.multiClusterPersistentVolumeClaimController.Get(clusterName, vNamespace, pPVC.Name)
+		shouldDelete := false
+		vPVCObj, err := c.multiClusterPersistentVolumeClaimController.Get(clusterName, vNamespace, pPVC.Name)
 		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vPVC := vPVCObj.(*v1.PersistentVolumeClaim)
+			if pPVC.Annotations[constants.LabelUID] != string(vPVC.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pPVC %s/%s delegated UID is different from tenant object.", pPVC.Namespace, pPVC.Name)
+			}
+		}
+		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pPVC.UID))
 			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(pPVC.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pPVC %s/%s in super master: %v", pPVC.Namespace, pPVC.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPVCs").Inc()
 			}
-			continue
 		}
 	}
 
@@ -116,6 +126,11 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 
 		if err != nil {
 			klog.Errorf("failed to get pPVC %s/%s from super master cache: %v", targetNamespace, vPVC.Name, err)
+			continue
+		}
+
+		if pPVC.Annotations[constants.LabelUID] != string(vPVC.UID) {
+			klog.Warningf("Found pPVC %s/%s delegated UID is different from tenant object.", pPVC.Namespace, pPVC.Name)
 			continue
 		}
 

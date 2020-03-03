@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -81,21 +82,27 @@ func (c *controller) checkServiceAccounts() {
 		if len(clusterName) == 0 || len(vNamespace) == 0 {
 			continue
 		}
-
-		_, err := c.multiClusterServiceAccountController.Get(clusterName, vNamespace, pSa.Name)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// vSa not found and pSa still exist, we need to delete pSa manually
-				deleteOptions := &metav1.DeleteOptions{}
-				deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pSa.UID))
-				if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
-					klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
-				} else {
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServiceAccounts").Inc()
-				}
-				continue
+		shouldDelete := false
+		vSaObj, err := c.multiClusterServiceAccountController.Get(clusterName, vNamespace, pSa.Name)
+		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vSa := vSaObj.(*v1.ServiceAccount)
+			if pSa.Annotations[constants.LabelUID] != string(vSa.UID) {
+				shouldDelete = true
+				klog.Warningf("Found pServiceAccount %s/%s delegated UID is different from tenant object.", pSa.Namespace, pSa.Name)
 			}
-			klog.Errorf("error getting vServiceAccount %s/%s from cluster %s cache: %v", vNamespace, pSa.Name, clusterName, err)
+		}
+		if shouldDelete {
+			// vSa not found and pSa still exist, we need to delete pSa manually
+			deleteOptions := &metav1.DeleteOptions{}
+			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pSa.UID))
+			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
+				klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServiceAccounts").Inc()
+			}
 		}
 	}
 }
@@ -111,7 +118,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 	saList := listObj.(*v1.ServiceAccountList)
 	for i, vSa := range saList.Items {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSa.Namespace)
-		_, err := c.saLister.ServiceAccounts(targetNamespace).Get(vSa.Name)
+		pSa, err := c.saLister.ServiceAccounts(targetNamespace).Get(vSa.Name)
 		if errors.IsNotFound(err) {
 			// pSa not found and vSa still exists, we need to create pSa again
 			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i], reconciler.AddEvent); err != nil {
@@ -126,5 +133,8 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 			klog.Errorf("error getting pServiceAccount %s/%s from super master cache: %v", targetNamespace, vSa.Name, err)
 		}
 		// Serviceaccounts are handled by sa controller in tenant/super master separately. The secrets of pSa and vSa are not expected to be equal
+		if pSa.Annotations[constants.LabelUID] != string(vSa.UID) {
+			klog.Warningf("Found pServiceAccount %s/%s delegated UID is different from tenant object.", pSa.Namespace, pSa.Name)
+		}
 	}
 }

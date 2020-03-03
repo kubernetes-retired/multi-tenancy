@@ -89,23 +89,20 @@ func (c *controller) checkSecrets() {
 		shouldDelete := false
 
 		// virtual service account token type secret
+		vSecretName := pSecret.Name
 		if saName := pSecret.GetAnnotations()[v1.ServiceAccountNameKey]; saName != "" {
-			vSecretName := pSecret.GetLabels()[constants.LabelSecretName]
-			// check whether service account token type secret is exists in tenant.
-			tenantClient, err := c.multiClusterSecretController.GetClusterClient(clusterName)
-			if err != nil {
-				klog.Errorf("failed to get tenant client %s", clusterName)
-				continue
-			}
-			_, err = tenantClient.CoreV1().Secrets(vNamespace).Get(vSecretName, metav1.GetOptions{})
-			if errors.IsNotFound(err) {
+			vSecretName = pSecret.GetLabels()[constants.LabelSecretName]
+		}
+		// check whether secret is exists in tenant.
+		vSecretObj, err := c.multiClusterSecretController.Get(clusterName, vNamespace, vSecretName)
+		if errors.IsNotFound(err) {
+			shouldDelete = true
+		}
+		if err == nil {
+			vSecret := vSecretObj.(*v1.Secret)
+			if pSecret.Annotations[constants.LabelUID] != string(vSecret.UID) {
 				shouldDelete = true
-			}
-		} else {
-			// check whether secret is exists in tenant.
-			_, err := c.multiClusterSecretController.Get(clusterName, vNamespace, pSecret.Name)
-			if errors.IsNotFound(err) {
-				shouldDelete = true
+				klog.Warningf("Found pSecret %s/%s delegated UID is different from tenant object.", pSecret.Namespace, pSecret.Name)
 			}
 		}
 
@@ -154,6 +151,10 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 			continue
 		}
 
+		if pSecret.Annotations[constants.LabelUID] != string(vSecret.UID) {
+			klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, pSecret.Name)
+			continue
+		}
 		spec, err := c.multiClusterSecretController.GetSpec(clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
@@ -190,7 +191,10 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		klog.Warningf("found service account token type pSecret %s/%s more than one", targetNamespace, vSecret.Name)
 		return
 	}
-
+	if secretList[0].Annotations[constants.LabelUID] != string(vSecret.UID) {
+		klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, secretList[0].Name)
+		return
+	}
 	spec, err := c.multiClusterSecretController.GetSpec(clusterName)
 	if err != nil {
 		klog.Errorf("fail to get cluster spec : %s", clusterName)
