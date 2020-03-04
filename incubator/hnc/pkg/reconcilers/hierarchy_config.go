@@ -188,6 +188,8 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *fore
 		if ns.RequiredChildOf != "" {
 			log.Info("Will create missing namespace", "forParent", ns.RequiredChildOf)
 			nsInst.Name = ns.Name()
+			// Set "api.AnnotationOwner" annotation to the non-existent yet namespace.
+			metadata.SetAnnotation(nsInst, api.AnnotationOwner, ns.RequiredChildOf)
 		}
 		return true
 	}
@@ -226,10 +228,15 @@ func (r *HierarchyConfigReconciler) syncRequiredChildOf(log logr.Logger, inst *a
 	case ns.RequiredChildOf:
 		// ok
 	default:
-		// This should never happen unless there's some crazy race condition.
-		log.Info("Required subnamespace: conflict with existing parent", "requiredChildOf", ns.RequiredChildOf, "actual", inst.Spec.Parent)
-		r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
-		ns.RequiredChildOf = "" // get back in sync with apiserver
+		if r.HNSReconcilerEnabled {
+			// TODO report the conflict in hierarchicalnamespace.Status.State and enqueue the owner namespace.
+			//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/487
+		} else {
+			// This should never happen unless there's some crazy race condition.
+			log.Info("Required subnamespace: conflict with existing parent", "requiredChildOf", ns.RequiredChildOf, "actual", inst.Spec.Parent)
+			r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
+			ns.RequiredChildOf = "" // get back in sync with apiserver
+		}
 	}
 
 	// TODO(https://github.com/kubernetes-sigs/multi-tenancy/issues/316): prevent a namespace from
@@ -309,7 +316,17 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 
 	// Make a set to make it easy to look up if a child is required or not
 	isRequired := map[string]bool{}
-	for _, r := range inst.Spec.RequiredChildren {
+	rl := ns.OwnedNames()
+	// TODO Remove the spec.requiredChildren field when the hns reconciler is in use.
+	//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/457
+	// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
+	//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
+	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
+	// Use the old spec.requiredChildren field to get the list of the self-serve subnamespaces.
+	if !r.HNSReconcilerEnabled {
+		rl = inst.Spec.RequiredChildren
+	}
+	for _, r := range rl {
 		isRequired[r] = true
 	}
 
@@ -365,17 +382,27 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 				msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
 			}
 		} else {
-			// Someone else got it first. This should never happen if the validator is working correctly.
-			other := cns.RequiredChildOf
-			if other == "" {
-				other = cns.Parent().Name()
+			// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
+			//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
+			//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
+			if !r.HNSReconcilerEnabled {
+				// Someone else got it first. This should never happen if the validator is working correctly.
+				other := cns.RequiredChildOf
+				if other == "" {
+					other = cns.Parent().Name()
+				}
+				log.Info("Required child is already owned/claimed by another parent", "child", cn, "otherParent", other)
 			}
-			log.Info("Required child is already owned/claimed by another parent", "child", cn, "otherParent", other)
 		}
 
-		// Set the condition that the required child isn't an actual child. As mentioned above, if we
-		// just need to create it, this condition will be removed shortly.
-		ns.SetCondition(cn, api.RequiredChildConflict, msg)
+		// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
+		//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
+		//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
+		if !r.HNSReconcilerEnabled {
+			// Set the condition that the required child isn't an actual child. As mentioned above, if we
+			// just need to create it, this condition will be removed shortly.
+			ns.SetCondition(cn, api.RequiredChildConflict, msg)
+		}
 	}
 }
 

@@ -19,8 +19,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Constant for the hierarchicalnamespaces resource type.
-const HierarchicalNamespaces string = "hierarchicalnamespaces"
+// Constants for the hierarchicalnamespaces resource type and namespace annotation.
+const (
+	HierarchicalNamespaces = "hierarchicalnamespaces"
+	AnnotationOwner        = MetaGroup + "/owner"
+)
 
 // HNSState describes the state of a hierarchical namespace. The state could be
 // "missing", "ok", "conflict" or "forbidden". The definitions will be described below.
