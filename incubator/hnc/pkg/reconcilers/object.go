@@ -63,6 +63,10 @@ type ObjectReconciler struct {
 	// GVK is the group/version/kind handled by this reconciler.
 	GVK schema.GroupVersionKind
 
+	// Mode describes propagation mode of objects that are handled by this reconciler.
+	// See more details in the comments of api.SynchronizationMode.
+	Mode api.SynchronizationMode
+
 	// Affected is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional objects that need updating.
@@ -96,8 +100,71 @@ func (r *ObjectReconciler) GetGVK() schema.GroupVersionKind {
 	return r.GVK
 }
 
+// SetMode sets the Mode field of an object reconciler and syncs objects in the cluster if needed.
+// The method will return an error if syncs fail.
+func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.SynchronizationMode, log logr.Logger) error {
+	log = log.WithValues("gvk", r.GVK)
+	newMode := r.getValidateMode(mode, log)
+	oldMode := r.Mode
+	if newMode == oldMode {
+		return nil
+	}
+	r.Log.Info("Changing mode of the object reconciler", "old", oldMode, "new", newMode)
+	r.Mode = newMode
+	// Currently, there are only two modes: 'ignore' and 'propagate'. If we change from "ignore" mode to 'propagate',
+	// we need to update objects in the cluster.
+	// TODO: We might need to revisit when we want to call SyncCluster if we support more modes in future.
+	if oldMode == api.Ignore {
+		err := r.syncCluster(ctx, r.Log)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// getValidateMode returns a valid api.SynchronizationMode based on the given mode. Please
+// see the comments of api.SynchronizationMode for currently supported modes.
+// If mode is not set, it will be api.Propagate by default. Any unrecognized mode is
+// treated as api.Ignore.
+func (r *ObjectReconciler) getValidateMode(mode api.SynchronizationMode, log logr.Logger) api.SynchronizationMode {
+	switch mode {
+	// TODO: Add api.Remove here. We currently do not support 'remove' mode. A
+	// 'remove' mode will be treated as 'ignore'. We will add api.Remove to the first
+	// case when we start to support the mode.
+	case api.Propagate, api.Ignore:
+		return mode
+	case "":
+		log.Info("Unset mode; using 'propagate'")
+		return api.Propagate
+	default:
+		log.Info("Unrecognized mode; using 'ignore'", "mode", mode)
+		return api.Ignore
+	}
+}
+
+// SyncCluster enqueues all the current objects in all namespaces.
+func (r *ObjectReconciler) syncCluster(ctx context.Context, log logr.Logger) error {
+	keys := r.Forest.GetNamespaceNames()
+	for _, ns := range keys {
+		// Enqueue all the current objects in the namespace.
+		if err := r.enqueueLocalObjects(ctx, log, ns); err != nil {
+			log.Error(err, "Error while trying to enqueue local objects", "namespace", ns)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if ex[req.Namespace] {
+		return ctrl.Result{}, nil
+	}
+
+	log := r.Log.WithValues("trigger", req.NamespacedName)
+	r.Mode = r.getValidateMode(r.Mode, log)
+	if r.Mode == api.Ignore {
 		return ctrl.Result{}, nil
 	}
 
@@ -106,7 +173,6 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
-	log := r.Log.WithValues("trigger", req.NamespacedName)
 
 	// Read the object. Sync it with the forest whether it's found/missing.
 	inst := &unstructured.Unstructured{}
