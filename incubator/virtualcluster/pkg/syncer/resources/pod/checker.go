@@ -188,6 +188,9 @@ func (c *controller) checkPods() {
 				if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
 					numStatusMissMatchedPods++
 					klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
+					if assignedPod(pPod) {
+						c.enqueuePod(pPod)
+					}
 				}
 			}
 		}
