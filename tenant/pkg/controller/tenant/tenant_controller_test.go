@@ -17,19 +17,27 @@ limitations under the License.
 package tenant
 
 import (
+	stdlog "log"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis"
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 )
 
 var c client.Client
@@ -37,6 +45,24 @@ var c client.Client
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo"}}
 
 const timeout = time.Second * 5
+
+var cfg *rest.Config
+
+func TestMain(m *testing.M) {
+	t := &envtest.Environment{
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+	}
+	apis.AddToScheme(scheme.Scheme)
+
+	var err error
+	if cfg, err = t.Start(); err != nil {
+		stdlog.Fatal(err)
+	}
+
+	code := m.Run()
+	t.Stop()
+	os.Exit(code)
+}
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
