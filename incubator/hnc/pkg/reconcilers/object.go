@@ -97,7 +97,7 @@ func (r *ObjectReconciler) GetGVK() schema.GroupVersionKind {
 }
 
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if ex[req.Namespace] {
+	if EX[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
 

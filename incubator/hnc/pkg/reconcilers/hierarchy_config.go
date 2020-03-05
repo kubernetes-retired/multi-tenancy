@@ -69,6 +69,8 @@ type HierarchyConfigReconciler struct {
 	// the GitHub issue "Implement self-service namespace" is resolved
 	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/457)
 	HNSReconcilerEnabled bool
+
+	hnsr *HierarchicalNamespaceReconciler
 }
 
 // +kubebuilder:rbac:groups=hnc.x-k8s.io,resources=hierarchies,verbs=get;list;watch;create;update;patch;delete
@@ -77,7 +79,7 @@ type HierarchyConfigReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if ex[req.Namespace] {
+	if EX[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
 
@@ -100,7 +102,7 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
 	// Get the singleton and namespace.
-	inst, nsInst, err := r.getInstances(ctx, log, nm)
+	inst, nsInst, err := r.GetInstances(ctx, log, nm)
 	if err != nil {
 		return err
 	}
@@ -196,6 +198,12 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *fore
 
 	// Remove it from the forest and notify its relatives
 	r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
+	// Enqueue the HNS if the self-serve subnamespace is deleted.
+	if r.HNSReconcilerEnabled {
+		if ns.RequiredChildOf != "" {
+			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "hns for the deleted self-serve subnamespace")
+		}
+	}
 	ns.UnsetExists()
 	log.Info("Removed namespace")
 	return true
@@ -227,10 +235,17 @@ func (r *HierarchyConfigReconciler) syncRequiredChildOf(log logr.Logger, inst *a
 		inst.Spec.Parent = ns.RequiredChildOf
 	case ns.RequiredChildOf:
 		// ok
+		if r.HNSReconcilerEnabled {
+			// Enqueue HNS to update the state to "Ok".
+			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "the HNS state should be updated to ok")
+		}
 	default:
 		if r.HNSReconcilerEnabled {
-			// TODO report the conflict in hierarchicalnamespace.Status.State and enqueue the owner namespace.
-			//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/487
+			// Enqueue the HNS to report the conflict in hierarchicalnamespace.Status.State and enqueue the
+			// owner namespace to report the "SubnamespaceConflict" condition.
+			log.Info("Self-serve subnamespace: conflict with parent", "owner", ns.RequiredChildOf, "parent", inst.Spec.Parent)
+			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "self-serve subnamespace has a parent but it's not the owner")
+			r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
 		} else {
 			// This should never happen unless there's some crazy race condition.
 			log.Info("Required subnamespace: conflict with existing parent", "requiredChildOf", ns.RequiredChildOf, "actual", inst.Spec.Parent)
@@ -311,8 +326,14 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 	// Update the most recent list of children from the forest
 	inst.Status.Children = ns.ChildNames()
 
-	// We'll reset any of these conditions if they occur.
-	ns.ClearAllConditions(api.RequiredChildConflict)
+	// Currently when HNS reconciler is not enabled, the "SubnamespaceConflict" condition is cleared and
+	// updated when a parent namespace syncChildren().
+	// TODO report the "SubnamespaceConflict" in the HNS reconciliation. See issue:
+	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/490
+	if !r.HNSReconcilerEnabled {
+		// We'll reset any of these conditions if they occur.
+		ns.ClearAllConditions(api.SubnamespaceConflict)
+	}
 
 	// Make a set to make it easy to look up if a child is required or not
 	isRequired := map[string]bool{}
@@ -320,7 +341,7 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 	// TODO Remove the spec.requiredChildren field when the hns reconciler is in use.
 	//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/457
 	// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
-	//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
+	//  here. Update hns states in hns reconciliation. See issue:
 	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
 	// Use the old spec.requiredChildren field to get the list of the self-serve subnamespaces.
 	if !r.HNSReconcilerEnabled {
@@ -343,49 +364,59 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 			// The forest will be reset to the correct value, below.
 			log.Error(forest.OutOfSync, "While syncing children", "child", cn, "requiredChildOf", cns.RequiredChildOf)
 			r.enqueueAffected(log, "forest out-of-sync: requiredChildOf != parent", cns.RequiredChildOf)
+			if r.HNSReconcilerEnabled {
+				r.hnsr.enqueue(log, cn, cns.RequiredChildOf, "forest out-of-sync: owner != parent")
+			}
 		}
 
-		if isRequired[cn] {
-			// This child is actually required. Remove it from the set so we know we found it. Also, the
-			// forest is almost certainly already in sync, but just set it again in case something went
-			// wrong (eg, the error shown above).
-			delete(isRequired, cn)
-			cns.RequiredChildOf = ns.Name()
+		if r.HNSReconcilerEnabled {
+			if isRequired[cn] {
+				delete(isRequired, cn)
+			}
 		} else {
-			// This isn't a required child, but it looks like it *used* to be a required child of this
-			// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
-			// what's on the apiserver.
-			cns.RequiredChildOf = ""
+			if isRequired[cn] {
+				// This child is actually required. Remove it from the set so we know we found it. Also, the
+				// forest is almost certainly already in sync, but just set it again in case something went
+				// wrong (eg, the error shown above).
+				delete(isRequired, cn)
+				cns.RequiredChildOf = ns.Name()
+			} else {
+				// This isn't a required child, but it looks like it *used* to be a required child of this
+				// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
+				// what's on the apiserver.
+				cns.RequiredChildOf = ""
+			}
 		}
 	}
 
-	// Anything that's still in isRequired at this point is a required child according to our own
-	// spec, but it doesn't exist as a child of this namespace. There could be one of two reasons:
-	// either the namespace hasn't been created (yet), in which case we just need to enqueue it for
-	// reconciliation, or else it *also* is claimed by another namespace.
-	for cn := range isRequired {
-		log.Info("Required child is missing", "child", cn)
-		cns := r.Forest.Get(cn)
+	if r.HNSReconcilerEnabled {
+		for cn := range isRequired {
+			r.hnsr.enqueue(log, cn, ns.Name(), "parent of the self-serve subnamespace is not the owner")
+		}
+	} else {
+		// Anything that's still in isRequired at this point is a required child according to our own
+		// spec, but it doesn't exist as a child of this namespace. There could be one of two reasons:
+		// either the namespace hasn't been created (yet), in which case we just need to enqueue it for
+		// reconciliation, or else it *also* is claimed by another namespace.
+		for cn := range isRequired {
+			log.Info("Required child is missing", "child", cn)
+			cns := r.Forest.Get(cn)
 
-		// We'll always set a condition just in case the required namespace can't be created/configured,
-		// but if all is working well, the condition will be resolved as soon as the child namespace is
-		// configured correctly (see the call to ClearAllConditions, above, in this function). This is
-		// the default message, we'll override it if the namespace doesn't exist.
-		msg := fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
+			// We'll always set a condition just in case the required namespace can't be created/configured,
+			// but if all is working well, the condition will be resolved as soon as the child namespace is
+			// configured correctly (see the call to ClearAllConditions, above, in this function). This is
+			// the default message, we'll override it if the namespace doesn't exist.
+			msg := fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
 
-		// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
-		// (which is when it will be created).
-		if cns.Parent() == nil && (cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name()) {
-			cns.RequiredChildOf = ns.Name()
-			r.enqueueAffected(log, "required child is missing", cn)
-			if !cns.Exists() {
-				msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
-			}
-		} else {
-			// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
-			//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
-			//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
-			if !r.HNSReconcilerEnabled {
+			// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
+			// (which is when it will be created).
+			if cns.Parent() == nil && (cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name()) {
+				cns.RequiredChildOf = ns.Name()
+				r.enqueueAffected(log, "required child is missing", cn)
+				if !cns.Exists() {
+					msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
+				}
+			} else {
 				// Someone else got it first. This should never happen if the validator is working correctly.
 				other := cns.RequiredChildOf
 				if other == "" {
@@ -393,15 +424,10 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 				}
 				log.Info("Required child is already owned/claimed by another parent", "child", cn, "otherParent", other)
 			}
-		}
 
-		// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
-		//  here. Replace hc "RequiredChildConflict" condition with hns "conflict" state. See issue:
-		//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
-		if !r.HNSReconcilerEnabled {
 			// Set the condition that the required child isn't an actual child. As mentioned above, if we
 			// just need to create it, this condition will be removed shortly.
-			ns.SetCondition(cn, api.RequiredChildConflict, msg)
+			ns.SetCondition(cn, api.SubnamespaceConflict, msg)
 		}
 	}
 }
@@ -468,7 +494,7 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 	}()
 }
 
-func (r *HierarchyConfigReconciler) getInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
+func (r *HierarchyConfigReconciler) GetInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
 	inst, err = r.getSingleton(ctx, nm)
 	if err != nil {
 		log.Error(err, "Couldn't read singleton")
