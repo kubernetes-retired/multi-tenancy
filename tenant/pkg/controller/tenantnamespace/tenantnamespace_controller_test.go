@@ -17,6 +17,8 @@ limitations under the License.
 package tenantnamespace
 
 import (
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
+	//"k8s.io/client-go/tools/clientcmd"
 	"testing"
 	"time"
 
@@ -308,4 +310,82 @@ func TestReconcile(t *testing.T) {
 	testCreateTenantNamespaceWithPrefix(c, g, t, requests)
 	testCreateTenantNamespaceWithPrefixNoSpec(c, g, t, requests)
 	testImportExistingNamespace(c, g, t, requests)
+}
+
+
+func TestBothReconcile(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+
+	//setup manager and client
+	mgr, err := manager.New(cfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	c = mgr.GetClient()
+
+	//start tenant controller
+	g.Expect(tenant.Add(mgr)).NotTo(gomega.HaveOccurred())
+
+	//start tenantnamespace controller
+	g.Expect(Add(mgr)).NotTo(gomega.HaveOccurred())
+
+	stopMgr1, mgrStopped1 := StartTestManager(mgr, g)
+
+	defer func() {
+		close(stopMgr1)
+		mgrStopped1.Wait()
+
+	}()
+
+	//testRolesAndRolesBindingsExistingCluster(c, g, t)
+	testingImpersonate(c,g,t)
+	//testRolesAndRolesBindingsTestingCluster(c, g, t)
+}
+
+func testingImpersonate(c client.Client, g *gomega.GomegaWithT, t *testing.T) {
+	saWithKindCfg := &corev1.ServiceAccount{
+		TypeMeta:                     metav1.TypeMeta{
+		//	Kind:"ServiceAccount",
+		},
+		ObjectMeta:                   metav1.ObjectMeta{
+			Name:"shivanisinghal",
+			Namespace:"default",
+		},
+		Secrets:                      nil,
+		ImagePullSecrets:             nil,
+		AutomountServiceAccountToken: nil,
+	}
+	err := c.Create(context.TODO(), saWithKindCfg)
+	if err != nil{
+		t.Logf("Failed to create serviceaccount with kind config error: %+v ", err)
+		return
+	}
+	defer c.Delete(context.TODO(),saWithKindCfg)
+
+	// now add impersonation
+	cfg.Impersonate.UserName="shivanisinghal"
+	//cfg.Impersonate.Groups=[]string{"system:serviceaccounts:default"}
+
+	//create new manager and client for user
+	mgr, err := manager.New(cfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	userClient := mgr.GetClient()
+
+
+	sa2:=&corev1.ServiceAccount{
+		TypeMeta:                     metav1.TypeMeta{
+		//	Kind:"ServiceAccount",
+		},
+		ObjectMeta:                   metav1.ObjectMeta{
+			Name:"shivani-singhal2",
+			Namespace:"default",
+		},
+		Secrets:                      nil,
+		ImagePullSecrets:             nil,
+		AutomountServiceAccountToken: nil,
+	}
+	err = userClient.Create(context.TODO(), sa2)
+	if err != nil{
+		t.Logf("Failed to create serviceaccount with user config error: %+v ", err)
+		return
+	}
+	defer userClient.Delete(context.TODO(), sa2)
 }

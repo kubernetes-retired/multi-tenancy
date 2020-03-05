@@ -19,7 +19,6 @@ package tenantnamespace
 import (
 	stdlog "log"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -36,7 +35,8 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+		//CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+		UseExistingCluster:true,
 	}
 	apis.AddToScheme(scheme.Scheme)
 
