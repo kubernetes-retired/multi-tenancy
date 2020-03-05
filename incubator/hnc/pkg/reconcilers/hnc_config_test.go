@@ -3,6 +3,7 @@ package reconcilers_test
 import (
 	"context"
 	"strings"
+	"time"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
@@ -14,6 +15,11 @@ import (
 )
 
 var _ = Describe("HNCConfiguration", func() {
+	// sleepTime is the time to sleep for objects propagation to take effect.
+	// From experiment it takes ~0.015s for HNC to propagate an object. Setting
+	// the sleep time to 1s should be long enough.
+	// We may need to increase the sleep time in future if HNC takes longer to propagate objects.
+	const sleepTime = 1 * time.Second
 	ctx := context.Background()
 
 	var (
@@ -88,22 +94,66 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeFalse())
 	})
 
-	It("should only propagate objects whose types are in HNCConfiguration", func() {
+	It("should not propagate objects if the type is not in HNCConfiguration", func() {
 		setParent(ctx, barName, fooName)
-		makeSecret(ctx, fooName, "foo-sec")
 		makeResourceQuota(ctx, fooName, "foo-resource-quota")
 
+		// Foo should have "foo-resource-quota" since we created there.
+		Eventually(hasResourceQuota(ctx, fooName, "foo-resource-quota")).Should(BeTrue())
+		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
+		time.Sleep(sleepTime)
+		Expect(hasResourceQuota(ctx, barName, "foo-resource-quota")()).Should(BeFalse())
+	})
+
+	It("should propagate objects if the mode of a type is set to propagate", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 
-		// Foo should have both "foo-sec" and "foo-resource-quota" since we created there.
+		setParent(ctx, barName, fooName)
+		makeSecret(ctx, fooName, "foo-sec")
+
+		// Foo should have "foo-sec" since we created there.
 		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeTrue())
-		Eventually(hasResourceQuota(ctx, fooName, "foo-resource-quota")).Should(BeTrue())
 		// "foo-sec" should now be propagated from foo to bar.
 		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
 		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
-		// "foo-resource-quota" should not be propagated from foo to bar because ResourceQuota
-		// is not added to HNCConfiguration.
-		Expect(hasResourceQuota(ctx, barName, "foo-resource-quota")).Should(BeFalse())
+	})
+
+	It("should stop propagating objects if the mode of a type is changed from propagate to ignore", func() {
+		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
+
+		setParent(ctx, barName, fooName)
+		makeSecret(ctx, fooName, "foo-sec")
+
+		// Foo should have "foo-sec" since we created there.
+		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeTrue())
+		// "foo-sec" should now be propagated from foo to bar because we set the mode of Secret to "propagate".
+		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
+		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+
+		updateHNCConfigSpec(ctx, "v1", "v1", "Secret", "Secret", api.Propagate, api.Ignore)
+		bazName := createNS(ctx, "baz")
+		setParent(ctx, bazName, fooName)
+		// Sleep to give "foo-sec" a chance to propagate from foo to baz, if it could.
+		time.Sleep(sleepTime)
+		Expect(hasSecret(ctx, bazName, "foo-sec")()).Should(BeFalse())
+	})
+
+	It("should propagate objects if the mode of a type is changed from ignore to propagate", func() {
+		addToHNCConfig(ctx, "v1", "ResourceQuota", api.Ignore)
+
+		setParent(ctx, barName, fooName)
+		makeResourceQuota(ctx, fooName, "foo-resource-quota")
+
+		// Foo should have "foo-resource-quota" since we created there.
+		Eventually(hasResourceQuota(ctx, fooName, "foo-resource-quota")).Should(BeTrue())
+		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
+		time.Sleep(sleepTime)
+		Expect(hasResourceQuota(ctx, barName, "foo-resource-quota")()).Should(BeFalse())
+
+		updateHNCConfigSpec(ctx, "v1", "v1", "ResourceQuota", "ResourceQuota", api.Ignore, api.Propagate)
+		// "foo-resource-quota" should now be propagated from foo to bar because the mode of ResourceQuota is set to "propagate".
+		Eventually(hasResourceQuota(ctx, barName, "foo-resource-quota")).Should(BeTrue())
+		Expect(resourceQuotaInheritedFrom(ctx, barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 })
 
@@ -202,12 +252,28 @@ func makeResourceQuota(ctx context.Context, nsName, resourceQuotaName string) {
 	ExpectWithOffset(1, k8sClient.Create(ctx, resourceQuota)).Should(Succeed())
 }
 
-func hasResourceQuota(ctx context.Context, nsName, resourceQuotaName string) bool {
+func hasResourceQuota(ctx context.Context, nsName, resourceQuotaName string) func() bool {
 	// `Eventually` only works with a fn that doesn't take any args
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nsName, Name: resourceQuotaName}
+		resourceQuota := &corev1.ResourceQuota{}
+		err := k8sClient.Get(ctx, nnm, resourceQuota)
+		return err == nil
+	}
+}
+
+func resourceQuotaInheritedFrom(ctx context.Context, nsName, resourceQuotaName string) string {
 	nnm := types.NamespacedName{Namespace: nsName, Name: resourceQuotaName}
 	resourceQuota := &corev1.ResourceQuota{}
-	err := k8sClient.Get(ctx, nnm, resourceQuota)
-	return err == nil
+	if err := k8sClient.Get(ctx, nnm, resourceQuota); err != nil {
+		// should have been caught above
+		return err.Error()
+	}
+	if resourceQuota.ObjectMeta.Labels == nil {
+		return ""
+	}
+	lif, _ := resourceQuota.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	return lif
 }
 
 func hasHNCConfigurationConditionWithMsg(ctx context.Context, code api.HNCConfigurationCode, subMsg string) func() bool {
