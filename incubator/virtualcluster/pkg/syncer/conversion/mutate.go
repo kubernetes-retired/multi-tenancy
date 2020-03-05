@@ -82,6 +82,28 @@ func (p *podMutateCtx) Mutate(ms ...PodMutator) error {
 	return nil
 }
 
+func mutatePodAffinityTerms(terms []v1.PodAffinityTerm, clusterName string) {
+	for i, each := range terms {
+		if each.LabelSelector != nil {
+			if terms[i].LabelSelector.MatchLabels == nil {
+				terms[i].LabelSelector.MatchLabels = make(map[string]string)
+			}
+			terms[i].LabelSelector.MatchLabels[constants.LabelCluster] = clusterName
+		}
+	}
+}
+
+func mutateWeightedPodAffinityTerms(weightedTerms []v1.WeightedPodAffinityTerm, clusterName string) {
+	for i, each := range weightedTerms {
+		if each.PodAffinityTerm.LabelSelector != nil {
+			if weightedTerms[i].PodAffinityTerm.LabelSelector.MatchLabels == nil {
+				weightedTerms[i].PodAffinityTerm.LabelSelector.MatchLabels = make(map[string]string)
+			}
+			weightedTerms[i].PodAffinityTerm.LabelSelector.MatchLabels[constants.LabelCluster] = clusterName
+		}
+	}
+}
+
 func PodMutateDefault(vPod *v1.Pod, SASecret *v1.Secret, services []*v1.Service, nameServer string) PodMutator {
 	return func(p *podMutateCtx) error {
 		p.pPod.Status = v1.PodStatus{}
@@ -111,6 +133,26 @@ func PodMutateDefault(vPod *v1.Pod, SASecret *v1.Secret, services []*v1.Service,
 				p.pPod.Spec.Volumes[i].Name = SASecret.Name
 				p.pPod.Spec.Volumes[i].Secret.SecretName = SASecret.Name
 			}
+		}
+
+		// Make sure pod-pod affinity/anti-affinity rules are applied within tenant scope.
+		// First, add a label to mark Pod's tenant. This is indeed a dup of the same key:val in annotation.
+		// TODO: consider removing the dup key:val in annotation.
+		labels := p.pPod.GetLabels()
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels[constants.LabelCluster] = p.clusterName
+		p.pPod.SetLabels(labels)
+		// Then add tenant label to all affinity terms if any.
+		if p.pPod.Spec.Affinity != nil && p.pPod.Spec.Affinity.PodAffinity != nil {
+			mutatePodAffinityTerms(p.pPod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution, p.clusterName)
+			mutateWeightedPodAffinityTerms(p.pPod.Spec.Affinity.PodAffinity.PreferredDuringSchedulingIgnoredDuringExecution, p.clusterName)
+		}
+
+		if p.pPod.Spec.Affinity != nil && p.pPod.Spec.Affinity.PodAntiAffinity != nil {
+			mutatePodAffinityTerms(p.pPod.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution, p.clusterName)
+			mutateWeightedPodAffinityTerms(p.pPod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution, p.clusterName)
 		}
 
 		clusterDomain, err := p.mc.GetClusterDomain(p.clusterName)
