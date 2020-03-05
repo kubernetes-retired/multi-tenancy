@@ -54,7 +54,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	pExists := true
 	var pSecret *v1.Secret
 	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
-		constants.LabelSecretName: request.Name,
+		constants.LabelSecretUID: request.UID,
 	}))
 	if err != nil && !errors.IsNotFound(err) {
 		return reconciler.Result{Requeue: true}, err
@@ -200,7 +200,7 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 func (c *controller) reconcileSecretRemove(clusterName, targetNamespace, requestUID, name string, secret *v1.Secret) error {
 	switch secret.Type {
 	case v1.SecretTypeServiceAccountToken:
-		return c.reconcileServiceAccountTokenSecretRemove(clusterName, targetNamespace, name)
+		return c.reconcileServiceAccountTokenSecretRemove(clusterName, targetNamespace, requestUID, name)
 	default:
 		return c.reconcileNormalSecretRemove(clusterName, targetNamespace, requestUID, name, secret)
 	}
@@ -221,13 +221,13 @@ func (c *controller) reconcileNormalSecretRemove(clusterName, targetNamespace, r
 	return err
 }
 
-func (c *controller) reconcileServiceAccountTokenSecretRemove(clusterName, targetNamespace, name string) error {
+func (c *controller) reconcileServiceAccountTokenSecretRemove(clusterName, targetNamespace, requestUID, name string) error {
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
 	err := c.secretClient.Secrets(targetNamespace).DeleteCollection(opts, metav1.ListOptions{
 		LabelSelector: labels.Set(map[string]string{
-			constants.LabelSecretName: name,
+			constants.LabelSecretUID: requestUID,
 		}).String(),
 	})
 	if errors.IsNotFound(err) {

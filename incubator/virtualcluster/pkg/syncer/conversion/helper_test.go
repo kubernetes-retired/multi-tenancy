@@ -128,7 +128,7 @@ func Test_mutateContainerSecret(t *testing.T) {
 	saSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "service-token-secret",
-			Labels: map[string]string{
+			Annotations: map[string]string{
 				constants.LabelSecretName: "service-token-secret-tenant",
 			},
 		},
