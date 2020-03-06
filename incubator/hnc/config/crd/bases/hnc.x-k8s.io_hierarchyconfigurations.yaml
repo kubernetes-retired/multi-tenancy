@@ -34,6 +34,10 @@ spec:
         spec:
           description: HierarchySpec defines the desired state of Hierarchy
           properties:
+            allowCascadingDelete:
+              description: AllowCascadingDelete indicates if the self-serve subnamespaces
+                of this namespace are allowed to cascading delete.
+              type: boolean
             parent:
               description: Parent indicates the parent of this namespace, if any.
               type: string
@@ -45,6 +49,8 @@ spec:
               items:
                 type: string
               type: array
+          required:
+          - allowCascadingDelete
           type: object
         status:
           description: HierarchyStatus defines the observed state of Hierarchy

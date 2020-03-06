@@ -63,6 +63,10 @@ type HierarchyConfigurationSpec struct {
 	// Parent indicates the parent of this namespace, if any.
 	Parent string `json:"parent,omitempty"`
 
+	// AllowCascadingDelete indicates if the self-serve subnamespaces of this namespace are allowed
+	// to cascading delete.
+	AllowCascadingDelete bool `json:"allowCascadingDelete"`
+
 	// RequiredChildren indicates the required subnamespaces of this namespace. If they do not exist,
 	// the HNC will create them, allowing users without privileges to create namespaces to get child
 	// namespaces anyway.
