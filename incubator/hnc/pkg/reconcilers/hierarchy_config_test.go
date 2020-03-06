@@ -154,7 +154,7 @@ var _ = Describe("Hierarchy", func() {
 		}).Should(Equal([]string{barName}))
 	})
 
-	It("should set RequiredChildConflict condition if a required child cannot be set", func() {
+	It("should set SubnamespaceConflict condition if a required child cannot be set", func() {
 		if enableHNSReconciler {
 			return
 		}
@@ -177,13 +177,13 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(hasCondition(ctx, fooName, "")).Should(Equal(false))
 		Eventually(hasCondition(ctx, bazName, "")).Should(Equal(false))
 		want := &api.Condition{
-			Code:    api.RequiredChildConflict,
+			Code:    api.SubnamespaceConflict,
 			Affects: []api.AffectedObject{{Version: "v1", Kind: "Namespace", Name: bazName}},
 		}
-		Eventually(getCondition(ctx, barName, api.RequiredChildConflict)).Should(Equal(want))
+		Eventually(getCondition(ctx, barName, api.SubnamespaceConflict)).Should(Equal(want))
 	})
 
-	It("should clear RequiredChildConflict condition if the parent removes the required child", func() {
+	It("should clear SubnamespaceConflict condition if the parent removes the required child", func() {
 		if enableHNSReconciler {
 			return
 		}
