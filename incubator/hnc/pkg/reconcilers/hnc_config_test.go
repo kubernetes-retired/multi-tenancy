@@ -152,6 +152,44 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
+
+	It("should remove propagated objects if the mode of a type is changed from propagate to remove", func() {
+		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "Secret", fooName, "foo-sec")
+
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
+		// "foo-sec" should be propagated from foo to bar.
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
+
+		updateHNCConfigSpec(ctx, "v1", "v1", "Secret", "Secret", api.Propagate, api.Remove)
+
+		// Foo should still have "foo-sec" because it is a source object, not propagated one.
+		// Therefore, we do not remove it.
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
+		// "foo-sec" should be removed from bar.
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeFalse())
+	})
+
+	It("should propagate objects if the mode of a type is changed from remove to propagate", func() {
+		addToHNCConfig(ctx, "v1", "ResourceQuota", api.Remove)
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")
+
+		// Foo should have "foo-resource-quota" because it is a source object, which will not be removed.
+		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
+		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
+		time.Sleep(sleepTime)
+		// "foo-resource-quota" should not be propagated from foo to bar.
+		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
+
+		updateHNCConfigSpec(ctx, "v1", "v1", "ResourceQuota", "ResourceQuota", api.Remove, api.Propagate)
+
+		// "foo-resource-quota" should be propagated from foo to bar.
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
+	})
 })
 
 func hasTypeWithMode(apiVersion, kind string, mode api.SynchronizationMode, config *api.HNCConfiguration) func() bool {
