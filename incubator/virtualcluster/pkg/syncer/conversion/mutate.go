@@ -376,7 +376,7 @@ func (s *saSecretMutator) Mutate(vSecret *v1.Secret, clusterName string) {
 	}
 	annotations := s.pSecret.GetAnnotations()
 	if annotations == nil {
-		labels = make(map[string]string)
+		annotations = make(map[string]string)
 	}
 
 	annotations[constants.LabelSecretName] = vSecret.Name
