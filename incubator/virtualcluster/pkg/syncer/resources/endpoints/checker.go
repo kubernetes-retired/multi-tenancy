@@ -35,6 +35,13 @@ import (
 var numMissingEndPoints uint64
 var numMissMatchedEndPoints uint64
 
+// systemEndpointsNameMap endpoints only take effects on tenant apiserver.
+var systemEndpointsNameMap = map[string]struct{}{
+	"kube-controller-manager": {},
+	"kube-scheduler":          {},
+	"metrics-server":          {},
+}
+
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
@@ -88,6 +95,10 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 	klog.V(4).Infof("check endpoints consistency in cluster %s", clusterName)
 	epList := listObj.(*v1.EndpointsList)
 	for _, vEp := range epList.Items {
+		if _, exists := systemEndpointsNameMap[vEp.Name]; exists && vEp.Namespace == "kube-system" {
+			continue
+		}
+
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vEp.Namespace)
 		pEp, err := c.endpointsLister.Endpoints(targetNamespace).Get(vEp.Name)
 		if errors.IsNotFound(err) {
