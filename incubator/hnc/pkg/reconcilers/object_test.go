@@ -118,6 +118,8 @@ var _ = Describe("Secret", func() {
 	It("should overwrite the propagated ones if the source is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
+		// Wait 1 second to make sure the source get propagated.
+		time.Sleep(1 * time.Second)
 		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-role")).Should(BeFalse())
