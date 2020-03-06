@@ -8,10 +8,8 @@ import (
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("HNCConfiguration", func() {
@@ -30,11 +28,6 @@ var _ = Describe("HNCConfiguration", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
-
-		// Give foo a role.
-		makeRole(ctx, fooName, "foo-role")
-		// Give foo a role binding.
-		makeRoleBinding(ctx, fooName, "foo-role", "foo-admin", "foo-role-binding")
 	})
 
 	AfterEach(func() {
@@ -53,16 +46,20 @@ var _ = Describe("HNCConfiguration", func() {
 
 	It("should propagate Roles by default", func() {
 		setParent(ctx, barName, fooName)
+		// Give foo a role.
+		makeObject(ctx, "Role", fooName, "foo-role")
 
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 	})
 
 	It("should propagate RoleBindings by default", func() {
 		setParent(ctx, barName, fooName)
+		// Give foo a role binding.
+		makeRoleBinding(ctx, fooName, "foo-role", "foo-admin", "foo-role-binding")
 
-		Eventually(hasRoleBinding(ctx, barName, "foo-role-binding")).Should(BeTrue())
-		Expect(roleBindingInheritedFrom(ctx, barName, "foo-role-binding")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "RoleBinding", barName, "foo-role-binding")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "RoleBinding", barName, "foo-role-binding")).Should(Equal(fooName))
 	})
 
 	It("should set CritSingletonNameInvalid condition if singleton name is wrong", func() {
@@ -96,64 +93,64 @@ var _ = Describe("HNCConfiguration", func() {
 
 	It("should not propagate objects if the type is not in HNCConfiguration", func() {
 		setParent(ctx, barName, fooName)
-		makeResourceQuota(ctx, fooName, "foo-resource-quota")
+		makeObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")
 
 		// Foo should have "foo-resource-quota" since we created there.
-		Eventually(hasResourceQuota(ctx, fooName, "foo-resource-quota")).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
 		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
 		time.Sleep(sleepTime)
-		Expect(hasResourceQuota(ctx, barName, "foo-resource-quota")()).Should(BeFalse())
+		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 	})
 
 	It("should propagate objects if the mode of a type is set to propagate", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 
 		setParent(ctx, barName, fooName)
-		makeSecret(ctx, fooName, "foo-sec")
+		makeObject(ctx, "Secret", fooName, "foo-sec")
 
 		// Foo should have "foo-sec" since we created there.
-		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
 		// "foo-sec" should now be propagated from foo to bar.
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 	})
 
 	It("should stop propagating objects if the mode of a type is changed from propagate to ignore", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 
 		setParent(ctx, barName, fooName)
-		makeSecret(ctx, fooName, "foo-sec")
+		makeObject(ctx, "Secret", fooName, "foo-sec")
 
 		// Foo should have "foo-sec" since we created there.
-		Eventually(hasSecret(ctx, fooName, "foo-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
 		// "foo-sec" should now be propagated from foo to bar because we set the mode of Secret to "propagate".
-		Eventually(hasSecret(ctx, barName, "foo-sec")).Should(BeTrue())
-		Expect(secretInheritedFrom(ctx, barName, "foo-sec")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
 		updateHNCConfigSpec(ctx, "v1", "v1", "Secret", "Secret", api.Propagate, api.Ignore)
 		bazName := createNS(ctx, "baz")
 		setParent(ctx, bazName, fooName)
 		// Sleep to give "foo-sec" a chance to propagate from foo to baz, if it could.
 		time.Sleep(sleepTime)
-		Expect(hasSecret(ctx, bazName, "foo-sec")()).Should(BeFalse())
+		Expect(hasObject(ctx, "Secret", bazName, "foo-sec")()).Should(BeFalse())
 	})
 
 	It("should propagate objects if the mode of a type is changed from ignore to propagate", func() {
 		addToHNCConfig(ctx, "v1", "ResourceQuota", api.Ignore)
 
 		setParent(ctx, barName, fooName)
-		makeResourceQuota(ctx, fooName, "foo-resource-quota")
+		makeObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")
 
 		// Foo should have "foo-resource-quota" since we created there.
-		Eventually(hasResourceQuota(ctx, fooName, "foo-resource-quota")).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
 		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
 		time.Sleep(sleepTime)
-		Expect(hasResourceQuota(ctx, barName, "foo-resource-quota")()).Should(BeFalse())
+		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 
 		updateHNCConfigSpec(ctx, "v1", "v1", "ResourceQuota", "ResourceQuota", api.Ignore, api.Propagate)
 		// "foo-resource-quota" should now be propagated from foo to bar because the mode of ResourceQuota is set to "propagate".
-		Eventually(hasResourceQuota(ctx, barName, "foo-resource-quota")).Should(BeTrue())
-		Expect(resourceQuotaInheritedFrom(ctx, barName, "foo-resource-quota")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 })
 
@@ -169,37 +166,7 @@ func hasTypeWithMode(apiVersion, kind string, mode api.SynchronizationMode, conf
 	}
 }
 
-func makeSecret(ctx context.Context, nsName, secretName string) {
-	sec := &corev1.Secret{}
-	sec.Name = secretName
-	sec.Namespace = nsName
-	ExpectWithOffset(1, k8sClient.Create(ctx, sec)).Should(Succeed())
-}
-
-func hasSecret(ctx context.Context, nsName, secretName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-		sec := &corev1.Secret{}
-		err := k8sClient.Get(ctx, nnm, sec)
-		return err == nil
-	}
-}
-
-func secretInheritedFrom(ctx context.Context, nsName, secretName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: secretName}
-	sec := &corev1.Secret{}
-	if err := k8sClient.Get(ctx, nnm, sec); err != nil {
-		// should have been caught above
-		return err.Error()
-	}
-	if sec.ObjectMeta.Labels == nil {
-		return ""
-	}
-	lif, _ := sec.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
-	return lif
-}
-
+// We cannot use `makeObject` to create Rolebinding objects because `RoleRef` is a required field.
 func makeRoleBinding(ctx context.Context, nsName, roleName, userName, roleBindingName string) {
 	roleBinding := &v1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -219,61 +186,6 @@ func makeRoleBinding(ctx context.Context, nsName, roleName, userName, roleBindin
 		},
 	}
 	ExpectWithOffset(1, k8sClient.Create(ctx, roleBinding)).Should(Succeed())
-}
-
-func hasRoleBinding(ctx context.Context, nsName, roleBindingName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: roleBindingName}
-		roleBinding := &v1.RoleBinding{}
-		err := k8sClient.Get(ctx, nnm, roleBinding)
-		return err == nil
-	}
-}
-
-func roleBindingInheritedFrom(ctx context.Context, nsName, roleBindingName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: roleBindingName}
-	roleBinding := &v1.RoleBinding{}
-	if err := k8sClient.Get(ctx, nnm, roleBinding); err != nil {
-		// should have been caught above
-		return err.Error()
-	}
-	if roleBinding.ObjectMeta.Labels == nil {
-		return ""
-	}
-	lif, _ := roleBinding.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
-	return lif
-}
-
-func makeResourceQuota(ctx context.Context, nsName, resourceQuotaName string) {
-	resourceQuota := &corev1.ResourceQuota{}
-	resourceQuota.Name = resourceQuotaName
-	resourceQuota.Namespace = nsName
-	ExpectWithOffset(1, k8sClient.Create(ctx, resourceQuota)).Should(Succeed())
-}
-
-func hasResourceQuota(ctx context.Context, nsName, resourceQuotaName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: resourceQuotaName}
-		resourceQuota := &corev1.ResourceQuota{}
-		err := k8sClient.Get(ctx, nnm, resourceQuota)
-		return err == nil
-	}
-}
-
-func resourceQuotaInheritedFrom(ctx context.Context, nsName, resourceQuotaName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: resourceQuotaName}
-	resourceQuota := &corev1.ResourceQuota{}
-	if err := k8sClient.Get(ctx, nnm, resourceQuota); err != nil {
-		// should have been caught above
-		return err.Error()
-	}
-	if resourceQuota.ObjectMeta.Labels == nil {
-		return ""
-	}
-	lif, _ := resourceQuota.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
-	return lif
 }
 
 func hasHNCConfigurationConditionWithMsg(ctx context.Context, code api.HNCConfigurationCode, subMsg string) func() bool {
