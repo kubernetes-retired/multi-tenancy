@@ -39,11 +39,18 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master endpoints informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	if request.Namespace != "default" || request.Name != "kubernetes" {
-		// For now, we bypass all ep events beside the default kubernetes ep. The tenant/master ep controllers handle ep lifecycle independently.
-		return reconciler.Result{}, nil
+	vServiceObj, err := c.multiClusterEndpointsController.GetByObjectType(request.ClusterName, request.Namespace, request.Name, &v1.Service{})
+	if err != nil && !errors.IsNotFound(err) {
+		return reconciler.Result{Requeue: true}, fmt.Errorf("fail to query service from tenant master %s", request.ClusterName)
 	}
-	klog.Infof("reconcile endpoints %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
+	if err == nil {
+		vService := vServiceObj.(*v1.Service)
+		if vService.Spec.Selector != nil {
+			// Supermaster ep controller handles the service ep lifecycle, quit.
+			return reconciler.Result{}, nil
+		}
+	}
+	klog.V(4).Infof("reconcile endpoints %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
 	pEndpoints, err := c.endpointsLister.Endpoints(targetNamespace).Get(request.Name)
 	pExists := true
