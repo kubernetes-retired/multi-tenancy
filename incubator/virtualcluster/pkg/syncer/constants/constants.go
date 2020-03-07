@@ -65,8 +65,8 @@ const (
 	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
 	DefaultvNodeGCGracePeriod = time.Second * 120
 	// If Uws request keeps failing, stop retrying after MaxUwsRetryAttempts.
-	// According to controller workqueue default rate limiter algorithm, retry 13 times takes around 90 seconds.
-	MaxUwsRetryAttempts = 13
+	// According to controller workqueue default rate limiter algorithm, retry 16 times takes around 180 seconds.
+	MaxUwsRetryAttempts = 16
 
 	DefaultOpaqueMetaPrefix = "tenancy.x-k8s.io"
 )
