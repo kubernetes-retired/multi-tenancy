@@ -1,4 +1,4 @@
-package test
+package resourcemodification
 
 import (
 	"fmt"
@@ -11,14 +11,13 @@ import (
 )
 
 const (
-	expectedVal = "No"
+	expectedVal = "no"
 )
 
 var _ = framework.KubeDescribe("test resource quotas modification permissions", func() {
 	var config *configutil.BenchmarkConfig
 	var err error
-	// var dryrun = "--dry-run=true"
-	// var all = "--all=true"
+	var flag = "can-i"
 	actions := [5]string{"create", "update", "patch", "delete", "deletecollection"}
 
 	ginkgo.BeforeEach(func() {
@@ -27,19 +26,20 @@ var _ = framework.KubeDescribe("test resource quotas modification permissions", 
 	})
 
 	framework.KubeDescribe("tenant cannnot modify resource quotas", func() {
-		var user string
+		var user, namespace string
 
 		ginkgo.BeforeEach(func() {
 			tenantkubeconfig := config.GetValidTenant()
 			os.Setenv("KUBECONFIG", tenantkubeconfig.Kubeconfig)
-			user = configutil.GetContextFromKubeConfig(tenantkubeconfig.Kubeconfig)
+			user = configutil.GetContextFromKubeconfig(tenantkubeconfig.Kubeconfig)
+			namespace = tenantkubeconfig.Namespace
 		})
 
 		ginkgo.It("modify resource quotas", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot modify resource quotas", user))
 			for _, action := range actions {
 				_, errNew := framework.LookForString(expectedVal, time.Minute, func() string {
-					_, err := framework.RunKubectl("-n", "tenant1admin", "auth can-i", action, "quota")
+					_, err := framework.RunKubectl("auth", flag, action, "quota", "-n", namespace)
 					return err.Error()
 				})
 
