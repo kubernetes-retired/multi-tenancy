@@ -10,8 +10,8 @@ import (
 	ginkgowrapper "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 
 	// test sources
-	_ "github.com/phoenixking25/multi-tenancy/benchmarks/e2e/tests/block_ns_quotas"
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
+	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_ns_quotas"
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
 )
 
