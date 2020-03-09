@@ -33,10 +33,13 @@ const (
 	LabelOwnerReferences = "tenancy.x-k8s.io/ownerReferences"
 	// LabelClusterIP is the cluster ip of the corresponding service in tenant namespace.
 	LabelClusterIP = "tenancy.x-k8s.io/clusterIP"
-	// LabelServiceAccountName is the service account name related to the secret.
-	LabelServiceAccountName = "tenancy.x-k8s.io/service-account.name"
 	// LabelSecretName is the service account token secret name in tenant namespace.
 	LabelSecretName = "tenancy.x-k8s.io/secret.name"
+
+	// LabelServiceAccountUID is the tenant service account UID related to the secret.
+	LabelServiceAccountUID = "tenancy.x-k8s.io/service-account.UID"
+	// LabelSecretUID is the service account token secret UID in tenant namespace.
+	LabelSecretUID = "tenancy.x-k8s.io/secret.UID"
 
 	// UwsControllerWorkersHigh is the quantity of the worker routine for a resource that generates high number of uws requests.
 	UwsControllerWorkerHigh = 10
@@ -62,8 +65,8 @@ const (
 	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
 	DefaultvNodeGCGracePeriod = time.Second * 120
 	// If Uws request keeps failing, stop retrying after MaxUwsRetryAttempts.
-	// According to controller workqueue default rate limiter algorithm, retry 13 times takes around 90 seconds.
-	MaxUwsRetryAttempts = 13
+	// According to controller workqueue default rate limiter algorithm, retry 16 times takes around 180 seconds.
+	MaxUwsRetryAttempts = 16
 
 	DefaultOpaqueMetaPrefix = "tenancy.x-k8s.io"
 )

@@ -150,7 +150,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 
 	pPod := newObj.(*v1.Pod)
 
-	pSecret, err := c.getPodServiceAccountSecret(pPod)
+	pSecret, err := c.getPodServiceAccountSecret(clusterName, pPod, vPod)
 	if err != nil {
 		return fmt.Errorf("failed to get service account secret from cluster %s cache: %v", clusterName, err)
 	}
@@ -189,14 +189,21 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 	return err
 }
 
-func (c *controller) getPodServiceAccountSecret(pPod *v1.Pod) (*v1.Secret, error) {
+func (c *controller) getPodServiceAccountSecret(clusterName string, pPod, vPod *v1.Pod) (*v1.Secret, error) {
 	saName := "default"
 	if pPod.Spec.ServiceAccountName != "" {
 		saName = pPod.Spec.ServiceAccountName
 	}
+	// find tenant sa UID
+	vSaObj, err := c.multiClusterPodController.GetByObjectType(clusterName, vPod.Namespace, saName, &v1.ServiceAccount{})
+	if err != nil {
+		return nil, fmt.Errorf("fail to get tenant service account UID")
+	}
+	vSa := vSaObj.(*v1.ServiceAccount)
+
 	// find service account token secret and replace the one set by tenant kcm.
 	secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.SelectorFromSet(map[string]string{
-		constants.LabelServiceAccountName: saName,
+		constants.LabelServiceAccountUID: string(vSa.UID),
 	}))
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, err

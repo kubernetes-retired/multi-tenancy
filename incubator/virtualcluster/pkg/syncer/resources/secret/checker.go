@@ -91,7 +91,7 @@ func (c *controller) checkSecrets() {
 		// virtual service account token type secret
 		vSecretName := pSecret.Name
 		if saName := pSecret.GetAnnotations()[v1.ServiceAccountNameKey]; saName != "" {
-			vSecretName = pSecret.GetLabels()[constants.LabelSecretName]
+			vSecretName = pSecret.GetAnnotations()[constants.LabelSecretName]
 		}
 		// check whether secret is exists in tenant.
 		vSecretObj, err := c.multiClusterSecretController.Get(clusterName, vNamespace, vSecretName)
@@ -171,7 +171,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 
 func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterName, targetNamespace string, vSecret *v1.Secret) {
 	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
-		constants.LabelSecretName: vSecret.Name,
+		constants.LabelSecretUID: string(vSecret.UID),
 	}))
 	if errors.IsNotFound(err) || len(secretList) == 0 {
 		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret, reconciler.AddEvent); err != nil {

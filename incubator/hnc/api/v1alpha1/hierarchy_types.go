@@ -32,13 +32,15 @@ const (
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
+// TODO change condition codes to CamelCase strings. See issue:
+//  https://github.com/kubernetes-sigs/multi-tenancy/issues/500
 const (
-	CritParentMissing     Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid     Code = "CRIT_PARENT_INVALID"
-	CritAncestor          Code = "CRIT_ANCESTOR"
-	RequiredChildConflict Code = "REQUIRED_CHILD_CONFLICT"
-	CannotUpdate          Code = "CANNOT_UPDATE_OBJECT"
-	CannotPropagate       Code = "CANNOT_PROPAGATE_OBJECT"
+	CritParentMissing    Code = "CRIT_PARENT_MISSING"
+	CritParentInvalid    Code = "CRIT_PARENT_INVALID"
+	CritAncestor         Code = "CRIT_ANCESTOR"
+	SubnamespaceConflict Code = "SUBNAMESPACE_CONFLICT"
+	CannotUpdate         Code = "CANNOT_UPDATE_OBJECT"
+	CannotPropagate      Code = "CANNOT_PROPAGATE_OBJECT"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -62,6 +64,10 @@ type HierarchyConfigurationSpec struct {
 
 	// Parent indicates the parent of this namespace, if any.
 	Parent string `json:"parent,omitempty"`
+
+	// AllowCascadingDelete indicates if the self-serve subnamespaces of this namespace are allowed
+	// to cascading delete.
+	AllowCascadingDelete bool `json:"allowCascadingDelete"`
 
 	// RequiredChildren indicates the required subnamespaces of this namespace. If they do not exist,
 	// the HNC will create them, allowing users without privileges to create namespaces to get child

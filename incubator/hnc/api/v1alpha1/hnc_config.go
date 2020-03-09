@@ -55,7 +55,8 @@ type TypeSynchronizationSpec struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	// Kind to be configured.
 	Kind string `json:"kind,omitempty"`
-	// Synchronization mode of the kind.
+	// Synchronization mode of the kind. If the field is empty, it will be treated
+	// as "propagate". An unsupported mode will be treated as "ignore".
 	// +optional
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }

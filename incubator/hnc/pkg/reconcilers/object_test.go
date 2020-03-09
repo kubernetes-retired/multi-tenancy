@@ -28,9 +28,9 @@ var _ = Describe("Secret", func() {
 		bazName = createNS(ctx, "baz")
 
 		// Give them each a role.
-		makeRole(ctx, fooName, "foo-role")
-		makeRole(ctx, barName, "bar-role")
-		makeRole(ctx, bazName, "baz-role")
+		makeObject(ctx, "Role", fooName, "foo-role")
+		makeObject(ctx, "Role", barName, "bar-role")
+		makeObject(ctx, "Role", bazName, "baz-role")
 	})
 
 	AfterEach(func() {
@@ -44,46 +44,46 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
 	})
 
 	It("should be copied to descendents when source object is empty", func() {
 		setParent(ctx, barName, fooName)
 		// Creates an empty ConfigMap. We use ConfigMap for this test because the apiserver will not
 		// add additional fields to an empty ConfigMap object to make it non-empty.
-		makeConfigMap(ctx, fooName, "foo-config")
+		makeObject(ctx, "ConfigMap", fooName, "foo-config")
 		addToHNCConfig(ctx, "v1", "ConfigMap", api.Propagate)
 
 		// "foo-config" should now be propagated from foo to bar.
-		Eventually(hasConfigMap(ctx, barName, "foo-config")).Should(BeTrue())
-		Expect(configMapInheritedFrom(ctx, barName, "foo-config")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "ConfigMap", barName, "foo-config")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "ConfigMap", barName, "foo-config")).Should(Equal(fooName))
 	})
 
 	It("should be removed if the hierarchy changes", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
 		setParent(ctx, bazName, fooName)
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		setParent(ctx, bazName, "")
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should not be propagated if modified", func() {
 		// Set tree as bar -> foo and make sure the first-time propagation of foo-role
 		// is finished before modifying the foo-role in bar namespace
 		setParent(ctx, barName, fooName)
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 
 		// Wait 1 second to make sure all enqueued fooName hiers are successfully reconciled
 		// in case the manual modification is overridden by the unfinished propagation.
@@ -95,33 +95,35 @@ var _ = Describe("Secret", func() {
 		// that if the other one *isn't* copied, this is because we decided not to, and
 		// not that we just haven't gotten to it yet.
 		setParent(ctx, bazName, barName)
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
 
 		// Make sure the bad one got overwritte.
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 	})
 
 	It("should be removed if the source no longer exists", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 
 		removeRole(ctx, fooName, "foo-role")
 		// Wait 1 second to make sure the propagated objects are removed.
 		time.Sleep(1 * time.Second)
-		Eventually(hasRole(ctx, fooName, "foo-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should overwrite the propagated ones if the source is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
+		// Wait 1 second to make sure the source get propagated.
+		time.Sleep(1 * time.Second)
 		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeFalse())
 
 		modifyRole(ctx, fooName, "foo-role")
@@ -137,13 +139,13 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
 
 		// Set foo's parent to a non-existent namespace.
 		brumpfName := createNSName("brumpf")
@@ -156,23 +158,23 @@ var _ = Describe("Secret", func() {
 
 		// Set baz's parent to foo and add a new role in foo.
 		setParent(ctx, bazName, fooName)
-		makeRole(ctx, fooName, "foo-role-2")
+		makeObject(ctx, "Role", fooName, "foo-role-2")
 
 		// Wait 1 second to make sure any potential actions are done.
 		time.Sleep(1 * time.Second)
 
 		// Since the sync is frozen, baz should still have bar-role (no deleting).
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
 		// baz and bar shouldn't have foo-role-2 (no propagating).
-		Eventually(hasRole(ctx, bazName, "foo-role-2")).Should(BeFalse())
-		Eventually(hasRole(ctx, barName, "foo-role-2")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role-2")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role-2")).Should(BeFalse())
 
 		// Create the missing parent namespace with one object.
 		brumpfNS := &corev1.Namespace{}
 		brumpfNS.Name = brumpfName
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
-		makeRole(ctx, brumpfName, "brumpf-role")
+		makeObject(ctx, "Role", brumpfName, "brumpf-role")
 
 		// The Crit conditions should be gone.
 		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(false))
@@ -180,39 +182,39 @@ var _ = Describe("Secret", func() {
 		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(false))
 
 		// Everything should be up to date after the Crit conditions are gone.
-		Eventually(hasRole(ctx, fooName, "brumpf-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, fooName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, "Role", fooName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", fooName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, barName, "foo-role-2")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role-2")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, barName, "brumpf-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role-2")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, bazName, "foo-role-2")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role-2")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, bazName, "brumpf-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role-2")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasRole(ctx, bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
 	})
 
 	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 
 		// Make the secret unpropagateable and verify that it disappears.
 		setFinalizer(ctx, fooName, "foo-role", true)
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeFalse())
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
 
 		// Observe the condition on the source namespace
 		want := &api.Condition{
@@ -224,10 +226,10 @@ var _ = Describe("Secret", func() {
 		// Fix the problem and verify that the condition vanishes and the secret is propagated again
 		setFinalizer(ctx, fooName, "foo-role", false)
 		Eventually(hasCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(false))
-		Eventually(hasRole(ctx, barName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasRole(ctx, bazName, "foo-role")).Should(BeTrue())
-		Expect(roleInheritedFrom(ctx, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 	})
 })
 
@@ -283,36 +285,4 @@ func removeRole(ctx context.Context, nsName, roleName string) {
 	role.Name = roleName
 	role.Namespace = nsName
 	ExpectWithOffset(1, k8sClient.Delete(ctx, role)).Should(Succeed())
-}
-
-// Makes an empty ConfigMap object.
-func makeConfigMap(ctx context.Context, nsName, configMapName string) {
-	configMap := &corev1.ConfigMap{}
-	configMap.Name = configMapName
-	configMap.Namespace = nsName
-	ExpectWithOffset(1, k8sClient.Create(ctx, configMap)).Should(Succeed())
-}
-
-func hasConfigMap(ctx context.Context, nsName, configMapName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: configMapName}
-		configMap := &corev1.ConfigMap{}
-		err := k8sClient.Get(ctx, nnm, configMap)
-		return err == nil
-	}
-}
-
-func configMapInheritedFrom(ctx context.Context, nsName, configMapName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: configMapName}
-	configMap := &corev1.ConfigMap{}
-	if err := k8sClient.Get(ctx, nnm, configMap); err != nil {
-		// should have been caught above
-		return err.Error()
-	}
-	if configMap.ObjectMeta.Labels == nil {
-		return ""
-	}
-	lif, _ := configMap.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
-	return lif
 }

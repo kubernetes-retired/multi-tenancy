@@ -7,13 +7,24 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 )
+
+// GVKs maps a kind to its corresponding GVK.
+var GVKs = map[string]schema.GroupVersionKind{
+	"Secret":        {Group: "", Version: "v1", Kind: "Secret"},
+	"Role":          {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
+	"RoleBinding":   {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
+	"NetworkPolicy": {Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	"ResourceQuota": {Group: "", Version: "v1", Kind: "ResourceQuota"},
+	"LimitRange":    {Group: "", Version: "v1", Kind: "LimitRange"},
+	"ConfigMap":     {Group: "", Version: "v1", Kind: "ConfigMap"},
+}
 
 func setParent(ctx context.Context, nm string, pnm string) {
 	hier := newOrGetHierarchy(ctx, nm)
@@ -107,48 +118,43 @@ func addToHNCConfig(ctx context.Context, apiVersion, kind string, mode api.Synch
 	}).Should(Succeed())
 }
 
-func makeRole(ctx context.Context, nsName, roleName string) {
-	role := &v1.Role{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      roleName,
-			Namespace: nsName,
-		},
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Role",
-			APIVersion: "rbac.authorization.k8s.io/v1",
-		},
-		Rules: []v1.PolicyRule{
-			// Allow the users to read all secrets, namespaces and configmaps.
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "namespaces", "configmaps"},
-				Verbs:     []string{"get", "watch", "list"},
-			},
-		},
-	}
-	ExpectWithOffset(1, k8sClient.Create(ctx, role)).Should(Succeed())
-}
-
-func hasRole(ctx context.Context, nsName, roleName string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
+// hasObject returns true if a namespace contains a specific object of the given kind.
+//  The kind and its corresponding GVK should be included in the GVKs map.
+func hasObject(ctx context.Context, kind string, nsName, name string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args.
 	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
-		role := &v1.Role{}
-		err := k8sClient.Get(ctx, nnm, role)
+		nnm := types.NamespacedName{Namespace: nsName, Name: name}
+		inst := &unstructured.Unstructured{}
+		inst.SetGroupVersionKind(GVKs[kind])
+		err := k8sClient.Get(ctx, nnm, inst)
 		return err == nil
 	}
 }
 
-func roleInheritedFrom(ctx context.Context, nsName, roleName string) string {
-	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
-	role := &v1.Role{}
-	if err := k8sClient.Get(ctx, nnm, role); err != nil {
+// makeObject creates an empty object of the given kind in a specific namespace. The kind and
+// its corresponding GVK should be included in the GVKs map.
+func makeObject(ctx context.Context, kind string, nsName, name string) {
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetNamespace(nsName)
+	inst.SetName(name)
+	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
+}
+
+// objectInheritedFrom returns the name of the namespace where a specific object of a given kind
+// is propagated from or an empty string if the object is not a propagated object. The kind and
+// its corresponding GVK should be included in the GVKs map.
+func objectInheritedFrom(ctx context.Context, kind string, nsName, name string) string {
+	nnm := types.NamespacedName{Namespace: nsName, Name: name}
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	if err := k8sClient.Get(ctx, nnm, inst); err != nil {
 		// should have been caught above
 		return err.Error()
 	}
-	if role.ObjectMeta.Labels == nil {
+	if inst.GetLabels() == nil {
 		return ""
 	}
-	lif, _ := role.ObjectMeta.Labels["hnc.x-k8s.io/inheritedFrom"]
+	lif, _ := inst.GetLabels()["hnc.x-k8s.io/inheritedFrom"]
 	return lif
 }

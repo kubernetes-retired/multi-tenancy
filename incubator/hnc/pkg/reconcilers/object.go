@@ -63,6 +63,10 @@ type ObjectReconciler struct {
 	// GVK is the group/version/kind handled by this reconciler.
 	GVK schema.GroupVersionKind
 
+	// Mode describes propagation mode of objects that are handled by this reconciler.
+	// See more details in the comments of api.SynchronizationMode.
+	Mode api.SynchronizationMode
+
 	// Affected is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional objects that need updating.
@@ -96,8 +100,66 @@ func (r *ObjectReconciler) GetGVK() schema.GroupVersionKind {
 	return r.GVK
 }
 
+// SetMode sets the Mode field of an object reconciler and syncs objects in the cluster if needed.
+// The method will return an error if syncs fail.
+func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.SynchronizationMode, log logr.Logger) error {
+	log = log.WithValues("gvk", r.GVK)
+	newMode := r.getValidateMode(mode, log)
+	oldMode := r.Mode
+	if newMode == oldMode {
+		return nil
+	}
+	r.Log.Info("Changing mode of the object reconciler", "old", oldMode, "new", newMode)
+	r.Mode = newMode
+	// If the new mode is not "ignore", we need to update objects in the cluster
+	// (e.g., propagate or remove existing objects).
+	if newMode != api.Ignore {
+		err := r.enqueueAllObjects(ctx, r.Log)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// getValidateMode returns a valid api.SynchronizationMode based on the given mode. Please
+// see the comments of api.SynchronizationMode for currently supported modes.
+// If mode is not set, it will be api.Propagate by default. Any unrecognized mode is
+// treated as api.Ignore.
+func (r *ObjectReconciler) getValidateMode(mode api.SynchronizationMode, log logr.Logger) api.SynchronizationMode {
+	switch mode {
+	case api.Propagate, api.Ignore, api.Remove:
+		return mode
+	case "":
+		log.Info("Unset mode; using 'propagate'")
+		return api.Propagate
+	default:
+		log.Info("Unrecognized mode; using 'ignore'", "mode", mode)
+		return api.Ignore
+	}
+}
+
+// enqueueAllObjects enqueues all the current objects in all namespaces.
+func (r *ObjectReconciler) enqueueAllObjects(ctx context.Context, log logr.Logger) error {
+	keys := r.Forest.GetNamespaceNames()
+	for _, ns := range keys {
+		// Enqueue all the current objects in the namespace.
+		if err := r.enqueueLocalObjects(ctx, log, ns); err != nil {
+			log.Error(err, "Error while trying to enqueue local objects", "namespace", ns)
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if ex[req.Namespace] {
+	if EX[req.Namespace] {
+		return ctrl.Result{}, nil
+	}
+
+	log := r.Log.WithValues("trigger", req.NamespacedName)
+	r.Mode = r.getValidateMode(r.Mode, log)
+	if r.Mode == api.Ignore {
 		return ctrl.Result{}, nil
 	}
 
@@ -106,7 +168,6 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	resp := ctrl.Result{}
 	ctx := context.Background()
-	log := r.Log.WithValues("trigger", req.NamespacedName)
 
 	// Read the object. Sync it with the forest whether it's found/missing.
 	inst := &unstructured.Unstructured{}
@@ -151,7 +212,7 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	if !exist {
 		// If it's a source, it must have been deleted. Update the forest and enqueue all its descendants.
 		if r.isInForest(inst) {
-			r.syncDeletedSource(ctx, log, inst)
+			r.syncRemovedSource(ctx, log, inst)
 			return ignore, nil
 		}
 
@@ -214,6 +275,8 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
 
 	// Return the action to delete the obsolete copy if there's no source in the ancestors.
+	// This might happen when the source was deleted by users or was removed by HNC
+	// because it will no longer be handled by HNC (see the comments of `exclude` for details).
 	if srcInst == nil {
 		return remove, nil
 	}
@@ -233,12 +296,12 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 // syncSource syncs the copy in the forest with the current source object. If there's a change,
 // enqueue all the descendants to propagate the new source.
 func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
-	// Note that we only call exclude() here, not in syncPropagated, because we'll never propagate an
-	// *uncreated* excluded object, and if an excluded object somehow got propagated, we do want to
-	// delete it.
+	// Determine if the object should be handled by HNC. Please see the comments of `exclude` for details.
 	if r.exclude(log, src) {
-		// In case this was previously propagated, we should delete any propagated copies
-		r.syncDeletedSource(ctx, log, src)
+		// Note that we only call exclude() here, not in syncPropagated, because we'll never propagate an
+		// *uncreated* excluded object. If an object was previously handled by HNC and was propagated,
+		// we want to delete it in the forest along with all the propagated copies.
+		r.syncRemovedSource(ctx, log, src)
 		return
 	}
 	sns := src.GetNamespace()
@@ -429,8 +492,10 @@ func (r *ObjectReconciler) isInForest(inst *unstructured.Unstructured) bool {
 	return r.Forest.Get(ns).HasOriginalObject(gvk, n)
 }
 
-// syncDeletedSource deletes the source copy in the forest and then enqueues all its descendants.
-func (r *ObjectReconciler) syncDeletedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
+// syncRemovedSource deletes the source copy in the forest and then enqueues all its descendants.
+// The method can be called when the source was deleted by users or if it will no longer be handled
+// by HNC (see comments of `exclude` for details).
+func (r *ObjectReconciler) syncRemovedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
 	ns := inst.GetNamespace()
 	n := inst.GetName()
 	gvk := inst.GroupVersionKind()
@@ -439,8 +504,10 @@ func (r *ObjectReconciler) syncDeletedSource(ctx context.Context, log logr.Logge
 }
 
 // exclude returns true if the object shouldn't be handled by the HNC, and in some non-obvious cases
-// sets a condition on the namespace. Eventually, this may be user-configurable, but right now it's
-// used for Service Account token secrets and to decide object propagation based on finalizer field.
+// sets a condition on the namespace. Following objects will not be handled by HNC:
+// - Objects with nonempty finalizer list
+// - Objects of a type whose mode is set to "remove" in the HNCConfiguration singleton
+// - Service Account token secrets
 func (r *ObjectReconciler) exclude(log logr.Logger, inst *unstructured.Unstructured) bool {
 	// Object with nonempty finalizer list is not propagated
 	if len(inst.GetFinalizers()) != 0 {
@@ -449,6 +516,11 @@ func (r *ObjectReconciler) exclude(log logr.Logger, inst *unstructured.Unstructu
 	}
 
 	switch {
+	// Users can set the mode of a type to "remove" to exclude objects of the type
+	// from being handled by HNC.
+	case r.Mode == api.Remove:
+		return true
+
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":
 		// These are reaped by a builtin K8s controller so there's no point copying them.
 		// More to the point, SA tokens really aren't supposed to be copied between

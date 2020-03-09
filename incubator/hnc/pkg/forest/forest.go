@@ -29,6 +29,9 @@ type TypeSyncer interface {
 	SyncNamespace(context.Context, logr.Logger, string) error
 	// Provides the GVK that is handled by the reconciler who implements the interface.
 	GetGVK() schema.GroupVersionKind
+	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements the interface.
+	// The method also syncs objects in the cluster for the type handled by the reconciler if necessary.
+	SetMode(context.Context, api.SynchronizationMode, logr.Logger) error
 }
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -40,7 +43,7 @@ type Forest struct {
 	lock       sync.Mutex
 	namespaces namedNamespaces
 
-	// types is a list of other reconcillers that HierarchyReconciler can call if the hierarchy
+	// types is a list of other reconcilers that HierarchyReconciler can call if the hierarchy
 	// changes. This will force all objects to be re-propagated.
 	//
 	// This is probably wildly inefficient, and we can probably make better use of things like
@@ -72,14 +75,15 @@ func (f *Forest) AddTypeSyncer(nss TypeSyncer) {
 	f.types = append(f.types, nss)
 }
 
-// HasTypeSyncer returns true if there is already a reconciler with the given GVK.
-func (f *Forest) HasTypeSyncer(gvk schema.GroupVersionKind) bool {
+// GetTypeSyncer returns the reconciler for the given GVK or nil if the reconciler
+// does not exist.
+func (f *Forest) GetTypeSyncer(gvk schema.GroupVersionKind) TypeSyncer {
 	for _, t := range f.types {
 		if t.GetGVK() == gvk {
-			return true
+			return t
 		}
 	}
-	return false
+	return nil
 }
 
 // GetTypeSyncers returns the types list.
@@ -113,6 +117,15 @@ func (f *Forest) Get(nm string) *Namespace {
 	}
 	f.namespaces[nm] = ns
 	return ns
+}
+
+// GetNamespaceNames returns names of all namespaces in the cluster.
+func (f *Forest) GetNamespaceNames() []string {
+	var keys []string
+	for k := range f.namespaces {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 type namedNamespaces map[string]*Namespace
