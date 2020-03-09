@@ -29,7 +29,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	// +kubebuilder:scaffold:imports
@@ -59,6 +58,7 @@ func main() {
 		metricsAddr          string
 		maxReconciles        int
 		enableLeaderElection bool
+		leaderElectionId     string
 		novalidation         bool
 		debugLogs            bool
 		testLog              bool
@@ -68,6 +68,8 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionId, "leader-election-id", "controller-leader-election-helper",
+		"Leader election id determines the name of the configmap that leader election will use for holding the leader lock.")
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
@@ -99,8 +101,8 @@ func main() {
 	}
 	defer exporter.StopMetricsExporter()
 
-	prom.DefaultRegisterer = metrics.Registry
-	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: metrics.Registry})
+	prom.DefaultRegisterer = prom.DefaultRegisterer.(*prom.Registry)
+	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: prom.DefaultRegisterer.(*prom.Registry)})
 	view.RegisterExporter(promExporter)
 
 	ctrl.SetLogger(zap.Logger(debugLogs))
@@ -120,6 +122,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   leaderElectionId,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

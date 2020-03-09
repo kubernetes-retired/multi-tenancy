@@ -18,7 +18,7 @@ steps:
     # Get kustomize
     export PATH=$$(go env GOPATH)/bin:$$PATH
     mkdir -p $$(go env GOPATH)/bin
-    GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.2.1
+    GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4
 
     # Build manifests
     cd multi-tenancy/incubator/hnc
