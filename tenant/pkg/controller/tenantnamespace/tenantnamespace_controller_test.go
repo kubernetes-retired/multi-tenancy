@@ -17,21 +17,23 @@ limitations under the License.
 package tenantnamespace
 
 import (
-	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
-	//"k8s.io/client-go/tools/clientcmd"
 	"testing"
 	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
 )
 
 var c client.Client
@@ -312,7 +314,6 @@ func TestReconcile(t *testing.T) {
 	testImportExistingNamespace(c, g, t, requests)
 }
 
-
 func TestBothReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
@@ -335,57 +336,101 @@ func TestBothReconcile(t *testing.T) {
 
 	}()
 
-	//testRolesAndRolesBindingsExistingCluster(c, g, t)
-	testingImpersonate(c,g,t)
-	//testRolesAndRolesBindingsTestingCluster(c, g, t)
+	testTenantRoleAndBindings(c, g, t)
 }
 
-func testingImpersonate(c client.Client, g *gomega.GomegaWithT, t *testing.T) {
-	saWithKindCfg := &corev1.ServiceAccount{
-		TypeMeta:                     metav1.TypeMeta{
-		//	Kind:"ServiceAccount",
+func testTenantRoleAndBindings(c client.Client, g *gomega.GomegaWithT, t *testing.T) {
+	//create service account
+	sa := corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "tenant-admin",
 		},
-		ObjectMeta:                   metav1.ObjectMeta{
-			Name:"shivanisinghal",
-			Namespace:"default",
-		},
-		Secrets:                      nil,
-		ImagePullSecrets:             nil,
-		AutomountServiceAccountToken: nil,
 	}
-	err := c.Create(context.TODO(), saWithKindCfg)
-	if err != nil{
-		t.Logf("Failed to create serviceaccount with kind config error: %+v ", err)
+	err := c.Create(context.TODO(), &sa)
+	if err != nil {
+		t.Logf("Failed while creating the service account error %+v", err)
 		return
 	}
-	defer c.Delete(context.TODO(),saWithKindCfg)
+	defer c.Delete(context.TODO(), &sa)
 
-	// now add impersonation
-	cfg.Impersonate.UserName="shivanisinghal"
-	//cfg.Impersonate.Groups=[]string{"system:serviceaccounts:default"}
+	//create tenant
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "ta-admin-ns",
+			TenantAdmins: []v1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					APIGroup:  "",
+					Name:      sa.ObjectMeta.Name,
+					Namespace: sa.ObjectMeta.Namespace,
+				},
+			},
+		},
+	}
+	err = c.Create(context.TODO(), tenant)
+	if err != nil {
+		t.Logf("Failed while creating the tenant error %+v", err)
+		return
+	}
+	defer c.Delete(context.TODO(), tenant)
 
-	//create new manager and client for user
-	mgr, err := manager.New(cfg, manager.Options{})
+	//check admin namespace is created or not, As tenant controller is running so admin namespace should be automatically created
+	adminNsKey := types.NamespacedName{Name: tenant.Spec.TenantAdminNamespaceName}
+	adminNs := &corev1.Namespace{}
+	err = c.Get(context.TODO(), adminNsKey, adminNs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to get admin namespace object, got an invalid object error: %v", err)
+		return
+	}
+
+	//create user config
+	userCfgStr, err := GenerateKubeconfigUseCertAndKey("kind-kind", []string{cfg.Host}, cfg.TLSClientConfig.CAData, cfg.TLSClientConfig.KeyData, cfg.TLSClientConfig.CertData, sa.ObjectMeta.Name)
+	userRestCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(userCfgStr))
+	if err != nil {
+		t.Logf("failed to create user rest config, got an invalid object error: %v", err)
+		return
+	}
+
+	//create manager
+	mgr, err := manager.New(userRestCfg, manager.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	userClient := mgr.GetClient()
+	userCl := mgr.GetClient()
 
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
 
-	sa2:=&corev1.ServiceAccount{
-		TypeMeta:                     metav1.TypeMeta{
-		//	Kind:"ServiceAccount",
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	//create tenantnamespace object using user client
+	tenantnamespaceObj := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo-tenantns",
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
-		ObjectMeta:                   metav1.ObjectMeta{
-			Name:"shivani-singhal2",
-			Namespace:"default",
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "tenantnamespace",
 		},
-		Secrets:                      nil,
-		ImagePullSecrets:             nil,
-		AutomountServiceAccountToken: nil,
 	}
-	err = userClient.Create(context.TODO(), sa2)
-	if err != nil{
-		t.Logf("Failed to create serviceaccount with user config error: %+v ", err)
+	err = userCl.Create(context.TODO(), tenantnamespaceObj)
+	if err != nil {
+		t.Logf("failed to create tenantnamespace object, got an invalid object error: %v", err)
 		return
 	}
-	defer userClient.Delete(context.TODO(), sa2)
+	defer userCl.Delete(context.TODO(), tenantnamespaceObj)
+
+	//As tenantnamespace controller is working so it should create tenantnamespace
+	tenantNsKey := types.NamespacedName{Name: tenantnamespaceObj.Spec.Name}
+	tenantnamespace := &corev1.Namespace{}
+	err = c.Get(context.TODO(), tenantNsKey, tenantnamespace)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to get tenantnamespace object, got an invalid object error: %v", err)
+		return
+	}
+
 }
