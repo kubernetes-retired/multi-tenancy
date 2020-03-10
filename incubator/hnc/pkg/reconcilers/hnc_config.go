@@ -151,6 +151,20 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
+	if err := r.syncActiveReconcilers(ctx, inst); err != nil {
+		return err
+	}
+
+	if err := r.syncRemovedReconcilers(ctx, inst); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// syncActiveReconcilers syncs object reconcilers for types that are in the Spec. If an object reconciler exists, it sets
+// its mode according to the Spec; otherwise, it creates the object reconciler.
+func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
 	for _, t := range inst.Spec.Types {
 		gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 		if ts := r.Forest.GetTypeSyncer(gvk); ts != nil {
@@ -161,7 +175,33 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 			r.createObjectReconciler(gvk, t.Mode, inst)
 		}
 	}
+	return nil
+}
 
+// syncRemovedReconcilers sets object reconcilers to "ignore" mode for types that are removed from the Spec.
+func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
+	// If a type exists in the forest but not exists in the Spec, we will
+	// set the mode of corresponding object reconciler to "ignore".
+	// TODO: Ideally, we should shut down the corresponding object
+	// reconciler. Gracefully terminating an object reconciler is still under
+	// development (https://github.com/kubernetes-sigs/controller-runtime/issues/764).
+	// We will revisit the code below once the feature is released.
+	for _, ts := range r.Forest.GetTypeSyncers() {
+		exist := false
+		for _, t := range inst.Spec.Types {
+			if ts.GetGVK() == schema.FromAPIVersionAndKind(t.APIVersion, t.Kind) {
+				exist = true
+				break
+			}
+		}
+		if exist {
+			continue
+		}
+		// The type does not exist in the Spec. Ignore subsequent reconciliations.
+		if err := ts.SetMode(ctx, api.Ignore, r.Log); err != nil {
+			return err // retry the reconciliation
+		}
+	}
 	return nil
 }
 
