@@ -72,7 +72,7 @@ func init() {
 			hncConfig := *config
 			hncConfig.ContentConfig.GroupVersion = &api.GroupVersion
 			hncConfig.APIPath = "/apis"
-			hncConfig.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+			hncConfig.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
 			hncConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 			hncClient, err = rest.UnversionedRESTClientFor(&hncConfig)
 			if err != nil {

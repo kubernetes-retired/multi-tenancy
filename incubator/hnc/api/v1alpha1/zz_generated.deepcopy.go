@@ -104,7 +104,7 @@ func (in *HNCConfigurationCondition) DeepCopy() *HNCConfigurationCondition {
 func (in *HNCConfigurationList) DeepCopyInto(out *HNCConfigurationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]HNCConfiguration, len(*in))
@@ -209,7 +209,7 @@ func (in *HierarchicalNamespace) DeepCopyObject() runtime.Object {
 func (in *HierarchicalNamespaceList) DeepCopyInto(out *HierarchicalNamespaceList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]HierarchicalNamespace, len(*in))
@@ -283,7 +283,7 @@ func (in *HierarchyConfiguration) DeepCopyObject() runtime.Object {
 func (in *HierarchyConfigurationList) DeepCopyInto(out *HierarchyConfigurationList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]HierarchyConfiguration, len(*in))
