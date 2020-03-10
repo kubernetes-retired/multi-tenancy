@@ -14,6 +14,7 @@ import (
 // TODO make the exclusion configurable - https://github.com/kubernetes-sigs/multi-tenancy/issues/374
 var EX = map[string]bool{
 	"kube-system":  true,
+	"kube-public":  true,
 	"hnc-system":   true,
 	"cert-manager": true,
 }
