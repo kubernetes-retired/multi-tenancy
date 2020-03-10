@@ -19,6 +19,8 @@ package tenantnamespace
 import (
 	stdlog "log"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -35,13 +37,13 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{
-		//CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
 		UseExistingCluster:true,
 	}
 	apis.AddToScheme(scheme.Scheme)
 
 	var err error
-	if cfg, err = t.Start(); err != nil {
+	if cfg, err = t.Start(); err != nil && !(strings.Contains(err.Error(), "customresourcedefinitions.apiextensions.k8s.io") && strings.Contains(err.Error(), "already exists") && (strings.Contains(err.Error(), "tenants.tenancy.x-k8s.io") || strings.Contains(err.Error(), "tenantnamespaces.tenancy.x-k8s.io"))) {
 		stdlog.Fatal(err)
 	}
 

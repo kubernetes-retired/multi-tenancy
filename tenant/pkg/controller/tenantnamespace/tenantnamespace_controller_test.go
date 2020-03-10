@@ -17,7 +17,11 @@ limitations under the License.
 package tenantnamespace
 
 import (
-	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
+	tenant2 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
+	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/client-go/tools/clientcmd"
+	"strings"
+
 	//"k8s.io/client-go/tools/clientcmd"
 	"testing"
 	"time"
@@ -312,80 +316,314 @@ func TestReconcile(t *testing.T) {
 	testImportExistingNamespace(c, g, t, requests)
 }
 
-
 func TestBothReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
 
-	//setup manager and client
+	testRoleAndBindingsWithValidAdmin(t, g)
+	testRoleAndBindingsWithNonValidAdmin(t, g)
+}
+
+func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
+	var expectedRequestTenantNamespace = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo-tenantns", Namespace: "tenant-admin-ns"}}
+	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: "tenant-a"}}
+
+	//setup and client
 	mgr, err := manager.New(cfg, manager.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
 
 	//start tenant controller
-	g.Expect(tenant.Add(mgr)).NotTo(gomega.HaveOccurred())
+	recFnTenant, requestsTenant := tenant2.SetupTestReconcile(tenant2.SetupNewReconciler(mgr))
+	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
 
 	//start tenantnamespace controller
-	g.Expect(Add(mgr)).NotTo(gomega.HaveOccurred())
+	recFnTenantNS, requestsTenantNS := SetupTestReconcile(newReconciler(mgr))
+	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
 
-	stopMgr1, mgrStopped1 := StartTestManager(mgr, g)
-
+	//start and defer manager
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
 	defer func() {
-		close(stopMgr1)
-		mgrStopped1.Wait()
-
+		close(stopMgr)
+		mgrStopped.Wait()
 	}()
 
-	//testRolesAndRolesBindingsExistingCluster(c, g, t)
-	testingImpersonate(c,g,t)
-	//testRolesAndRolesBindingsTestingCluster(c, g, t)
-}
-
-func testingImpersonate(c client.Client, g *gomega.GomegaWithT, t *testing.T) {
-	saWithKindCfg := &corev1.ServiceAccount{
-		TypeMeta:                     metav1.TypeMeta{
-		//	Kind:"ServiceAccount",
+	//create tenant-admin
+	sa := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "",
 		},
-		ObjectMeta:                   metav1.ObjectMeta{
-			Name:"shivanisinghal",
-			Namespace:"default",
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tenant-admin-sa",
+			Namespace: "default",
 		},
-		Secrets:                      nil,
-		ImagePullSecrets:             nil,
-		AutomountServiceAccountToken: nil,
 	}
-	err := c.Create(context.TODO(), saWithKindCfg)
-	if err != nil{
-		t.Logf("Failed to create serviceaccount with kind config error: %+v ", err)
+	err = c.Create(context.TODO(), &sa)
+	if err != nil {
+		t.Logf("Failed to create tenant admin: %+v with error: %+v", sa.ObjectMeta.Name, err)
 		return
 	}
-	defer c.Delete(context.TODO(),saWithKindCfg)
+	//defer c.Delete(context.TODO(), &sa)
 
-	// now add impersonation
-	cfg.Impersonate.UserName="shivanisinghal"
-	//cfg.Impersonate.Groups=[]string{"system:serviceaccounts:default"}
+	//create tenant object
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "tenant-admin-ns",
+			TenantAdmins: []v1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      "tenant-admin-sa",
+					Namespace: "default",
+				},
+			},
+		},
+	}
+	err = c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Eventually(requestsTenant, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenant)))
+	//defer c.Delete(context.TODO(), tenant)
 
-	//create new manager and client for user
+	//check admin namespace of tenant is created or not
+	tenantadminkey := types.NamespacedName{Name: "tenant-admin-ns"}
+	tenantAdminNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), tenantadminkey, tenantAdminNs) }, timeout).
+		Should(gomega.Succeed())
+
+	//Get service account list, to fetch above sa because secret generation is async
+	saList := corev1.ServiceAccountList{}
+	if err = c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
+		t.Logf("Failed to get serciceaccountlist, error %+v", err)
+		return
+	}
+
+	//Get secret name of tenant admin service account
+	var saSecretName string
+	for _, eachSA := range saList.Items {
+		for _, each := range eachSA.Secrets {
+			if strings.Contains(each.Name, sa.ObjectMeta.Name) {
+				saSecretName = each.Name
+			}
+		}
+	}
+
+	//Get secret
+	saSecretKey := types.NamespacedName{Name: saSecretName, Namespace: sa.ObjectMeta.Namespace}
+	tenantAdminSecret := corev1.Secret{}
+	err = c.Get(context.TODO(), saSecretKey, &tenantAdminSecret)
+	if err != nil {
+		t.Logf("Failed to get tenant admin secret, error %+v", err)
+		return
+	}
+
+	//Generate user config string
+	userCfgStr, err := GenerateCfgStr("kind-kind", cfg.Host, tenantAdminSecret.Data["ca.crt"], tenantAdminSecret.Data["token"], sa.ObjectMeta.Name)
+	userCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(userCfgStr))
+	if err != nil {
+		t.Logf("failed to create user config, got an invalid object error: %v", err)
+		return
+	}
+
+	//User manager and client
+	userMgr, err := manager.New(userCfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	userCl := userMgr.GetClient()
+
+	stopUserMgr, userMgrStopped := StartTestManager(userMgr, g)
+
+	defer func() {
+		close(stopUserMgr)
+		userMgrStopped.Wait()
+	}()
+
+	//create tenantnamespace object using user client
+	tenantnamespaceObj := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo-tenantns",
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
+		},
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "tenantnamespace",
+		},
+	}
+	err = userCl.Create(context.TODO(), tenantnamespaceObj)
+	if err != nil {
+		t.Logf("failed to create tenantnamespace object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Eventually(requestsTenantNS, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenantNamespace)))
+	//defer userCl.Delete(context.TODO(), tenantnamespaceObj)
+
+	nskey := types.NamespacedName{Name: "tenantnamespace"}
+	tenantNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
+		Should(gomega.Succeed())
+
+	c.Delete(context.TODO(), &sa)
+	c.Delete(context.TODO(), tenant)
+	c.Delete(context.TODO(), tenantAdminNs)
+	userCl.Delete(context.TODO(), tenantnamespaceObj)
+}
+
+func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
+	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: "tenant-a-2"}}
+
+	//setup and client
 	mgr, err := manager.New(cfg, manager.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	userClient := mgr.GetClient()
+	c = mgr.GetClient()
 
+	//start tenant controller
+	recFnTenant, requestsTenant := tenant2.SetupTestReconcile(tenant2.SetupNewReconciler(mgr))
+	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
 
-	sa2:=&corev1.ServiceAccount{
-		TypeMeta:                     metav1.TypeMeta{
-		//	Kind:"ServiceAccount",
+	//start tenantnamespace controller
+	recFnTenantNS, _ := SetupTestReconcile(newReconciler(mgr))
+	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
+
+	//start and defer manager
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	//create normal user
+	usr := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "",
 		},
-		ObjectMeta:                   metav1.ObjectMeta{
-			Name:"shivani-singhal2",
-			Namespace:"default",
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fake-sa-2",
+			Namespace: "default",
 		},
-		Secrets:                      nil,
-		ImagePullSecrets:             nil,
-		AutomountServiceAccountToken: nil,
 	}
-	err = userClient.Create(context.TODO(), sa2)
-	if err != nil{
-		t.Logf("Failed to create serviceaccount with user config error: %+v ", err)
+	err = c.Create(context.TODO(), &usr)
+	if err != nil {
+		t.Logf("Failed to create fake user: %+v with error: %+v", usr.ObjectMeta.Name, err)
 		return
 	}
-	defer userClient.Delete(context.TODO(), sa2)
+	defer c.Delete(context.TODO(), &usr)
+
+	//create tenant-admin
+	sa := corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceAccount",
+			APIVersion: "",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tenant-admin-sa-2",
+			Namespace: "default",
+		},
+	}
+	err = c.Create(context.TODO(), &sa)
+	if err != nil {
+		t.Logf("Failed to create tenant admin: %+v with error: %+v", sa.ObjectMeta.Name, err)
+		return
+	}
+	defer c.Delete(context.TODO(), &sa)
+
+	//create tenant object
+	tenant := &tenancyv1alpha1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tenant-a-2",
+		},
+		Spec: tenancyv1alpha1.TenantSpec{
+			TenantAdminNamespaceName: "tenant-admin-ns-2",
+			TenantAdmins: []v1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      "tenant-admin-sa-2",
+					Namespace: "default",
+				},
+			},
+		},
+	}
+	err = c.Create(context.TODO(), tenant)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create tenant object, got an invalid object error: %v", err)
+		return
+	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Eventually(requestsTenant, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenant)))
+	defer c.Delete(context.TODO(), tenant)
+
+	//check admin namespace of tenant is created or not
+	tenantadminkey := types.NamespacedName{Name: "tenant-admin-ns-2"}
+	tenantAdminNs := &corev1.Namespace{}
+	g.Eventually(func() error { return c.Get(context.TODO(), tenantadminkey, tenantAdminNs) }, timeout).
+		Should(gomega.Succeed())
+
+	//Get service account list, to fetch above sa because secret generation is async
+	saList := corev1.ServiceAccountList{}
+	if err = c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
+		t.Logf("Failed to get serciceaccountlist, error %+v", err)
+		return
+	}
+
+	//Get secret name of fake user service account
+	var saSecretName string
+	for _, eachSA := range saList.Items {
+		for _, each := range eachSA.Secrets {
+			if strings.Contains(each.Name, usr.ObjectMeta.Name) {
+				saSecretName = each.Name
+			}
+		}
+	}
+
+	//Get secret
+	saSecretKey := types.NamespacedName{Name: saSecretName, Namespace: usr.ObjectMeta.Namespace}
+	fakeUserSecret := corev1.Secret{}
+	err = c.Get(context.TODO(), saSecretKey, &fakeUserSecret)
+	if err != nil {
+		t.Logf("Failed to get tenant admin secret, error %+v", err)
+		return
+	}
+
+	//Generate user config string
+	userCfgStr, err := GenerateCfgStr("kind-kind", cfg.Host, fakeUserSecret.Data["ca.crt"], fakeUserSecret.Data["token"], usr.ObjectMeta.Name)
+	userCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(userCfgStr))
+	if err != nil {
+		t.Logf("failed to create user config, got an invalid object error: %v", err)
+		return
+	}
+
+	//User manager and client
+	userMgr, err := manager.New(userCfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	userCl := userMgr.GetClient()
+
+	stopUserMgr, userMgrStopped := StartTestManager(userMgr, g)
+
+	defer func() {
+		close(stopUserMgr)
+		userMgrStopped.Wait()
+	}()
+
+	//create tenantnamespace object using user client
+	tenantnamespaceObj := &tenancyv1alpha1.TenantNamespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo-tenantns-2",
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
+		},
+		Spec: tenancyv1alpha1.TenantNamespaceSpec{
+			Name: "tenantnamespace-2",
+		},
+	}
+
+	g.Eventually(func() error { return userCl.Create(context.TODO(), tenantnamespaceObj) }).ShouldNot(gomega.Succeed())
+
+	c.Delete(context.TODO(), &sa)
+	c.Delete(context.TODO(), &usr)
+	c.Delete(context.TODO(), tenant)
+	c.Delete(context.TODO(), tenantAdminNs)
 }
+

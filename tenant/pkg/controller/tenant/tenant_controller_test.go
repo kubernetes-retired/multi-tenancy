@@ -17,6 +17,13 @@ limitations under the License.
 package tenant
 
 import (
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	stdlog "log"
+	"os"
+	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"testing"
 	"time"
 
@@ -37,6 +44,25 @@ var c client.Client
 var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo"}}
 
 const timeout = time.Second * 5
+
+var cfg *rest.Config
+
+func TestMain(m *testing.M) {
+	t := &envtest.Environment{
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
+	}
+	apis.AddToScheme(scheme.Scheme)
+
+	var err error
+	if cfg, err = t.Start(); err != nil {
+		stdlog.Fatal(err)
+	}
+
+	code := m.Run()
+	t.Stop()
+	os.Exit(code)
+}
+
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
