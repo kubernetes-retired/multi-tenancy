@@ -169,6 +169,17 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode api.SynchronizationMode, inst *api.HNCConfiguration) {
 	r.Log.Info("Creating an object reconciler", "gvk", gvk, "mode", mode)
 
+	// After upgrading sigs.k8s.io/controller-runtime version to v0.5.0, we can create
+	// reconciler successfully even when the resource does not exist in the cluster.
+	// Therefore, we explicitly check if the resource exists before creating the
+	// reconciler.
+	_, err := r.Manager.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		r.Log.Error(err, "Error while trying to get resource", "gvk", gvk)
+		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
+		return
+	}
+
 	or := &ObjectReconciler{
 		Client:            r.Client,
 		Log:               ctrl.Log.WithName("reconcilers").WithName(gvk.Kind),
@@ -182,16 +193,21 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
-		condition := api.HNCConfigurationCondition{
-			Code: api.ObjectReconcilerCreationFailed,
-			Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
-		}
-		inst.Status.Conditions = append(inst.Status.Conditions, condition)
+		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
 		return
 	}
 
 	// Informs the in-memory forest about the new reconciler by adding it to the types list.
 	r.Forest.AddTypeSyncer(or)
+}
+
+func (r *ConfigReconciler) writeObjectReconcilerCreationFailedCondition(inst *api.HNCConfiguration,
+	gvk schema.GroupVersionKind, err error) {
+	condition := api.HNCConfigurationCondition{
+		Code: api.ObjectReconcilerCreationFailed,
+		Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
+	}
+	inst.Status.Conditions = append(inst.Status.Conditions, condition)
 }
 
 func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) error {
