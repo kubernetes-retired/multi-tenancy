@@ -38,7 +38,6 @@ import (
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // Each Cluster object represents a tenant master in Virtual Cluster architecture.
@@ -53,9 +52,11 @@ type Cluster struct {
 	// The root namespace name for this cluster
 	key string
 	// Name of the corresponding virtual cluster object.
-	VCName string
+	vcName string
 	// Namespace of the corresponding virtual cluster object.
-	VCNamespace string
+	vcNamespace string
+	// UID of the corresponding virtual cluster object.
+	vcUID string
 
 	// KubeClientConfig is used to make it easy to get an api server client. Required.
 	KubeClientConfig clientcmd.ClientConfig
@@ -105,7 +106,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(key, namespace, name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -118,8 +119,9 @@ func NewTenantCluster(key, namespace, name string, vclister vclisters.Virtualclu
 
 	return &Cluster{
 		key:              key,
-		VCName:           name,
-		VCNamespace:      namespace,
+		vcName:           name,
+		vcNamespace:      namespace,
+		vcUID:            uid,
 		vclister:         vclister,
 		KubeClientConfig: kubeClientConfig,
 		RestConfig:       clusterRestConfig,
@@ -133,9 +135,13 @@ func (c *Cluster) GetClusterName() string {
 	return c.key
 }
 
+func (c *Cluster) GetOwnerInfo() (string, string) {
+	return c.vcName, c.vcUID
+}
+
 // GetSpec returns the virtual cluster spec.
 func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
-	vc, err := c.vclister.Virtualclusters(c.VCNamespace).Get(c.VCName)
+	vc, err := c.vclister.Virtualclusters(c.vcNamespace).Get(c.vcName)
 	if err != nil {
 		return nil, err
 	}
@@ -151,11 +157,6 @@ func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
 
 func (c *Cluster) getScheme() *runtime.Scheme {
 	return scheme.Scheme
-}
-
-// GetClientInfo returns the cluster client info.
-func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
-	return reconciler.NewClusterInfo(c.GetClusterName(), c.RestConfig)
 }
 
 // GetClientSet returns a clientset client without any informer caches. All client requests go to apiserver directly.

@@ -73,7 +73,7 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	rootNS := conversion.ToClusterKey(vc)
 
 	// 1. create the root ns
-	err = kubeutil.CreateNS(mpn, rootNS)
+	err = kubeutil.CreateRootNS(mpn, rootNS, vc.Name, string(vc.UID))
 	if err != nil {
 		return err
 	}
@@ -301,7 +301,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 }
 
 func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
-	return kubeutil.DeleteAffiliatedNs(mpn, vc, log)
+	return nil
 }
 
 func (mpn *MasterProvisionerNative) GetMasterProvisioner() string {

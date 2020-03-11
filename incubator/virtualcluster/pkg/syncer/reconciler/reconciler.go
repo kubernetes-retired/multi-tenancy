@@ -18,22 +18,9 @@ package reconciler
 
 import (
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-type ClusterInfo struct {
-	Name   string
-	Config *rest.Config
-}
-
-func NewClusterInfo(name string, config *rest.Config) *ClusterInfo {
-	return &ClusterInfo{
-		Name:   name,
-		Config: config,
-	}
-}
 
 type EventType string
 
