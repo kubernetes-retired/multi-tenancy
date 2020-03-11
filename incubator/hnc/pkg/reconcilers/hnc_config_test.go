@@ -73,25 +73,23 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasHNCConfigurationConditionWithName(ctx, api.CritSingletonNameInvalid, nm)).Should(BeTrue())
 	})
 
-	// TODO: We will enable following two tests when we can handle incorrect GVK when creating object reconciler.
-	// See details in: https://github.com/kubernetes-sigs/multi-tenancy/issues/488
-	//It("should set ObjectReconcilerCreationFailed condition if an object reconciler creation fails", func() {
-	//	// API version of Secret should be "v1"
-	//	addToHNCConfig(ctx, "v2", "ConfigMap", api.Propagate)
-	//
-	//	Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeTrue())
-	//})
-	//
-	//It("should unset ObjectReconcilerCreationFailed condition if an object reconciler creation later succeeds", func() {
-	//	// API version of LimitRange should be "v1"
-	//	addToHNCConfig(ctx, "v2", "LimitRange", api.Propagate)
-	//
-	//	Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeTrue())
-	//
-	//	updateHNCConfigSpec(ctx, "v2", "v1", "LimitRange", "LimitRange", api.Propagate, api.Propagate)
-	//
-	//	Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeFalse())
-	//})
+	It("should set ObjectReconcilerCreationFailed condition if an object reconciler creation fails", func() {
+		// API version of Secret should be "v1"
+		addToHNCConfig(ctx, "v2", "ConfigMap", api.Propagate)
+
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeTrue())
+	})
+
+	It("should unset ObjectReconcilerCreationFailed condition if an object reconciler creation later succeeds", func() {
+		// API version of LimitRange should be "v1"
+		addToHNCConfig(ctx, "v2", "LimitRange", api.Propagate)
+
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeTrue())
+
+		updateHNCConfigSpec(ctx, "v2", "v1", "LimitRange", "LimitRange", api.Propagate, api.Propagate)
+
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeFalse())
+	})
 
 	It("should not propagate objects if the type is not in HNCConfiguration", func() {
 		setParent(ctx, barName, fooName)
