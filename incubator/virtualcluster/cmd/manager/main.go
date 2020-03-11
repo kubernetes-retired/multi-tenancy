@@ -28,19 +28,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 func main() {
 	var (
-		metricsAddr          string
-		masterProvisioner    string
-		leaderElection       bool
-		leaderElectionCmName string
+		metricsAddr             string
+		masterProvisioner       string
+		leaderElection          bool
+		leaderElectionCmName    string
+		maxConcurrentReconciles int
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
 	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
 	flag.BoolVar(&leaderElection, "leader-election", true, "If enable leaderelection for vc-manager")
 	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
+	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 1, "The max number reconcilers of virtualcluster controller")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
@@ -55,11 +59,11 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
-	mgr, err := manager.New(cfg, manager.Options{
+	mgr, err := vcmanager.NewVirtualClusterManager(cfg, manager.Options{
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     leaderElection,
 		LeaderElectionID:   leaderElectionCmName,
-	})
+	}, maxConcurrentReconciles)
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
