@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -212,6 +213,28 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(hasObject(ctx, "Secret", barName, "foo-sec-2")()).Should(BeFalse())
 
 	})
+
+	It("should reconcile after adding a new crd to the apiserver", func() {
+		// Add a config for a type that hasn't been defined yet.
+		addToHNCConfig(ctx, "stable.example.com/v1", "CronTab", api.Propagate)
+
+		// The corresponding object reconciler should not be created because the type does not exist.
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab")).Should(BeTrue())
+
+		// Add the CRD for CronTab to the apiserver.
+		createCronTabCRD(ctx)
+
+		// The object reconciler for CronTab should be created successfully.
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab")).Should(BeFalse())
+
+		// Give foo a CronTab object.
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "CronTab", fooName, "foo-crontab")
+
+		// "foo-crontab" should be propagated from foo to bar.
+		Eventually(hasObject(ctx, "CronTab", barName, "foo-crontab")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "CronTab", barName, "foo-crontab")).Should(Equal(fooName))
+	})
 })
 
 func hasTypeWithMode(apiVersion, kind string, mode api.SynchronizationMode, config *api.HNCConfiguration) func() bool {
@@ -310,5 +333,30 @@ func removeHNCConfigType(ctx context.Context, apiVersion, kind string) {
 		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
 		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
 		return updateHNCConfig(ctx, c)
+	}).Should(Succeed())
+}
+
+func createCronTabCRD(ctx context.Context) {
+	crontab := v1beta1.CustomResourceDefinition{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CustomResourceDefinition",
+			APIVersion: "apiextensions.k8s.io/v1beta1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "crontabs.stable.example.com",
+		},
+		Spec: v1beta1.CustomResourceDefinitionSpec{
+			Group: "stable.example.com",
+			Versions: []v1beta1.CustomResourceDefinitionVersion{
+				{Name: "v1", Served: true, Storage: true},
+			},
+			Names: v1beta1.CustomResourceDefinitionNames{
+				Singular: "crontab",
+				Plural:   "crontabs",
+				Kind:     "CronTab",
+			},
+		},
+	}
+	Eventually(func() error {
+		return k8sClient.Create(ctx, &crontab)
 	}).Should(Succeed())
 }
