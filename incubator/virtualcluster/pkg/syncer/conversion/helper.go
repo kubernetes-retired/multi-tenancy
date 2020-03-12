@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	listersv1 "k8s.io/client-go/listers/core/v1"
@@ -121,7 +122,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 	return target, nil
 }
 
-func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Object, error) {
+func BuildSuperMasterNamespace(cluster, vcName, vcUID string, obj runtime.Object) (runtime.Object, error) {
 	target := obj.DeepCopyObject()
 	m, err := meta.Accessor(target)
 	if err != nil {
@@ -141,6 +142,14 @@ func BuildSuperMasterNamespace(cluster string, obj runtime.Object) (runtime.Obje
 
 	targetName := ToSuperMasterNamespace(cluster, m.GetName())
 	m.SetName(targetName)
+	owner := []metav1.OwnerReference{
+		metav1.OwnerReference{
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
+			Kind:       "Virtualcluster",
+			Name:       vcName,
+			UID:        types.UID(vcUID),
+		}}
+	m.SetOwnerReferences(owner)
 	return target, nil
 }
 
