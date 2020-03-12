@@ -19,8 +19,10 @@ package virtualcluster
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +35,7 @@ import (
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
+	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 var log = logf.Log.WithName("virtualcluster-controller")
@@ -40,7 +43,7 @@ var log = logf.Log.WithName("virtualcluster-controller")
 // Add creates a new Virtualcluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
-func Add(mgr manager.Manager, masterProvisioner string) error {
+func Add(mgr *vcmanager.VirtualclusterManager, masterProvisioner string) error {
 	return add(mgr, newReconciler(mgr, masterProvisioner))
 }
 
@@ -62,10 +65,12 @@ func newReconciler(mgr manager.Manager, masterProv string) reconcile.Reconciler 
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr *vcmanager.VirtualclusterManager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("virtualcluster-controller",
-		mgr, controller.Options{Reconciler: r})
+		mgr, controller.Options{
+			MaxConcurrentReconciles: mgr.MaxConcurrentReconciles,
+			Reconciler:              r})
 	if err != nil {
 		return err
 	}
@@ -177,6 +182,10 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			vc.Status.Phase = "Running"
 			vc.Status.Message = "tenant master is running"
 			vc.Status.Reason = "TenantMasterRunning"
+			vc.Status.Conditions = append(vc.Status.Conditions, tenancyv1alpha1.ClusterCondition{
+				LastTransitionTime: metav1.Time{time.Now()},
+				Message:            fmt.Sprintf("virtualcluster(%s) starts running", vc.GetName()),
+			})
 			updateErr := r.Update(context.TODO(), vc)
 			if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
 				log.Info("fail to get vc on update failure", "error", err.Error())
