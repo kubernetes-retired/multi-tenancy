@@ -44,7 +44,7 @@ func main() {
 	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
 	flag.BoolVar(&leaderElection, "leader-election", true, "If enable leaderelection for vc-manager")
 	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
-	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 1, "The max number reconcilers of virtualcluster controller")
+	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 10, "The max number reconcilers of virtualcluster controller")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
