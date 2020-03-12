@@ -262,12 +262,18 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 
 	clusterName := conversion.ToClusterKey(vc)
 
-	adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", KubeconfigAdmin, clusterName, err)
+	var adminKubeConfigBytes []byte
+	if adminKubeConfig, exists := vc.GetAnnotations()[constants.LabelAdminKubeConfig]; exists {
+		adminKubeConfigBytes = []byte(adminKubeConfig)
+	} else {
+		adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", KubeconfigAdmin, clusterName, err)
+		}
+		adminKubeConfigBytes = adminKubeConfigSecret.Data[KubeconfigAdmin]
 	}
 
-	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), s.lister, adminKubeConfigSecret.Data[KubeconfigAdmin], cluster.Options{})
+	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), s.lister, adminKubeConfigBytes, cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
