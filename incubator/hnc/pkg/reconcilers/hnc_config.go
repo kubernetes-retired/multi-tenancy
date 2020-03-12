@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
@@ -293,9 +295,22 @@ func (r *ConfigReconciler) forceInitialReconcile(log logr.Logger, reason string)
 
 // SetupWithManager builds a controller with the reconciler.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Whenever a CRD is created/updated, we will send a request to reconcile the
+	// singleton again, in case the singleton has configuration for the resource.
+	crdMapFn := handler.ToRequestsFunc(
+		func(a handler.MapObject) []reconcile.Request {
+			nnm := types.NamespacedName{
+				Name: api.HNCConfigSingleton,
+			}
+			return []reconcile.Request{
+				{NamespacedName: nnm},
+			}
+		})
 	err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
 		Watches(&source.Channel{Source: r.Igniter}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &v1beta1.CustomResourceDefinition{}},
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: crdMapFn}).
 		Complete(r)
 	if err != nil {
 		return err

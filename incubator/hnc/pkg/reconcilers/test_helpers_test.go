@@ -24,6 +24,8 @@ var GVKs = map[string]schema.GroupVersionKind{
 	"ResourceQuota": {Group: "", Version: "v1", Kind: "ResourceQuota"},
 	"LimitRange":    {Group: "", Version: "v1", Kind: "LimitRange"},
 	"ConfigMap":     {Group: "", Version: "v1", Kind: "ConfigMap"},
+	// CronTab is a custom resource.
+	"CronTab": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
 }
 
 func setParent(ctx context.Context, nm string, pnm string) {

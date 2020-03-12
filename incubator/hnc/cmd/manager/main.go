@@ -24,6 +24,9 @@ import (
 	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 	corev1 "k8s.io/api/core/v1"
+
+	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -50,6 +53,7 @@ func init() {
 
 	_ = api.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
