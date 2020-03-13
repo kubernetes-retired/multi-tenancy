@@ -20,7 +20,9 @@ var _ = framework.KubeDescribe("test cross tenants permission", func() {
 	var resourceList string
 	var err error
 	var tenantA, tenantB string
-	namespaceFlag := fmt.Sprintf("-n")
+	var namespaceFlag = "-n"
+	var dryrun = "--dry-run=true"
+	var all = "--all=true"
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By("get namespace wide api-resources")
@@ -31,8 +33,9 @@ var _ = framework.KubeDescribe("test cross tenants permission", func() {
 		os.Setenv("KUBECONFIG", config.TenantA.Kubeconfig)
 		tenantA = configutil.GetContextFromKubeconfig(config.TenantA.Kubeconfig)
 		outputFlag := fmt.Sprintf("-o=name")
+		nsdFlag := fmt.Sprintf("--namespaced=true")
 
-		resourceList, err = framework.RunKubectl(namespaceFlag, config.TenantA.Namespace, "api-resources", outputFlag)
+		resourceList, err = framework.RunKubectl(namespaceFlag, config.TenantA.Namespace, "api-resources", nsdFlag, outputFlag)
 		framework.ExpectNoError(err)
 	})
 
@@ -43,12 +46,26 @@ var _ = framework.KubeDescribe("test cross tenants permission", func() {
 			tenantB = configutil.GetContextFromKubeconfig(config.TenantB.Kubeconfig)
 		})
 
-		ginkgo.It("get namespaced resources", func() {
+		ginkgo.It("get tenant namespaced resources", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot get tenant %s namespaced resources", tenantB, tenantA))
 			resources := strings.Fields(resourceList)
 			for _, resource := range resources {
 				_, errNew := framework.LookForString(expectedVal, time.Minute, func() string {
 					_, err := framework.RunKubectl(namespaceFlag, config.TenantA.Namespace, "get", resource)
+					return err.Error()
+				})
+
+				framework.ExpectNoError(errNew)
+			}
+		})
+
+		ginkgo.It("edit other tenant namespaced resources", func() {
+			ginkgo.By(fmt.Sprintf("tenant %s cannot edit tenant %s namespaced resources", tenantB, tenantA))
+			resources := strings.Fields(resourceList)
+			annotation := "test=multi-tenancy"
+			for _, resource := range resources {
+				_, errNew := framework.LookForString(expectedVal, time.Minute, func() string {
+					_, err := framework.RunKubectl(namespaceFlag, config.TenantA.Namespace, "annotate", resource, annotation, dryrun, all)
 					return err.Error()
 				})
 
