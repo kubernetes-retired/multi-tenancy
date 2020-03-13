@@ -17,6 +17,7 @@ limitations under the License.
 package syncer
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"sync"
@@ -264,7 +265,11 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 
 	var adminKubeConfigBytes []byte
 	if adminKubeConfig, exists := vc.GetAnnotations()[constants.LabelAdminKubeConfig]; exists {
-		adminKubeConfigBytes = []byte(adminKubeConfig)
+		decoded, err := base64.StdEncoding.DecodeString(adminKubeConfig)
+		if err != nil {
+			return fmt.Errorf("failed to decode kubeconfig from annotations %s: %v", constants.LabelAdminKubeConfig, err)
+		}
+		adminKubeConfigBytes = decoded
 	} else {
 		adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
 		if err != nil {
