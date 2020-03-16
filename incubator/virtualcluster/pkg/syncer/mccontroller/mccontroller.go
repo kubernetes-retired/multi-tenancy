@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgocache "k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -90,11 +89,13 @@ type ClusterInterface interface {
 	GetOwnerInfo() (string, string)
 	GetSpec() (*v1alpha1.VirtualclusterSpec, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
-	GetClientSet() (*clientset.Clientset, error)
-	GetClientConfig() clientcmd.ClientConfig
-	GetDelegatingClient() (*client.DelegatingClient, error)
+	GetClientSet() (clientset.Interface, error)
+	GetDelegatingClient() (client.Client, error)
 	Cache
 }
+
+// TenantClusterReconcileHandler is the handler to process the event from tenant cluster.
+type TenantClusterReconcileHandler func(request reconciler.Request) (reconciler.Result, error)
 
 // NewMCController creates a new MultiClusterController.
 func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
@@ -256,21 +257,12 @@ func (c *MultiClusterController) getCluster(clusterName string) ClusterInterface
 }
 
 // GetClusterClient returns the cluster's clientset client for direct access to tenant apiserver
-func (c *MultiClusterController) GetClusterClient(clusterName string) (*clientset.Clientset, error) {
+func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset.Interface, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
 	}
 	return cluster.GetClientSet()
-}
-
-// GetClusterClientConfig ClientConfig is used to make it easy to get an api server client.
-func (c *MultiClusterController) GetClusterClientConfig(clusterName string) (clientcmd.ClientConfig, error) {
-	cluster := c.getCluster(clusterName)
-	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
-	}
-	return cluster.GetClientConfig(), nil
 }
 
 // GetClusterDomain returns the cluster's domain name specified in VirtualclusterSpec
@@ -320,7 +312,7 @@ func (c *MultiClusterController) GetClusterNames() []string {
 }
 
 // RequeueObject requeues the cluster object, thus reconcileHandler can reconcile it again.
-func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}, event reconciler.EventType) error {
+func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}) error {
 	o, err := meta.Accessor(obj)
 	if err != nil {
 		return err

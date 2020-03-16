@@ -32,7 +32,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
@@ -121,7 +120,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 		pSa, err := c.saLister.ServiceAccounts(targetNamespace).Get(vSa.Name)
 		if errors.IsNotFound(err) {
 			// pSa not found and vSa still exists, we need to create pSa again
-			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
 				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServiceAccounts").Inc()
