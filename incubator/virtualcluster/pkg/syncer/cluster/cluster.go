@@ -58,9 +58,6 @@ type Cluster struct {
 	// UID of the corresponding virtual cluster object.
 	vcUID string
 
-	// KubeClientConfig is used to make it easy to get an api server client. Required.
-	KubeClientConfig clientcmd.ClientConfig
-
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	RestConfig *rest.Config
 
@@ -112,22 +109,16 @@ func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.Virtu
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
 	}
 
-	kubeClientConfig, err := clientcmd.NewClientConfigFromBytes(configBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build kube client config: %v", err)
-	}
-
 	return &Cluster{
-		key:              key,
-		vcName:           name,
-		vcNamespace:      namespace,
-		vcUID:            uid,
-		vclister:         vclister,
-		KubeClientConfig: kubeClientConfig,
-		RestConfig:       clusterRestConfig,
-		Options:          o,
-		synced:           false,
-		stopCh:           make(chan struct{})}, nil
+		key:         key,
+		vcName:      name,
+		vcNamespace: namespace,
+		vcUID:       uid,
+		vclister:    vclister,
+		RestConfig:  clusterRestConfig,
+		Options:     o,
+		synced:      false,
+		stopCh:      make(chan struct{})}, nil
 }
 
 // GetClusterName returns the unique cluster name, aka, the root namespace name.
@@ -160,7 +151,7 @@ func (c *Cluster) getScheme() *runtime.Scheme {
 }
 
 // GetClientSet returns a clientset client without any informer caches. All client requests go to apiserver directly.
-func (c *Cluster) GetClientSet() (*clientset.Clientset, error) {
+func (c *Cluster) GetClientSet() (clientset.Interface, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
@@ -170,11 +161,6 @@ func (c *Cluster) GetClientSet() (*clientset.Clientset, error) {
 		return nil, err
 	}
 	return c.client, nil
-}
-
-// GetClientConfig return clientConfig used to make it easy to get an api server client.
-func (c *Cluster) GetClientConfig() clientcmd.ClientConfig {
-	return c.KubeClientConfig
 }
 
 // getMapper returns a lazily created apimachinery RESTMapper.
@@ -221,7 +207,7 @@ func (c *Cluster) getCache() (cache.Cache, error) {
 // It is used by other Cluster getters, and by reconcilers.
 // TODO: consider implementing Reader, Writer and StatusClient in Cluster
 // and forwarding to actual delegating client.
-func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
+func (c *Cluster) GetDelegatingClient() (client.Client, error) {
 	if !c.synced {
 		return nil, fmt.Errorf("The client cache has not been synced yet.")
 	}

@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedOpaqueSecrets uint64
@@ -138,7 +137,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 
 		pSecret, err := c.secretLister.Secrets(targetNamespace).Get(vSecret.Name)
 		if errors.IsNotFound(err) {
-			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i]); err != nil {
 				klog.Errorf("error requeue vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantOpaqueSecrets").Inc()
@@ -174,7 +173,7 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		constants.LabelSecretUID: string(vSecret.UID),
 	}))
 	if errors.IsNotFound(err) || len(secretList) == 0 {
-		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret, reconciler.AddEvent); err != nil {
+		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret); err != nil {
 			klog.Errorf("error requeue service account type vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 		} else {
 			metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantSASecrets").Inc()

@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedPVCs uint64
@@ -116,7 +115,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPVC.Namespace)
 		pPVC, err := c.pvcLister.PersistentVolumeClaims(targetNamespace).Get(vPVC.Name)
 		if errors.IsNotFound(err) {
-			if err := c.multiClusterPersistentVolumeClaimController.RequeueObject(clusterName, &pvcList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterPersistentVolumeClaimController.RequeueObject(clusterName, &pvcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vPVC %v/%v in cluster %s: %v", vPVC.Namespace, vPVC.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPVCs").Inc()

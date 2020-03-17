@@ -39,6 +39,10 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master namespace informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
+	return c.reconcileHandler(request)
+}
+
+func (c *controller) reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.V(4).Infof("reconcile namespace %s for cluster %s", request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Name)
 	pNamespace, err := c.nsLister.Get(targetNamespace)
@@ -95,25 +99,24 @@ func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requ
 		return err
 	}
 
-	pNamespace, err := c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
+	_, err = c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
 	if errors.IsAlreadyExists(err) {
-		if pNamespace.Annotations[constants.LabelUID] == requestUID {
-			klog.Infof("namespace %s of cluster %s already exist in super master", targetNamespace, clusterName)
-			return nil
-		} else {
-			return fmt.Errorf("pNamespace %s exists but its delegated object UID is different.", targetNamespace)
-		}
+		klog.Infof("namespace %s of cluster %s already exist in super master", targetNamespace, clusterName)
+		return nil
 	}
 	return err
 }
 
 func (c *controller) reconcileNamespaceUpdate(clusterName, targetNamespace, requestUID string, pNamespace, vNamespace *v1.Namespace) error {
+	if pNamespace.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("pNamespace %s exists but its delegated UID is different", targetNamespace)
+	}
 	return nil
 }
 
 func (c *controller) reconcileNamespaceRemove(clusterName, targetNamespace, requestUID string, pNamespace *v1.Namespace) error {
 	if pNamespace.Annotations[constants.LabelUID] != requestUID {
-		return fmt.Errorf("To be deleted pNamespace %s delegated UID is different from deleted object.", targetNamespace)
+		return fmt.Errorf("to be deleted pNamespace %s delegated UID is different from deleted object", targetNamespace)
 	}
 
 	opts := &metav1.DeleteOptions{
