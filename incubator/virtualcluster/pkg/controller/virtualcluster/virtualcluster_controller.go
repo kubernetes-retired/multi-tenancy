@@ -183,7 +183,7 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			vc.Status.Message = "tenant master is running"
 			vc.Status.Reason = "TenantMasterRunning"
 			vc.Status.Conditions = append(vc.Status.Conditions, tenancyv1alpha1.ClusterCondition{
-				LastTransitionTime: metav1.Time{time.Now()},
+				LastTransitionTime: metav1.NewTime(time.Now()),
 				Message:            fmt.Sprintf("virtualcluster(%s) starts running", vc.GetName()),
 			})
 			updateErr := r.Update(context.TODO(), vc)
