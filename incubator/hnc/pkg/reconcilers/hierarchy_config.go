@@ -167,7 +167,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	r.markExisting(log, ns)
 
-	r.syncRequiredChildOf(log, inst, ns)
+	r.syncOwner(log, inst, ns)
 	r.syncParent(log, inst, ns)
 
 	// Update the list of actual children, then resolve it versus the list of required children.
@@ -185,23 +185,23 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *fore
 	}
 
 	if !ns.Exists() {
-		// The namespace doesn't exist on the server, but it's been requested for a parent. Initialize
+		// The namespace doesn't exist on the server, but its owner expects it to be there. Initialize
 		// it so it gets created; once it is, it will be reconciled again.
-		if ns.RequiredChildOf != "" {
-			log.Info("Will create missing namespace", "forParent", ns.RequiredChildOf)
+		if ns.Owner != "" {
+			log.Info("Will create missing namespace", "forOwner", ns.Owner)
 			nsInst.Name = ns.Name()
 			// Set "api.AnnotationOwner" annotation to the non-existent yet namespace.
-			metadata.SetAnnotation(nsInst, api.AnnotationOwner, ns.RequiredChildOf)
+			metadata.SetAnnotation(nsInst, api.AnnotationOwner, ns.Owner)
 		}
 		return true
 	}
 
 	// Remove it from the forest and notify its relatives
 	r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
-	// Enqueue the HNS if the self-serve subnamespace is deleted.
+	// Enqueue the HNS if the owned namespace is deleted.
 	if r.HNSReconcilerEnabled {
-		if ns.RequiredChildOf != "" {
-			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "hns for the deleted self-serve subnamespace")
+		if ns.Owner != "" {
+			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "hns for the deleted owned namespace")
 		}
 	}
 	ns.UnsetExists()
@@ -215,42 +215,42 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.RequiredChildOf != "" {
-			r.enqueueAffected(log, "parent of newly synced/created required subnamespace", ns.RequiredChildOf)
+		if ns.Owner != "" {
+			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Owner)
 		}
 	}
 }
 
-// syncRequiredChildOf propagates the required child value from the forest to the spec if possible
-// (the spec itself will be synced next), or removes the requiredChildOf value if there's a problem
+// syncOwner propagates the required child value from the forest to the spec if possible
+// (the spec itself will be synced next), or removes the owner value if there's a problem
 // and notifies the would-be parent namespace.
-func (r *HierarchyConfigReconciler) syncRequiredChildOf(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
-	if ns.RequiredChildOf == "" {
+func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	if ns.Owner == "" {
 		return
 	}
 
 	switch inst.Spec.Parent {
 	case "":
-		log.Info("Required subnamespace: initializing", "parent", ns.RequiredChildOf)
-		inst.Spec.Parent = ns.RequiredChildOf
-	case ns.RequiredChildOf:
+		log.Info("Owned namespace: initializing", "owner", ns.Owner)
+		inst.Spec.Parent = ns.Owner
+	case ns.Owner:
 		// ok
 		if r.HNSReconcilerEnabled {
 			// Enqueue HNS to update the state to "Ok".
-			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "the HNS state should be updated to ok")
+			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "the HNS state should be updated to ok")
 		}
 	default:
 		if r.HNSReconcilerEnabled {
 			// Enqueue the HNS to report the conflict in hierarchicalnamespace.Status.State and enqueue the
 			// owner namespace to report the "SubnamespaceConflict" condition.
-			log.Info("Self-serve subnamespace: conflict with parent", "owner", ns.RequiredChildOf, "parent", inst.Spec.Parent)
-			r.hnsr.enqueue(log, ns.Name(), ns.RequiredChildOf, "self-serve subnamespace has a parent but it's not the owner")
-			r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
+			log.Info("Owned namespace: conflict with parent", "owner", ns.Owner, "parent", inst.Spec.Parent)
+			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "owned namespace has a parent but it's not the owner")
+			r.enqueueAffected(log, "owned namespace already has a parent", ns.Owner)
 		} else {
 			// This should never happen unless there's some crazy race condition.
-			log.Info("Required subnamespace: conflict with existing parent", "requiredChildOf", ns.RequiredChildOf, "actual", inst.Spec.Parent)
-			r.enqueueAffected(log, "required child already has a parent", ns.RequiredChildOf)
-			ns.RequiredChildOf = "" // get back in sync with apiserver
+			log.Info("Owned namespace: conflict with existing parent", "owner", ns.Owner, "actualParent", inst.Spec.Parent)
+			r.enqueueAffected(log, "owned namespace already has a parent", ns.Owner)
+			ns.Owner = "" // get back in sync with apiserver
 		}
 	}
 
@@ -355,17 +355,17 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 	for _, cn := range inst.Status.Children {
 		cns := r.Forest.Get(cn)
 
-		if cns.RequiredChildOf != "" && cns.RequiredChildOf != ns.Name() {
+		if cns.Owner != "" && cns.Owner != ns.Name() {
 			// Since the list of children of this namespace came from the forest, this implies that the
-			// in-memory forest is out of sync with itself: requiredChildOf != parent. Obviously, this
+			// in-memory forest is out of sync with itself: owner != parent. Obviously, this
 			// should never happen.
 			//
 			// Let's just log an error and enqueue the other namespace so it can report the condition.
 			// The forest will be reset to the correct value, below.
-			log.Error(forest.OutOfSync, "While syncing children", "child", cn, "requiredChildOf", cns.RequiredChildOf)
-			r.enqueueAffected(log, "forest out-of-sync: requiredChildOf != parent", cns.RequiredChildOf)
+			log.Error(forest.OutOfSync, "While syncing children", "child", cn, "owner", cns.Owner)
+			r.enqueueAffected(log, "forest out-of-sync: owner != parent", cns.Owner)
 			if r.HNSReconcilerEnabled {
-				r.hnsr.enqueue(log, cn, cns.RequiredChildOf, "forest out-of-sync: owner != parent")
+				r.hnsr.enqueue(log, cn, cns.Owner, "forest out-of-sync: owner != parent")
 			}
 		}
 
@@ -375,23 +375,23 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 			}
 		} else {
 			if isRequired[cn] {
-				// This child is actually required. Remove it from the set so we know we found it. Also, the
+				// This child is actually owned. Remove it from the set so we know we found it. Also, the
 				// forest is almost certainly already in sync, but just set it again in case something went
 				// wrong (eg, the error shown above).
 				delete(isRequired, cn)
-				cns.RequiredChildOf = ns.Name()
+				cns.Owner = ns.Name()
 			} else {
-				// This isn't a required child, but it looks like it *used* to be a required child of this
-				// namespace. Clear the RequiredChildOf field from the forest to bring our state in line with
+				// This isn't an owned child, but it looks like it *used* to be an owned child of this
+				// namespace. Clear the Owner field from the forest to bring our state in line with
 				// what's on the apiserver.
-				cns.RequiredChildOf = ""
+				cns.Owner = ""
 			}
 		}
 	}
 
 	if r.HNSReconcilerEnabled {
 		for cn := range isRequired {
-			r.hnsr.enqueue(log, cn, ns.Name(), "parent of the self-serve subnamespace is not the owner")
+			r.hnsr.enqueue(log, cn, ns.Name(), "parent of the owned namespace is not the owner")
 		}
 	} else {
 		// Anything that's still in isRequired at this point is a required child according to our own
@@ -410,15 +410,15 @@ func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.Hier
 
 			// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
 			// (which is when it will be created).
-			if cns.Parent() == nil && (cns.RequiredChildOf == "" || cns.RequiredChildOf == ns.Name()) {
-				cns.RequiredChildOf = ns.Name()
+			if cns.Parent() == nil && (cns.Owner == "" || cns.Owner == ns.Name()) {
+				cns.Owner = ns.Name()
 				r.enqueueAffected(log, "required child is missing", cn)
 				if !cns.Exists() {
 					msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
 				}
 			} else {
 				// Someone else got it first. This should never happen if the validator is working correctly.
-				other := cns.RequiredChildOf
+				other := cns.Owner
 				if other == "" {
 					other = cns.Parent().Name()
 				}

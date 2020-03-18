@@ -135,9 +135,7 @@ func (r *HierarchicalNamespaceReconciler) syncMissing(log logr.Logger, inst *api
 
 	// Set the "Owner" in the forest of the hierarchical namespace to the current namespace.
 	log.Info("Setting the subnamespace's owner in the forest", "owner", pnm, "namespace", nm)
-	// TODO rename RequiredChildOf to Owner in the forest. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/469
-	ns.RequiredChildOf = pnm
+	ns.Owner = pnm
 
 	// Enqueue the not-yet existent self-serve subnamespace. The HierarchyConfig reconciler will
 	// create the namespace and the HierarchyConfig instances on apiserver accordingly.
@@ -158,7 +156,7 @@ func (r *HierarchicalNamespaceReconciler) syncExisting(log logr.Logger, inst *ap
 		// or a human manually created the namespace with the right annotation but no HC.
 		// Both cases meant to create this namespace as HNS.
 		log.Info("Setting the subnamespace's owner in the forest", "owner", pnm, "namespace", nm)
-		ns.RequiredChildOf = pnm
+		ns.Owner = pnm
 		r.hcr.enqueueAffected(log, "updated subnamespace", nm)
 
 		// We will set it as "Conflict" though it's just a short transient state. Once the hc is

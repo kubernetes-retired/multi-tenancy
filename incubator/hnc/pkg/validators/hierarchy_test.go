@@ -21,7 +21,7 @@ func TestStructure(t *testing.T) {
 	//     -> fooRC (RequiredChild of foo)
 	foo := createNS(f, "foo", nil)
 	bar := createNS(f, "bar", nil)
-	createRCNS(f, "fooRC", foo)
+	createOwnedNS(f, "fooRC", foo)
 	createNS(f, "baz", nil)
 	bar.SetParent(foo)
 	h := &Hierarchy{Forest: f}
@@ -162,12 +162,12 @@ func createNS(f *forest.Forest, nnm string, ue []string) *forest.Namespace {
 	return ns
 }
 
-// createRCNS creates rc (requiredChild) and sets its parent and requiredChildOf to nm and sets it
+// createOwnedNS creates a namespace and sets its parent and owner to nm and sets it
 // to existing.
-func createRCNS(f *forest.Forest, rc string, p *forest.Namespace) *forest.Namespace {
+func createOwnedNS(f *forest.Forest, rc string, p *forest.Namespace) *forest.Namespace {
 	ns := f.Get(rc)
 	ns.SetParent(p)
-	ns.RequiredChildOf = p.Name()
+	ns.Owner = p.Name()
 	ns.SetExists()
 	return ns
 }
