@@ -39,6 +39,7 @@ const (
 	CritParentInvalid    Code = "CRIT_PARENT_INVALID"
 	CritAncestor         Code = "CRIT_ANCESTOR"
 	SubnamespaceConflict Code = "SUBNAMESPACE_CONFLICT"
+	HNSMissing           Code = "HNS_MISSING"
 	CannotUpdate         Code = "CANNOT_UPDATE_OBJECT"
 	CannotPropagate      Code = "CANNOT_PROPAGATE_OBJECT"
 )

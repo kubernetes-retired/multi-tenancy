@@ -110,14 +110,25 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	origHC := inst.DeepCopy()
 	origNS := nsInst.DeepCopy()
 
-	// If either object exists but is being deleted, we won't update them when we're finished syncing
-	// (we should sync our internal data structure anyway just in case something's changed).  I'm not
-	// sure if this is the right thing to do but the kubebuilder boilerplate included this case
-	// explicitly.
 	update := true
-	if !inst.GetDeletionTimestamp().IsZero() || !nsInst.GetDeletionTimestamp().IsZero() {
-		log.Info("Singleton or namespace are being deleted; will not update")
-		update = false
+	if r.HNSReconcilerEnabled {
+		deleting, err := r.syncDeleting(ctx, log, inst, nsInst)
+		if err != nil {
+			return err
+		}
+		// If the namespace or the HC instance is being deleted, early exit.
+		if deleting {
+			return nil
+		}
+	} else {
+		// If either object exists but is being deleted, we won't update them when we're finished syncing
+		// (we should sync our internal data structure anyway just in case something's changed).  I'm not
+		// sure if this is the right thing to do but the kubebuilder boilerplate included this case
+		// explicitly.
+		if !inst.GetDeletionTimestamp().IsZero() || !nsInst.GetDeletionTimestamp().IsZero() {
+			log.Info("Singleton or namespace are being deleted; will not update")
+			update = false
+		}
 	}
 
 	// Sync the Hierarchy singleton with the in-memory forest.
@@ -143,6 +154,70 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	// *kind* of changes that *should* cause objects to be updated (eg add/remove critical conditions,
 	// change subtree parents, etc).
 	return r.updateObjects(ctx, log, nm)
+}
+
+// syncDeleting returns true if the namespace or the HC instance is being deleted.
+func (r *HierarchyConfigReconciler) syncDeleting(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace) (bool, error) {
+	r.Forest.Lock()
+	ns := r.Forest.Get(inst.Namespace)
+
+	switch {
+	// Nothing is deleted. Early exit to do the rest of the reconciliation.
+	case !ns.Deleting() && inst.DeletionTimestamp.IsZero():
+		r.Forest.Unlock()
+		return false, nil
+	// Only deleting the singleton, no others. Remove the finalizers and early
+	// exit to let it proceed.
+	case !ns.Deleting() && nsInst.DeletionTimestamp.IsZero():
+		r.Forest.Unlock()
+		if err := r.removeFinalizers(ctx, log, inst, "only the singleton is being deleted, not the namespace"); err != nil {
+			return false, err
+		}
+		return true, nil
+	// The namespace is being deleted. Set its deleting status in the forest and
+	// wait for any existing HNS instances to be gone.
+	case !ns.Deleting() && !nsInst.DeletionTimestamp.IsZero():
+		ns.SetDeleting()
+		r.Forest.Unlock()
+	// The namespace is purged by apiserver. Do nothing but unset its existence in
+	// the forest.
+	case ns.Deleting() && nsInst.Name == "":
+		ns.UnsetExists()
+		r.Forest.Unlock()
+		return true, nil
+	// If the namespace has deleting status in the forest but not yet being deleted,
+	// delete the namespace.
+	case ns.Deleting() && nsInst.DeletionTimestamp.IsZero():
+		r.Forest.Unlock()
+		r.deleteNamespace(ctx, log, nsInst)
+	// The namespace is being deleted. Wait for any existing HNS instances to be gone.
+	default:
+		r.Forest.Unlock()
+	}
+
+	// Get the HNSes from the forest so that we don't need to keep looking until
+	// the HNSes are purged by apiserver.
+	if len(ns.OwnedHNS()) == 0 {
+		r.Forest.Lock()
+		// Unset the namespace existence here to avoid waiting for the namespace to be
+		// purged by the apiserver, so that the HNS (if any) enqueued below can be
+		// processed immediately and no additional enqueue is needed. This is safe
+		// because the namespace doesn't have any finalizers and will be purged shortly.
+		log.Info("Unsetting the existence of the namespace in the forest")
+		ns.UnsetExists()
+		// Clear owner to avoid re-creating this missing owned namespace we just deleted.
+		ns.Owner = ""
+		r.Forest.Unlock()
+
+		if nsInst.Annotations[api.AnnotationOwner] != "" {
+			r.hnsr.enqueue(log, inst.Namespace, nsInst.Annotations[api.AnnotationOwner], "updating the finalizer since an owned namespace is deleted")
+		}
+
+		if err := r.removeFinalizers(ctx, log, inst, "all the owned namespaces are deleted"); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // syncWithForest synchronizes the in-memory forest with the (in-memory) Hierarchy instance. If any
@@ -174,6 +249,8 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncChildren(log, inst, ns)
 
 	r.syncLabel(log, nsInst, ns)
+
+	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
 
 	// Sync all conditions. This should be placed at the end after all conditions are updated.
 	r.syncConditions(log, inst, ns, hadCrit)
@@ -494,6 +571,31 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 	}()
 }
 
+// removeFinalizers will update the singleton with no finalizers. It will return
+// error if the singleton doesn't exist any more. This function is always put at
+// the end of the early exit of a deleting case.
+func (r *HierarchyConfigReconciler) removeFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, reason string) error {
+	log.Info("Removing the finalizers", "reason", reason)
+	inst.ObjectMeta.Finalizers = nil
+
+	stats.WriteHierConfig()
+	log.Info("Updating singleton on apiserver")
+	if err := r.Update(ctx, inst); err != nil {
+		log.Error(err, "while updating apiserver")
+		return err
+	}
+	return nil
+}
+
+func (r *HierarchyConfigReconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
+	log.Info("Deleting namespace on apiserver")
+	if err := r.Delete(ctx, inst); err != nil {
+		log.Error(err, "while deleting on apiserver")
+		return err
+	}
+	return nil
+}
+
 func (r *HierarchyConfigReconciler) GetInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
 	inst, err = r.getSingleton(ctx, nm)
 	if err != nil {
@@ -531,6 +633,10 @@ func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr
 	}
 
 	stats.WriteHierConfig()
+	// Make sure finalizers are set before writing the instance.
+	if r.HNSReconcilerEnabled {
+		inst.ObjectMeta.Finalizers = []string{api.MetaGroup}
+	}
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating singleton on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
@@ -538,7 +644,7 @@ func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr
 			return false, err
 		}
 	} else {
-		log.Info("Updating singleton on apiserver")
+		log.Info("Updating singleton on apiserver", "finalizer", inst.Finalizers, "deletionTS", inst.DeletionTimestamp)
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
 			return false, err

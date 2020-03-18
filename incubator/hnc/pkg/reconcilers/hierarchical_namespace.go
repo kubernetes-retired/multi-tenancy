@@ -64,11 +64,24 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/501
 	inst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// If the instance doesn't exist, return nil to prevent a retry.
+		return ctrl.Result{}, err
+	}
+
+	// If the instance is being deleted, remove the finalizer or cascading delete.
+	if !inst.DeletionTimestamp.IsZero() {
+		if len(inst.ObjectMeta.Finalizers) == 0 {
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, err
+		updateFinalizer := r.syncDeleting(log, inst)
+		if updateFinalizer {
+			r.writeInstance(ctx, log, inst)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// If the instance doesn't exist, return nil to prevent a retry.
+	if inst.CreationTimestamp.IsZero() {
+		return ctrl.Result{}, nil
 	}
 
 	// Report "Forbidden" state and early exist if the namespace is not allowed to self-serve
@@ -91,7 +104,56 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	// TODO report the "SubnamespaceConflict" in the HNS reconciliation. See issue:
 	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/490
 
+	// Make sure finalizers are set before writing the instance.
+	inst.ObjectMeta.Finalizers = []string{api.MetaGroup}
 	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+}
+
+func (r *HierarchicalNamespaceReconciler) syncDeleting(log logr.Logger, inst *api.HierarchicalNamespace) (updateFinalizers bool) {
+	r.forest.Lock()
+	defer r.forest.Unlock()
+
+	state := inst.Status.State
+	cnm := inst.Name
+	pnm := inst.Namespace
+	cns := r.forest.Get(cnm)
+	updateFinalizers = false
+
+	switch {
+	// If the owned namespace doesn't exist, remove the finalizer. The missing state
+	// is excluded here in case it's being created by the HC reconciler concurrently.
+	case state == api.Conflict || state == api.Forbidden || !cns.Exists():
+		r.removeFinalizers(log, inst, "the owned namespace doesn't exist")
+		updateFinalizers = true
+	// If the owned namespace exists but doesn't allow cascading deletion, remove the
+	// finalizer and set NNS_MISSING condition in the owned namespace.
+	case !cns.AllowCascadingDelete():
+		r.removeFinalizers(log, inst, "the owned namespace doesn't allow cascading delete")
+		updateFinalizers = true
+		cns.SetCondition(pnm, api.HNSMissing, "missing HNS in the owner namespace")
+		r.hcr.enqueueAffected(log, "updating HNS_MISSING condition", cnm)
+	// If the owned namespace exists and allow cascading deletion, delete it.
+	default:
+		log.Info("setting ns.deleting to true in the forest")
+		cns.SetDeleting()
+		r.hcr.enqueueAffected(log, "cascading deleting this owned namespace from the owner", cnm)
+	}
+
+	return
+}
+
+// removeFinalizers removes the instance's finalizers. If the owner namespace is
+// also being deleted, enqueue the owner to let HC reconciler update its finalizers.
+func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst *api.HierarchicalNamespace, reason string) {
+	log.Info("Removing the finalizers", "reason", reason)
+	inst.ObjectMeta.Finalizers = []string{}
+
+	// Only enqueue the owner to update its HC finalizers if the owner is also being deleted.
+	pnm := inst.Namespace
+	pns := r.forest.Get(pnm)
+	if pns.Deleting() {
+		r.hcr.enqueueAffected(log, "updating the finalizers since an HNS instance is deleted", pnm)
+	}
 }
 
 // HierarchicalNamespace (HNS) is synced with the in-memory forest, the HierarchyConfig and
@@ -188,7 +250,13 @@ func (r *HierarchicalNamespaceReconciler) getInstance(ctx context.Context, pnm, 
 	nsn := types.NamespacedName{Namespace: pnm, Name: nm}
 	inst := &api.HierarchicalNamespace{}
 	if err := r.Get(ctx, nsn, inst); err != nil {
-		return nil, err
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+
+		// It doesn't exist - initialize it
+		inst.ObjectMeta.Namespace = pnm
+		inst.ObjectMeta.Name = nm
 	}
 	return inst, nil
 }

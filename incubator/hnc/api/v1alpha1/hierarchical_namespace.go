@@ -21,8 +21,10 @@ import (
 
 // Constants for the hierarchicalnamespaces resource type and namespace annotation.
 const (
-	HierarchicalNamespaces = "hierarchicalnamespaces"
-	AnnotationOwner        = MetaGroup + "/owner"
+	HierarchicalNamespaces           = "hierarchicalnamespaces"
+	HierarchicalNamespacesKind       = "HierarchicalNamespace"
+	HierarchicalNamespacesAPIVersion = MetaGroup + "/v1alpha1"
+	AnnotationOwner                  = MetaGroup + "/owner"
 )
 
 // HNSState describes the state of a hierarchical namespace. The state could be

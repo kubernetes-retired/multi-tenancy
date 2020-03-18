@@ -140,11 +140,13 @@ const Local = ""
 // Namespace represents a namespace in a forest. Other than its structure, it contains some
 // properties useful to the reconcilers.
 type Namespace struct {
-	forest   *Forest
-	name     string
-	parent   *Namespace
-	children namedNamespaces
-	exists   bool
+	forest               *Forest
+	name                 string
+	parent               *Namespace
+	children             namedNamespaces
+	exists               bool
+	deleting             bool
+	allowCascadingDelete bool
 
 	// originalObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
@@ -176,12 +178,15 @@ func (ns *Namespace) SetExists() bool {
 	return changed
 }
 
-// UnsetExists marks this namespace as missing, returning true if it previously existed. It also
-// removes it from its parent, if any, since a nonexistent namespace can't have a parent.
+// UnsetExists marks this namespace as missing, returning true if it previously existed. It
+// removes it from its parent, if any, since a nonexistent namespace can't have a parent. It
+// also clears the deleting status and allowCascadingDelete flag in the namespace.
 func (ns *Namespace) UnsetExists() bool {
 	changed := ns.exists
 	ns.SetParent(nil) // Unreconciled namespaces can't specify parents
 	ns.exists = false
+	ns.deleting = false
+	ns.allowCascadingDelete = false
 	ns.clean() // clean up if this is a useless data structure
 	return changed
 }
@@ -195,6 +200,33 @@ func (ns *Namespace) clean() {
 
 	// Remove from the forest.
 	delete(ns.forest.namespaces, ns.name)
+}
+
+// Deleting returns true if the namespace is being deleted.
+func (ns *Namespace) Deleting() bool {
+	return ns.deleting
+}
+
+// SetDeleting marks this namespace as being deleted.
+func (ns *Namespace) SetDeleting() {
+	ns.deleting = true
+}
+
+// UpdateAllowCascadingDelete updates if this namespace allows cascading deletion.
+func (ns *Namespace) UpdateAllowCascadingDelete(acd bool) {
+	ns.allowCascadingDelete = acd
+}
+
+// AllowCascadingDelete returns if the namespace's or any of the owner ancestors'
+// allowCascadingDelete field is set to true.
+func (ns *Namespace) AllowCascadingDelete() bool {
+	if ns.allowCascadingDelete == true {
+		return true
+	}
+	if ns.Owner == "" {
+		return false
+	}
+	return ns.forest.Get(ns.Owner).AllowCascadingDelete()
 }
 
 // SetParent attempts to set the namespace's parent. This includes removing it from the list of
@@ -263,14 +295,25 @@ func (ns *Namespace) ChildNames() []string {
 	return nms
 }
 
-// OwnedNames returns a list of names of the owned namespaces or nil if there's none.
+// OwnedNames returns a list of names of the namespaces whose owner is set to
+// this namespace.
 func (ns *Namespace) OwnedNames() []string {
-	if len(ns.forest.namespaces) == 0 {
-		return nil
-	}
 	nms := []string{}
 	for nm, ns := range ns.forest.namespaces {
 		if ns.Owner == ns.name {
+			nms = append(nms, nm)
+		}
+	}
+	return nms
+}
+
+// OwnedHNS returns a list of names of the children whose owner is set to this
+// namespace and they don't have conditions related to this owner (HNS_MISSING
+// specifically).
+func (ns *Namespace) OwnedHNS() []string {
+	nms := []string{}
+	for nm, cns := range ns.children {
+		if cns.Owner == ns.name && len(cns.GetCondition(ns.name)) == 0 {
 			nms = append(nms, nm)
 		}
 	}
