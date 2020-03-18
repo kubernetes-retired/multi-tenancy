@@ -169,9 +169,9 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
-	// Prevent changing parent of a required child
-	if ns.RequiredChildOf != "" && ns.RequiredChildOf != newParent.Name() {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a required child of %q", ns.Name(), newParent.Name(), ns.RequiredChildOf)
+	// Prevent changing parent of an owned child
+	if ns.Owner != "" && ns.Owner != newParent.Name() {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a self-serve subnamespace of %q", ns.Name(), newParent.Name(), ns.Owner)
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
@@ -186,7 +186,7 @@ func (v *Hierarchy) checkRequiredChildren(ns *forest.Namespace, requiredChildren
 			continue
 		}
 		// If this is already a child, or is about to be, no problem.
-		if cns.Parent() == ns || (cns.Parent() == nil && cns.RequiredChildOf == ns.Name()) {
+		if cns.Parent() == ns || (cns.Parent() == nil && cns.Owner == ns.Name()) {
 			continue
 		}
 		reason := fmt.Sprintf("Cannot set %q as the required child of %q because it already exists and is not a child of %q", cns.Name(), ns.Name(), ns.Name())
