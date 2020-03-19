@@ -452,6 +452,8 @@ func codeFromReason(reason metav1.StatusReason) int32 {
 		return 409
 	case metav1.StatusReasonBadRequest:
 		return 400
+	case metav1.StatusReasonInvalid:
+		return 422
 	case metav1.StatusReasonInternalError:
 		return 500
 	default:
