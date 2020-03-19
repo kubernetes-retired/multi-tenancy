@@ -71,6 +71,10 @@ const (
 	MaxUwsRetryAttempts = 16
 
 	DefaultOpaqueMetaPrefix = "tenancy.x-k8s.io"
+
+	// Override the client-go default 5 qps and 10 burst, which are too samll for syncer.
+	DefaultSyncerClientQPS   = 1000
+	DefaultSyncerClientBurst = 2000
 )
 
 const (
