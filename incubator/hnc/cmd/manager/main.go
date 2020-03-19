@@ -159,6 +159,11 @@ func main() {
 			Log:    ctrl.Log.WithName("validators").WithName("Object"),
 			Forest: f,
 		}})
+
+		// Create webhook for the config
+		mgr.GetWebhookServer().Register(validators.ConfigServingPath, &webhook.Admission{Handler: &validators.HNCConfig{
+			Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
+		}})
 	}
 
 	setupLog.Info("starting manager")

@@ -29,6 +29,25 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-hnc-x-k8s-io-v1alpha1-hncconfigurations
+  failurePolicy: Fail
+  name: hncconfigurations.hnc.x-k8s.io
+  rules:
+  - apiGroups:
+    - hnc.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - hncconfigurations
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-objects
   failurePolicy: Ignore
   name: secrets.objects.hnc.x-k8s.io
