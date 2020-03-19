@@ -229,11 +229,11 @@ func TestNonRBACTypes(t *testing.T) {
 // is allowed.
 type fakeGVKValidator []string
 
-func (f fakeGVKValidator) Exists(_ context.Context, gvk schema.GroupVersionKind) (bool, error) {
+func (f fakeGVKValidator) Exists(_ context.Context, gvk schema.GroupVersionKind) error {
 	for _, k := range f {
 		if k == gvk.Kind {
-			return false, fmt.Errorf("%s does not exist", gvk)
+			return fmt.Errorf("%s does not exist", gvk)
 		}
 	}
-	return true, nil
+	return nil
 }
