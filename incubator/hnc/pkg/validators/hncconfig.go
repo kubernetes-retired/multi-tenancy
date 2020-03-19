@@ -37,8 +37,8 @@ type HNCConfig struct {
 // gvkValidator checks if a resource exists. The check should typically be performed against the apiserver,
 // but need to be stubbed out during unit testing.
 type gvkValidator interface {
-	// Exists takes a GVK, and returns true if the GVK exists in the apiserver.
-	Exists(ctx context.Context, gvk schema.GroupVersionKind) (bool, error)
+	// Exists takes a GVK and returns an error if the GVK does not exist in the apiserver.
+	Exists(ctx context.Context, gvk schema.GroupVersionKind) error
 }
 
 type gvkSet map[schema.GroupVersionKind]bool
@@ -74,7 +74,7 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 // allowing it to be more easily unit tested (ie without constructing a full admission.Request).
 func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admission.Response {
 	if inst.GetName() != "config" {
-		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Wrong singleton name: %s; the name should be 'config'", inst.GetName()))
+		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Wrong singleton name: %s; the name should be 'config'", inst.GetName()))
 	}
 
 	roleExist := false
@@ -102,10 +102,10 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 		}
 	}
 	if !roleExist {
-		return deny(metav1.StatusReasonInvalid, "Configuration for Role is missing")
+		return deny(metav1.StatusReasonForbidden, "Configuration for Role is missing")
 	}
 	if !roleBindingExist {
-		return deny(metav1.StatusReasonInvalid, "Configuration for RoleBinding is missing")
+		return deny(metav1.StatusReasonForbidden, "Configuration for RoleBinding is missing")
 	}
 	return allow("")
 }
@@ -114,7 +114,7 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 func (c *HNCConfig) isTypeConfigured(t api.TypeSynchronizationSpec, ts gvkSet) admission.Response {
 	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 	if exists := ts[gvk]; exists {
-		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gvk))
+		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Duplicate configurations for %s", gvk))
 	}
 	ts[gvk] = true
 	return allow("")
@@ -129,7 +129,7 @@ func (c *HNCConfig) validateRBAC(mode api.SynchronizationMode, kind string) admi
 	if mode == api.Propagate || mode == "" {
 		return allow("")
 	}
-	return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", kind, mode, api.Propagate))
+	return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", kind, mode, api.Propagate))
 }
 
 // validateType validates a non-RBAC type.
@@ -137,18 +137,18 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 
 	// Validate if the GVK exists in the apiserver.
-	exists, err := c.validator.Exists(ctx, gvk)
-	if !exists {
-		return deny(metav1.StatusReasonInvalid,
+	if err := c.validator.Exists(ctx, gvk); err != nil {
+		return deny(metav1.StatusReasonForbidden,
 			fmt.Sprintf("Cannot find the %s in the apiserver with error: %s", gvk, err.Error()))
 	}
 
 	// The mode of a type should be either unset or set to one of the supported modes.
-	if t.Mode != api.Propagate && t.Mode != api.Remove && t.Mode != api.Ignore && t.Mode != "" {
-		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Unrecognized mode '%s' for %s", t.Mode, gvk))
+	switch t.Mode {
+	case api.Propagate, api.Ignore, api.Remove, "":
+		return allow("")
+	default:
+		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Unrecognized mode '%s' for %s", t.Mode, gvk))
 	}
-
-	return allow("")
 }
 
 // realGVKValidator implements gvkValidator, and is not used during unit tests.
@@ -156,19 +156,18 @@ type realGVKValidator struct {
 	client client.Client
 }
 
-// Exists validates if a given GVK exists in the apiserver. The method tries to get an object of the
-// GVK from the apiserver. If the error returned from the apiserver is not IsNotFound, we will assume the
-// GVK does not exist.
-func (r *realGVKValidator) Exists(ctx context.Context, gvk schema.GroupVersionKind) (bool, error) {
+// Exists validates if a given GVK exists in the apiserver.
+func (r *realGVKValidator) Exists(ctx context.Context, gvk schema.GroupVersionKind) error {
 	inst := &unstructured.Unstructured{}
 	inst.SetGroupVersionKind(gvk)
 	err := r.client.Get(ctx, types.NamespacedName{Name: "nm"}, inst)
 	// We try to get an object of the given GVK with name "nm". It is possible that the
 	// object does not exist. Therefore, we will ignore the IsNotFound error.
-	if err != nil && !errors.IsNotFound(err) {
-		return false, err
+	if errors.IsNotFound(err) {
+		return nil
 	}
-	return true, nil
+	// if err is nil, that means the object was found, which means the type exists.
+	return err
 }
 
 func (c *HNCConfig) InjectClient(cl client.Client) error {
