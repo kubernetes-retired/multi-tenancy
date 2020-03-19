@@ -17,11 +17,10 @@ limitations under the License.
 package tenantnamespace
 
 import (
+	"fmt"
 	tenant2 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/client-go/tools/clientcmd"
-	"strings"
-
 	//"k8s.io/client-go/tools/clientcmd"
 	"testing"
 	"time"
@@ -43,22 +42,22 @@ var c client.Client
 const timeout = time.Second * 5
 
 func testCreateTenantNamespaceNoPrefix(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
-	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo", Namespace: "ta-admin"}}
+	uniqueNo := 1
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "ta-admin",
+			TenantAdminNamespaceName: getUniqueName("ta-admin",uniqueNo),
 		},
 	}
 	instance := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo",
-			Namespace: "ta-admin",
+			Name:      getUniqueName("foo",uniqueNo),
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
-			Name: "t1",
+			Name: getUniqueName("tns",uniqueNo),
 		},
 	}
 	// Create tenant object
@@ -71,7 +70,7 @@ func testCreateTenantNamespaceNoPrefix(c client.Client, g *gomega.GomegaWithT, t
 	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
 	adminNs := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ta-admin",
+			Name: tenant.Spec.TenantAdminNamespaceName,
 		},
 	}
 	err = c.Create(context.TODO(), adminNs)
@@ -88,9 +87,10 @@ func testCreateTenantNamespaceNoPrefix(c client.Client, g *gomega.GomegaWithT, t
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), instance)
+	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: instance.ObjectMeta.Name, Namespace: instance.ObjectMeta.Namespace}}
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	nskey := types.NamespacedName{Name: "t1"}
+	nskey := types.NamespacedName{Name: instance.Spec.Name}
 	tenantNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 		Should(gomega.Succeed())
@@ -105,23 +105,23 @@ func testCreateTenantNamespaceNoPrefix(c client.Client, g *gomega.GomegaWithT, t
 }
 
 func testCreateTenantNamespaceWithPrefix(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
-	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo-1", Namespace: "ta-admin"}}
+	uniqueNo := 2
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "ta-admin",
+			TenantAdminNamespaceName: getUniqueName("ta-admin",uniqueNo),
 			RequireNamespacePrefix:   true,
 		},
 	}
 	instance := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo-1",
-			Namespace: "ta-admin",
+			Name:      getUniqueName("foo",uniqueNo),
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
-			Name: "t1",
+			Name: getUniqueName("tns",uniqueNo),
 		},
 	}
 	// Create tenant object
@@ -134,7 +134,7 @@ func testCreateTenantNamespaceWithPrefix(c client.Client, g *gomega.GomegaWithT,
 	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
 	adminNs := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ta-admin",
+			Name: tenant.Spec.TenantAdminNamespaceName,
 		},
 	}
 	err = c.Create(context.TODO(), adminNs)
@@ -151,29 +151,30 @@ func testCreateTenantNamespaceWithPrefix(c client.Client, g *gomega.GomegaWithT,
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), instance)
+	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: instance.ObjectMeta.Name, Namespace: instance.ObjectMeta.Namespace}}
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	nskey := types.NamespacedName{Name: "ta-admin-t1"}
+	nskey := types.NamespacedName{Name: fmt.Sprintf("%+v-%+v", tenant.Spec.TenantAdminNamespaceName, instance.Spec.Name)}
 	tenantNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 		Should(gomega.Succeed())
 }
 
 func testCreateTenantNamespaceWithPrefixNoSpec(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
-	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo-2", Namespace: "ta-admin"}}
+	uniqueNo :=3
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "ta-admin",
+			TenantAdminNamespaceName: getUniqueName("ta-admin",uniqueNo),
 			RequireNamespacePrefix:   true,
 		},
 	}
 	instance := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo-2",
-			Namespace: "ta-admin",
+			Name:      getUniqueName("foo",uniqueNo),
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 	}
 	// Create tenant object
@@ -186,7 +187,7 @@ func testCreateTenantNamespaceWithPrefixNoSpec(c client.Client, g *gomega.Gomega
 	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
 	adminNs := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ta-admin",
+			Name: tenant.Spec.TenantAdminNamespaceName,
 		},
 	}
 	err = c.Create(context.TODO(), adminNs)
@@ -203,31 +204,32 @@ func testCreateTenantNamespaceWithPrefixNoSpec(c client.Client, g *gomega.Gomega
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), instance)
+	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: instance.ObjectMeta.Name, Namespace: instance.ObjectMeta.Namespace}}
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
-	nskey := types.NamespacedName{Name: "ta-admin-foo-2"}
+	nskey := types.NamespacedName{Name: fmt.Sprintf("%+v-%+v", tenant.Spec.TenantAdminNamespaceName, instance.ObjectMeta.Name)}
 	tenantNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 		Should(gomega.Succeed())
 }
 
 func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *testing.T, requests chan reconcile.Request) {
-	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo-3", Namespace: "ta-admin"}}
+	uniqueNo:= 4
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "ta-admin",
+			TenantAdminNamespaceName: getUniqueName("ta-admin",uniqueNo),
 		},
 	}
 	instance := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo-3",
-			Namespace: "ta-admin",
+			Name:      getUniqueName("foo",uniqueNo),
+			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
-			Name: "t2",
+			Name: getUniqueName("tns",uniqueNo),
 		},
 	}
 	// Create tenant object
@@ -240,7 +242,7 @@ func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *test
 	// Tenant reconcile is not active hence we need to manually create tenant admin namespace
 	adminNs := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "ta-admin",
+			Name: tenant.Spec.TenantAdminNamespaceName,
 		},
 	}
 	err = c.Create(context.TODO(), adminNs)
@@ -252,7 +254,7 @@ func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *test
 	// Create t2, make it available before creating tenant namespace object
 	t2Ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "t2",
+			Name: instance.Spec.Name,
 		},
 	}
 	err = c.Create(context.TODO(), t2Ns)
@@ -269,6 +271,7 @@ func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *test
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	defer c.Delete(context.TODO(), instance)
+	var expectedRequest = reconcile.Request{NamespacedName: types.NamespacedName{Name: instance.ObjectMeta.Name, Namespace: instance.ObjectMeta.Namespace}}
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 	// Refresh instance
 	err = c.Get(context.TODO(), expectedRequest.NamespacedName, instance)
@@ -277,7 +280,7 @@ func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *test
 		return
 	}
 	// Refresh t2
-	nskey := types.NamespacedName{Name: "t2"}
+	nskey := types.NamespacedName{Name: instance.Spec.Name}
 	err = c.Get(context.TODO(), nskey, t2Ns)
 	if apierrors.IsInvalid(err) {
 		t.Logf("failed to get namespace object, got an invalid object error: %v", err)
@@ -292,91 +295,37 @@ func testImportExistingNamespace(c client.Client, g *gomega.GomegaWithT, t *test
 	g.Expect(len(t2Ns.OwnerReferences) == 1 && expectedOwnerRef == t2Ns.OwnerReferences[0]).To(gomega.BeTrue())
 }
 
-func TestReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
-	// channel when it is finished.
-	mgr, err := manager.New(cfg, manager.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c = mgr.GetClient()
-
-	recFn, requests := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
-
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
-	testCreateTenantNamespaceNoPrefix(c, g, t, requests)
-	testCreateTenantNamespaceWithPrefix(c, g, t, requests)
-	testCreateTenantNamespaceWithPrefixNoSpec(c, g, t, requests)
-	testImportExistingNamespace(c, g, t, requests)
-}
-
-func TestBothReconcile(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
-
-	testRoleAndBindingsWithValidAdmin(t, g)
-	testRoleAndBindingsWithNonValidAdmin(t, g)
-}
-
-func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
-	var expectedRequestTenantNamespace = reconcile.Request{NamespacedName: types.NamespacedName{Name: "foo-tenantns", Namespace: "tenant-admin-ns"}}
-	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: "tenant-a"}}
-
-	//setup and client
-	mgr, err := manager.New(cfg, manager.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c = mgr.GetClient()
-
-	//start tenant controller
-	recFnTenant, requestsTenant := tenant2.SetupTestReconcile(tenant2.SetupNewReconciler(mgr))
-	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
-
-	//start tenantnamespace controller
-	recFnTenantNS, requestsTenantNS := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
-
-	//start and defer manager
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
+func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT, c client.Client, requestsTenant, requestsTenantNS chan reconcile.Request) {
+	uniqueNo :=5
 	//create tenant-admin
 	sa := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceAccount",
-			APIVersion: "",
+			Kind: "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-admin-sa",
+			Name:      getUniqueName("tenant-admin-sa",uniqueNo),
 			Namespace: "default",
 		},
 	}
-	err = c.Create(context.TODO(), &sa)
+	err := c.Create(context.TODO(), &sa)
 	if err != nil {
 		t.Logf("Failed to create tenant admin: %+v with error: %+v", sa.ObjectMeta.Name, err)
 		return
 	}
-	//defer c.Delete(context.TODO(), &sa)
+//	defer c.Delete(context.TODO(), &sa)
 
 	//create tenant object
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "tenant-admin-ns",
+			TenantAdminNamespaceName: getUniqueName("tenant-admin-ns",uniqueNo),
 			TenantAdmins: []v1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      "tenant-admin-sa",
-					Namespace: "default",
+					Name:      sa.ObjectMeta.Name,
+					Namespace: sa.ObjectMeta.Namespace,
 				},
 			},
 		},
@@ -387,30 +336,20 @@ func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 		return
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: tenant.ObjectMeta.Name}}
 	g.Eventually(requestsTenant, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenant)))
-	//defer c.Delete(context.TODO(), tenant)
+//	defer c.Delete(context.TODO(), tenant)
 
 	//check admin namespace of tenant is created or not
-	tenantadminkey := types.NamespacedName{Name: "tenant-admin-ns"}
+	tenantadminkey := types.NamespacedName{Name: tenant.Spec.TenantAdminNamespaceName}
 	tenantAdminNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), tenantadminkey, tenantAdminNs) }, timeout).
 		Should(gomega.Succeed())
 
-	//Get service account list, to fetch above sa because secret generation is async
-	saList := corev1.ServiceAccountList{}
-	if err = c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
-		t.Logf("Failed to get serciceaccountlist, error %+v", err)
+	saSecretName, err := findSecretNameOfSA(c, sa.ObjectMeta.Name)
+	if err != nil {
+		t.Logf("Failed to get secret name of a service account: error: %+v", err)
 		return
-	}
-
-	//Get secret name of tenant admin service account
-	var saSecretName string
-	for _, eachSA := range saList.Items {
-		for _, each := range eachSA.Secrets {
-			if strings.Contains(each.Name, sa.ObjectMeta.Name) {
-				saSecretName = each.Name
-			}
-		}
 	}
 
 	//Get secret
@@ -445,11 +384,11 @@ func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 	//create tenantnamespace object using user client
 	tenantnamespaceObj := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo-tenantns",
+			Name:      getUniqueName("foo-tenantns",uniqueNo),
 			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
-			Name: "tenantnamespace",
+			Name: getUniqueName("tenantnamespace-t",uniqueNo),
 		},
 	}
 	err = userCl.Create(context.TODO(), tenantnamespaceObj)
@@ -458,69 +397,49 @@ func testRoleAndBindingsWithValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 		return
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	var expectedRequestTenantNamespace = reconcile.Request{NamespacedName: types.NamespacedName{Name: tenantnamespaceObj.ObjectMeta.Name, Namespace: tenantnamespaceObj.ObjectMeta.Namespace}}
 	g.Eventually(requestsTenantNS, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenantNamespace)))
-	//defer userCl.Delete(context.TODO(), tenantnamespaceObj)
 
-	nskey := types.NamespacedName{Name: "tenantnamespace"}
+	//check if tenantnamespace is created or not
+	nskey := types.NamespacedName{Name: tenantnamespaceObj.Spec.Name}
 	tenantNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 		Should(gomega.Succeed())
 
+	//deleting all resources
 	c.Delete(context.TODO(), &sa)
 	c.Delete(context.TODO(), tenant)
 	c.Delete(context.TODO(), tenantAdminNs)
 	userCl.Delete(context.TODO(), tenantnamespaceObj)
+	userCl.Delete(context.TODO(), tenantNs)
+
 }
 
-func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
-	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: "tenant-a-2"}}
-
-	//setup and client
-	mgr, err := manager.New(cfg, manager.Options{})
-	g.Expect(err).NotTo(gomega.HaveOccurred())
-	c = mgr.GetClient()
-
-	//start tenant controller
-	recFnTenant, requestsTenant := tenant2.SetupTestReconcile(tenant2.SetupNewReconciler(mgr))
-	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
-
-	//start tenantnamespace controller
-	recFnTenantNS, _ := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
-
-	//start and defer manager
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
-	defer func() {
-		close(stopMgr)
-		mgrStopped.Wait()
-	}()
-
+func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT, c client.Client, requestsTenant, requestsTenantNS chan reconcile.Request) {
+	uniqueNo :=6
 	//create normal user
 	usr := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceAccount",
-			APIVersion: "",
+			Kind: "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fake-sa-2",
+			Name:      getUniqueName("fake-sa",uniqueNo),
 			Namespace: "default",
 		},
 	}
-	err = c.Create(context.TODO(), &usr)
+	err := c.Create(context.TODO(), &usr)
 	if err != nil {
 		t.Logf("Failed to create fake user: %+v with error: %+v", usr.ObjectMeta.Name, err)
 		return
 	}
-	defer c.Delete(context.TODO(), &usr)
 
 	//create tenant-admin
 	sa := corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceAccount",
-			APIVersion: "",
+			Kind: "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tenant-admin-sa-2",
+			Name:      getUniqueName("tenant-admin-sa",uniqueNo),
 			Namespace: "default",
 		},
 	}
@@ -529,20 +448,19 @@ func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 		t.Logf("Failed to create tenant admin: %+v with error: %+v", sa.ObjectMeta.Name, err)
 		return
 	}
-	defer c.Delete(context.TODO(), &sa)
 
 	//create tenant object
 	tenant := &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a-2",
+			Name: getUniqueName("tenant-a",uniqueNo),
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "tenant-admin-ns-2",
+			TenantAdminNamespaceName: getUniqueName("tenant-admin-ns",uniqueNo),
 			TenantAdmins: []v1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      "tenant-admin-sa-2",
-					Namespace: "default",
+					Name:      sa.ObjectMeta.Name,
+					Namespace: sa.ObjectMeta.Namespace,
 				},
 			},
 		},
@@ -553,30 +471,20 @@ func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 		return
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	var expectedRequestTenant = reconcile.Request{NamespacedName: types.NamespacedName{Name: tenant.ObjectMeta.Name}}
 	g.Eventually(requestsTenant, timeout).Should(gomega.Receive(gomega.Equal(expectedRequestTenant)))
-	defer c.Delete(context.TODO(), tenant)
 
 	//check admin namespace of tenant is created or not
-	tenantadminkey := types.NamespacedName{Name: "tenant-admin-ns-2"}
+	tenantadminkey := types.NamespacedName{Name: tenant.Spec.TenantAdminNamespaceName}
 	tenantAdminNs := &corev1.Namespace{}
 	g.Eventually(func() error { return c.Get(context.TODO(), tenantadminkey, tenantAdminNs) }, timeout).
 		Should(gomega.Succeed())
 
-	//Get service account list, to fetch above sa because secret generation is async
-	saList := corev1.ServiceAccountList{}
-	if err = c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
-		t.Logf("Failed to get serciceaccountlist, error %+v", err)
+	// get secretname of fake user
+	saSecretName, err := findSecretNameOfSA(c, usr.ObjectMeta.Name)
+	if err != nil {
+		t.Logf("Failed to get secret name of a service account: error: %+v", err)
 		return
-	}
-
-	//Get secret name of fake user service account
-	var saSecretName string
-	for _, eachSA := range saList.Items {
-		for _, each := range eachSA.Secrets {
-			if strings.Contains(each.Name, usr.ObjectMeta.Name) {
-				saSecretName = each.Name
-			}
-		}
 	}
 
 	//Get secret
@@ -611,11 +519,11 @@ func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 	//create tenantnamespace object using user client
 	tenantnamespaceObj := &tenancyv1alpha1.TenantNamespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foo-tenantns-2",
+			Name:      getUniqueName("foo-tenantns",uniqueNo),
 			Namespace: tenant.Spec.TenantAdminNamespaceName,
 		},
 		Spec: tenancyv1alpha1.TenantNamespaceSpec{
-			Name: "tenantnamespace-2",
+			Name: getUniqueName("tenantnamespace",uniqueNo),
 		},
 	}
 
@@ -625,5 +533,36 @@ func testRoleAndBindingsWithNonValidAdmin(t *testing.T, g *gomega.GomegaWithT) {
 	c.Delete(context.TODO(), &usr)
 	c.Delete(context.TODO(), tenant)
 	c.Delete(context.TODO(), tenantAdminNs)
+}
+
+func TestReconcile(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
+	// channel when it is finished.
+	mgr, err := manager.New(cfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	c = mgr.GetClient()
+
+	//start tenant controller
+	recFnTenant, requestsTenant := tenant2.SetupTestReconcile(tenant2.SetupNewReconciler(mgr))
+	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
+
+	//start tenantnamespace controller
+	recFnTenantNS, requestsTenantNS := SetupTestReconcile(newReconciler(mgr))
+	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
+
+	//start and defer manager
+	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	defer func() {
+		close(stopMgr)
+		mgrStopped.Wait()
+	}()
+
+	testCreateTenantNamespaceNoPrefix(c, g, t, requestsTenantNS)
+	testCreateTenantNamespaceWithPrefix(c, g, t, requestsTenantNS)
+	testCreateTenantNamespaceWithPrefixNoSpec(c, g, t, requestsTenantNS)
+	testImportExistingNamespace(c, g, t, requestsTenantNS)
+	testRoleAndBindingsWithValidAdmin(t, g, c, requestsTenant, requestsTenantNS)
+	testRoleAndBindingsWithNonValidAdmin(t, g, c, requestsTenant, requestsTenantNS)
 }
 

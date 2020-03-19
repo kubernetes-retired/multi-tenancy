@@ -2,8 +2,13 @@ package tenantnamespace
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"fmt"
 	"html/template"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 const (
@@ -57,4 +62,25 @@ func getTemplateContent(kubeConfigTmpl string, context interface{}) (string, err
 	return writer.String(), nil
 }
 
+func findSecretNameOfSA(c client.Client, saName string) (string, error) {
+	//Get service account list, to fetch above sa because secret generation is async
+	saList := corev1.ServiceAccountList{}
+	if err := c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
+		return "", err
+	}
 
+	//Get secret name of tenant admin service account
+	var saSecretName string
+	for _, eachSA := range saList.Items {
+		for _, each := range eachSA.Secrets {
+			if strings.Contains(each.Name, saName) {
+				saSecretName = each.Name
+			}
+		}
+	}
+	return saSecretName, nil
+}
+
+func getUniqueName(str string, a int) string{
+	return fmt.Sprintf("%+v-%+v",str, int64(a))
+}
