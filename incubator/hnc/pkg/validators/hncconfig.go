@@ -74,7 +74,7 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 // allowing it to be more easily unit tested (ie without constructing a full admission.Request).
 func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admission.Response {
 	if inst.GetName() != "config" {
-		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Wrong singleton name: %s; the name should be 'config'", inst.GetName()))
+		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Wrong singleton name: %s; the name should be 'config'", inst.GetName()))
 	}
 
 	roleExist := false
@@ -102,10 +102,10 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 		}
 	}
 	if !roleExist {
-		return deny(metav1.StatusReasonForbidden, "Configuration for Role is missing")
+		return deny(metav1.StatusReasonInvalid, "Configuration for Role is missing")
 	}
 	if !roleBindingExist {
-		return deny(metav1.StatusReasonForbidden, "Configuration for RoleBinding is missing")
+		return deny(metav1.StatusReasonInvalid, "Configuration for RoleBinding is missing")
 	}
 	return allow("")
 }
@@ -114,7 +114,7 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 func (c *HNCConfig) isTypeConfigured(t api.TypeSynchronizationSpec, ts gvkSet) admission.Response {
 	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 	if exists := ts[gvk]; exists {
-		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Duplicate configurations for %s", gvk))
+		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gvk))
 	}
 	ts[gvk] = true
 	return allow("")
@@ -129,7 +129,7 @@ func (c *HNCConfig) validateRBAC(mode api.SynchronizationMode, kind string) admi
 	if mode == api.Propagate || mode == "" {
 		return allow("")
 	}
-	return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", kind, mode, api.Propagate))
+	return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", kind, mode, api.Propagate))
 }
 
 // validateType validates a non-RBAC type.
@@ -138,7 +138,7 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 
 	// Validate if the GVK exists in the apiserver.
 	if err := c.validator.Exists(ctx, gvk); err != nil {
-		return deny(metav1.StatusReasonForbidden,
+		return deny(metav1.StatusReasonInvalid,
 			fmt.Sprintf("Cannot find the %s in the apiserver with error: %s", gvk, err.Error()))
 	}
 
@@ -147,7 +147,7 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 	case api.Propagate, api.Ignore, api.Remove, "":
 		return allow("")
 	default:
-		return deny(metav1.StatusReasonForbidden, fmt.Sprintf("Unrecognized mode '%s' for %s", t.Mode, gvk))
+		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Unrecognized mode '%s' for %s", t.Mode, gvk))
 	}
 }
 

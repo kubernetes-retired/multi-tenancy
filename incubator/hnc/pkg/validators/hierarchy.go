@@ -428,14 +428,33 @@ func allow(msg string) admission.Response {
 // human-readable message _and_ a machine-readable reason, and also sets the code correctly instead
 // of hardcoding it to 403 Forbidden.
 func deny(reason metav1.StatusReason, msg string) admission.Response {
-	return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
-		Allowed: false,
-		Result: &metav1.Status{
-			Code:    codeFromReason(reason),
-			Message: msg,
-			Reason:  reason,
-		},
-	}}
+	if reason != metav1.StatusReasonInvalid {
+		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &metav1.Status{
+				Code:    codeFromReason(reason),
+				Message: msg,
+				Reason:  reason,
+			},
+		}}
+	} else {
+		// metav1.StatusReasonInvalid shows the custom message in the Details field instead of
+		// Message field of metav1.Status.
+		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &metav1.Status{
+				Code:   codeFromReason(reason),
+				Reason: reason,
+				Details: &metav1.StatusDetails{
+					Causes: []metav1.StatusCause{
+						{
+							Message: msg,
+						},
+					},
+				},
+			},
+		}}
+	}
 }
 
 // codeFromReason implements the needed subset of
