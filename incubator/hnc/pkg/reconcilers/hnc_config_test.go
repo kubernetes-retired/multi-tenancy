@@ -39,10 +39,8 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should set mode of Roles and RoleBindings as propagate by default", func() {
-		config := getHNCConfig(ctx)
-
-		Eventually(hasTypeWithMode("rbac.authorization.k8s.io/v1", "Role", api.Propagate, config)).Should(BeTrue())
-		Eventually(hasTypeWithMode("rbac.authorization.k8s.io/v1", "RoleBinding", api.Propagate, config)).Should(BeTrue())
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding", api.Propagate)).Should(BeTrue())
 	})
 
 	It("should propagate Roles by default", func() {
@@ -54,6 +52,19 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 	})
 
+	It("should insert Roles if it does not exist", func() {
+		removeHNCConfigType(ctx, "rbac.authorization.k8s.io/v1", "Role")
+
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+	})
+
+	It("should set the mode of Roles to `propagate` if the mode is not `propagate`", func() {
+		updateHNCConfigSpec(ctx, "rbac.authorization.k8s.io/v1", "rbac.authorization.k8s.io/v1",
+			"Role", "Role", api.Propagate, api.Ignore)
+
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+	})
+
 	It("should propagate RoleBindings by default", func() {
 		setParent(ctx, barName, fooName)
 		// Give foo a role binding.
@@ -61,6 +72,19 @@ var _ = Describe("HNCConfiguration", func() {
 
 		Eventually(hasObject(ctx, "RoleBinding", barName, "foo-role-binding")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "RoleBinding", barName, "foo-role-binding")).Should(Equal(fooName))
+	})
+
+	It("should insert RoleBindings if it does not exist", func() {
+		removeHNCConfigType(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding")
+
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding", api.Propagate)).Should(BeTrue())
+	})
+
+	It("should set the mode of RoleBindings to `propagate` if the mode is not `propagate`", func() {
+		updateHNCConfigSpec(ctx, "rbac.authorization.k8s.io/v1", "rbac.authorization.k8s.io/v1",
+			"RoleBinding", "RoleBinding", api.Propagate, api.Ignore)
+
+		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
 	})
 
 	It("should set CritSingletonNameInvalid condition if singleton name is wrong", func() {
@@ -237,9 +261,10 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 })
 
-func hasTypeWithMode(apiVersion, kind string, mode api.SynchronizationMode, config *api.HNCConfiguration) func() bool {
+func hasTypeWithMode(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) func() bool {
 	// `Eventually` only works with a fn that doesn't take any args
 	return func() bool {
+		config := getHNCConfig(ctx)
 		for _, t := range config.Spec.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind && t.Mode == mode {
 				return true
