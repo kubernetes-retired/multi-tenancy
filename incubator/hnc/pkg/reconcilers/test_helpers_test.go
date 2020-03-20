@@ -92,7 +92,9 @@ func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 
 func resetHNCConfigToDefault(ctx context.Context) error {
 	c := getHNCConfig(ctx)
-	c.Spec = config.GetDefaultConfigSpec()
+	c.Spec = api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
+		config.GetDefaultRoleSpec(),
+		config.GetDefaultRoleBindingSpec()}}
 	c.Status.Types = nil
 	c.Status.Conditions = nil
 	return k8sClient.Update(ctx, c)

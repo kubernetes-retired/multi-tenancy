@@ -91,13 +91,68 @@ func (r *ConfigReconciler) getSingleton(ctx context.Context) (*api.HNCConfigurat
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
-
-		// It doesn't exist - initialize it to a default value.
-		inst.Spec = config.GetDefaultConfigSpec()
-		inst.ObjectMeta.Name = api.HNCConfigSingleton
 	}
 
+	r.validateSingleton(inst)
 	return inst, nil
+}
+
+// validateSingleton sets the singleton name if it hasn't been set and ensures
+// Role and RoleBinding have the default configuration.
+func (r *ConfigReconciler) validateSingleton(inst *api.HNCConfiguration) {
+	// It is possible that the singleton does not exist on the apiserver. In this
+	// case its name hasn't been set yet.
+	if inst.ObjectMeta.Name == "" {
+		r.Log.Info(fmt.Sprintf("Setting the object name to be %s", api.HNCConfigSingleton))
+		inst.ObjectMeta.Name = api.HNCConfigSingleton
+	}
+	r.validateRBACTypes(inst)
+}
+
+// validateRBACTypes set Role and RoleBindings to the default configuration if they are
+// missing or having non-default configuration in the Spec.
+func (r *ConfigReconciler) validateRBACTypes(inst *api.HNCConfiguration) {
+	roleExists, roleBindingsExists := false, false
+
+	// Check the mode of Role and RoleBinding. The mode can be either the default mode
+	// or not set; otherwise, we will change the mode to the default mode.
+	for i := 0; i < len(inst.Spec.Types); i++ {
+		t := &inst.Spec.Types[i]
+		if r.isRole(*t) {
+			mode := config.GetDefaultRoleSpec().Mode
+			if t.Mode != mode && t.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for Role. Changing the mode from %s to %s", t.Mode, mode))
+				t.Mode = mode
+			}
+			roleExists = true
+		} else if r.isRoleBinding(*t) {
+			mode := config.GetDefaultRoleBindingSpec().Mode
+			if t.Mode != mode && t.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for RoleBinding. Changing the mode from %s to %s", t.Mode, mode))
+				t.Mode = mode
+			}
+			roleBindingsExists = true
+		}
+	}
+
+	// If Role and/or RoleBinding do not exist in the configuration, we will insert
+	// the default configuration in the spec for each of them.
+	if !roleExists {
+		r.Log.Info("Adding default configuration for Role")
+		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleSpec())
+	}
+	if !roleBindingsExists {
+		r.Log.Info("Adding default configuration for RoleBinding")
+		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleBindingSpec())
+	}
+}
+
+func (r *ConfigReconciler) isRole(t api.TypeSynchronizationSpec) bool {
+	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "Role"
+}
+
+func (r *ConfigReconciler) isRoleBinding(t api.TypeSynchronizationSpec) bool {
+	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "RoleBinding"
 }
 
 // writeSingleton creates a singleton on the apiserver if it does not exist.
