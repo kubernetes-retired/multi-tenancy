@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
@@ -167,14 +168,23 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualc
 
 	err := mpn.Create(context.TODO(), ssBdl.StatefulSet)
 	if err != nil {
-		return err
+		if !apierrors.IsAlreadyExists(err) {
+			return err
+		}
+		log.Info("statefuleset already exist",
+			"statefuleset", ssBdl.StatefulSet.GetName(),
+			"namespace", ssBdl.StatefulSet.GetNamespace())
 	}
 
 	if ssBdl.Service != nil {
 		log.Info("deploying Service for master component", "component", ssBdl.Name)
 		err = mpn.Create(context.TODO(), ssBdl.Service)
 		if err != nil {
-			return err
+			if !apierrors.IsAlreadyExists(err) {
+				return err
+			}
+			log.Info("service already exist",
+				"service", ssBdl.Service.GetName())
 		}
 	}
 
@@ -218,7 +228,12 @@ func (mpn *MasterProvisionerNative) createPKISecrets(caGroup *vcpki.ClusterCAGro
 			srt.Name, "namespace", srt.Namespace)
 		err := mpn.Create(context.TODO(), srt)
 		if err != nil {
-			return err
+			if !apierrors.IsAlreadyExists(err) {
+				return err
+			}
+			log.Info("Secret already exists",
+				"secret", srt.Name,
+				"namespace", srt.Namespace)
 		}
 	}
 
