@@ -14,6 +14,11 @@ import (
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
 )
 
+var _ = func() bool {
+	testing.Init()
+	return true
+}()
+
 // RunE2ETests runs the multi-tenancy benchmark tests
 func RunE2ETests(t *testing.T) {
 	logs.InitLogs()
