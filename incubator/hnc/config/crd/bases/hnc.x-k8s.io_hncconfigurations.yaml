@@ -80,7 +80,9 @@ spec:
                       the specified singleton name is invalid. The name should be
                       the same as HNCConfigSingleton. \n - \"objectReconcilerCreationFailed\":
                       an error exists when creating the object reconciler for the
-                      type specified in Msg."
+                      type specified in Msg. \n - \"multipleConfigurationsForOneType\":
+                      Multiple configurations exist for the type specified in the
+                      Msg. One type should only have one configuration."
                     type: string
                   msg:
                     description: A human-readable description of the condition, if

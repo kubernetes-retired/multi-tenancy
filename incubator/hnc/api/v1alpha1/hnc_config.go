@@ -45,8 +45,9 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid       HNCConfigurationCode = "critSingletonNameInvalid"
-	ObjectReconcilerCreationFailed HNCConfigurationCode = "objectReconcilerCreationFailed"
+	CritSingletonNameInvalid         HNCConfigurationCode = "critSingletonNameInvalid"
+	ObjectReconcilerCreationFailed   HNCConfigurationCode = "objectReconcilerCreationFailed"
+	MultipleConfigurationsForOneType HNCConfigurationCode = "multipleConfigurationsForOneType"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
@@ -133,6 +134,9 @@ type HNCConfigurationCondition struct {
 	//
 	// - "objectReconcilerCreationFailed": an error exists when creating the object
 	// reconciler for the type specified in Msg.
+	//
+	// - "multipleConfigurationsForOneType": Multiple configurations exist for the type specified
+	// in the Msg. One type should only have one configuration.
 	Code HNCConfigurationCode `json:"code"`
 
 	// A human-readable description of the condition, if the `code` field is not

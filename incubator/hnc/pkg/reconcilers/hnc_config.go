@@ -44,13 +44,14 @@ type ConfigReconciler struct {
 	HierarchyConfigUpdates chan event.GenericEvent
 }
 
+type gvkSet map[schema.GroupVersionKind]bool
+
 // Reconcile sets up some basic variable and logs the Spec.
 // TODO: Updates the comment above when adding more logic to the Reconcile method.
 func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
 	// Validate the singleton name.
-	// TODO: Add a validating admission controller to prevent the problem in the first place.
 	if err := r.validateSingletonName(ctx, req.NamespacedName.Name); err != nil {
 		r.Log.Error(err, "Singleton name validation failed")
 		return ctrl.Result{}, nil
@@ -222,7 +223,14 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 // syncActiveReconcilers syncs object reconcilers for types that are in the Spec. If an object reconciler exists, it sets
 // its mode according to the Spec; otherwise, it creates the object reconciler.
 func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
+	// exist keeps track of existing types in the `config` singleton.
+	exist := gvkSet{}
 	for _, t := range inst.Spec.Types {
+		// If there are multiple configurations of the same type, we will follow the first
+		// configuration and ignore the rest.
+		if !r.ensureNoDuplicateTypeConfigurations(inst, t, exist) {
+			continue
+		}
 		gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
 		if ts := r.Forest.GetTypeSyncer(gvk); ts != nil {
 			if err := ts.SetMode(ctx, t.Mode, r.Log); err != nil {
@@ -233,6 +241,27 @@ func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.
 		}
 	}
 	return nil
+}
+
+// ensureNoDuplicateTypeConfigurations checks whether the configuration of a type already exists and sets
+// a condition in the status if the type exists. The method returns true if the type configuration does not exist;
+// otherwise, returns false.
+func (r *ConfigReconciler) ensureNoDuplicateTypeConfigurations(inst *api.HNCConfiguration, t api.TypeSynchronizationSpec,
+	mp gvkSet) bool {
+	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
+	if !mp[gvk] {
+		mp[gvk] = true
+		return true
+	}
+	specMsg := fmt.Sprintf("APIVersion: %s, Kind: %s, Mode: %s", t.APIVersion, t.Kind, t.Mode)
+	r.Log.Info(fmt.Sprintf("Ignoring the configuration: %s", specMsg))
+	condition := api.HNCConfigurationCondition{
+		Code: api.MultipleConfigurationsForOneType,
+		Msg: fmt.Sprintf("Ignore the configuration: %s because the configuration of the type already exists; "+
+			"only the first configuration will be applied", specMsg),
+	}
+	inst.Status.Conditions = append(inst.Status.Conditions, condition)
+	return false
 }
 
 // syncRemovedReconcilers sets object reconcilers to "ignore" mode for types that are removed from the Spec.
