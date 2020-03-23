@@ -2,6 +2,7 @@ package reconcilers_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -114,6 +115,30 @@ var _ = Describe("HNCConfiguration", func() {
 		updateHNCConfigSpec(ctx, "v2", "v1", "LimitRange", "LimitRange", api.Propagate, api.Propagate)
 
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=LimitRange")).Should(BeFalse())
+	})
+
+	It("should set MultipleConfigurationsForOneType if there are multiple configurations for one type", func() {
+		// Add multiple configurations for a type.
+		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
+		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
+
+		// The second configuration should be ignored.
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeTrue())
+	})
+
+	It("should unset MultipleConfigurationsForOneType if extra configurations are later removed", func() {
+		// Add multiple configurations for a type.
+		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
+		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
+
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeTrue())
+
+		removeHNCConfigTypeWithMode(ctx, "v1", "Secret", api.Remove)
+
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeFalse())
 	})
 
 	It("should not propagate objects if the type is not in HNCConfiguration", func() {
@@ -348,6 +373,25 @@ func removeHNCConfigType(ctx context.Context, apiVersion, kind string) {
 		i := 0
 		for ; i < len(c.Spec.Types); i++ {
 			if c.Spec.Types[i].APIVersion == apiVersion && c.Spec.Types[i].Kind == kind {
+				break
+			}
+		}
+		// The type does not exist. Nothing to remove.
+		if i == len(c.Spec.Types) {
+			return nil
+		}
+		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
+		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
+		return updateHNCConfig(ctx, c)
+	}).Should(Succeed())
+}
+
+func removeHNCConfigTypeWithMode(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	Eventually(func() error {
+		c := getHNCConfig(ctx)
+		i := 0
+		for ; i < len(c.Spec.Types); i++ {
+			if c.Spec.Types[i].APIVersion == apiVersion && c.Spec.Types[i].Kind == kind && c.Spec.Types[i].Mode == mode {
 				break
 			}
 		}
