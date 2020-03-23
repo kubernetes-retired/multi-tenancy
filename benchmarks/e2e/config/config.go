@@ -7,15 +7,15 @@ import (
 const ConfigPath = "./config.yaml"
 
 type BenchmarkConfig struct {
-	Adminkubeconfig string     `json:"adminKubeconfig"`
-	Label           string     `json:"label,omitempty"`
-	TenantA         TenantSpec `json:"tenantA,omitempty"`
-	TenantB         TenantSpec `json:"tenantB,omitempty"`
+	Adminkubeconfig string     `yaml:"adminKubeconfig"`
+	Label           string     `yaml:"label,omitempty"`
+	TenantA         TenantSpec `yaml:"tenantA,omitempty"`
+	TenantB         TenantSpec `yaml:"tenantB,omitempty"`
 }
 
 type TenantSpec struct {
-	Kubeconfig string `json:"kubeconfig"`
-	Namespace  string `json:"namespace"`
+	Kubeconfig string `yaml:"kubeconfig"`
+	Namespace  string `yaml:"namespace"`
 }
 
 func (c *BenchmarkConfig) GetValidTenant() TenantSpec {
