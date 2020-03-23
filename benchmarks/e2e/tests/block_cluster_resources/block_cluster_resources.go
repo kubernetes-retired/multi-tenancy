@@ -18,6 +18,7 @@ const (
 var _ = framework.KubeDescribe("test tenant permission", func() {
 	var config *configutil.BenchmarkConfig
 	var resourceList string
+	var tenantkubeconfig configutil.TenantSpec
 	var err error
 	var dryrun = "--dry-run=true"
 	var all = "--all=true"
@@ -40,7 +41,9 @@ var _ = framework.KubeDescribe("test tenant permission", func() {
 		var user string
 
 		ginkgo.BeforeEach(func() {
-			tenantkubeconfig := config.GetValidTenant()
+			tenantkubeconfig, err = config.GetValidTenant()
+			framework.ExpectNoError(err)
+
 			os.Setenv("KUBECONFIG", tenantkubeconfig.Kubeconfig)
 			user = configutil.GetContextFromKubeconfig(tenantkubeconfig.Kubeconfig)
 		})
