@@ -13,7 +13,6 @@ func handleFlags() {
 	config.CopyFlags(config.Flags, flag.CommandLine)
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
-	flag.Parse()
 }
 
 func init() {
@@ -22,5 +21,6 @@ func init() {
 }
 
 func TestE2E(t *testing.T) {
+	flag.Parse()
 	RunE2ETests(t)
 }
