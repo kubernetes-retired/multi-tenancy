@@ -78,13 +78,16 @@ func (o *Options) Flags() cliflag.NamedFlagSets {
 
 // Config is the config to create a vn-agent server handler.
 func (o *Options) Config() (*config.Config, *ServerOption, error) {
-	kubeletClientCertPair, err := tls.LoadX509KeyPair(o.KubeletOption.CertFile, o.KubeletOption.KeyFile)
-	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to load kubelet tls config")
+	if o.KubeletOption.CertFile != "" && o.KubeletOption.KeyFile != "" {
+		kubeletClientCertPair, err := tls.LoadX509KeyPair(o.KubeletOption.CertFile, o.KubeletOption.KeyFile)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to load kubelet tls config")
+		}
+		return &config.Config{
+			KubeletClientCert: &kubeletClientCertPair,
+			KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", o.KubeletOption.Port),
+		}, &o.ServerOption, nil
 	}
 
-	return &config.Config{
-		KubeletClientCert: kubeletClientCertPair,
-		KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", o.KubeletOption.Port),
-	}, &o.ServerOption, nil
+	return &config.Config{KubeletClientCert: nil}, &o.ServerOption, nil
 }

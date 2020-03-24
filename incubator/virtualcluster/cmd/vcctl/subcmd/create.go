@@ -22,10 +22,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -139,24 +141,33 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 	if err := cli.Create(context.TODO(), vc); err != nil {
 		return err
 	}
-
 	ns := conversion.ToClusterKey(vc)
 
-	err = kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
-	if err != nil {
-		return err
+	retry := 5
+	for retry > 0 {
+		err = kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
+		if err != nil {
+			if apierrors.IsNotFound(err) && retry > 0 {
+				retry--
+				log.Println("cannot find sts/etcd, will retry in 2 seconds")
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			return fmt.Errorf("cannot find sts/etcd in ns %s: %s", ns, err)
+		}
+		break
 	}
 	log.Println("etcd is ready")
 
 	err = kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot find sts/apiserver in ns %s: %s", ns, err)
 	}
 	log.Println("apiserver is ready")
 
 	err = kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot find sts/controller-manager in ns %s: %s", ns, err)
 	}
 	log.Println("controller-manager is ready")
 
