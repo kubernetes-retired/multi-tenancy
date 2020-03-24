@@ -31,6 +31,7 @@ var describeCmd = &cobra.Command{
 		nnm := args[0]
 		fmt.Printf("Hierarchy configuration for namespace %s\n", nnm)
 		hier := client.getHierarchy(nnm)
+		hnsnms := client.getHierarchicalNamespacesNames(nnm)
 
 		// Parent
 		if hier.Spec.Parent != "" {
@@ -44,11 +45,11 @@ var describeCmd = &cobra.Command{
 		for _, cn := range hier.Status.Children {
 			childrenAndStatus[cn] = ""
 		}
-		for _, cn := range hier.Spec.RequiredChildren {
+		for _, cn := range hnsnms {
 			if _, ok := childrenAndStatus[cn]; ok {
-				childrenAndStatus[cn] = "required"
+				childrenAndStatus[cn] = "Owned"
 			} else {
-				childrenAndStatus[cn] = "MISSING"
+				childrenAndStatus[cn] = "Missing"
 			}
 		}
 		if len(childrenAndStatus) > 0 {
