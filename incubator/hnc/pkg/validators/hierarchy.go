@@ -345,7 +345,7 @@ func isHNCServiceAccount(user *authnv1.UserInfo) bool {
 func checkConfig(hc *api.HierarchyConfiguration) admission.Response {
 
 	// Check if children names in requiredChildren field obey kubernetes namespace regex format.
-	// invalidRCs accomodates illegal required child(RC) name(s).
+	// invalidRCs accommodates illegal required child(RC) name(s).
 	invalidRCs := []string{}
 	for _, rc := range hc.Spec.RequiredChildren {
 		if resp := validateNamespace(rc); resp != nil {
