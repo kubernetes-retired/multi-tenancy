@@ -32,6 +32,16 @@ type TypeSyncer interface {
 	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	// The method also syncs objects in the cluster for the type handled by the reconciler if necessary.
 	SetMode(context.Context, api.SynchronizationMode, logr.Logger) error
+	// GetMode returns the propagation mode of objects that are handled by the reconciler who implements the interface.
+	GetMode() api.SynchronizationMode
+	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
+	GetNumPropagatedObjects() int32
+}
+
+// ConfigSyncer syncs the status of the HNCConfiguration object. ConfigReconciler implements the interface so that
+// it can be called by an ObjectReconciler if the status needs to be updated.
+type ConfigSyncer interface {
+	SyncHNCConfigStatus(logr.Logger)
 }
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -53,6 +63,10 @@ type Forest struct {
 	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
 	// In that way, we don't need to put the list in the forest.
 	types []TypeSyncer
+
+	// config is the ConfigReconciler that an object reconciler can call if the status of the HNCConfiguration
+	// object needs to be updated.
+	config ConfigSyncer
 }
 
 func NewForest() *Forest {
@@ -84,6 +98,14 @@ func (f *Forest) GetTypeSyncer(gvk schema.GroupVersionKind) TypeSyncer {
 		}
 	}
 	return nil
+}
+
+func (f *Forest) AddConfigSyncer(c ConfigSyncer) {
+	f.config = c
+}
+
+func (f *Forest) GetConfigSyncer() ConfigSyncer {
+	return f.config
 }
 
 // GetTypeSyncers returns the types list.
@@ -126,6 +148,11 @@ func (f *Forest) GetNamespaceNames() []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// GetNamespaces returns the namespaces in the forest.
+func (f *Forest) GetNamespaces() namedNamespaces {
+	return f.namespaces
 }
 
 type namedNamespaces map[string]*Namespace
@@ -353,6 +380,11 @@ func (ns *Namespace) GetOriginalObjects(gvk schema.GroupVersionKind) []*unstruct
 		o = append(o, obj)
 	}
 	return o
+}
+
+// GetNumOriginalObjects returns the total number of original objects of a specific GVK in the namespace.
+func (ns *Namespace) GetNumOriginalObjects(gvk schema.GroupVersionKind) int {
+	return len(ns.originalObjects[gvk])
 }
 
 // GetPropagatedObjects returns all original copies in the ancestors.

@@ -108,9 +108,16 @@ spec:
                   kind:
                     description: Kind to be configured.
                     type: string
-                  numPropagated:
-                    description: Tracks the number of original objects that are being
-                      propagated to descendant namespaces.
+                  numPropagatedObjects:
+                    description: Tracks the number of objects that are being propagated
+                      to descendant namespaces. The propagated objects are created
+                      by HNC.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  numSourceObjects:
+                    description: Tracks the number of source objects for types in
+                      propagate mode. Source objects are created by users.
                     format: int32
                     minimum: 0
                     type: integer

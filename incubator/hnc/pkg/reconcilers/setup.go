@@ -74,7 +74,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, enableHNSReco
 		Log:                    ctrl.Log.WithName("reconcilers").WithName("HNCConfiguration"),
 		Manager:                mgr,
 		Forest:                 f,
-		Igniter:                make(chan event.GenericEvent),
+		Trigger:                make(chan event.GenericEvent),
 		HierarchyConfigUpdates: hcChan,
 	}
 	if err := cr.SetupWithManager(mgr); err != nil {

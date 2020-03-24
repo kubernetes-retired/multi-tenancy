@@ -44,13 +44,13 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", barName, "foo-role"), 4*time.Second).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "foo-role"), 4*time.Second).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role"), 4*time.Second).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
 	})
 
@@ -62,7 +62,7 @@ var _ = Describe("Secret", func() {
 		addToHNCConfig(ctx, "v1", "ConfigMap", api.Propagate)
 
 		// "foo-config" should now be propagated from foo to bar.
-		Eventually(hasObject(ctx, "ConfigMap", barName, "foo-config")).Should(BeTrue())
+		Eventually(hasObject(ctx, "ConfigMap", barName, "foo-config"), 4*time.Second).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ConfigMap", barName, "foo-config")).Should(Equal(fooName))
 	})
 
