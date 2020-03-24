@@ -4,7 +4,7 @@ import (
 	"reflect"
 )
 
-const ConfigPath = "./config.yaml"
+const ConfigPath = "../../config.yaml"
 
 type BenchmarkConfig struct {
 	Adminkubeconfig string     `yaml:"adminKubeconfig"`
