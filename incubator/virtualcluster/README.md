@@ -66,6 +66,10 @@ cp ~/.minikube/client.crt ~/.minikube/client.key .
 # create secret
 kubectl create secret generic vc-kubelet-client --from-file=./client.crt --from-file=./client.key --namespace vc-manager
 ```
+If the client certificates are not available, vn-agent will first forward 
+the request to the super master, and then the super master will send the request to
+the corresponding kubelet. To enable this, we comment out lines after 
+"- --cert-dir=/etc/vn-agent/" the all_in_one.yaml
 <br />
 <br />
 
