@@ -11,6 +11,7 @@ import (
 	// test sources
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
 	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
+	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_multitenant_resources"
 )
 
 // RunE2ETests runs the multi-tenancy benchmark tests
