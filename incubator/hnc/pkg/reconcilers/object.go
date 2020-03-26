@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
@@ -28,6 +29,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -50,6 +52,10 @@ const (
 	write
 	ignore
 )
+
+// namespacedNameSet is used to keep track of existing propagated objects of
+// a specific GVK in the cluster.
+type namespacedNameSet map[types.NamespacedName]bool
 
 // ObjectReconciler reconciles generic propagated objects. You must create one for each
 // group/version/kind that needs to be propagated and set its `GVK` field appropriately.
@@ -74,6 +80,13 @@ type ObjectReconciler struct {
 
 	// AffectedNamespace is a channel of events used to update namespaces.
 	AffectedNamespace chan event.GenericEvent
+
+	// propagatedObjectsLock is used to prevent the race condition between concurrent reconciliation threads
+	// trying to update propagatedObjects at the same time.
+	propagatedObjectsLock sync.Mutex
+
+	// propagatedObjects contains all propagated objects of the GVK handled by this reconciler.
+	propagatedObjects namespacedNameSet
 }
 
 // +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete
@@ -100,11 +113,33 @@ func (r *ObjectReconciler) GetGVK() schema.GroupVersionKind {
 	return r.GVK
 }
 
+// GetMode provides the mode of objects that are handled by this reconciler.
+func (r *ObjectReconciler) GetMode() api.SynchronizationMode {
+	return r.Mode
+}
+
+// GetValidateMode returns a valid api.SynchronizationMode based on the given mode. Please
+// see the comments of api.SynchronizationMode for currently supported modes.
+// If mode is not set, it will be api.Propagate by default. Any unrecognized mode is
+// treated as api.Ignore.
+func GetValidateMode(mode api.SynchronizationMode, log logr.Logger) api.SynchronizationMode {
+	switch mode {
+	case api.Propagate, api.Ignore, api.Remove:
+		return mode
+	case "":
+		log.Info("Unset mode; using 'propagate'")
+		return api.Propagate
+	default:
+		log.Info("Unrecognized mode; using 'ignore'", "mode", mode)
+		return api.Ignore
+	}
+}
+
 // SetMode sets the Mode field of an object reconciler and syncs objects in the cluster if needed.
 // The method will return an error if syncs fail.
 func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.SynchronizationMode, log logr.Logger) error {
 	log = log.WithValues("gvk", r.GVK)
-	newMode := r.getValidateMode(mode, log)
+	newMode := GetValidateMode(mode, log)
 	oldMode := r.Mode
 	if newMode == oldMode {
 		return nil
@@ -122,21 +157,12 @@ func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.Synchronization
 	return nil
 }
 
-// getValidateMode returns a valid api.SynchronizationMode based on the given mode. Please
-// see the comments of api.SynchronizationMode for currently supported modes.
-// If mode is not set, it will be api.Propagate by default. Any unrecognized mode is
-// treated as api.Ignore.
-func (r *ObjectReconciler) getValidateMode(mode api.SynchronizationMode, log logr.Logger) api.SynchronizationMode {
-	switch mode {
-	case api.Propagate, api.Ignore, api.Remove:
-		return mode
-	case "":
-		log.Info("Unset mode; using 'propagate'")
-		return api.Propagate
-	default:
-		log.Info("Unrecognized mode; using 'ignore'", "mode", mode)
-		return api.Ignore
-	}
+// GetNumPropagatedObjects returns the number of propagated objects of the GVK handled by this object reconciler.
+func (r *ObjectReconciler) GetNumPropagatedObjects() int {
+	r.propagatedObjectsLock.Lock()
+	defer r.propagatedObjectsLock.Unlock()
+
+	return len(r.propagatedObjects)
 }
 
 // enqueueAllObjects enqueues all the current objects in all namespaces.
@@ -158,7 +184,6 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	log := r.Log.WithValues("trigger", req.NamespacedName)
-	r.Mode = r.getValidateMode(r.Mode, log)
 	if r.Mode == api.Ignore {
 		return ctrl.Result{}, nil
 	}
@@ -180,9 +205,19 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return resp, err
 		}
 	}
+
 	act, srcInst := r.syncWithForest(ctx, log, inst)
 
-	return resp, r.operate(ctx, log, act, inst, srcInst)
+	err := r.operate(ctx, log, act, inst, srcInst)
+	if err != nil {
+		return resp, err
+	}
+
+	// Only trigger the config reconciler to update NumPropagatedObjects status of the
+	// `config` singleton when operations on the apiserver succeeds. Otherwise, the
+	// NumPropagatedObjects is unchanged.
+	r.Forest.ObjectsStatusSyncer.SyncNumPropagatedObjects(log)
+	return resp, nil
 }
 
 // syncWithForest syncs the object instance with the in-memory forest. It returns the action to take on
@@ -290,6 +325,10 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 		return write, srcInst
 	}
 
+	// Add the propagated object to the map if it is not in the map because at this point we are confident that
+	// this is a propagated object that is already on the apiserver, if this is the first time we reconcile this
+	// object, we should include it in the map.
+	r.addToNumPropagated(log, inst.GetNamespace(), inst.GetName())
 	return ignore, nil
 }
 
@@ -408,6 +447,9 @@ func (r *ObjectReconciler) delete(ctx context.Context, log logr.Logger, inst *un
 		return err
 	}
 
+	// Remove the propagated object from the map because we are confident that the object was successfully deleted
+	// on the apiserver.
+	r.removeFromNumPropagated(log, inst.GetNamespace(), inst.GetName())
 	return nil
 }
 
@@ -433,6 +475,10 @@ func (r *ObjectReconciler) write(ctx context.Context, log logr.Logger, inst, src
 	if err != nil {
 		r.setErrorConditions(log, srcInst, inst, op, err)
 		log.Error(err, "Couldn't write", "object", inst)
+	} else {
+		// Add the object to the map if it does not exist because we are confident that the object was updated/created
+		// successfully on the apiserver.
+		r.addToNumPropagated(log, inst.GetNamespace(), inst.GetName())
 	}
 	return err
 }
@@ -537,6 +583,30 @@ func (r *ObjectReconciler) exclude(log logr.Logger, inst *unstructured.Unstructu
 	default:
 		return false
 	}
+}
+
+// addToNumPropagated adds a propagated object to the PropagatedObjects map if it does not exist.
+func (r *ObjectReconciler) addToNumPropagated(log logr.Logger, namespace, name string) {
+	r.propagatedObjectsLock.Lock()
+	defer r.propagatedObjectsLock.Unlock()
+
+	nnm := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+	r.propagatedObjects[nnm] = true
+}
+
+// removeFromNumPropagated removes a propagated object to the PropagatedObjects map.
+func (r *ObjectReconciler) removeFromNumPropagated(log logr.Logger, namespace, name string) {
+	r.propagatedObjectsLock.Lock()
+	defer r.propagatedObjectsLock.Unlock()
+
+	nnm := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
+	}
+	delete(r.propagatedObjects, nnm)
 }
 
 func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {

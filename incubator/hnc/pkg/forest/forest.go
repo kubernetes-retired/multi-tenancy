@@ -32,6 +32,16 @@ type TypeSyncer interface {
 	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	// The method also syncs objects in the cluster for the type handled by the reconciler if necessary.
 	SetMode(context.Context, api.SynchronizationMode, logr.Logger) error
+	// GetMode gets the propagation mode of objects that are handled by the reconciler who implements the interface.
+	GetMode() api.SynchronizationMode
+	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
+	GetNumPropagatedObjects() int
+}
+
+// NumPropagatedObjectsSyncer syncs the number of propagated objects. ConfigReconciler implements the
+// interface so that it can be called by an ObjectReconciler if the number of propagated objects is changed.
+type NumPropagatedObjectsSyncer interface {
+	SyncNumPropagatedObjects(logr.Logger)
 }
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -53,6 +63,10 @@ type Forest struct {
 	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
 	// In that way, we don't need to put the list in the forest.
 	types []TypeSyncer
+
+	// ObjectsStatusSyncer is the ConfigReconciler that an object reconciler can call if the status of the HNCConfiguration
+	// object needs to be updated.
+	ObjectsStatusSyncer NumPropagatedObjectsSyncer
 }
 
 func NewForest() *Forest {
