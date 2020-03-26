@@ -47,6 +47,19 @@ func setParent(ctx context.Context, nm string, pnm string) {
 	}
 }
 
+func getNamespace(ctx context.Context, nm string) *corev1.Namespace {
+	return getNamespaceWithOffset(1, ctx, nm)
+}
+
+func getNamespaceWithOffset(offset int, ctx context.Context, nm string) *corev1.Namespace {
+	nnm := types.NamespacedName{Name: nm}
+	ns := &corev1.Namespace{}
+	EventuallyWithOffset(offset+1, func() error {
+		return k8sClient.Get(ctx, nnm, ns)
+	}).Should(Succeed())
+	return ns
+}
+
 // createNS is a convenience function to create a namespace and wait for its singleton to be
 // created. It's used in other tests in this package, but basically duplicates the code in this test
 // (it didn't originally). TODO: refactor.
