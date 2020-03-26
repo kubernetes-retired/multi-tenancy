@@ -236,7 +236,7 @@ func (c *controller) backPopulate(key string) error {
 			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
 				return err
 			}
-			if vPod.Spec.NodeName != "" && isPodScheduled(vPod) {
+			if vPod.Spec.NodeName != "" {
 				c.updateClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID), reconciler.DeleteEvent)
 			}
 		}
