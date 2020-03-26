@@ -38,6 +38,9 @@ import (
 	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	netutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )
 
 const (
@@ -114,10 +117,28 @@ func getAPISvcPort(svc *v1.Service) (int, error) {
 	return int(svc.Spec.Ports[0].Port), nil
 }
 
+// retryIfNotFound retries to call `f` `retry` times if the returned error
+// of `f` is `metav1.StatusReasonNotFound`
+func retryIfNotFound(retry, retryPeriod int, f func() error) error {
+	for retry >= 0 {
+		if err := f(); err != nil {
+			if apierrors.IsNotFound(err) && retry > 0 {
+				retry--
+				<-time.After(time.Duration(retryPeriod) * time.Second)
+				continue
+			}
+			// if other err or having retried too many times
+			return err
+		}
+		// success
+		break
+	}
+	return nil
+}
+
 // createVirtualcluster creates a virtual cluster based on the file yamlPath and
 // generates the kubeconfig file for accessing the virtual cluster
 func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, vcKbCfg string) error {
-
 	cv := &tenancyv1alpha1.ClusterVersion{}
 	if err := cli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "default",
@@ -143,30 +164,23 @@ func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster,
 	}
 	ns := conversion.ToClusterKey(vc)
 
-	retry := 5
-	for retry > 0 {
-		err = kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
-		if err != nil {
-			if apierrors.IsNotFound(err) && retry > 0 {
-				retry--
-				log.Println("cannot find sts/etcd, will retry in 2 seconds")
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			return fmt.Errorf("cannot find sts/etcd in ns %s: %s", ns, err)
-		}
-		break
+	if err := retryIfNotFound(5, 2, func() error {
+		return kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
+	}); err != nil {
+		return fmt.Errorf("cannot find sts/etcd in ns %s: %s", ns, err)
 	}
 	log.Println("etcd is ready")
 
-	err = kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
-	if err != nil {
+	if err := retryIfNotFound(5, 2, func() error {
+		return kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
+	}); err != nil {
 		return fmt.Errorf("cannot find sts/apiserver in ns %s: %s", ns, err)
 	}
 	log.Println("apiserver is ready")
 
-	err = kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
-	if err != nil {
+	if err := retryIfNotFound(5, 2, func() error {
+		return kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
+	}); err != nil {
 		return fmt.Errorf("cannot find sts/controller-manager in ns %s: %s", ns, err)
 	}
 	log.Println("controller-manager is ready")
