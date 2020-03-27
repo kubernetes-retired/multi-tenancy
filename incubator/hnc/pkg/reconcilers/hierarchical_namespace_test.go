@@ -81,13 +81,13 @@ var _ = Describe("HierarchicalNamespace", func() {
 		// Create "bar" hns in "foo" namespace.
 		foo_hns_bar := newHierarchicalNamespace(barName, fooName)
 		updateHierarchicalNamespace(ctx, foo_hns_bar)
+		Eventually(func() string {
+			barHier := getHierarchy(ctx, barName)
+			return barHier.Spec.Parent
+		}).Should(Equal(fooName))
 
 		// Change the bar's parent. Additionally change another field to reflect the
 		// update of the HC instance (hc.Spec.AllowCascadingDelete).
-		Eventually(func() bool {
-			barHier := getHierarchy(ctx, barName)
-			return barHier.Spec.AllowCascadingDelete
-		}).Should(Equal(false))
 		barHier := getHierarchy(ctx, barName)
 		barHier.Spec.Parent = "other"
 		barHier.Spec.AllowCascadingDelete = true
