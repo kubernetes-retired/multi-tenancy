@@ -179,7 +179,7 @@ func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 		klog.V(4).Infof("request after translate %+v", superHttpsUrl)
 
 		// 3. mutate the request, i.e., replacing the dst, add bearer token header
-		req.Request.URL.Host = superHttpsUrl.Hostname()
+		req.Request.URL.Host = superHttpsUrl.Host
 		req.Request.URL.Scheme = "https"
 		req.Request.Header.Add("Authorization", "Bearer "+restConfig.BearerToken)
 		if err != nil {
