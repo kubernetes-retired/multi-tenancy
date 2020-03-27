@@ -219,12 +219,21 @@ func (c *controller) checkPods() {
 	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedPods").Set(float64(numUWMetaMissMatchedPods))
 }
 
-func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod) {
+func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod, graceful bool) {
 	client, err := c.multiClusterPodController.GetClusterClient(clusterName)
 	if err != nil {
 		klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 	} else {
-		deleteOptions := metav1.NewDeleteOptions(0)
+		var deleteOptions *metav1.DeleteOptions
+		if graceful {
+			gracePeriod := int64(minimumGracePeriodInSeconds)
+			if vPod.Spec.TerminationGracePeriodSeconds != nil {
+				gracePeriod = *vPod.Spec.TerminationGracePeriodSeconds
+			}
+			deleteOptions = metav1.NewDeleteOptions(gracePeriod)
+		} else {
+			deleteOptions = metav1.NewDeleteOptions(0)
+		}
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
 		if err = client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
 			klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
@@ -254,13 +263,13 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			// pPod not found and vPod is under deletion, we need to delete vPod manually
 			if vPod.DeletionTimestamp != nil {
 				// since pPod not found in super master, we can force delete vPod
-				c.forceDeletevPod(clusterName, &vPod)
+				c.forceDeletevPod(clusterName, &vPod, false)
 			} else {
 				// pPod not found and vPod still exists, the pPod may be deleted manually or by controller pod eviction.
 				// If the vPod has not been bound yet, we can create pPod again.
 				// If the vPod has been bound, we'd better delete the vPod since the new pPod may have a different nodename.
 				if isPodScheduled(&vPod) {
-					c.forceDeletevPod(clusterName, &vPod)
+					c.forceDeletevPod(clusterName, &vPod, false)
 					metrics.CheckerRemedyStats.WithLabelValues("numDeletedTenantPodsDueToSuperEviction").Inc()
 				} else {
 					if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
@@ -286,7 +295,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			// For example, if pPod is deleted just before uws tries to bind the vPod and dws gets a request from checker or
 			// user update at the same time, a new pPod is going to be created potentially in a differnt node.
 			// However, uws bound vPod to a wrong node already. There is no easy remediation besides deleting tenant pod.
-			c.forceDeletevPod(clusterName, &vPod)
+			c.forceDeletevPod(clusterName, &vPod, true)
 			klog.Errorf("Found pPod %s/%s nodename is different from tenant pod nodename, delete the vPod.", targetNamespace, pPod.Name)
 			metrics.CheckerRemedyStats.WithLabelValues("numDeletedTenantPodsDueToNodeMissMatch").Inc()
 			continue
