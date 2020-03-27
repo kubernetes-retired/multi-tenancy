@@ -281,7 +281,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			klog.Errorf("Found pPod %s/%s delegated UID is different from tenant object.", targetNamespace, pPod.Name)
 			continue
 		}
-		if pPod.Spec.NodeName != vPod.Spec.NodeName {
+		if pPod.Spec.NodeName != "" && vPod.Spec.NodeName != "" && pPod.Spec.NodeName != vPod.Spec.NodeName {
 			// If pPod can be deleted arbitrarily, e.g., evicted by node controller, this inconsistency may happen.
 			// For example, if pPod is deleted just before uws tries to bind the vPod and dws gets a request from checker or
 			// user update at the same time, a new pPod is going to be created potentially in a differnt node.
