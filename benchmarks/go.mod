@@ -1,4 +1,4 @@
-module github.com/realshuting/multi-tenancy/benchmarks
+module sigs.k8s.io/multi-tenancy/benchmarks
 
 go 1.12
 

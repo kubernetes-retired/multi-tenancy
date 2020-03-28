@@ -24,12 +24,14 @@ import (
 	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 	corev1 "k8s.io/api/core/v1"
+
+	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	// +kubebuilder:scaffold:imports
@@ -51,6 +53,7 @@ func init() {
 
 	_ = api.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -59,21 +62,22 @@ func main() {
 		metricsAddr          string
 		maxReconciles        int
 		enableLeaderElection bool
+		leaderElectionId     string
 		novalidation         bool
 		debugLogs            bool
 		testLog              bool
 		qps                  int
-		enableHNSReconciler  bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionId, "leader-election-id", "controller-leader-election-helper",
+		"Leader election id determines the name of the configmap that leader election will use for holding the leader lock.")
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
-	flag.BoolVar(&enableHNSReconciler, "enable-hierarchicalnamespace-reconciler", false, "Enables hierarchicalnamespace reconciler.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -99,8 +103,8 @@ func main() {
 	}
 	defer exporter.StopMetricsExporter()
 
-	prom.DefaultRegisterer = metrics.Registry
-	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: metrics.Registry})
+	prom.DefaultRegisterer = prom.DefaultRegisterer.(*prom.Registry)
+	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: prom.DefaultRegisterer.(*prom.Registry)})
 	view.RegisterExporter(promExporter)
 
 	ctrl.SetLogger(zap.Logger(debugLogs))
@@ -120,6 +124,7 @@ func main() {
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   leaderElectionId,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -133,7 +138,7 @@ func main() {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles, enableHNSReconciler); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
@@ -151,6 +156,11 @@ func main() {
 		mgr.GetWebhookServer().Register(validators.ObjectsServingPath, &webhook.Admission{Handler: &validators.Object{
 			Log:    ctrl.Log.WithName("validators").WithName("Object"),
 			Forest: f,
+		}})
+
+		// Create webhook for the config
+		mgr.GetWebhookServer().Register(validators.ConfigServingPath, &webhook.Admission{Handler: &validators.HNCConfig{
+			Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
 		}})
 	}
 

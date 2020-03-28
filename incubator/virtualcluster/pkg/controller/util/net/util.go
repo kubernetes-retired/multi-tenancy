@@ -67,6 +67,9 @@ func GetLBIP(name, namespace string, cli client.Client) (string, error) {
 				return "", err
 			}
 			if len(svc.Status.LoadBalancer.Ingress) != 0 {
+				if svc.Status.LoadBalancer.Ingress[0].IP == "" {
+					return svc.Status.LoadBalancer.Ingress[0].Hostname, nil
+				}
 				return svc.Status.LoadBalancer.Ingress[0].IP, nil
 			}
 		}

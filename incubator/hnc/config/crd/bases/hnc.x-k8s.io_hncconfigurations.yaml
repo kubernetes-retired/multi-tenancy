@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.4
+    controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
   name: hncconfigurations.hnc.x-k8s.io
 spec:
@@ -23,12 +23,12 @@ spec:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
             of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
           description: 'Kind is a string value representing the REST resource this
             object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -80,7 +80,9 @@ spec:
                       the specified singleton name is invalid. The name should be
                       the same as HNCConfigSingleton. \n - \"objectReconcilerCreationFailed\":
                       an error exists when creating the object reconciler for the
-                      type specified in Msg."
+                      type specified in Msg. \n - \"multipleConfigurationsForOneType\":
+                      Multiple configurations exist for the type specified in the
+                      Msg. One type should only have one configuration."
                     type: string
                   msg:
                     description: A human-readable description of the condition, if
@@ -106,10 +108,10 @@ spec:
                   kind:
                     description: Kind to be configured.
                     type: string
-                  numPropagated:
-                    description: Tracks the number of original objects that are being
-                      propagated to descendant namespaces.
-                    format: int32
+                  numPropagatedObjects:
+                    description: Tracks the number of objects that are being propagated
+                      to descendant namespaces. The propagated objects are created
+                      by HNC.
                     minimum: 0
                     type: integer
                 type: object

@@ -35,6 +35,8 @@ const (
 	LabelClusterIP = "tenancy.x-k8s.io/clusterIP"
 	// LabelSecretName is the service account token secret name in tenant namespace.
 	LabelSecretName = "tenancy.x-k8s.io/secret.name"
+	// LabelAdminKubeConfig is the kubeconfig in base64 format for tenant master.
+	LabelAdminKubeConfig = "tenancy.x-k8s.io/admin-kubeconfig"
 
 	// LabelServiceAccountUID is the tenant service account UID related to the secret.
 	LabelServiceAccountUID = "tenancy.x-k8s.io/service-account.UID"
@@ -69,6 +71,10 @@ const (
 	MaxUwsRetryAttempts = 16
 
 	DefaultOpaqueMetaPrefix = "tenancy.x-k8s.io"
+
+	// Override the client-go default 5 qps and 10 burst, which are too samll for syncer.
+	DefaultSyncerClientQPS   = 1000
+	DefaultSyncerClientBurst = 2000
 )
 
 const (

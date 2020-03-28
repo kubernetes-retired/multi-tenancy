@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -105,12 +103,6 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 		return allow("HNC SA")
 	}
 
-	// Verify the HC is legal in isolation (i.e., before checking the rest of the forest)
-	resp := checkConfig(req.hc)
-	if !resp.Allowed {
-		return resp
-	}
-
 	// Do all checks that require holding the in-memory lock. Generate a list of authz checks we
 	// should perform once the lock is released.
 	authzReqs, resp := v.checkForest(req.hc)
@@ -140,11 +132,6 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 		return nil, resp
 	}
 
-	resp = v.checkRequiredChildren(ns, hc.Spec.RequiredChildren)
-	if !resp.Allowed {
-		return nil, resp
-	}
-
 	// The structure looks good. Get the list of namespaces we need authz checks on.
 	return v.needAuthzOn(curParent, newParent), allow("")
 }
@@ -169,9 +156,9 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
-	// Prevent changing parent of a required child
-	if ns.RequiredChildOf != "" && ns.RequiredChildOf != newParent.Name() {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a required child of %q", ns.Name(), newParent.Name(), ns.RequiredChildOf)
+	// Prevent changing parent of an owned child
+	if ns.Owner != "" && ns.Owner != newParent.Name() {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a self-serve subnamespace of %q", ns.Name(), newParent.Name(), ns.Owner)
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
@@ -186,7 +173,7 @@ func (v *Hierarchy) checkRequiredChildren(ns *forest.Namespace, requiredChildren
 			continue
 		}
 		// If this is already a child, or is about to be, no problem.
-		if cns.Parent() == ns || (cns.Parent() == nil && cns.RequiredChildOf == ns.Name()) {
+		if cns.Parent() == ns || (cns.Parent() == nil && cns.Owner == ns.Name()) {
 			continue
 		}
 		reason := fmt.Sprintf("Cannot set %q as the required child of %q because it already exists and is not a child of %q", cns.Name(), ns.Name(), ns.Name())
@@ -340,31 +327,6 @@ func isHNCServiceAccount(user *authnv1.UserInfo) bool {
 	return false
 }
 
-// checkConfig is checking whether namespaces in the hierarchy configuration meet kubernetes requirements.
-// if required children's field contains invalid name, it returns admission response that reject namespaces creation.
-func checkConfig(hc *api.HierarchyConfiguration) admission.Response {
-
-	// Check if children names in requiredChildren field obey kubernetes namespace regex format.
-	// invalidRCs accomodates illegal required child(RC) name(s).
-	invalidRCs := []string{}
-	for _, rc := range hc.Spec.RequiredChildren {
-		if resp := validateNamespace(rc); resp != nil {
-			invalidRCs = append(invalidRCs, rc)
-		}
-	}
-
-	if len(invalidRCs) > 0 {
-		return deny(metav1.StatusReasonBadRequest, fmt.Sprintf("The following required children are not valid namespace names: %s", strings.Join(invalidRCs, ", ")))
-	}
-	return allow("")
-}
-
-// validateNamespace validates a string is a valid namespace using apimachinery.
-// https://godoc.org/k8s.io/apimachinery/pkg/util/validation#IsDNS1123Label
-func validateNamespace(s string) []string {
-	return validation.IsDNS1123Label(s)
-}
-
 func (v *Hierarchy) InjectClient(c client.Client) error {
 	v.authz = &realAuthzClient{client: c}
 	return nil
@@ -428,14 +390,33 @@ func allow(msg string) admission.Response {
 // human-readable message _and_ a machine-readable reason, and also sets the code correctly instead
 // of hardcoding it to 403 Forbidden.
 func deny(reason metav1.StatusReason, msg string) admission.Response {
-	return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
-		Allowed: false,
-		Result: &metav1.Status{
-			Code:    codeFromReason(reason),
-			Message: msg,
-			Reason:  reason,
-		},
-	}}
+	if reason != metav1.StatusReasonInvalid {
+		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &metav1.Status{
+				Code:    codeFromReason(reason),
+				Message: msg,
+				Reason:  reason,
+			},
+		}}
+	} else {
+		// metav1.StatusReasonInvalid shows the custom message in the Details field instead of
+		// Message field of metav1.Status.
+		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+			Allowed: false,
+			Result: &metav1.Status{
+				Code:   codeFromReason(reason),
+				Reason: reason,
+				Details: &metav1.StatusDetails{
+					Causes: []metav1.StatusCause{
+						{
+							Message: msg,
+						},
+					},
+				},
+			},
+		}}
+	}
 }
 
 // codeFromReason implements the needed subset of
@@ -452,6 +433,8 @@ func codeFromReason(reason metav1.StatusReason) int32 {
 		return 409
 	case metav1.StatusReasonBadRequest:
 		return 400
+	case metav1.StatusReasonInvalid:
+		return 422
 	case metav1.StatusReasonInternalError:
 		return 500
 	default:

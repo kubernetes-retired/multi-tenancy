@@ -24,6 +24,8 @@ var GVKs = map[string]schema.GroupVersionKind{
 	"ResourceQuota": {Group: "", Version: "v1", Kind: "ResourceQuota"},
 	"LimitRange":    {Group: "", Version: "v1", Kind: "LimitRange"},
 	"ConfigMap":     {Group: "", Version: "v1", Kind: "ConfigMap"},
+	// CronTab is a custom resource.
+	"CronTab": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
 }
 
 func setParent(ctx context.Context, nm string, pnm string) {
@@ -43,6 +45,19 @@ func setParent(ctx context.Context, nm string, pnm string) {
 			return pHier.Status.Children
 		}).Should(ContainElement(nm))
 	}
+}
+
+func getNamespace(ctx context.Context, nm string) *corev1.Namespace {
+	return getNamespaceWithOffset(1, ctx, nm)
+}
+
+func getNamespaceWithOffset(offset int, ctx context.Context, nm string) *corev1.Namespace {
+	nnm := types.NamespacedName{Name: nm}
+	ns := &corev1.Namespace{}
+	EventuallyWithOffset(offset+1, func() error {
+		return k8sClient.Get(ctx, nnm, ns)
+	}).Should(Succeed())
+	return ns
 }
 
 // createNS is a convenience function to create a namespace and wait for its singleton to be
@@ -90,7 +105,9 @@ func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 
 func resetHNCConfigToDefault(ctx context.Context) error {
 	c := getHNCConfig(ctx)
-	c.Spec = config.GetDefaultConfigSpec()
+	c.Spec = api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
+		config.GetDefaultRoleSpec(),
+		config.GetDefaultRoleBindingSpec()}}
 	c.Status.Types = nil
 	c.Status.Conditions = nil
 	return k8sClient.Update(ctx, c)

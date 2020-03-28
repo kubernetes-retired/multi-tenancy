@@ -17,9 +17,13 @@ limitations under the License.
 package server
 
 import (
+	"fmt"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/emicklei/go-restful"
+	"k8s.io/klog"
 )
 
 // TranslatePath translate the naming between tenant and master cluster.
@@ -33,4 +37,77 @@ func TranslatePath(req *restful.Request, tenantName string) {
 		path = path[:secondSlash+2] + tenantName + "-" + path[secondSlash+2:]
 	}
 	req.Request.URL.Path = path
+}
+
+// translateRawQuery translates the rawquery for super apiserver
+func translateRawQuery(req *restful.Request, containerName string) {
+	vals := req.Request.URL.Query()
+	query := url.Values{}
+	for k, v := range vals {
+		switch k {
+		case "command":
+			query.Add("command", v[0])
+		case "input":
+			if v[0] == "1" {
+				query.Add("stdin", "true")
+			}
+			if v[0] == "0" {
+				query.Add("stdin", "false")
+			}
+		case "output":
+			if v[0] == "1" {
+				query.Add("stdout", "true")
+			}
+			if v[0] == "0" {
+				query.Add("stdout", "false")
+			}
+		case "tty":
+			if v[0] == "1" {
+				query.Add("tty", "true")
+			}
+			if v[0] == "0" {
+				query.Add("stdout", "false")
+			}
+		default:
+			klog.Errorf("unknown rawquery: %s", k)
+		}
+	}
+	if containerName != "" {
+		query.Add("container", containerName)
+	}
+	req.Request.URL.RawQuery = query.Encode()
+}
+
+// TranslatePathForSuper translates the URL path to kubelet to super apiserver
+func TranslatePathForSuper(req *restful.Request, tenantName string) error {
+	action := strings.Split(req.Request.URL.Path[1:], "/")[0]
+	var apiserverPath string
+	// req.PathParameter inclouding containerName, podID, podNamespace
+	pathParas := req.PathParameters()
+	podNamespace := pathParas["podNamespace"]
+	podID := pathParas["podID"]
+	containerName := pathParas["containerName"]
+	commonPath := fmt.Sprintf("/api/v1/namespaces/%s-%s/pods/%s", tenantName, podNamespace, podID)
+
+	switch action {
+	case "containerLogs":
+		// eg. 	/containerLogs/{podNamespace}/{podID}/{containerName}
+		// to   /api/v1/namespaces/{tenantName}-{podNamespace}/pods/{podID}/log
+		apiserverPath = path.Join(commonPath, "log")
+	case "exec":
+		// eg. /exec/{podNamespace}/podID/{containerName}
+		// to  /api/v1/namespaces/{tenantName}-{podNamespace}/pods/{podID}/exec
+		apiserverPath = path.Join(commonPath, "exec")
+		translateRawQuery(req, containerName)
+	case "attach":
+		apiserverPath = path.Join(commonPath, "attach")
+		translateRawQuery(req, containerName)
+	case "portForward":
+		apiserverPath = path.Join(commonPath, "portForward")
+		translateRawQuery(req, "")
+	default:
+		return fmt.Errorf("unsupport action %s", action)
+	}
+	req.Request.URL.Path = apiserverPath
+	return nil
 }

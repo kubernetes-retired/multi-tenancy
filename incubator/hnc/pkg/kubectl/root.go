@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
@@ -44,6 +45,7 @@ type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
 	createHierarchicalNamespace(nnm string, hnnm string)
+	getHierarchicalNamespacesNames(nnm string) []string
 }
 
 func init() {
@@ -72,7 +74,7 @@ func init() {
 			hncConfig := *config
 			hncConfig.ContentConfig.GroupVersion = &api.GroupVersion
 			hncConfig.APIPath = "/apis"
-			hncConfig.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+			hncConfig.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
 			hncConfig.UserAgent = rest.DefaultKubernetesUserAgent()
 			hncClient, err = rest.UnversionedRESTClientFor(&hncConfig)
 			if err != nil {
@@ -87,7 +89,6 @@ func init() {
 	rootCmd.AddCommand(newSetCmd())
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
-	rootCmd.AddCommand(newCreateCmd())
 	rootCmd.AddCommand(newCreate2Cmd())
 }
 
@@ -121,6 +122,27 @@ func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 	return hier
 }
 
+func (cl *realClient) getHierarchicalNamespacesNames(nnm string) []string {
+	var hnsnms []string
+
+	// List all the hns instance in the namespace.
+	ul := &unstructured.UnstructuredList{}
+	ul.SetKind(api.HierarchicalNamespacesKind)
+	ul.SetAPIVersion(api.HierarchicalNamespacesAPIVersion)
+	err := hncClient.Get().Resource(api.HierarchicalNamespaces).Namespace(nnm).Do().Into(ul)
+	if err != nil && !errors.IsNotFound(err) {
+		fmt.Printf("Error listing hierarchicalNamespaces for %s: %s\n", nnm, err)
+		os.Exit(1)
+	}
+
+	// Create a list of strings of the hns names.
+	for _, inst := range ul.Items {
+		hnsnms = append(hnsnms, inst.GetName())
+	}
+
+	return hnsnms
+}
+
 func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
 	nnm := hier.Namespace
 	var err error
@@ -145,13 +167,4 @@ func (cl *realClient) createHierarchicalNamespace(nnm string, hnnm string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Successfully created \"%s\" hierarchicalnamespace instance in \"%s\" namespace\n", hnnm, nnm)
-}
-
-func childNamespaceExists(hier *api.HierarchyConfiguration, cn string) bool {
-	for _, n := range hier.Spec.RequiredChildren {
-		if cn == n {
-			return true
-		}
-	}
-	return false
 }

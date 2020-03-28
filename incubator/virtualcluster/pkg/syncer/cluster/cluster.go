@@ -38,7 +38,6 @@ import (
 	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // Each Cluster object represents a tenant master in Virtual Cluster architecture.
@@ -53,12 +52,11 @@ type Cluster struct {
 	// The root namespace name for this cluster
 	key string
 	// Name of the corresponding virtual cluster object.
-	VCName string
+	vcName string
 	// Namespace of the corresponding virtual cluster object.
-	VCNamespace string
-
-	// KubeClientConfig is used to make it easy to get an api server client. Required.
-	KubeClientConfig clientcmd.ClientConfig
+	vcNamespace string
+	// UID of the corresponding virtual cluster object.
+	vcUID string
 
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	RestConfig *rest.Config
@@ -105,27 +103,28 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(key, namespace, name string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
+	if clusterRestConfig.QPS == 0 {
+		clusterRestConfig.QPS = constants.DefaultSyncerClientQPS
+	}
+	if clusterRestConfig.Burst == 0 {
+		clusterRestConfig.Burst = constants.DefaultSyncerClientBurst
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
 	}
 
-	kubeClientConfig, err := clientcmd.NewClientConfigFromBytes(configBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build kube client config: %v", err)
-	}
-
 	return &Cluster{
-		key:              key,
-		VCName:           name,
-		VCNamespace:      namespace,
-		vclister:         vclister,
-		KubeClientConfig: kubeClientConfig,
-		RestConfig:       clusterRestConfig,
-		Options:          o,
-		synced:           false,
-		stopCh:           make(chan struct{})}, nil
+		key:         key,
+		vcName:      name,
+		vcNamespace: namespace,
+		vcUID:       uid,
+		vclister:    vclister,
+		RestConfig:  clusterRestConfig,
+		Options:     o,
+		synced:      false,
+		stopCh:      make(chan struct{})}, nil
 }
 
 // GetClusterName returns the unique cluster name, aka, the root namespace name.
@@ -133,9 +132,13 @@ func (c *Cluster) GetClusterName() string {
 	return c.key
 }
 
+func (c *Cluster) GetOwnerInfo() (string, string) {
+	return c.vcName, c.vcUID
+}
+
 // GetSpec returns the virtual cluster spec.
 func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
-	vc, err := c.vclister.Virtualclusters(c.VCNamespace).Get(c.VCName)
+	vc, err := c.vclister.Virtualclusters(c.vcNamespace).Get(c.vcName)
 	if err != nil {
 		return nil, err
 	}
@@ -153,13 +156,8 @@ func (c *Cluster) getScheme() *runtime.Scheme {
 	return scheme.Scheme
 }
 
-// GetClientInfo returns the cluster client info.
-func (c *Cluster) GetClientInfo() *reconciler.ClusterInfo {
-	return reconciler.NewClusterInfo(c.GetClusterName(), c.RestConfig)
-}
-
 // GetClientSet returns a clientset client without any informer caches. All client requests go to apiserver directly.
-func (c *Cluster) GetClientSet() (*clientset.Clientset, error) {
+func (c *Cluster) GetClientSet() (clientset.Interface, error) {
 	if c.client != nil {
 		return c.client, nil
 	}
@@ -169,11 +167,6 @@ func (c *Cluster) GetClientSet() (*clientset.Clientset, error) {
 		return nil, err
 	}
 	return c.client, nil
-}
-
-// GetClientConfig return clientConfig used to make it easy to get an api server client.
-func (c *Cluster) GetClientConfig() clientcmd.ClientConfig {
-	return c.KubeClientConfig
 }
 
 // getMapper returns a lazily created apimachinery RESTMapper.
@@ -220,7 +213,7 @@ func (c *Cluster) getCache() (cache.Cache, error) {
 // It is used by other Cluster getters, and by reconcilers.
 // TODO: consider implementing Reader, Writer and StatusClient in Cluster
 // and forwarding to actual delegating client.
-func (c *Cluster) GetDelegatingClient() (*client.DelegatingClient, error) {
+func (c *Cluster) GetDelegatingClient() (client.Client, error) {
 	if !c.synced {
 		return nil, fmt.Errorf("The client cache has not been synced yet.")
 	}

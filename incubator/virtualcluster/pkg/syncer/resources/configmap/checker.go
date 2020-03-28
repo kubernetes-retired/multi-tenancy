@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedConfigMaps uint64
@@ -130,7 +129,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 		pConfigMap, err := c.configMapLister.ConfigMaps(targetNamespace).Get(vConfigMap.Name)
 		if errors.IsNotFound(err) {
 			// pConfigMap not found and vConfigMap still exists, we need to create pConfigMap again
-			if err := c.multiClusterConfigMapController.RequeueObject(clusterName, &configMapList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterConfigMapController.RequeueObject(clusterName, &configMapList.Items[i]); err != nil {
 				klog.Errorf("error requeue vConfigMap %v/%v in cluster %s: %v", vConfigMap.Namespace, vConfigMap.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantConfigMaps").Inc()

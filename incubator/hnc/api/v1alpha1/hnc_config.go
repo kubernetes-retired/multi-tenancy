@@ -45,8 +45,9 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid       HNCConfigurationCode = "critSingletonNameInvalid"
-	ObjectReconcilerCreationFailed HNCConfigurationCode = "objectReconcilerCreationFailed"
+	CritSingletonNameInvalid         HNCConfigurationCode = "critSingletonNameInvalid"
+	ObjectReconcilerCreationFailed   HNCConfigurationCode = "objectReconcilerCreationFailed"
+	MultipleConfigurationsForOneType HNCConfigurationCode = "multipleConfigurationsForOneType"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
@@ -68,10 +69,11 @@ type TypeSynchronizationStatus struct {
 	// Kind to be configured.
 	Kind string `json:"kind,omitempty"`
 
-	// Tracks the number of original objects that are being propagated to descendant namespaces.
+	// Tracks the number of objects that are being propagated to descendant namespaces. The propagated
+	// objects are created by HNC.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
-	NumPropagated *int32 `json:"numPropagated,omitempty"`
+	NumPropagatedObjects *int `json:"numPropagatedObjects,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -133,6 +135,9 @@ type HNCConfigurationCondition struct {
 	//
 	// - "objectReconcilerCreationFailed": an error exists when creating the object
 	// reconciler for the type specified in Msg.
+	//
+	// - "multipleConfigurationsForOneType": Multiple configurations exist for the type specified
+	// in the Msg. One type should only have one configuration.
 	Code HNCConfigurationCode `json:"code"`
 
 	// A human-readable description of the condition, if the `code` field is not

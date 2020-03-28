@@ -224,7 +224,13 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 
 	restConfig.ContentConfig.ContentType = config.AcceptContentTypes
 	restConfig.QPS = config.QPS
+	if restConfig.QPS == 0 {
+		restConfig.QPS = constants.DefaultSyncerClientQPS
+	}
 	restConfig.Burst = int(config.Burst)
+	if restConfig.Burst == 0 {
+		restConfig.Burst = constants.DefaultSyncerClientBurst
+	}
 
 	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, constants.ResourceSyncerUserAgent))
 	if err != nil {
