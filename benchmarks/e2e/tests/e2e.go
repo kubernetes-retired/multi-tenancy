@@ -9,6 +9,7 @@ import (
 	ginkgowrapper "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 
 	// test sources
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_ns_quotas"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_privileged_containers"
