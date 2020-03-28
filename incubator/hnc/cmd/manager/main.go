@@ -24,6 +24,9 @@ import (
 	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
 	corev1 "k8s.io/api/core/v1"
+
+	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -50,6 +53,7 @@ func init() {
 
 	_ = api.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = v1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -63,7 +67,6 @@ func main() {
 		debugLogs            bool
 		testLog              bool
 		qps                  int
-		enableHNSReconciler  bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -75,7 +78,6 @@ func main() {
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
-	flag.BoolVar(&enableHNSReconciler, "enable-hierarchicalnamespace-reconciler", false, "Enables hierarchicalnamespace reconciler.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -136,7 +138,7 @@ func main() {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles, enableHNSReconciler); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
@@ -154,6 +156,11 @@ func main() {
 		mgr.GetWebhookServer().Register(validators.ObjectsServingPath, &webhook.Admission{Handler: &validators.Object{
 			Log:    ctrl.Log.WithName("validators").WithName("Object"),
 			Forest: f,
+		}})
+
+		// Create webhook for the config
+		mgr.GetWebhookServer().Register(validators.ConfigServingPath, &webhook.Admission{Handler: &validators.HNCConfig{
+			Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
 		}})
 	}
 

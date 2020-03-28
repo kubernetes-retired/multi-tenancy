@@ -102,6 +102,10 @@ func (c *controller) backPopulate(key string) error {
 		op = reconciler.DeleteEvent
 	}
 
+	if pPV.Spec.ClaimRef == nil {
+		return nil
+	}
+
 	pPVC, err := c.pvcLister.PersistentVolumeClaims(pPV.Spec.ClaimRef.Namespace).Get(pPV.Spec.ClaimRef.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {

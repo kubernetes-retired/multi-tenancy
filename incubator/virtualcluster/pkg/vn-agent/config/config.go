@@ -30,6 +30,6 @@ type TLSOptions struct {
 
 // Config holds the config of the server.
 type Config struct {
-	KubeletClientCert tls.Certificate
+	KubeletClientCert *tls.Certificate
 	KubeletServerHost string
 }

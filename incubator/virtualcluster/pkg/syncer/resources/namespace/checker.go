@@ -32,7 +32,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartPeriodChecker starts the period checker for data consistency check. Checker is
@@ -123,7 +122,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 		pNamespace, err := c.nsLister.Get(targetNamespace)
 		if errors.IsNotFound(err) {
 			// pNamespace not found and vNamespace still exists, we need to create pNamespace again
-			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
 				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantNamespaces").Inc()

@@ -32,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // the namespace of the pod can be found in this file
@@ -83,6 +81,7 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 			}, sts); err != nil {
 				return err
 			}
+
 			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
 				return nil
 			}
@@ -90,48 +89,24 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 	}
 }
 
-// CreateVCNS creates namespace 'nsName' by client 'cli' and add annotation
-// related to 'cluster'
-func CreateVCNS(cli client.Client, cluster, nsName string) error {
-	ns := &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nsName,
-		},
-	}
-	superNs, err := conversion.BuildSuperMasterNamespace(cluster, ns)
-	if err != nil {
-		return err
-	}
-	err = cli.Create(context.TODO(), superNs)
-	if apierrors.IsAlreadyExists(err) {
-		return nil
-	}
-	return err
-}
-
-// CreateNS creates namespace 'nsName' by client 'cli'
-func CreateNS(cli client.Client, nsName string) error {
+// CreateRootNS creates the root namespace for the vc
+func CreateRootNS(cli client.Client, nsName, vcName, vcUID string) error {
 	err := cli.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
+					Kind:       "Virtualcluster",
+					Name:       vcName,
+					UID:        types.UID(vcUID),
+				}},
 		},
 	})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
 	}
 	return err
-}
-
-// RemoveNS removes namespace 'nsName' by client 'cli'
-func RemoveNS(cli client.Client, nsName string) error {
-	if err := cli.Delete(context.TODO(), &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: nsName,
-		},
-	}); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-	return nil
 }
 
 // AnnotateVC add the annotation('key'='val') to the Virtualcluster 'vc'
@@ -158,48 +133,4 @@ func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv
 		}
 		return patchErr
 	})
-}
-
-// isAffiliated checks if the given namespace is related to vc, i.e. contains
-// annotation "tenancy.x-k8s.io/cluster":conversion.ToClusterKey(vc)
-// NOTE the root ns doesn't contain this annotation
-func isAffiliated(ns *v1.Namespace, vc *tenancyv1alpha1.Virtualcluster) bool {
-	var tmpVcName string
-	for k, v := range ns.GetAnnotations() {
-		if k == constants.LabelCluster {
-			tmpVcName = v
-			break
-		}
-	}
-	if tmpVcName != "" && tmpVcName == conversion.ToClusterKey(vc) {
-		return true
-	}
-	return false
-
-}
-
-// DeleteAffiliatedNs deletes namespaces affiliated to the target virtualcluster
-func DeleteAffiliatedNs(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, log logr.Logger) error {
-	// delete all related ns, except the root ns
-	nsLst := &v1.NamespaceList{}
-	if err := cli.List(context.TODO(), nsLst); err != nil {
-		log.Error(err, "fail to list all namespaces")
-		return err
-	}
-	for _, ns := range nsLst.Items {
-		if isAffiliated(&ns, vc) {
-			// remove related ns
-			if err := RemoveNS(cli, ns.GetName()); err != nil {
-				log.Error(err, "fail to delete the namespace", "ns", ns.GetName())
-				return err
-			}
-			log.Info("namespace is deleted", "ns", ns.GetName())
-		}
-	}
-	// delete the root ns
-	if err := RemoveNS(cli, conversion.ToClusterKey(vc)); err != nil {
-		log.Error(err, "fail to delete the root namespace", "ns", conversion.ToClusterKey(vc))
-		return err
-	}
-	return nil
 }

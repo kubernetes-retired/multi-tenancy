@@ -21,6 +21,7 @@ import (
 	"time"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,7 +45,8 @@ func TestReconcile(t *testing.T) {
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
 	// NOTE: use a random free port ":0"
-	mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: ":0"})
+
+	mgr, err := vcmanager.NewVirtualClusterManager(cfg, manager.Options{MetricsBindAddress: ":0"}, 1)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
 

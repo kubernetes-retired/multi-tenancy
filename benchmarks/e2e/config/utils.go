@@ -1,11 +1,10 @@
 package test
 
 import (
-	"encoding/json"
 	"io/ioutil"
 	"os"
-
-	yaml "k8s.io/apimachinery/pkg/util/yaml"
+	"errors"
+	"gopkg.in/yaml.v2"
 	kubernetes "k8s.io/client-go/kubernetes"
 	clientcmd "k8s.io/client-go/tools/clientcmd"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -39,15 +38,13 @@ func ReadConfig(path string) (*BenchmarkConfig, error) {
 		return nil, err
 	}
 
-	data, err := yaml.ToJSON(file)
-	if err != nil {
+	if err := yaml.Unmarshal(file, &config); err != nil {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
+	if config == nil {
+		return config, errors.New("Please fill in a valid/non-empty yaml file")
 	}
-
 	return config, nil
 }
 

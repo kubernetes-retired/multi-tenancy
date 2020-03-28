@@ -80,7 +80,9 @@ spec:
                       the specified singleton name is invalid. The name should be
                       the same as HNCConfigSingleton. \n - \"objectReconcilerCreationFailed\":
                       an error exists when creating the object reconciler for the
-                      type specified in Msg."
+                      type specified in Msg. \n - \"multipleConfigurationsForOneType\":
+                      Multiple configurations exist for the type specified in the
+                      Msg. One type should only have one configuration."
                     type: string
                   msg:
                     description: A human-readable description of the condition, if
@@ -106,10 +108,10 @@ spec:
                   kind:
                     description: Kind to be configured.
                     type: string
-                  numPropagated:
-                    description: Tracks the number of original objects that are being
-                      propagated to descendant namespaces.
-                    format: int32
+                  numPropagatedObjects:
+                    description: Tracks the number of objects that are being propagated
+                      to descendant namespaces. The propagated objects are created
+                      by HNC.
                     minimum: 0
                     type: integer
                 type: object

@@ -3,9 +3,13 @@ package reconcilers
 import (
 	"context"
 	"fmt"
+	"sort"
+	"time"
 
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
@@ -31,16 +35,31 @@ type ConfigReconciler struct {
 	// Forest is the in-memory data structure that is shared with all other reconcilers.
 	Forest *forest.Forest
 
-	// Igniter is a channel of event.GenericEvent (see "Watching Channels" in
+	// Trigger is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html)
-	// that is used to enqueue the singleton for initial reconciliation.
-	Igniter chan event.GenericEvent
+	// that is used to enqueue the singleton to trigger reconciliation.
+	Trigger chan event.GenericEvent
 
 	// HierarchyConfigUpdates is a channel of events used to update hierarchy configuration changes performed by
 	// ObjectReconcilers. It is passed on to ObjectReconcilers for the updates. The ConfigReconciler itself does
 	// not use it.
 	HierarchyConfigUpdates chan event.GenericEvent
+
+	// activeGVKs contains GVKs that are configured in the Spec.
+	activeGVKs gvkSet
+
+	// shouldReconcile is used by object reconcilers to signal config reconciler to reconcile.
+	// Object reconcilers will set shouldReconcile to be true when an object is successfully reconciled
+	// and the status of the `config` singleton might need to be updated.
+	shouldReconcile bool
 }
+
+// gvkSet keeps track of a group of unique GVKs.
+type gvkSet map[schema.GroupVersionKind]bool
+
+// checkPeriod is the period that the config reconciler checks if it needs to reconcile the
+// `config` singleton.
+const checkPeriod = 3 * time.Second
 
 // Reconcile sets up some basic variable and logs the Spec.
 // TODO: Updates the comment above when adding more logic to the Reconcile method.
@@ -48,7 +67,6 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
 	// Validate the singleton name.
-	// TODO: Add a validating admission controller to prevent the problem in the first place.
 	if err := r.validateSingletonName(ctx, req.NamespacedName.Name); err != nil {
 		r.Log.Error(err, "Singleton name validation failed")
 		return ctrl.Result{}, nil
@@ -60,18 +78,17 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	// TODO: Modify this and other reconcilers (e.g., hierarchy and object reconcilers) to
-	// achieve the reconciliation.
-	r.Log.Info("Reconciling cluster-wide HNC configuration")
-
-	// Clear the existing conditions because we will reconstruct the latest conditions.
+	// Clear the existing the status because we will reconstruct the latest status.
 	inst.Status.Conditions = nil
+	inst.Status.Types = nil
 
 	// Create or sync corresponding ObjectReconcilers, if needed.
 	syncErr := r.syncObjectReconcilers(ctx, inst)
 
+	// Add the status for each type.
+	r.addTypeStatus(inst)
+
 	// Write back to the apiserver.
-	// TODO: Update HNCConfiguration.Status before writing the singleton back to the apiserver.
 	if err := r.writeSingleton(ctx, inst); err != nil {
 		r.Log.Error(err, "Couldn't write singleton")
 		return ctrl.Result{}, err
@@ -89,13 +106,68 @@ func (r *ConfigReconciler) getSingleton(ctx context.Context) (*api.HNCConfigurat
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
-
-		// It doesn't exist - initialize it to a default value.
-		inst.Spec = config.GetDefaultConfigSpec()
-		inst.ObjectMeta.Name = api.HNCConfigSingleton
 	}
 
+	r.validateSingleton(inst)
 	return inst, nil
+}
+
+// validateSingleton sets the singleton name if it hasn't been set and ensures
+// Role and RoleBinding have the default configuration.
+func (r *ConfigReconciler) validateSingleton(inst *api.HNCConfiguration) {
+	// It is possible that the singleton does not exist on the apiserver. In this
+	// case its name hasn't been set yet.
+	if inst.ObjectMeta.Name == "" {
+		r.Log.Info(fmt.Sprintf("Setting the object name to be %s", api.HNCConfigSingleton))
+		inst.ObjectMeta.Name = api.HNCConfigSingleton
+	}
+	r.validateRBACTypes(inst)
+}
+
+// validateRBACTypes set Role and RoleBindings to the default configuration if they are
+// missing or having non-default configuration in the Spec.
+func (r *ConfigReconciler) validateRBACTypes(inst *api.HNCConfiguration) {
+	roleExists, roleBindingsExists := false, false
+
+	// Check the mode of Role and RoleBinding. The mode can be either the default mode
+	// or not set; otherwise, we will change the mode to the default mode.
+	for i := 0; i < len(inst.Spec.Types); i++ {
+		t := &inst.Spec.Types[i]
+		if r.isRole(*t) {
+			mode := config.GetDefaultRoleSpec().Mode
+			if t.Mode != mode && t.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for Role. Changing the mode from %s to %s", t.Mode, mode))
+				t.Mode = mode
+			}
+			roleExists = true
+		} else if r.isRoleBinding(*t) {
+			mode := config.GetDefaultRoleBindingSpec().Mode
+			if t.Mode != mode && t.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for RoleBinding. Changing the mode from %s to %s", t.Mode, mode))
+				t.Mode = mode
+			}
+			roleBindingsExists = true
+		}
+	}
+
+	// If Role and/or RoleBinding do not exist in the configuration, we will insert
+	// the default configuration in the spec for each of them.
+	if !roleExists {
+		r.Log.Info("Adding default configuration for Role")
+		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleSpec())
+	}
+	if !roleBindingsExists {
+		r.Log.Info("Adding default configuration for RoleBinding")
+		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleBindingSpec())
+	}
+}
+
+func (r *ConfigReconciler) isRole(t api.TypeSynchronizationSpec) bool {
+	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "Role"
+}
+
+func (r *ConfigReconciler) isRoleBinding(t api.TypeSynchronizationSpec) bool {
+	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "RoleBinding"
 }
 
 // writeSingleton creates a singleton on the apiserver if it does not exist.
@@ -165,8 +237,17 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 // syncActiveReconcilers syncs object reconcilers for types that are in the Spec. If an object reconciler exists, it sets
 // its mode according to the Spec; otherwise, it creates the object reconciler.
 func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
+	// exist keeps track of existing types in the `config` singleton.
+	exist := gvkSet{}
+	r.activeGVKs = gvkSet{}
 	for _, t := range inst.Spec.Types {
+		// If there are multiple configurations of the same type, we will follow the first
+		// configuration and ignore the rest.
+		if !r.ensureNoDuplicateTypeConfigurations(inst, t, exist) {
+			continue
+		}
 		gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
+		r.activeGVKs[gvk] = true
 		if ts := r.Forest.GetTypeSyncer(gvk); ts != nil {
 			if err := ts.SetMode(ctx, t.Mode, r.Log); err != nil {
 				return err // retry the reconciliation
@@ -176,6 +257,27 @@ func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.
 		}
 	}
 	return nil
+}
+
+// ensureNoDuplicateTypeConfigurations checks whether the configuration of a type already exists and sets
+// a condition in the status if the type exists. The method returns true if the type configuration does not exist;
+// otherwise, returns false.
+func (r *ConfigReconciler) ensureNoDuplicateTypeConfigurations(inst *api.HNCConfiguration, t api.TypeSynchronizationSpec,
+	mp gvkSet) bool {
+	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
+	if !mp[gvk] {
+		mp[gvk] = true
+		return true
+	}
+	specMsg := fmt.Sprintf("APIVersion: %s, Kind: %s, Mode: %s", t.APIVersion, t.Kind, t.Mode)
+	r.Log.Info(fmt.Sprintf("Ignoring the configuration: %s", specMsg))
+	condition := api.HNCConfigurationCondition{
+		Code: api.MultipleConfigurationsForOneType,
+		Msg: fmt.Sprintf("Ignore the configuration: %s because the configuration of the type already exists; "+
+			"only the first configuration will be applied", specMsg),
+	}
+	inst.Status.Conditions = append(inst.Status.Conditions, condition)
+	return false
 }
 
 // syncRemovedReconcilers sets object reconcilers to "ignore" mode for types that are removed from the Spec.
@@ -209,29 +311,46 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context, inst *api
 func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode api.SynchronizationMode, inst *api.HNCConfiguration) {
 	r.Log.Info("Creating an object reconciler", "gvk", gvk, "mode", mode)
 
+	// After upgrading sigs.k8s.io/controller-runtime version to v0.5.0, we can create
+	// reconciler successfully even when the resource does not exist in the cluster.
+	// Therefore, we explicitly check if the resource exists before creating the
+	// reconciler.
+	_, err := r.Manager.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		r.Log.Error(err, "Error while trying to get resource", "gvk", gvk)
+		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
+		return
+	}
+
 	or := &ObjectReconciler{
 		Client:            r.Client,
 		Log:               ctrl.Log.WithName("reconcilers").WithName(gvk.Kind),
 		Forest:            r.Forest,
 		GVK:               gvk,
-		Mode:              mode,
+		Mode:              GetValidateMode(mode, r.Log),
 		Affected:          make(chan event.GenericEvent),
 		AffectedNamespace: r.HierarchyConfigUpdates,
+		propagatedObjects: namespacedNameSet{},
 	}
 
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
-		condition := api.HNCConfigurationCondition{
-			Code: api.ObjectReconcilerCreationFailed,
-			Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
-		}
-		inst.Status.Conditions = append(inst.Status.Conditions, condition)
+		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
 		return
 	}
 
 	// Informs the in-memory forest about the new reconciler by adding it to the types list.
 	r.Forest.AddTypeSyncer(or)
+}
+
+func (r *ConfigReconciler) writeObjectReconcilerCreationFailedCondition(inst *api.HNCConfiguration,
+	gvk schema.GroupVersionKind, err error) {
+	condition := api.HNCConfigurationCondition{
+		Code: api.ObjectReconcilerCreationFailed,
+		Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
+	}
+	inst.Status.Conditions = append(inst.Status.Conditions, condition)
 }
 
 func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) error {
@@ -260,31 +379,94 @@ func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string)
 	return fmt.Errorf("Error while validating singleton name: %s", msg)
 }
 
-// forceInitialReconcile forces reconciliation to start after setting up the
-// controller with the manager. This is used to create a default singleton if
-// there is no singleton in the cluster. This occurs in a goroutine so the
+// addTypeStatus adds Status.Types for types configured in the spec. Only the status of
+// types in `propagate` and `remove` modes will be recorded. The Status.Types
+// is sorted in alphabetical order based on APIVersion.
+func (r *ConfigReconciler) addTypeStatus(inst *api.HNCConfiguration) {
+	for _, ts := range r.Forest.GetTypeSyncers() {
+		if r.activeGVKs[ts.GetGVK()] && ts.GetMode() != api.Ignore {
+			r.addNumPropagatedObjects(ts.GetGVK(), ts.GetNumPropagatedObjects(), inst)
+		}
+	}
+	sort.Slice(inst.Status.Types, func(i, j int) bool {
+		return inst.Status.Types[i].APIVersion < inst.Status.Types[j].APIVersion
+	})
+}
+
+// addNumPropagatedObjects adds the NumPropagatedObjects field for a given GVK in the status.
+func (r *ConfigReconciler) addNumPropagatedObjects(gvk schema.GroupVersionKind, num int,
+	inst *api.HNCConfiguration) {
+	apiVersion, kind := gvk.ToAPIVersionAndKind()
+	inst.Status.Types = append(inst.Status.Types, api.TypeSynchronizationStatus{
+		APIVersion:           apiVersion,
+		Kind:                 kind,
+		NumPropagatedObjects: &num,
+	})
+}
+
+// enqueueSingleton enqueues the `config` singleton to trigger the reconciliation
+// of the singleton for a given reason . This occurs in a goroutine so the
 // caller doesn't block; since the reconciler is never garbage-collected,
 // this is safe.
-func (r *ConfigReconciler) forceInitialReconcile(log logr.Logger, reason string) {
+func (r *ConfigReconciler) enqueueSingleton(log logr.Logger, reason string) {
 	go func() {
 		log.Info("Enqueuing for reconciliation", "reason", reason)
 		// The watch handler doesn't care about anything except the metadata.
 		inst := &api.HNCConfiguration{}
 		inst.ObjectMeta.Name = api.HNCConfigSingleton
-		r.Igniter <- event.GenericEvent{Meta: inst}
+		r.Trigger <- event.GenericEvent{Meta: inst}
 	}()
+}
+
+// periodicTrigger periodically checks if the `config` singleton needs to be reconciled and
+// enqueues the `config` singleton for reconciliation, if needed.
+// Object reconcilers signal the config reconciler to reconcile when the status needs to
+// be updated. The config reconciler only reconciles periodically so that the reconciliation
+// won't be triggered too frequently.
+func (r *ConfigReconciler) periodicTrigger() {
+	// run forever
+	for {
+		time.Sleep(checkPeriod)
+		if r.shouldReconcile == false {
+			continue
+		}
+		r.enqueueSingleton(r.Log, "Syncing NumPropagatedObjects in the status")
+		r.shouldReconcile = false
+	}
+}
+
+// SyncNumPropagatedObjects will be called by object reconcilers to signal config
+// reconciler to reconcile when an object is reconciled successfully and the status of
+// the `config` object might need to be updated.
+func (r *ConfigReconciler) SyncNumPropagatedObjects(log logr.Logger) {
+	log.V(1).Info("Signalling config reconciler for reconciliation.")
+	r.shouldReconcile = true
 }
 
 // SetupWithManager builds a controller with the reconciler.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Whenever a CRD is created/updated, we will send a request to reconcile the
+	// singleton again, in case the singleton has configuration for the resource.
+	crdMapFn := handler.ToRequestsFunc(
+		func(a handler.MapObject) []reconcile.Request {
+			nnm := types.NamespacedName{
+				Name: api.HNCConfigSingleton,
+			}
+			return []reconcile.Request{
+				{NamespacedName: nnm},
+			}
+		})
 	err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
-		Watches(&source.Channel{Source: r.Igniter}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Channel{Source: r.Trigger}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &v1beta1.CustomResourceDefinition{}},
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: crdMapFn}).
 		Complete(r)
 	if err != nil {
 		return err
 	}
-	// Create a default singleton if there is no singleton in the cluster.
+	// Create a default singleton if there is no singleton in the cluster by forcing
+	// reconciliation to start.
 	//
 	// The cache used by the client to retrieve objects might not be populated
 	// at this point. As a result, we cannot use r.Get() to determine the existence
@@ -292,7 +474,18 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// it does not exist. As a workaround, we decide to enforce reconciliation. The
 	// cache is populated at the reconciliation stage. A default singleton will be
 	// created during the reconciliation if there is no singleton in the cluster.
-	r.forceInitialReconcile(r.Log, "Enforce reconciliation to create a default"+
+	r.enqueueSingleton(r.Log, "Enforce reconciliation to create a default"+
 		"HNCConfiguration singleton if it does not exist")
+
+	// Inform the forest about the config reconciler so that object reconcilers can
+	// signal the config reconciler to reconcile.
+	r.Forest.ObjectsStatusSyncer = r
+
+	// Periodically checks if the config reconciler needs to reconcile and trigger the
+	// reconciliation if needed, in case the status needs to be updated. This occurs
+	// in a goroutine so the caller doesn't block; since the reconciler is never
+	// garbage-collected, this is safe.
+	go r.periodicTrigger()
+
 	return nil
 }

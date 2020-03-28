@@ -33,6 +33,7 @@ import (
 )
 
 type controller struct {
+	reconcileHandler mc.TenantClusterReconcileHandler
 	// super master namespace client
 	namespaceClient v1core.NamespacesGetter
 	// super master namespace lister
@@ -50,23 +51,32 @@ func Register(
 	namespaceInformer coreinformers.NamespaceInformer,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, err := NewNamespaceController(namespaceClient, namespaceInformer)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster namespace controller %v", err)
+		return
+	}
+
+	controllerManager.AddController(c)
+}
+
+func NewNamespaceController(namespaceClient v1core.NamespacesGetter, namespaceInformer coreinformers.NamespaceInformer) (*controller, error) {
 	c := &controller{
 		namespaceClient:     namespaceClient,
 		periodCheckerPeriod: 60 * time.Second,
 	}
 
-	// Create the multi cluster configmap controller
 	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
 	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, options)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster namespace controller %v", err)
-		return
+		return nil, err
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
 	c.nsLister = namespaceInformer.Lister()
 	c.nsSynced = namespaceInformer.Informer().HasSynced
+	c.reconcileHandler = c.reconcile
 
-	controllerManager.AddController(c)
+	return c, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
