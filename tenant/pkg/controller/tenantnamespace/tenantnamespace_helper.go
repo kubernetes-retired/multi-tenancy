@@ -62,25 +62,24 @@ func getTemplateContent(kubeConfigTmpl string, context interface{}) (string, err
 	return writer.String(), nil
 }
 
+//findSecretNameOfSA: get secret name of tenant admin service account
 func findSecretNameOfSA(c client.Client, saName string) (string, error) {
-	//Get service account list, to fetch above sa because secret generation is async
-	saList := corev1.ServiceAccountList{}
-	if err := c.List(context.TODO(), &client.ListOptions{}, &saList); err != nil {
+	var saSecretName string
+	secretList := corev1.SecretList{}
+	if err := c.List(context.TODO(), &client.ListOptions{}, &secretList); err != nil {
 		return "", err
 	}
-
-	//Get secret name of tenant admin service account
-	var saSecretName string
-	for _, eachSA := range saList.Items {
-		for _, each := range eachSA.Secrets {
-			if strings.Contains(each.Name, saName) {
-				saSecretName = each.Name
-			}
+	for _, eachSecret := range secretList.Items {
+		//checks secret type and annotations
+		if v, ok := eachSecret.Annotations[corev1.ServiceAccountNameKey]; ok && strings.EqualFold(v, saName) && (eachSecret.Type == corev1.SecretTypeServiceAccountToken){
+			saSecretName = eachSecret.Name
+			break
 		}
 	}
+
 	return saSecretName, nil
 }
 
-func getUniqueName(str string, a int) string{
-	return fmt.Sprintf("%+v-%+v",str, int64(a))
+func getUniqueName(str string, a int) string {
+	return fmt.Sprintf("%+v-%+v", str, int64(a))
 }
