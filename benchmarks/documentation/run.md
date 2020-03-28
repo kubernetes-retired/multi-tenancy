@@ -32,17 +32,8 @@ tenantA:
 go test ./e2e/tests
 ```
 
+### To see a more verbose output from the test
 
-### Compile the test binary and run the test
-
-This command compiles the test and output to `tests.test` in current directory.
 ```shell
-go test -c ./e2e/tests
+go test -v ./e2e/tests
 ```
-
-Run the test:
-```shell
-./tests.test 
-```
-<br/><br/>
-*Read Next >> [Contributing](contributing.md)*
