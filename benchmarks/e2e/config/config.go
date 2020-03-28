@@ -1,10 +1,11 @@
 package test
 
 import (
+	"errors"
 	"reflect"
 )
 
-const ConfigPath = "./config.yaml"
+const ConfigPath = "../../config.yaml"
 
 type BenchmarkConfig struct {
 	Adminkubeconfig string     `yaml:"adminKubeconfig"`
@@ -18,10 +19,13 @@ type TenantSpec struct {
 	Namespace  string `yaml:"namespace"`
 }
 
-func (c *BenchmarkConfig) GetValidTenant() TenantSpec {
+func (c *BenchmarkConfig) GetValidTenant() (TenantSpec, error) {
+	if c == nil {
+		return TenantSpec{}, errors.New("Please fill in a valid/non-empty config.yaml")
+	}
 	if !reflect.DeepEqual(c.TenantA, TenantSpec{}) {
-		return c.TenantA
+		return c.TenantA, nil
 	}
 
-	return c.TenantB
+	return c.TenantB, nil
 }
