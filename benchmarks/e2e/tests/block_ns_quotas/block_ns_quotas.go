@@ -29,7 +29,9 @@ var _ = framework.KubeDescribe("test resource quotas modification permissions", 
 		var user, namespace string
 
 		ginkgo.BeforeEach(func() {
-			tenantkubeconfig := config.GetValidTenant()
+			tenantkubeconfig, err := config.GetValidTenant()
+			framework.ExpectNoError(err)
+
 			os.Setenv("KUBECONFIG", tenantkubeconfig.Kubeconfig)
 			user = configutil.GetContextFromKubeconfig(tenantkubeconfig.Kubeconfig)
 			namespace = tenantkubeconfig.Namespace
