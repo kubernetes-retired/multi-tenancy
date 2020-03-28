@@ -32,7 +32,8 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 		os.Setenv("KUBECONFIG", config.Adminkubeconfig)
 		labelFlg := fmt.Sprintf("-l")
 
-		tenantkubeconfig := config.GetValidTenant()
+		tenantkubeconfig, err := config.GetValidTenant()
+		framework.ExpectNoError(err)
 
 		resourceList, err = framework.RunKubectl("get", "all", labelFlg, config.Label , nsFlag, tenantkubeconfig.Namespace, outputFlag)
 		framework.ExpectNoError(err)
@@ -42,16 +43,21 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 		var user string
 
 		ginkgo.BeforeEach(func() {
-			tenantkubeconfig := config.GetValidTenant()
+			tenantkubeconfig, err := config.GetValidTenant()
+			framework.ExpectNoError(err)
 			os.Setenv("KUBECONFIG", tenantkubeconfig.Kubeconfig)
 			user = configutil.GetContextFromKubeconfig(tenantkubeconfig.Kubeconfig)
 		})
 
 		ginkgo.It("annotate resources managed by the cluster administrator in tenant's namespace", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot annotate resources managed by the cluster administrator in tenant's namespace", user))
+			
 			resources := strings.Fields(resourceList)
 			annotate := fmt.Sprintf("test=multi")
-			tenantkubeconfig := config.GetValidTenant()
+			
+			tenantkubeconfig, err := config.GetValidTenant()
+			framework.ExpectNoError(err)
+
 			for _, resource := range resources {
 				_, errNew := framework.LookForString(expectedVal, time.Minute, func() string {
 					_, err := framework.RunKubectl(dryrun, nsFlag, tenantkubeconfig.Namespace, "annotate", resource, annotate)
@@ -80,7 +86,8 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 
 		os.Setenv("KUBECONFIG", config.Adminkubeconfig)
 
-		tenantkubeconfig := config.GetValidTenant()
+		tenantkubeconfig, err := config.GetValidTenant()
+		framework.ExpectNoError(err)
 
 		resourceList, err = framework.RunKubectl("get", "rolebinding", nsFlag, tenantkubeconfig.Namespace, outputFlag)
 		framework.ExpectNoError(err)
@@ -90,16 +97,21 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 		var user string
 
 		ginkgo.BeforeEach(func() {
-			tenantkubeconfig := config.GetValidTenant()
+			tenantkubeconfig, err := config.GetValidTenant()
+			framework.ExpectNoError(err)
+
 			os.Setenv("KUBECONFIG", tenantkubeconfig.Kubeconfig)
 			user = configutil.GetContextFromKubeconfig(tenantkubeconfig.Kubeconfig)
 		})
 
 		ginkgo.It("annotate rolebinding in tenant's namespace", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot annotate rolebinding in tenant's namespace", user))
+			
 			resources := strings.Fields(resourceList)
 			annotate := fmt.Sprintf("test=multi")
-			tenantkubeconfig := config.GetValidTenant()
+			
+			tenantkubeconfig, err := config.GetValidTenant()
+			framework.ExpectNoError(err)
 			for _, resource := range resources {
 				_, errNew := framework.LookForString(expectedVal, time.Minute, func() string {
 					_, err := framework.RunKubectl(dryrun, nsFlag, tenantkubeconfig.Namespace, "annotate", resource, annotate)
