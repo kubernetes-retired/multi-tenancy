@@ -37,3 +37,5 @@ go test ./e2e/tests
 ```shell
 go test -v ./e2e/tests
 ```
+<br/><br/>
+*Read Next >> [Contributing](contributing.md)*
