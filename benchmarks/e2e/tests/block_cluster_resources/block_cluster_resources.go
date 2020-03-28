@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "github.com/realshuting/multi-tenancy/benchmarks/e2e/config"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 

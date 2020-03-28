@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/onsi/ginkgo"
-	configutil "github.com/realshuting/multi-tenancy/benchmarks/e2e/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
