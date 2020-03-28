@@ -23,8 +23,8 @@ import (
 )
 
 type EnqueueRequestForObject struct {
-	Cluster *reconciler.ClusterInfo
-	Queue   Queue
+	ClusterName string
+	Queue       Queue
 }
 
 func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
@@ -34,7 +34,7 @@ func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
 	}
 
 	r := reconciler.Request{}
-	r.ClusterName = e.Cluster.Name
+	r.ClusterName = e.ClusterName
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
 	r.UID = string(o.GetUID())

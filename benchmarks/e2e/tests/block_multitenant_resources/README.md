@@ -28,7 +28,7 @@ The resources managed by the cluster administrator and that cannot be modified b
 	
 Run the following commands to retrieve the list of resources managed by the cluster administrator
 
-  	kubectl --kubeconfig=tenant-a -n a1 get all -l <key>=<value>
+  	kubectl --kubeconfig=cluster-admin -n a1 get all -l <key>=<value>
 
 For each returned by the first command verify that the resource cannot be modified by the tenant administrator:
 	

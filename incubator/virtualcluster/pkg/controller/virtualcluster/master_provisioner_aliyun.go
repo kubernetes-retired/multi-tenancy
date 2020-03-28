@@ -493,13 +493,8 @@ PollASK:
 
 	// 4. create the root namesapce of the Virtualcluster
 	vcNs := conversion.ToClusterKey(vc)
-	// remove root ns if exist.
-	// NOTE rootNS may exist for debugging purposes if creation fail
-	err = kubeutil.RemoveNS(mpa, vcNs)
-	if err != nil {
-		return err
-	}
-	err = kubeutil.CreateNS(mpa, vcNs)
+
+	err = kubeutil.CreateRootNS(mpa, vcNs, vc.Name, string(vc.UID))
 	if err != nil {
 		return err
 	}
@@ -574,7 +569,6 @@ PollASK:
 // the ASK will be deleted
 func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
 	log.Info("deleting the ASK of the virtualcluster", "vc-name", vc.Name)
-	defer kubeutil.DeleteAffiliatedNs(mpa, vc, log)
 	aliyunAKID, aliyunAKSrt, err := mpa.getAliyunAKPair()
 	if err != nil {
 		return err

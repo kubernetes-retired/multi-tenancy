@@ -259,6 +259,43 @@ spec:
           imagePullPolicy: Always
           name: vc-syncer
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: vn-agent-role
+rules:
+- apiGroups: 
+  - ""
+  resources: 
+  - pods
+  - pods/log
+  - pods/exec
+  - pods/portforward
+  verbs:
+  - get
+  - list
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vn-agent-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vn-agent-role
+subjects:
+- kind: ServiceAccount
+  name: vn-agent
+  namespace: vc-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vn-agent
+  namespace: vc-manager
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -276,6 +313,7 @@ spec:
       labels:
         app: vn-agent
     spec:
+      serviceAccountName: vn-agent
       hostNetwork: true
       containers:
         - command:

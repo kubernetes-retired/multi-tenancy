@@ -120,7 +120,7 @@ func newServerTestWithDebug(enableDebugging, redirectContainerStreaming bool, st
 	}
 
 	server, err := NewServer(&config.Config{
-		KubeletClientCert: kubeletClientCert,
+		KubeletClientCert: &kubeletClientCert,
 		KubeletServerHost: fv.kubeletServer.testHTTPServer.URL,
 	})
 	if err != nil {

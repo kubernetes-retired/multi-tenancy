@@ -3,6 +3,8 @@ module github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
 go 1.12
 
 require (
+	github.com/Azure/go-autorest v14.0.0+incompatible // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.8.2 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
 	github.com/emicklei/go-restful v2.9.6+incompatible
 	github.com/go-logr/logr v0.1.0

@@ -17,14 +17,14 @@ limitations under the License.
 package controller
 
 import (
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs []func(manager.Manager, string) error
+var AddToManagerFuncs []func(*vcmanager.VirtualclusterManager, string) error
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m manager.Manager, masterProvisioner string) error {
+func AddToManager(m *vcmanager.VirtualclusterManager, masterProvisioner string) error {
 	for _, f := range AddToManagerFuncs {
 		if err := f(m, masterProvisioner); err != nil {
 			return err

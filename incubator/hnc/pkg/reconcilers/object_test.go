@@ -108,8 +108,6 @@ var _ = Describe("Secret", func() {
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 
 		removeRole(ctx, fooName, "foo-role")
-		// Wait 1 second to make sure the propagated objects are removed.
-		time.Sleep(1 * time.Second)
 		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
@@ -118,8 +116,7 @@ var _ = Describe("Secret", func() {
 	It("should overwrite the propagated ones if the source is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		// Wait 1 second to make sure the source get propagated.
-		time.Sleep(1 * time.Second)
+		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-role")).Should(BeFalse())
@@ -127,8 +124,6 @@ var _ = Describe("Secret", func() {
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeFalse())
 
 		modifyRole(ctx, fooName, "foo-role")
-		// Wait 1 second to make sure the updated source get propagated.
-		time.Sleep(1 * time.Second)
 		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeTrue())
@@ -159,9 +154,6 @@ var _ = Describe("Secret", func() {
 		// Set baz's parent to foo and add a new role in foo.
 		setParent(ctx, bazName, fooName)
 		makeObject(ctx, "Role", fooName, "foo-role-2")
-
-		// Wait 1 second to make sure any potential actions are done.
-		time.Sleep(1 * time.Second)
 
 		// Since the sync is frozen, baz should still have bar-role (no deleting).
 		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
@@ -270,14 +262,22 @@ func setFinalizer(ctx context.Context, nsName, roleName string, set bool) {
 	ExpectWithOffset(1, k8sClient.Update(ctx, role)).Should(Succeed())
 }
 
-func isModified(ctx context.Context, nsName, roleName string) bool {
-	nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
-	role := &v1.Role{}
-	ExpectWithOffset(1, k8sClient.Get(ctx, nnm, role)).Should(Succeed())
+func isModified(ctx context.Context, nsName, roleName string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args.
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nsName, Name: roleName}
+		role := &v1.Role{}
+		// Even if `isModified` is always called after `hasObject`, we still use `Eventually`
+		// here to make sure there's no weird case of failure when the object does exist. This
+		// will not increase the test time since it will pass immediately if it succeeds.
+		EventuallyWithOffset(1, func() error {
+			return k8sClient.Get(ctx, nnm, role)
+		}).Should(Succeed())
 
-	labels := role.GetLabels()
-	_, ok := labels["modify"]
-	return ok
+		labels := role.GetLabels()
+		_, ok := labels["modify"]
+		return ok
+	}
 }
 
 func removeRole(ctx context.Context, nsName, roleName string) {

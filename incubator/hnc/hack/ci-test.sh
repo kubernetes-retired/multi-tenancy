@@ -33,7 +33,7 @@ tar -zxvf kubebuilder_2.0.0-alpha.1_linux_amd64.tar.gz
 mv kubebuilder_2.0.0-alpha.1_linux_amd64 /usr/local/kubebuilder
 
 echo "Installing 'kustomize'"
-GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.2.1
+GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4
 
 hack_dir=$(dirname ${BASH_SOURCE})
 

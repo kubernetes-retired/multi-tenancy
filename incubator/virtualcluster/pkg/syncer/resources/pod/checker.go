@@ -253,7 +253,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 				}
 			} else {
 				// pPod not found and vPod still exists, we need to create pPod again
-				if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i], reconciler.AddEvent); err != nil {
+				if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 					klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 				} else {
 					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPods").Inc()

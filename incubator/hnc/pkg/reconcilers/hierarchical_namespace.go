@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -81,96 +83,27 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	}
 
 	// Get the self-serve namespace's hierarchyConfig and namespace instances.
-	hcInst, nsInst, err := r.hcr.GetInstances(ctx, log, nm)
+	nsInst, err := r.getNamespace(ctx, nm)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	r.syncWithForest(log, inst, nsInst, hcInst)
-
-	// TODO report the "SubnamespaceConflict" in the HNS reconciliation. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/490
-
-	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
-}
-
-// HierarchicalNamespace (HNS) is synced with the in-memory forest, the HierarchyConfig and
-// the namespace instances to update its HNS state. This will be the only place the "Owner"
-// field in the forest is set. Therefore, the "Owner" field can be used in the forest to get
-// all the HNS objects of a namespace.
-func (r *HierarchicalNamespaceReconciler) syncWithForest(log logr.Logger, inst *api.HierarchicalNamespace, nsInst *corev1.Namespace, hcInst *api.HierarchyConfiguration) {
-	r.forest.Lock()
-	defer r.forest.Unlock()
-
-	// Names of the hierarchical namespace and the current namespace.
-	nm := inst.Name
-	pnm := inst.Namespace
-
-	// Get the namespace instance in memory.
-	ns := r.forest.Get(nm)
-
 	switch {
 	case nsInst.Name == "":
-		// If the real namespace instance doesn't exist yet, update forest and enqueue the namespace
-		// to HierarchyConfig reconciler.
-		log.Info("The self-serve subnamespace does not exist", "namespace", nm)
-		r.syncMissing(log, inst, ns)
+		log.Info("The owned subnamespace does not exist", "subnamespace", nm)
+		inst.Status.State = api.Missing
+		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
+			return ctrl.Result{}, err
+		}
 	case nsInst.Annotations[api.AnnotationOwner] != pnm:
-		// If the namespace is not a self-serve namespace or it's a self-serve namespace of another
-		// namespace. Report the conflict.
 		log.Info("The owner annotation of the subnamespace doesn't match the owner", "annotation", nsInst.Annotations[api.AnnotationOwner])
 		inst.Status.State = api.Conflict
 	default:
 		log.Info("The subnamespace has the correct owner annotation", "annotation", nsInst.Annotations[api.AnnotationOwner])
-		r.syncExisting(log, inst, ns, hcInst, nsInst)
-	}
-}
-
-func (r *HierarchicalNamespaceReconciler) syncMissing(log logr.Logger, inst *api.HierarchicalNamespace, ns *forest.Namespace) {
-	pnm := inst.Namespace
-	nm := inst.Name
-
-	// Set the HNS state to "Missing" because the subnamespace doesn't exist.
-	inst.Status.State = api.Missing
-
-	// Set the "Owner" in the forest of the hierarchical namespace to the current namespace.
-	log.Info("Setting the subnamespace's owner in the forest", "owner", pnm, "namespace", nm)
-	// TODO rename RequiredChildOf to Owner in the forest. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/469
-	ns.RequiredChildOf = pnm
-
-	// Enqueue the not-yet existent self-serve subnamespace. The HierarchyConfig reconciler will
-	// create the namespace and the HierarchyConfig instances on apiserver accordingly.
-	r.hcr.enqueueAffected(log, "new subnamespace", nm)
-}
-
-// syncExisting syncs the existing subnamespace with its owner namespace. It updates the HNS state
-// to "Ok" or "Conflict" according to the hierarchy.
-func (r *HierarchicalNamespaceReconciler) syncExisting(log logr.Logger, inst *api.HierarchicalNamespace, ns *forest.Namespace, hcInst *api.HierarchyConfiguration, nsInst *corev1.Namespace) {
-	pnm := inst.Namespace
-	nm := inst.Name
-
-	switch hcInst.Spec.Parent {
-	case "":
-		log.Info("Parent is not set", "namespace", nm)
-		// This case is rare. It means the namespace is created with the right annotation but
-		// no HC. This could be a transient state before HC reconciler finishes creating the HC
-		// or a human manually created the namespace with the right annotation but no HC.
-		// Both cases meant to create this namespace as HNS.
-		log.Info("Setting the subnamespace's owner in the forest", "owner", pnm, "namespace", nm)
-		ns.RequiredChildOf = pnm
-		r.hcr.enqueueAffected(log, "updated subnamespace", nm)
-
-		// We will set it as "Conflict" though it's just a short transient state. Once the hc is
-		// reconciled, this HNS will be enqueued and then set the state to "Ok".
-		inst.Status.State = api.Conflict
-	case pnm:
-		log.Info("Setting the HierarchicalNamespace state to Ok")
 		inst.Status.State = api.Ok
-	default:
-		log.Info("Self-serve subnamespace is already owned by another parent", "child", nm, "intendedParent", pnm, "actualParent", hcInst.Spec.Parent)
-		inst.Status.State = api.Conflict
 	}
+
+	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 }
 
 // It enqueues a hierarchicalNamespace instance for later reconciliation. This occurs in a goroutine
@@ -195,6 +128,21 @@ func (r *HierarchicalNamespaceReconciler) getInstance(ctx context.Context, pnm, 
 	return inst, nil
 }
 
+// getNamespace returns the namespace if it exists, or returns an invalid, blank, unnamed one if it
+// doesn't. This allows it to be trivially identified as a namespace that doesn't exist, and also
+// allows us to easily modify it if we want to create it.
+func (r *HierarchicalNamespaceReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
+	ns := &corev1.Namespace{}
+	nnm := types.NamespacedName{Name: nm}
+	if err := r.Get(ctx, nnm, ns); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		return &corev1.Namespace{}, nil
+	}
+	return ns, nil
+}
+
 func (r *HierarchicalNamespaceReconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.HierarchicalNamespace) error {
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating instance on apiserver")
@@ -212,9 +160,40 @@ func (r *HierarchicalNamespaceReconciler) writeInstance(ctx context.Context, log
 	return nil
 }
 
+func (r *HierarchicalNamespaceReconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
+	inst := &corev1.Namespace{}
+	inst.ObjectMeta.Name = nm
+	metadata.SetAnnotation(inst, api.AnnotationOwner, pnm)
+
+	// It's safe to use create here since if the namespace is created by someone
+	// else while this reconciler is running, returning an error will trigger a
+	// retry. The reconciler will set the 'Conflict' state instead of recreating
+	// this namespace. All other transient problems should trigger a retry too.
+	log.Info("Creating namespace on apiserver")
+	if err := r.Create(ctx, inst); err != nil {
+		log.Error(err, "while creating on apiserver")
+		return err
+	}
+	return nil
+}
+
 func (r *HierarchicalNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Maps an owned namespace to its HNS instance in the owner namespace.
+	nsMapFn := handler.ToRequestsFunc(
+		func(a handler.MapObject) []reconcile.Request {
+			if a.Meta.GetAnnotations()[api.AnnotationOwner] == "" {
+				return nil
+			}
+			return []reconcile.Request{
+				{NamespacedName: types.NamespacedName{
+					Name:      a.Meta.GetName(),
+					Namespace: a.Meta.GetAnnotations()[api.AnnotationOwner],
+				}},
+			}
+		})
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.HierarchicalNamespace{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
 		Complete(r)
 }

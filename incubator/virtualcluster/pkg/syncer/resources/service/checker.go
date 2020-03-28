@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedServices uint64
@@ -117,7 +116,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vService.Namespace)
 		pService, err := c.serviceLister.Services(targetNamespace).Get(vService.Name)
 		if errors.IsNotFound(err) {
-			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i], reconciler.AddEvent); err != nil {
+			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
