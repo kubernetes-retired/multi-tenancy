@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "github.com/realshuting/multi-tenancy/benchmarks/e2e/config"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
 )
 
@@ -25,13 +25,17 @@ var _ = framework.KubeDescribe("test cross tenants permission", func() {
 	var all = "--all=true"
 
 	ginkgo.BeforeEach(func() {
-		ginkgo.By("get namespace wide api-resources")
+		ginkgo.By("get tenant's namespace wide api-resources")
 
 		config, err = configutil.ReadConfig(configutil.ConfigPath)
 		framework.ExpectNoError(err)
 
+		err = config.ValidateTenant(config.TenantA)
+		framework.ExpectNoError(err)
+
 		os.Setenv("KUBECONFIG", config.TenantA.Kubeconfig)
 		tenantA = configutil.GetContextFromKubeconfig(config.TenantA.Kubeconfig)
+
 		outputFlag := fmt.Sprintf("-o=name")
 		nsdFlag := fmt.Sprintf("--namespaced=true")
 
@@ -42,6 +46,9 @@ var _ = framework.KubeDescribe("test cross tenants permission", func() {
 	framework.KubeDescribe("tenant cannot access other tenant namespaced resources", func() {
 
 		ginkgo.BeforeEach(func() {
+			err = config.ValidateTenant(config.TenantB)
+			framework.ExpectNoError(err)
+			
 			os.Setenv("KUBECONFIG", config.TenantB.Kubeconfig)
 			tenantB = configutil.GetContextFromKubeconfig(config.TenantB.Kubeconfig)
 		})
