@@ -39,6 +39,7 @@ const (
 	CritParentInvalid    Code = "CRIT_PARENT_INVALID"
 	CritAncestor         Code = "CRIT_ANCESTOR"
 	SubnamespaceConflict Code = "SUBNAMESPACE_CONFLICT"
+	HNSMissing           Code = "HNS_MISSING"
 	CannotUpdate         Code = "CANNOT_UPDATE_OBJECT"
 	CannotPropagate      Code = "CANNOT_PROPAGATE_OBJECT"
 )
@@ -68,11 +69,6 @@ type HierarchyConfigurationSpec struct {
 	// AllowCascadingDelete indicates if the self-serve subnamespaces of this namespace are allowed
 	// to cascading delete.
 	AllowCascadingDelete bool `json:"allowCascadingDelete"`
-
-	// RequiredChildren indicates the required subnamespaces of this namespace. If they do not exist,
-	// the HNC will create them, allowing users without privileges to create namespaces to get child
-	// namespaces anyway.
-	RequiredChildren []string `json:"requiredChildren,omitempty"`
 }
 
 // HierarchyStatus defines the observed state of Hierarchy

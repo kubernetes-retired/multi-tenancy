@@ -27,11 +27,6 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
-# Set default to not use HNS reconciler
-ifeq (,${HNS})
-HNS=0
-endif
-
 # Get check sum value of krew archive
 KREW_CKSM=$(shell sha256sum bin/kubectl-hierarchical_namespaces.tar.gz | cut -d " " -f 1)
 
@@ -41,12 +36,7 @@ all: test docker-build
 
 # Run tests
 test: build
-	# run tests in all directories except ./pkg/reconcilers/
-	go test ./api/... ./cmd/... `go list ./pkg/... | grep -v reconcilers` -coverprofile cover.out
-	# separately run tests in ./pkg/reconcilers/
-	# by default it will not use the HNS reconciler
-	# with HNS=1 it will use the new HNS reconciler
-	go test ./pkg/reconcilers/... -enable-hierarchicalnamespace-reconciler=${HNS} -coverprofile cover.out
+	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests

@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,12 +65,6 @@ type HierarchyConfigReconciler struct {
 	// simply hard to tell when one ends and another begins).
 	reconcileID int32
 
-	// This is a temporary field to toggle different behaviours of this HierarchyConfigurationReconciler
-	// depending on if the HierarchicalNamespaceReconciler is enabled or not. It will be removed after
-	// the GitHub issue "Implement self-service namespace" is resolved
-	// (https://github.com/kubernetes-sigs/multi-tenancy/issues/457)
-	HNSReconcilerEnabled bool
-
 	hnsr *HierarchicalNamespaceReconciler
 }
 
@@ -92,17 +87,13 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	rid := (int)(atomic.AddInt32(&r.reconcileID, 1))
 	log := r.Log.WithValues("ns", ns, "rid", rid)
 
-	// TODO remove this log and use the HNSReconcilerEnabled to toggle the behavour of this
-	//  reconciler accordingly. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/467
-	// Output a log for testing.
-	log.Info("HC will be reconciled with", "HNSReconcilerEnabled", r.HNSReconcilerEnabled)
-
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
 	// Get the singleton and namespace.
 	inst, nsInst, err := r.GetInstances(ctx, log, nm)
+	hnsnms, err := r.getHierarchicalNamespaceNames(ctx, nm)
 	if err != nil {
 		return err
 	}
@@ -121,7 +112,7 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	}
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst)
+	r.syncWithForest(log, nsInst, inst, hnsnms)
 
 	// Early exit if we don't need to write anything back.
 	if !update {
@@ -151,12 +142,12 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, hnsnms []string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 
-	// Handle missing namespaces. It could be created if it's been requested as a subnamespace.
+	// Handle missing namespaces.
 	if r.onMissingNamespace(log, ns, nsInst) {
 		return
 	}
@@ -165,13 +156,12 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearConditions(forest.Local, "")
 
+	r.syncOwner(log, inst, nsInst, ns)
 	r.markExisting(log, ns)
 
-	r.syncOwner(log, inst, ns)
 	r.syncParent(log, inst, ns)
-
-	// Update the list of actual children, then resolve it versus the list of required children.
-	r.syncChildren(log, inst, ns)
+	inst.Status.Children = ns.ChildNames()
+	r.syncHNSes(log, ns, hnsnms)
 
 	r.syncLabel(log, nsInst, ns)
 
@@ -184,29 +174,57 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *fore
 		return false
 	}
 
+	// If the namespace is removed, no more action need on the reconciliation. The
+	// namespace is only unset existence below.
 	if !ns.Exists() {
-		// The namespace doesn't exist on the server, but its owner expects it to be there. Initialize
-		// it so it gets created; once it is, it will be reconciled again.
-		if ns.Owner != "" {
-			log.Info("Will create missing namespace", "forOwner", ns.Owner)
-			nsInst.Name = ns.Name()
-			// Set "api.AnnotationOwner" annotation to the non-existent yet namespace.
-			metadata.SetAnnotation(nsInst, api.AnnotationOwner, ns.Owner)
-		}
 		return true
 	}
 
 	// Remove it from the forest and notify its relatives
 	r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
-	// Enqueue the HNS if the owned namespace is deleted.
-	if r.HNSReconcilerEnabled {
-		if ns.Owner != "" {
-			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "hns for the deleted owned namespace")
-		}
-	}
 	ns.UnsetExists()
 	log.Info("Removed namespace")
 	return true
+}
+
+// syncOwner sets the parent to the owner and updates the HNS_MISSING condition
+// if the HNS instance is missing in the owner namespace according to the forest.
+// The namespace owner annotation is the source of truth of the ownership, since
+// modifying a namespace has higher privilege than what HNC users can do.
+func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
+	// Clear the HNS_MISSING condition if this is not an owned namespace or to
+	// reset it for the updated condition later.
+	ns.ClearAllConditions(api.HNSMissing)
+	nm := ns.Name()
+	onm := nsInst.Annotations[api.AnnotationOwner]
+	ons := r.Forest.Get(onm)
+
+	if onm == "" {
+		return
+	}
+
+	if ns.Owner != onm {
+		log.Info("Owner annotation was updated", "old", ns.Owner, "new", onm)
+		ns.Owner = nsInst.Annotations[api.AnnotationOwner]
+	}
+
+	if inst.Spec.Parent != onm {
+		log.Info("The parent doesn't match the owner. Setting the owner as the parent.", "parent", inst.Spec.Parent, "owner", onm)
+		inst.Spec.Parent = onm
+	}
+
+	// Look up the HNSes in the owner namespace. Set HNS_MISSING condition if it's
+	// not there.
+	found := false
+	for _, hnsnm := range ons.HNSes {
+		if hnsnm == nm {
+			found = true
+			break
+		}
+	}
+	if !found {
+		ns.SetCondition(onm, api.HNSMissing, "The HNS instance is missing in the owner namespace")
+	}
 }
 
 // markExisting marks the namespace as existing. If this is the first time we're reconciling this namespace,
@@ -217,45 +235,9 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
 		if ns.Owner != "" {
 			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Owner)
+			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "the missing owned namespace is found")
 		}
 	}
-}
-
-// syncOwner propagates the required child value from the forest to the spec if possible
-// (the spec itself will be synced next), or removes the owner value if there's a problem
-// and notifies the would-be parent namespace.
-func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
-	if ns.Owner == "" {
-		return
-	}
-
-	switch inst.Spec.Parent {
-	case "":
-		log.Info("Owned namespace: initializing", "owner", ns.Owner)
-		inst.Spec.Parent = ns.Owner
-	case ns.Owner:
-		// ok
-		if r.HNSReconcilerEnabled {
-			// Enqueue HNS to update the state to "Ok".
-			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "the HNS state should be updated to ok")
-		}
-	default:
-		if r.HNSReconcilerEnabled {
-			// Enqueue the HNS to report the conflict in hierarchicalnamespace.Status.State and enqueue the
-			// owner namespace to report the "SubnamespaceConflict" condition.
-			log.Info("Owned namespace: conflict with parent", "owner", ns.Owner, "parent", inst.Spec.Parent)
-			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "owned namespace has a parent but it's not the owner")
-			r.enqueueAffected(log, "owned namespace already has a parent", ns.Owner)
-		} else {
-			// This should never happen unless there's some crazy race condition.
-			log.Info("Owned namespace: conflict with existing parent", "owner", ns.Owner, "actualParent", inst.Spec.Parent)
-			r.enqueueAffected(log, "owned namespace already has a parent", ns.Owner)
-			ns.Owner = "" // get back in sync with apiserver
-		}
-	}
-
-	// TODO(https://github.com/kubernetes-sigs/multi-tenancy/issues/316): prevent a namespace from
-	// stealing this after it's "released" from another parent.
 }
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
@@ -294,6 +276,16 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 	}
 }
 
+// syncHNSes updates the HNS list. If any HNS is created/deleted, it will enqueue
+// the child to update its HNS_MISSING condition. A modified HNS will appear
+// twice in the change list (one in deleted, one in created), both owned namespace
+// needs to be enqueued in this case.
+func (r *HierarchyConfigReconciler) syncHNSes(log logr.Logger, ns *forest.Namespace, hnsnms []string) {
+	for _, changedHNS := range ns.SetHNSes(hnsnms) {
+		r.enqueueAffected(log, "the HNS instance is created/deleted", changedHNS)
+	}
+}
+
 func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Depth label only makes sense if there's no error condition.
 	if ns.HasCritCondition() {
@@ -316,119 +308,6 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
 		metadata.SetLabel(nsInst, l, dist)
-	}
-}
-
-// syncChildren looks at the current list of children and compares it to the children that
-// have been marked as required. If any required children are missing, we add them to the in-memory
-// forest and enqueue the (missing) child for reconciliation; we also handle various error cases.
-func (r *HierarchyConfigReconciler) syncChildren(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
-	// Update the most recent list of children from the forest
-	inst.Status.Children = ns.ChildNames()
-
-	// Currently when HNS reconciler is not enabled, the "SubnamespaceConflict" condition is cleared and
-	// updated when a parent namespace syncChildren().
-	// TODO report the "SubnamespaceConflict" in the HNS reconciliation. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/490
-	if !r.HNSReconcilerEnabled {
-		// We'll reset any of these conditions if they occur.
-		ns.ClearAllConditions(api.SubnamespaceConflict)
-	}
-
-	// Make a set to make it easy to look up if a child is required or not
-	isRequired := map[string]bool{}
-	rl := ns.OwnedNames()
-	// TODO Remove the spec.requiredChildren field when the hns reconciler is in use.
-	//  See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/457
-	// TODO Sync the hns instances in HNS reconciler, instead of syncing the spec.requiredChildren
-	//  here. Update hns states in hns reconciliation. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/487
-	// Use the old spec.requiredChildren field to get the list of the self-serve subnamespaces.
-	if !r.HNSReconcilerEnabled {
-		rl = inst.Spec.RequiredChildren
-	}
-	for _, r := range rl {
-		isRequired[r] = true
-	}
-
-	// Check the list of actual children against the required children
-	for _, cn := range inst.Status.Children {
-		cns := r.Forest.Get(cn)
-
-		if cns.Owner != "" && cns.Owner != ns.Name() {
-			// Since the list of children of this namespace came from the forest, this implies that the
-			// in-memory forest is out of sync with itself: owner != parent. Obviously, this
-			// should never happen.
-			//
-			// Let's just log an error and enqueue the other namespace so it can report the condition.
-			// The forest will be reset to the correct value, below.
-			log.Error(forest.OutOfSync, "While syncing children", "child", cn, "owner", cns.Owner)
-			r.enqueueAffected(log, "forest out-of-sync: owner != parent", cns.Owner)
-			if r.HNSReconcilerEnabled {
-				r.hnsr.enqueue(log, cn, cns.Owner, "forest out-of-sync: owner != parent")
-			}
-		}
-
-		if r.HNSReconcilerEnabled {
-			if isRequired[cn] {
-				delete(isRequired, cn)
-			}
-		} else {
-			if isRequired[cn] {
-				// This child is actually owned. Remove it from the set so we know we found it. Also, the
-				// forest is almost certainly already in sync, but just set it again in case something went
-				// wrong (eg, the error shown above).
-				delete(isRequired, cn)
-				cns.Owner = ns.Name()
-			} else {
-				// This isn't an owned child, but it looks like it *used* to be an owned child of this
-				// namespace. Clear the Owner field from the forest to bring our state in line with
-				// what's on the apiserver.
-				cns.Owner = ""
-			}
-		}
-	}
-
-	if r.HNSReconcilerEnabled {
-		for cn := range isRequired {
-			r.hnsr.enqueue(log, cn, ns.Name(), "parent of the owned namespace is not the owner")
-		}
-	} else {
-		// Anything that's still in isRequired at this point is a required child according to our own
-		// spec, but it doesn't exist as a child of this namespace. There could be one of two reasons:
-		// either the namespace hasn't been created (yet), in which case we just need to enqueue it for
-		// reconciliation, or else it *also* is claimed by another namespace.
-		for cn := range isRequired {
-			log.Info("Required child is missing", "child", cn)
-			cns := r.Forest.Get(cn)
-
-			// We'll always set a condition just in case the required namespace can't be created/configured,
-			// but if all is working well, the condition will be resolved as soon as the child namespace is
-			// configured correctly (see the call to ClearAllConditions, above, in this function). This is
-			// the default message, we'll override it if the namespace doesn't exist.
-			msg := fmt.Sprintf("required subnamespace %s exists but cannot be set as a child of this namespace", cn)
-
-			// If this child isn't claimed by another parent, claim it and make sure it gets reconciled
-			// (which is when it will be created).
-			if cns.Parent() == nil && (cns.Owner == "" || cns.Owner == ns.Name()) {
-				cns.Owner = ns.Name()
-				r.enqueueAffected(log, "required child is missing", cn)
-				if !cns.Exists() {
-					msg = fmt.Sprintf("required subnamespace %s does not exist", cn)
-				}
-			} else {
-				// Someone else got it first. This should never happen if the validator is working correctly.
-				other := cns.Owner
-				if other == "" {
-					other = cns.Parent().Name()
-				}
-				log.Info("Required child is already owned/claimed by another parent", "child", cn, "otherParent", other)
-			}
-
-			// Set the condition that the required child isn't an actual child. As mentioned above, if we
-			// just need to create it, this condition will be removed shortly.
-			ns.SetCondition(cn, api.SubnamespaceConflict, msg)
-		}
 	}
 }
 
@@ -619,6 +498,30 @@ func (r *HierarchyConfigReconciler) getNamespace(ctx context.Context, nm string)
 	return ns, nil
 }
 
+// getHierarchicalNamespaceNames returns a list of HierarchicalNamespace
+// instance names in the given namespace.
+func (r *HierarchyConfigReconciler) getHierarchicalNamespaceNames(ctx context.Context, nm string) ([]string, error) {
+	var hnsnms []string
+
+	// List all the hns instance in the namespace.
+	ul := &unstructured.UnstructuredList{}
+	ul.SetKind(api.HierarchicalNamespacesKind)
+	ul.SetAPIVersion(api.HierarchicalNamespacesAPIVersion)
+	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		return hnsnms, nil
+	}
+
+	// Create a list of strings of the hns names.
+	for _, inst := range ul.Items {
+		hnsnms = append(hnsnms, inst.GetName())
+	}
+
+	return hnsnms, nil
+}
+
 func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
 	// Maps namespaces to their singletons
 	nsMapFn := handler.ToRequestsFunc(
@@ -630,6 +533,16 @@ func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconc
 				}},
 			}
 		})
+	// Maps a HierarchicalNamespace (HNS) instance to the owner singleton.
+	hnsMapFn := handler.ToRequestsFunc(
+		func(a handler.MapObject) []reconcile.Request {
+			return []reconcile.Request{
+				{NamespacedName: types.NamespacedName{
+					Name:      api.Singleton,
+					Namespace: a.Meta.GetNamespace(),
+				}},
+			}
+		})
 	opts := controller.Options{
 		MaxConcurrentReconciles: maxReconciles,
 	}
@@ -637,6 +550,7 @@ func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconc
 		For(&api.HierarchyConfiguration{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
+		Watches(&source.Kind{Type: &api.HierarchicalNamespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: hnsMapFn}).
 		WithOptions(opts).
 		Complete(r)
 }

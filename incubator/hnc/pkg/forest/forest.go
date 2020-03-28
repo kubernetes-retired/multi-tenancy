@@ -32,6 +32,16 @@ type TypeSyncer interface {
 	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	// The method also syncs objects in the cluster for the type handled by the reconciler if necessary.
 	SetMode(context.Context, api.SynchronizationMode, logr.Logger) error
+	// GetMode gets the propagation mode of objects that are handled by the reconciler who implements the interface.
+	GetMode() api.SynchronizationMode
+	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
+	GetNumPropagatedObjects() int
+}
+
+// NumPropagatedObjectsSyncer syncs the number of propagated objects. ConfigReconciler implements the
+// interface so that it can be called by an ObjectReconciler if the number of propagated objects is changed.
+type NumPropagatedObjectsSyncer interface {
+	SyncNumPropagatedObjects(logr.Logger)
 }
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate
@@ -53,6 +63,10 @@ type Forest struct {
 	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
 	// In that way, we don't need to put the list in the forest.
 	types []TypeSyncer
+
+	// ObjectsStatusSyncer is the ConfigReconciler that an object reconciler can call if the status of the HNCConfiguration
+	// object needs to be updated.
+	ObjectsStatusSyncer NumPropagatedObjectsSyncer
 }
 
 func NewForest() *Forest {
@@ -154,9 +168,14 @@ type Namespace struct {
 	// on this namespace.
 	conditions conditions
 
+	// Todo remove Owner field or replace it with isOwned bool field. See issue:
+	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/552
 	// Owner indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
 	Owner string
+
+	// HNSes store a list of HNS instances in the namespace.
+	HNSes []string
 }
 
 type condition struct {
@@ -263,20 +282,6 @@ func (ns *Namespace) ChildNames() []string {
 	return nms
 }
 
-// OwnedNames returns a list of names of the owned namespaces or nil if there's none.
-func (ns *Namespace) OwnedNames() []string {
-	if len(ns.forest.namespaces) == 0 {
-		return nil
-	}
-	nms := []string{}
-	for nm, ns := range ns.forest.namespaces {
-		if ns.Owner == ns.name {
-			nms = append(nms, nm)
-		}
-	}
-	return nms
-}
-
 // RelativesNames returns the children and parent.
 func (ns *Namespace) RelativesNames() []string {
 	a := []string{}
@@ -314,6 +319,30 @@ func (ns *Namespace) AncestryNames(other *Namespace) []string {
 
 	// Add ourselves to the ancestry
 	return append(ancestry, ns.name)
+}
+
+// SetHNSes updates the HNSes and returns a difference between the new/old list.
+func (ns *Namespace) SetHNSes(hnsnms []string) (diff []string) {
+	add := make(map[string]bool)
+	for _, nm := range hnsnms {
+		add[nm] = true
+	}
+	for _, nm := range ns.HNSes {
+		if add[nm] {
+			delete(add, nm)
+		} else {
+			// This old HNS is not in the new HNS list.
+			diff = append(diff, nm)
+		}
+	}
+
+	for nm, _ := range add {
+		// This new HNS is not in the old HNS list.
+		diff = append(diff, nm)
+	}
+
+	ns.HNSes = hnsnms
+	return
 }
 
 // SetOriginalObject updates or creates the original object in the namespace in the forest.

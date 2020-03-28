@@ -22,50 +22,34 @@ var EX = map[string]bool{
 // Create creates all reconcilers.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, enableHNSReconciler bool) error {
+func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	hcChan := make(chan event.GenericEvent)
 	hnsChan := make(chan event.GenericEvent)
 
-	// Create different reconcilers based on if the enableHNSReconciler flag is set or not.
-	if enableHNSReconciler {
-		// Create the HierarchyConfigReconciler with HNSReconciler enabled.
-		hcr := &HierarchyConfigReconciler{
-			Client:               mgr.GetClient(),
-			Log:                  ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
-			Forest:               f,
-			Affected:             hcChan,
-			HNSReconcilerEnabled: true,
-		}
+	// Create the HierarchyConfigReconciler with HNSReconciler enabled.
+	hcr := &HierarchyConfigReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
+		Forest:   f,
+		Affected: hcChan,
+	}
 
-		// Create HierarchicalNamespaceReconciler.
-		hnsr := &HierarchicalNamespaceReconciler{
-			Client:   mgr.GetClient(),
-			Log:      ctrl.Log.WithName("reconcilers").WithName("HierarchicalNamespace"),
-			forest:   f,
-			hcr:      hcr,
-			Affected: hnsChan,
-		}
+	// Create HierarchicalNamespaceReconciler.
+	hnsr := &HierarchicalNamespaceReconciler{
+		Client:   mgr.GetClient(),
+		Log:      ctrl.Log.WithName("reconcilers").WithName("HierarchicalNamespace"),
+		forest:   f,
+		hcr:      hcr,
+		Affected: hnsChan,
+	}
 
-		// Set hcr.hnsr after the HNS reconciler is created.
-		hcr.hnsr = hnsr
-		if err := hcr.SetupWithManager(mgr, maxReconciles); err != nil {
-			return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())
-		}
-		if err := hnsr.SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("cannot create HierarchicalNamespace reconciler: %s", err.Error())
-		}
-	} else {
-		// Create the HierarchyConfigReconciler with HNSReconciler disabled.
-		hr := &HierarchyConfigReconciler{
-			Client:               mgr.GetClient(),
-			Log:                  ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
-			Forest:               f,
-			Affected:             hcChan,
-			HNSReconcilerEnabled: false,
-		}
-		if err := hr.SetupWithManager(mgr, maxReconciles); err != nil {
-			return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())
-		}
+	// Set hcr.hnsr after the HNS reconciler is created.
+	hcr.hnsr = hnsr
+	if err := hcr.SetupWithManager(mgr, maxReconciles); err != nil {
+		return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())
+	}
+	if err := hnsr.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create HierarchicalNamespace reconciler: %s", err.Error())
 	}
 
 	// Create the ConfigReconciler.
@@ -74,7 +58,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, enableHNSReco
 		Log:                    ctrl.Log.WithName("reconcilers").WithName("HNCConfiguration"),
 		Manager:                mgr,
 		Forest:                 f,
-		Igniter:                make(chan event.GenericEvent),
+		Trigger:                make(chan event.GenericEvent),
 		HierarchyConfigUpdates: hcChan,
 	}
 	if err := cr.SetupWithManager(mgr); err != nil {

@@ -3,7 +3,7 @@ package test
 import (
 	"io/ioutil"
 	"os"
-
+	"errors"
 	"gopkg.in/yaml.v2"
 	kubernetes "k8s.io/client-go/kubernetes"
 	clientcmd "k8s.io/client-go/tools/clientcmd"
@@ -42,6 +42,9 @@ func ReadConfig(path string) (*BenchmarkConfig, error) {
 		return nil, err
 	}
 
+	if config == nil {
+		return config, errors.New("Please fill in a valid/non-empty yaml file")
+	}
 	return config, nil
 }
 
