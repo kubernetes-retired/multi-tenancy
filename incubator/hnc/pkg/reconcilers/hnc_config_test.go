@@ -13,7 +13,6 @@ import (
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 const (
@@ -503,14 +502,4 @@ func getNumPropagatedObjects(ctx context.Context, apiVersion, kind string) func(
 		}
 		return -1, errors.New(fmt.Sprintf("apiversion %s, kind %s is not found in status", apiVersion, kind))
 	}
-}
-
-// deleteObject deletes an object of the given kind in a specific namespace. The kind and
-// its corresponding GVK should be included in the GVKs map.
-func deleteObject(ctx context.Context, kind string, nsName, name string) {
-	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
-	inst.SetNamespace(nsName)
-	inst.SetName(name)
-	ExpectWithOffset(1, k8sClient.Delete(ctx, inst)).Should(Succeed())
 }
