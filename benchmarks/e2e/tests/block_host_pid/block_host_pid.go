@@ -24,7 +24,8 @@ var _ = framework.KubeDescribe("Tenants should not be allowed to share the host 
 		config, err = configutil.ReadConfig(configutil.ConfigPath)
 		framework.ExpectNoError(err)
 
-		tenantA = config.GetValidTenant()
+		tenantA, err = config.GetValidTenant()
+		framework.ExpectNoError(err)
 		user = configutil.GetContextFromKubeconfig(tenantA.Kubeconfig)
 	})
 
