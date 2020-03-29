@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/onsi/ginkgo"
-	configutil "github.com/realshuting/multi-tenancy/benchmarks/e2e/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
@@ -25,7 +25,8 @@ var _ = framework.KubeDescribe("A tenant namespace must have resource quotas", f
 		config, err = configutil.ReadConfig(configutil.ConfigPath)
 		framework.ExpectNoError(err)
 
-		tenantA = config.GetValidTenant()
+		tenantA, err = config.GetValidTenant()
+		framework.ExpectNoError(err)
 		user = configutil.GetContextFromKubeconfig(tenantA.Kubeconfig)
 	})
 

@@ -81,6 +81,7 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 			}, sts); err != nil {
 				return err
 			}
+
 			if sts.Status.ReadyReplicas == *sts.Spec.Replicas {
 				return nil
 			}

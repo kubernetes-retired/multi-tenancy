@@ -69,10 +69,11 @@ type TypeSynchronizationStatus struct {
 	// Kind to be configured.
 	Kind string `json:"kind,omitempty"`
 
-	// Tracks the number of original objects that are being propagated to descendant namespaces.
+	// Tracks the number of objects that are being propagated to descendant namespaces. The propagated
+	// objects are created by HNC.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
-	NumPropagated *int32 `json:"numPropagated,omitempty"`
+	NumPropagatedObjects *int `json:"numPropagatedObjects,omitempty"`
 }
 
 // +kubebuilder:object:root=true

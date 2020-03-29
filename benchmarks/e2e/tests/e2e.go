@@ -9,8 +9,10 @@ import (
 	ginkgowrapper "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 
 	// test sources
-	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
-	_ "github.com/realshuting/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_ns_quotas"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_privileged_containers"
 )
 
 // RunE2ETests runs the multi-tenancy benchmark tests
