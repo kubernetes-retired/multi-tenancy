@@ -17,6 +17,13 @@ ifeq ($(CONFIG),kind)
 HNC_IMG ?= controller:kind-local
 else
 HNC_IMG ?= "gcr.io/${PROJECT_ID}/hnc/controller:${HNC_IMG_TAG}"
+# We don't want to overwrite an existing docker image and tag so we query the repository
+# to see if the image already exists. This can be overridden by setting FORCE_RELEASE=true
+ifeq ($(FORCE_RELEASE), true)
+	IMG_ALREADY_EXISTS=1
+else
+	IMG_ALREADY_EXISTS=$(shell gcloud container images describe $(HNC_IMG) > /dev/null 2>&1; echo $$?)
+endif
 endif
 
 HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/hnc/controller:${HNC_IMG_TAG}"
@@ -198,6 +205,9 @@ ifndef HNC_PAT
 endif
 ifndef HNC_RELEASE_ID
 	$(error HNC_RELEASE_ID is undefined; ${ERR_MSG})
+endif
+ifeq ($(IMG_ALREADY_EXISTS), 0)
+	$(error The image ${HNC_IMG} already exists. Force and overwrite this image by using FORCE_RELEASE=true)
 endif
 	@echo "*********************************************"
 	@echo "*********************************************"
