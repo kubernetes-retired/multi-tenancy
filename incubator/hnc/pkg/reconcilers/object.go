@@ -144,7 +144,7 @@ func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.Synchronization
 	if newMode == oldMode {
 		return nil
 	}
-	r.Log.Info("Changing mode of the object reconciler", "old", oldMode, "new", newMode)
+	log.Info("Changing mode of the object reconciler", "old", oldMode, "new", newMode)
 	r.Mode = newMode
 	// If the new mode is not "ignore", we need to update objects in the cluster
 	// (e.g., propagate or remove existing objects).

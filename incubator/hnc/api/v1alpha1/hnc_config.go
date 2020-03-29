@@ -68,6 +68,10 @@ type TypeSynchronizationStatus struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	// Kind to be configured.
 	Kind string `json:"kind,omitempty"`
+	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
+	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
+	// spec and the default is chosen.
+	Mode SynchronizationMode `json:"mode,omitempty"`
 
 	// Tracks the number of objects that are being propagated to descendant namespaces. The propagated
 	// objects are created by HNC.

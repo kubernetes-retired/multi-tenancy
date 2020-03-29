@@ -61,32 +61,30 @@ type gvkSet map[schema.GroupVersionKind]bool
 // `config` singleton.
 const checkPeriod = 3 * time.Second
 
-// Reconcile sets up some basic variable and logs the Spec.
-// TODO: Updates the comment above when adding more logic to the Reconcile method.
+// Reconcile is the entrypoint to the reconciler.
 func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
-	// Validate the singleton name.
-	if err := r.validateSingletonName(ctx, req.NamespacedName.Name); err != nil {
-		r.Log.Error(err, "Singleton name validation failed")
-		return ctrl.Result{}, nil
+	// Validate the singleton name, and early exit if we're not validating the real one (note that the
+	// bad singleton will have a condition set, but the main one will not be affected).
+	if ok, err := r.validateSingletonName(ctx, req.NamespacedName.Name); !ok || err != nil {
+		r.Log.Error(err, "An incorrectly-named HNC Config exists", "name", req.NamespacedName.Name)
+		return ctrl.Result{}, err
 	}
 
+	// Load the config and clear its conditions so they can be reset.
 	inst, err := r.getSingleton(ctx)
 	if err != nil {
 		r.Log.Error(err, "Couldn't read singleton")
 		return ctrl.Result{}, err
 	}
-
-	// Clear the existing the status because we will reconstruct the latest status.
 	inst.Status.Conditions = nil
-	inst.Status.Types = nil
 
 	// Create or sync corresponding ObjectReconcilers, if needed.
 	syncErr := r.syncObjectReconcilers(ctx, inst)
 
-	// Add the status for each type.
-	r.addTypeStatus(inst)
+	// Set the status for each type.
+	r.setTypeStatuses(inst)
 
 	// Write back to the apiserver.
 	if err := r.writeSingleton(ctx, inst); err != nil {
@@ -300,6 +298,7 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context, inst *api
 			continue
 		}
 		// The type does not exist in the Spec. Ignore subsequent reconciliations.
+		r.Log.Info("Type config removed", "gvk", ts.GetGVK())
 		if err := ts.SetMode(ctx, api.Ignore, r.Log); err != nil {
 			return err // retry the reconciliation
 		}
@@ -353,15 +352,20 @@ func (r *ConfigReconciler) writeObjectReconcilerCreationFailedCondition(inst *ap
 	inst.Status.Conditions = append(inst.Status.Conditions, condition)
 }
 
-func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) error {
+// validateSingletonName tries to ensure we only have a single HNC Config object in the cluster. It
+// returns true if the singleton name is correct, and false if there's a bad copy (in which case,
+// the rest of the reconciler is skipped).
+func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) (bool, error) {
+	// If the name is expected, no problem.
 	if nm == api.HNCConfigSingleton {
-		return nil
+		return true, nil
 	}
 
+	// Otherwise, let's update whatever's in this wayward copy by setting a critical condition on it.
 	nnm := types.NamespacedName{Name: nm}
 	inst := &api.HNCConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
-		return err
+		return false, err
 	}
 
 	msg := "Singleton name is wrong. It should be 'config'"
@@ -372,36 +376,49 @@ func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string)
 	inst.Status.Conditions = nil
 	inst.Status.Conditions = append(inst.Status.Conditions, condition)
 
-	if err := r.writeSingleton(ctx, inst); err != nil {
-		return err
-	}
-
-	return fmt.Errorf("Error while validating singleton name: %s", msg)
+	return false, r.writeSingleton(ctx, inst)
 }
 
-// addTypeStatus adds Status.Types for types configured in the spec. Only the status of
+// setTypeStatuses adds Status.Types for types configured in the spec. Only the status of
 // types in `propagate` and `remove` modes will be recorded. The Status.Types
-// is sorted in alphabetical order based on APIVersion.
-func (r *ConfigReconciler) addTypeStatus(inst *api.HNCConfiguration) {
+// is sorted in alphabetical order based on APIVersion and Kind.
+func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
+	statuses := []api.TypeSynchronizationStatus{}
 	for _, ts := range r.Forest.GetTypeSyncers() {
-		if r.activeGVKs[ts.GetGVK()] && ts.GetMode() != api.Ignore {
-			r.addNumPropagatedObjects(ts.GetGVK(), ts.GetNumPropagatedObjects(), inst)
+		// Don't output a status for any reconciler that isn't explicitly listed in the spec
+		gvk := ts.GetGVK()
+		if !r.activeGVKs[ts.GetGVK()] {
+			continue
 		}
-	}
-	sort.Slice(inst.Status.Types, func(i, j int) bool {
-		return inst.Status.Types[i].APIVersion < inst.Status.Types[j].APIVersion
-	})
-}
 
-// addNumPropagatedObjects adds the NumPropagatedObjects field for a given GVK in the status.
-func (r *ConfigReconciler) addNumPropagatedObjects(gvk schema.GroupVersionKind, num int,
-	inst *api.HNCConfiguration) {
-	apiVersion, kind := gvk.ToAPIVersionAndKind()
-	inst.Status.Types = append(inst.Status.Types, api.TypeSynchronizationStatus{
-		APIVersion:           apiVersion,
-		Kind:                 kind,
-		NumPropagatedObjects: &num,
+		// Initialize status
+		apiVersion, kind := gvk.ToAPIVersionAndKind()
+		status := api.TypeSynchronizationStatus{
+			APIVersion: apiVersion,
+			Kind:       kind,
+			Mode:       ts.GetMode(), // may be different from the spec if it's implicit
+		}
+
+		// Only add counts if we're not ignoring this type
+		if ts.GetMode() != api.Ignore {
+			numProp := ts.GetNumPropagatedObjects()
+			status.NumPropagatedObjects = &numProp
+		}
+
+		// Record the status
+		statuses = append(statuses, status)
+	}
+
+	// Alphabetize
+	sort.Slice(statuses, func(i, j int) bool {
+		if statuses[i].APIVersion != statuses[j].APIVersion {
+			return statuses[i].APIVersion < statuses[j].APIVersion
+		}
+		return statuses[i].Kind < statuses[i].Kind
 	})
+
+	// Record the final list
+	inst.Status.Types = statuses
 }
 
 // enqueueSingleton enqueues the `config` singleton to trigger the reconciliation
