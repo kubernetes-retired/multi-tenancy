@@ -15,7 +15,7 @@ const (
 	expectedVal = "Error from server (Forbidden)"
 )
 
-var _ = framework.KubeDescribe("test cross tenants permission", func() {
+var _ = framework.KubeDescribe("test across tenants permission", func() {
 	var config *configutil.BenchmarkConfig
 	var resourceList string
 	var err error

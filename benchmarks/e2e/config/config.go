@@ -39,5 +39,5 @@ func (c *BenchmarkConfig) ValidateTenant(t TenantSpec) (error) {
 		return nil
 	}
 
-	return errors.New("given tenant does not match with TenantSpec")
+	return errors.New("Given tenant does not match with TenantSpec")
 } 
