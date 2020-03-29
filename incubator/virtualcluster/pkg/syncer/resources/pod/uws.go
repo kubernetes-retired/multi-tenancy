@@ -226,10 +226,15 @@ func (c *controller) backPopulate(key string) error {
 	if pPod.DeletionTimestamp != nil {
 		if vPod.DeletionTimestamp == nil {
 			klog.V(4).Infof("pPod %s/%s is under deletion accidentally", pPod.Namespace, pPod.Name)
-			// waiting for periodic check to recreate a pPod on super master.
-			return nil
-		}
-		if *vPod.DeletionGracePeriodSeconds != *pPod.DeletionGracePeriodSeconds {
+			gracePeriod := int64(minimumGracePeriodInSeconds)
+			if vPod.Spec.TerminationGracePeriodSeconds != nil {
+				gracePeriod = *vPod.Spec.TerminationGracePeriodSeconds
+			}
+			deleteOptions := metav1.NewDeleteOptions(gracePeriod)
+			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
+				return err
+			}
+		} else if *vPod.DeletionGracePeriodSeconds != *pPod.DeletionGracePeriodSeconds {
 			klog.V(4).Infof("delete virtual pPod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pPod.DeletionGracePeriodSeconds)
 			deleteOptions := metav1.NewDeleteOptions(*pPod.DeletionGracePeriodSeconds)
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
