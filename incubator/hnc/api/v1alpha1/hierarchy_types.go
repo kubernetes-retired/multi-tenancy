@@ -68,7 +68,7 @@ type HierarchyConfigurationSpec struct {
 
 	// AllowCascadingDelete indicates if the self-serve subnamespaces of this namespace are allowed
 	// to cascading delete.
-	AllowCascadingDelete bool `json:"allowCascadingDelete"`
+	AllowCascadingDelete bool `json:"allowCascadingDelete,omitempty"`
 }
 
 // HierarchyStatus defines the observed state of Hierarchy
