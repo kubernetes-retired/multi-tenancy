@@ -22,8 +22,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var create2Cmd = &cobra.Command{
-	Use:   "create2 -n parent child",
+var createCmd = &cobra.Command{
+	Use:   "create -n parent child",
 	Short: "Creates a subnamespace under the given parent.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -40,7 +40,7 @@ var create2Cmd = &cobra.Command{
 	},
 }
 
-func newCreate2Cmd() *cobra.Command {
-	create2Cmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new self-serve subnamespace")
-	return create2Cmd
+func newCreateCmd() *cobra.Command {
+	createCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new self-serve subnamespace")
+	return createCmd
 }
