@@ -79,7 +79,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 			klog.Errorf("failed reconcile Pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-		if pPod.Spec.NodeName != "" && isPodScheduled(pPod) {
+		if pPod.Spec.NodeName != "" {
 			c.updateClusterVNodePodMap(request.ClusterName, pPod.Spec.NodeName, request.UID, reconciler.DeleteEvent)
 		}
 	} else if vExists && pExists {
@@ -91,7 +91,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 			klog.Errorf("failed reconcile Pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-		if vPod.Spec.NodeName != "" && isPodScheduled(vPod) {
+		if vPod.Spec.NodeName != "" {
 			c.updateClusterVNodePodMap(request.ClusterName, vPod.Spec.NodeName, request.UID, reconciler.UpdateEvent)
 		}
 	} else {
@@ -131,7 +131,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 		return nil
 	}
 
-	if vPod.Spec.NodeName != "" && !isPodScheduled(vPod) {
+	if vPod.Spec.NodeName != "" {
 		// For now, we skip vPod that has NodeName set to prevent tenant from deploying DaemonSet or DaemonSet alike CRDs.
 		tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
 		if err != nil {
