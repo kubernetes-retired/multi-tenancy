@@ -36,7 +36,7 @@ Create a `rolebinding` to cluster role `edit`
 
 Create a `role` pod-reader with permission to view pods and create a `role binding` to this role.
 
-    kubectl apply -f- <<EOF
+    kubectl --kubeconfig=tenant-a apply -f- <<EOF
     apiVersion: rbac.authorization.k8s.io/v1
     kind: Role
     metadata:
