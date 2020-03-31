@@ -108,6 +108,12 @@ spec:
                   kind:
                     description: Kind to be configured.
                     type: string
+                  mode:
+                    description: Mode describes the synchronization mode of the kind.
+                      Typically, it will be the same as the mode in the spec, except
+                      when the reconciler has fallen behind or when the mode is omitted
+                      from the spec and the default is chosen.
+                    type: string
                   numPropagatedObjects:
                     description: Tracks the number of objects that are being propagated
                       to descendant namespaces. The propagated objects are created

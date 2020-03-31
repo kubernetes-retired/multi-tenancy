@@ -16,23 +16,31 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-var _ = Describe("HNCConfiguration", func() {
-	// sleepTime is the time to sleep for objects propagation to take effect.
-	// We only use this time to sleep when we hope to verify that an object is not
-	// propagated; otherwise, we will use `Eventually`.
+const (
+	// nopTime is the time we're willing to wait to ensure that something _hasn't_ happened
+	// ("no-operation time"). If we expect something *to* happen, then we use Eventually().
 	//
-	// From experiments it takes ~0.015s for HNC to propagate an object. Setting
-	// the sleep time to 1s should be long enough.
+	// From experiments it takes ~0.015s for HNC to propagate an object. Setting the sleep time to 1s
+	// should be long enough.
 	//
 	// We may need to increase the sleep time in future if HNC takes longer to propagate objects.
-	const sleepTime = 1 * time.Second
+	nopTime = 1 * time.Second
 
-	// statusUpdateTime is the timeout for `Eventually` to verify the status of the `config` singleton.
-	// Currently the config reconciler periodically updates status every 3 seconds. From experiments, tests are
-	// flaky when setting the statusUpdateTime to 3 seconds and tests can always pass when setting the time
-	// to 4 seconds. We may need to increase the time in future if the config reconciler takes longer to update the status.
-	const statusUpdateTime = 4 * time.Second
+	// statusUpdateTime is the timeout for `Eventually` to verify the object counts in the HNC Config
+	// status.  Currently the config reconciler periodically updates status every 3 seconds. From
+	// experiments, tests are flaky when setting the statusUpdateTime to 3 seconds and tests can
+	// always pass when setting the time to 4 seconds. We may need to increase the time in future if
+	// the config reconciler takes longer to update the status.
+	statusUpdateTime = 4 * time.Second
 
+	// rbacAV is a nice short form of the RBAC APIVersion
+	rbacAV = "rbac.authorization.k8s.io/v1"
+
+	// testModeMisssing is a fake mode to indicate that the spec/status doesn't exist in the config
+	testModeMisssing api.SynchronizationMode = "<missing>"
+)
+
+var _ = Describe("HNCConfiguration", func() {
 	ctx := context.Background()
 
 	var (
@@ -53,8 +61,8 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should set mode of Roles and RoleBindings as propagate by default", func() {
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding", api.Propagate)).Should(BeTrue())
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
+		Eventually(typeSpecHasMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
 	})
 
 	It("should propagate Roles by default", func() {
@@ -67,16 +75,15 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should insert Roles if it does not exist", func() {
-		removeHNCConfigType(ctx, "rbac.authorization.k8s.io/v1", "Role")
+		removeHNCConfigType(ctx, rbacAV, "Role")
 
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
 	It("should set the mode of Roles to `propagate` if the mode is not `propagate`", func() {
-		updateHNCConfigSpec(ctx, "rbac.authorization.k8s.io/v1", "rbac.authorization.k8s.io/v1",
-			"Role", "Role", api.Propagate, api.Ignore)
+		updateHNCConfigSpec(ctx, rbacAV, "Role", api.Ignore)
 
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
 	It("should propagate RoleBindings by default", func() {
@@ -89,16 +96,15 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should insert RoleBindings if it does not exist", func() {
-		removeHNCConfigType(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding")
+		removeHNCConfigType(ctx, rbacAV, "RoleBinding")
 
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "RoleBinding", api.Propagate)).Should(BeTrue())
+		Eventually(typeSpecHasMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
 	})
 
 	It("should set the mode of RoleBindings to `propagate` if the mode is not `propagate`", func() {
-		updateHNCConfigSpec(ctx, "rbac.authorization.k8s.io/v1", "rbac.authorization.k8s.io/v1",
-			"RoleBinding", "RoleBinding", api.Propagate, api.Ignore)
+		updateHNCConfigSpec(ctx, rbacAV, "RoleBinding", api.Ignore)
 
-		Eventually(hasTypeWithMode(ctx, "rbac.authorization.k8s.io/v1", "Role", api.Propagate)).Should(BeTrue())
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
 	It("should set CritSingletonNameInvalid condition if singleton name is wrong", func() {
@@ -112,13 +118,13 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasHNCConfigurationConditionWithName(ctx, api.CritSingletonNameInvalid, nm)).Should(BeTrue())
 	})
 
-	It("should unset ObjectReconcilerCreationFailed condition if an object reconciler creation later succeeds", func() {
+	It("should unset ObjectReconcilerCreationFailed condition if a bad type spec is removed", func() {
 		// API version of ConfigMap should be "v1"
 		addToHNCConfig(ctx, "v2", "ConfigMap", api.Propagate)
 
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeTrue())
 
-		updateHNCConfigSpec(ctx, "v2", "v1", "ConfigMap", "ConfigMap", api.Propagate, api.Propagate)
+		removeHNCConfigType(ctx, "v2", "ConfigMap")
 
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeFalse())
 	})
@@ -154,7 +160,7 @@ var _ = Describe("HNCConfiguration", func() {
 		// Foo should have "foo-resource-quota" since we created there.
 		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
 		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
-		time.Sleep(sleepTime)
+		time.Sleep(nopTime)
 		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 	})
 
@@ -171,7 +177,7 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 	})
 
-	It("should stop propagating objects if the mode of a type is changed from propagate to ignore", func() {
+	It("should stop propagating objects if the mode of a type is changed to ignore", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 
 		setParent(ctx, barName, fooName)
@@ -183,11 +189,14 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
-		updateHNCConfigSpec(ctx, "v1", "v1", "Secret", "Secret", api.Propagate, api.Ignore)
+		// Change to ignore and wait for reconciler
+		updateHNCConfigSpec(ctx, "v1", "Secret", api.Ignore)
+		Eventually(typeHasStatus(ctx, "v1", "Secret")).Should(Equal(api.Ignore))
+
 		bazName := createNS(ctx, "baz")
 		setParent(ctx, bazName, fooName)
 		// Sleep to give "foo-sec" a chance to propagate from foo to baz, if it could.
-		time.Sleep(sleepTime)
+		time.Sleep(nopTime)
 		Expect(hasObject(ctx, "Secret", bazName, "foo-sec")()).Should(BeFalse())
 	})
 
@@ -200,10 +209,10 @@ var _ = Describe("HNCConfiguration", func() {
 		// Foo should have "foo-resource-quota" since we created there.
 		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
 		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
-		time.Sleep(sleepTime)
+		time.Sleep(nopTime)
 		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 
-		updateHNCConfigSpec(ctx, "v1", "v1", "ResourceQuota", "ResourceQuota", api.Ignore, api.Propagate)
+		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
 		// "foo-resource-quota" should now be propagated from foo to bar because the mode of ResourceQuota is set to "propagate".
 		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
@@ -219,7 +228,7 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
-		updateHNCConfigSpec(ctx, "v1", "v1", "Secret", "Secret", api.Propagate, api.Remove)
+		updateHNCConfigSpec(ctx, "v1", "Secret", api.Remove)
 
 		// Foo should still have "foo-sec" because it is a source object, not propagated one.
 		// Therefore, we do not remove it.
@@ -236,11 +245,11 @@ var _ = Describe("HNCConfiguration", func() {
 		// Foo should have "foo-resource-quota" because it is a source object, which will not be removed.
 		Eventually(hasObject(ctx, "ResourceQuota", fooName, "foo-resource-quota")).Should(BeTrue())
 		// Sleep to give "foo-resource-quota" a chance to propagate from foo to bar, if it could.
-		time.Sleep(sleepTime)
+		time.Sleep(nopTime)
 		// "foo-resource-quota" should not be propagated from foo to bar.
 		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 
-		updateHNCConfigSpec(ctx, "v1", "v1", "ResourceQuota", "ResourceQuota", api.Remove, api.Propagate)
+		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
 
 		// "foo-resource-quota" should be propagated from foo to bar.
 		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
@@ -256,14 +265,16 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
+		// Remove from spec and wait for the reconciler to pick it up
 		removeHNCConfigType(ctx, "v1", "Secret")
+		Eventually(typeHasStatus(ctx, "v1", "Secret")).Should(Equal(testModeMisssing))
+
 		// Give foo another secret.
 		makeObject(ctx, "Secret", fooName, "foo-sec-2")
-
 		// Foo should have "foo-sec-2" because we created there.
 		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec-2")).Should(BeTrue())
 		// Sleep to give "foo-sec-2" a chance to propagate from foo to bar, if it could.
-		time.Sleep(sleepTime)
+		time.Sleep(nopTime)
 		// "foo-role-2" should not propagate from foo to bar because the reconciliation request is ignored.
 		Expect(hasObject(ctx, "Secret", barName, "foo-sec-2")()).Should(BeFalse())
 
@@ -310,22 +321,33 @@ var _ = Describe("HNCConfiguration", func() {
 
 		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
 
-		updateHNCConfigSpec(ctx, "v1", "v1", "LimitRange", "LimitRange", api.Propagate, api.Remove)
+		updateHNCConfigSpec(ctx, "v1", "LimitRange", api.Remove)
 
 		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
 	})
 })
 
-func hasTypeWithMode(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args
-	return func() bool {
+func typeSpecHasMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
+	return func() api.SynchronizationMode {
 		config := getHNCConfig(ctx)
 		for _, t := range config.Spec.Types {
-			if t.APIVersion == apiVersion && t.Kind == kind && t.Mode == mode {
-				return true
+			if t.APIVersion == apiVersion && t.Kind == kind {
+				return t.Mode
 			}
 		}
-		return false
+		return testModeMisssing
+	}
+}
+
+func typeHasStatus(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
+	return func() api.SynchronizationMode {
+		config := getHNCConfig(ctx)
+		for _, t := range config.Status.Types {
+			if t.APIVersion == apiVersion && t.Kind == kind {
+				return t.Mode
+			}
+		}
+		return testModeMisssing
 	}
 }
 
@@ -381,18 +403,23 @@ func hasHNCConfigurationConditionWithSingletonAndSubMsg(code api.HNCConfiguratio
 	return false
 }
 
-func updateHNCConfigSpec(ctx context.Context, prevApiVersion, newApiVersion, prevKind, newKind string,
-	preMode, newMode api.SynchronizationMode) {
+func updateHNCConfigSpec(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
 	Eventually(func() error {
+		// Get the existing spec from the apiserver
 		c := getHNCConfig(ctx)
-		for i := 0; i < len(c.Spec.Types); i++ {
-			if c.Spec.Types[i].APIVersion == prevApiVersion && c.Spec.Types[i].Kind == prevKind && c.Spec.Types[i].Mode == preMode {
-				c.Spec.Types[i].APIVersion = newApiVersion
-				c.Spec.Types[i].Kind = newKind
-				c.Spec.Types[i].Mode = newMode
+
+		// Modify the existing spec. We should find the thing we were looking for.
+		found := false
+		for i := 0; i < len(c.Spec.Types); i++ { // don't use range-for since that creates copies of the objects
+			if c.Spec.Types[i].APIVersion == apiVersion && c.Spec.Types[i].Kind == kind {
+				c.Spec.Types[i].Mode = mode
+				found = true
 				break
 			}
 		}
+		Expect(found).Should(BeTrue())
+
+		// Update the apiserver
 		return updateHNCConfig(ctx, c)
 	}).Should(Succeed())
 }
