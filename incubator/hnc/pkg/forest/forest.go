@@ -112,10 +112,8 @@ func (f *Forest) GetTypeSyncers() []TypeSyncer {
 // Get returns a `Namespace` object representing a namespace in K8s.
 func (f *Forest) Get(nm string) *Namespace {
 	if nm == "" {
-		// Impossible in normal circumstances, K8s doesn't allow unnamed objects. This should probably
-		// be a panic since most clients won't be checking for nil, but it makes some scenarios easier
-		// (ie "no parent" is returned as an empty string, which really should be represented as a nil
-		// pointer) so let's leave this as-is for now.
+		// Useful in cases where "no parent" is represented by an empty string, e.g. in the HC's
+		// .spec.parent field.
 		return nil
 	}
 	ns, ok := f.namespaces[nm]
@@ -135,21 +133,21 @@ func (f *Forest) Get(nm string) *Namespace {
 
 // GetNamespaceNames returns names of all namespaces in the cluster.
 func (f *Forest) GetNamespaceNames() []string {
-	var keys []string
-	for k := range f.namespaces {
-		keys = append(keys, k)
+	names := []string{}
+	for nm := range f.namespaces {
+		names = append(names, nm)
 	}
-	return keys
+	return names
 }
 
 type namedNamespaces map[string]*Namespace
 
 // TODO Store source objects by GK in the forest - https://github.com/kubernetes-sigs/multi-tenancy/issues/281
 type objects map[schema.GroupVersionKind]map[string]*unstructured.Unstructured
-type conditions map[string][]condition
 
-// Local represents conditions that originated from this namespace
-const Local = ""
+// conditions stores the conditions for a single namespace, in the form obj -> code -> msg. Note
+// that only one message can be stored per obj and code.
+type conditions map[api.AffectedObject]map[api.Code]string
 
 // Namespace represents a namespace in a forest. Other than its structure, it contains some
 // properties useful to the reconcilers.
@@ -356,9 +354,9 @@ func (ns *Namespace) SetOriginalObject(obj *unstructured.Unstructured) {
 	ns.originalObjects[gvk][name] = obj
 }
 
-// GetOriginalObject gets an original object from a key string. It returns nil, if the key doesn't exist.
-func (ns *Namespace) GetOriginalObject(gvk schema.GroupVersionKind, key string) *unstructured.Unstructured {
-	return ns.originalObjects[gvk][key]
+// GetOriginalObject gets an original object by name. It returns nil, if the object doesn't exist.
+func (ns *Namespace) GetOriginalObject(gvk schema.GroupVersionKind, nm string) *unstructured.Unstructured {
+	return ns.originalObjects[gvk][nm]
 }
 
 // HasOriginalObject returns if the namespace has an original object.
@@ -366,9 +364,9 @@ func (ns *Namespace) HasOriginalObject(gvk schema.GroupVersionKind, oo string) b
 	return ns.GetOriginalObject(gvk, oo) != nil
 }
 
-// DeleteOriginalObject deletes an original object from a key string.
-func (ns *Namespace) DeleteOriginalObject(gvk schema.GroupVersionKind, key string) {
-	delete(ns.originalObjects[gvk], key)
+// DeleteOriginalObject deletes an original object by name.
+func (ns *Namespace) DeleteOriginalObject(gvk schema.GroupVersionKind, nm string) {
+	delete(ns.originalObjects[gvk], nm)
 	// Garbage collection
 	if len(ns.originalObjects[gvk]) == 0 {
 		delete(ns.originalObjects, gvk)
@@ -421,9 +419,10 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 }
 
 // HasLocalCritCondition returns if the namespace itself has any local critical conditions, ignoring
-// its ancestors.
+// its ancestors. We assume that any condition set on the namespace itself is critical, which is
+// true for now.
 func (ns *Namespace) HasLocalCritCondition() bool {
-	return ns.GetCondition(Local) != nil
+	return ns.HasCondition(api.AffectedObject{}, "")
 }
 
 // HasCritCondition returns if the namespace or any of its ancestors has any critical condition.
@@ -437,45 +436,53 @@ func (ns *Namespace) HasCritCondition() bool {
 	return ns.Parent().HasCritCondition()
 }
 
-// ClearConditions clears local conditions in the namespace for a single key. If `code` is
-// non-empty, it only clears conditions with that code, otherwise it clears all conditions for that
-// key. It should only be called by the code that also *sets* the conditions.
-//
-// It returns true if it made any changes, false otherwise.
-func (ns *Namespace) ClearConditions(key string, code api.Code) bool {
-	// We don't *need* to special-case this here but it's a lot simpler if we do.
+// HasCondition returns true if there's a condition with the given object and code. If code is the
+// empty string, it returns true if there's _any_ condition for the given object.
+func (ns *Namespace) HasCondition(obj api.AffectedObject, code api.Code) bool {
+	if _, exists := ns.conditions[obj]; !exists {
+		// Nothing for this obj
+		return false
+	}
 	if code == "" {
-		_, existed := ns.conditions[key]
-		delete(ns.conditions, key)
-		return existed
+		// Something exists for this obj; we don't care what
+		return true
 	}
-
-	updated := []condition{}
-	changed := false
-	for _, c := range ns.conditions[key] {
-		if c.code != code {
-			updated = append(updated, c)
-		} else {
-			changed = true
-		}
-	}
-	if len(updated) == 0 {
-		delete(ns.conditions, key)
-	} else {
-		ns.conditions[key] = updated
-	}
-
-	return changed
+	_, exists := ns.conditions[obj][code]
+	return exists
 }
 
-// ClearAllConditions clears all conditions of a given code from this namespace across all keys. It
-// should only be called by the code that also *sets* the condition.
+// ClearCondition clears conditions in the namespace for a single object. If `code` is non-empty, it
+// only clears conditions with that code, otherwise it clears all conditions for that object. It
+// should only be called by the code that also *sets* the conditions.
 //
 // It returns true if it made any changes, false otherwise.
-func (ns *Namespace) ClearAllConditions(code api.Code) bool {
+func (ns *Namespace) ClearCondition(obj api.AffectedObject, code api.Code) bool {
+	if !ns.HasCondition(obj, code) {
+		return false
+	}
+
+	if code == "" {
+		delete(ns.conditions, obj)
+	} else {
+		delete(ns.conditions[obj], code)
+	}
+	return true
+}
+
+// ClearLocalCondition clears the condition(s) on this namespace.
+func (ns *Namespace) ClearLocalCondition(code api.Code) bool {
+	return ns.ClearCondition(api.AffectedObject{}, code)
+}
+
+// ClearConditionsByCode clears all conditions of a given code from this namespace across all
+// objects. It should only be called by the code that also *sets* the condition.
+//
+// It returns true if it made any changes, false otherwise.
+func (ns *Namespace) ClearConditionsByCode(log logr.Logger, code api.Code) bool {
 	changed := false
-	for k, _ := range ns.conditions {
-		if ns.ClearConditions(k, code) {
+	for obj, _ := range ns.conditions {
+		if ns.ClearCondition(obj, code) {
+			log.Info("Cleared conditions by code", "on", ns.name, "obj", obj.String(), "code", code)
 			changed = true
 		}
 	}
@@ -483,101 +490,70 @@ func (ns *Namespace) ClearAllConditions(code api.Code) bool {
 	return changed
 }
 
-// GetCondition gets a condition list from a key string. It returns nil, if the key doesn't exist.
-func (ns *Namespace) GetCondition(key string) []condition {
-	c, _ := ns.conditions[key]
-	return c
+// SetCondition sets a condition for the specified object and code, returning true if it does not
+// exist previously or if the message has changed.
+//
+// Returns true if the condition wasn't previously set
+func (ns *Namespace) SetCondition(obj api.AffectedObject, code api.Code, msg string) bool {
+	changed := false
+	if _, existed := ns.conditions[obj]; !existed {
+		changed = true
+		ns.conditions[obj] = map[api.Code]string{}
+	}
+
+	if oldMsg, existed := ns.conditions[obj][code]; !existed || msg != oldMsg {
+		changed = true
+		ns.conditions[obj][code] = msg
+	}
+
+	return changed
 }
 
-// SetCondition adds a condition into the list of conditions for key string, returning
-// true if it does not exist previously. The key must either be the constant `forest.Local`, a
-// namespace name, or a string of the form "group/version/kind/namespace/name".
-func (ns *Namespace) SetCondition(key string, code api.Code, msg string) {
-	oldConditions := ns.conditions[key]
-	for _, condition := range oldConditions {
-		if condition.code == code && condition.msg == msg {
-			return
+// SetLocalCondition sets a condition that applies to the current namespace.
+func (ns *Namespace) SetLocalCondition(code api.Code, msg string) bool {
+	return ns.SetCondition(api.AffectedObject{}, code, msg)
+}
+
+// Conditions returns a list of conditions in the namespace in the format expected by the API.
+func (ns *Namespace) Conditions() []api.Condition {
+	// Treat the code/msg combination as a combined key.
+	type codeMsg struct {
+		code api.Code
+		msg  string
+	}
+
+	// Reorder so that the objects are grouped by code and message
+	byCM := map[codeMsg][]api.AffectedObject{}
+	for obj, codes := range ns.conditions {
+		for code, msg := range codes {
+			cm := codeMsg{code: code, msg: msg}
+			byCM[cm] = append(byCM[cm], obj)
 		}
 	}
 
-	ns.conditions[key] = append(oldConditions, condition{code: code, msg: msg})
-}
-
-// Conditions returns a list of conditions in the namespace.
-// It converts map[string][]condition into []Condition.
-func (ns *Namespace) Conditions(log logr.Logger) []api.Condition {
-	return flatten(ns.convertConditions(log))
-}
-
-type objectsByMsg map[string][]api.AffectedObject
-type objectsByCodeAndMsg map[api.Code]objectsByMsg
-
-// convertConditions converts string -> condition{code, msg} map into condition{code, msg} -> affected map.
-func (ns *Namespace) convertConditions(log logr.Logger) objectsByCodeAndMsg {
-	converted := objectsByCodeAndMsg{}
-	for key, conditions := range ns.conditions {
-		for _, condition := range conditions {
-			if _, exists := converted[condition.code]; !exists {
-				converted[condition.code] = objectsByMsg{}
-			}
-			affectedObject := getAffectedObject(key, log)
-			converted[condition.code][condition.msg] = append(converted[condition.code][condition.msg], affectedObject)
+	// Flatten into a list of conditions
+	conds := []api.Condition{}
+	for cm, objs := range byCM {
+		// If the only affected object is unnamed (e.g., it refers to the current namespace), omit it.
+		c := api.Condition{Code: cm.code, Msg: cm.msg}
+		if len(objs) > 0 || objs[0].Name != "" {
+			api.SortAffectedObjects(objs)
+			c.Affects = objs
 		}
+		conds = append(conds, c)
 	}
-	return converted
-}
 
-// flatten flattens condition{code, msg} -> affected map into a list of condition{code, msg, []affected}.
-func flatten(m objectsByCodeAndMsg) []api.Condition {
-	flattened := []api.Condition{}
-	for code, msgAffected := range m {
-		for msg, affected := range msgAffected {
-			// Local conditions do not need Affects.
-			if len(affected) == 1 && (api.AffectedObject{}) == affected[0] {
-				flattened = append(flattened, api.Condition{Code: code, Msg: msg})
-			} else {
-				flattened = append(flattened, api.Condition{Code: code, Msg: msg, Affects: affected})
-			}
+	sort.Slice(conds, func(i, j int) bool {
+		if conds[i].Code != conds[j].Code {
+			return conds[i].Code < conds[j].Code
 		}
-	}
-	if len(flattened) > 0 {
-		return flattened
-	}
-	return nil
-}
+		return conds[i].Msg < conds[j].Msg
+	})
 
-// getAffectedObject gets AffectedObject from a namespace or a string of the form
-// group/version/kind/namespace/name.
-func getAffectedObject(gvknn string, log logr.Logger) api.AffectedObject {
-	if gvknn == Local {
-		return api.AffectedObject{}
+	if len(conds) == 0 {
+		conds = nil // prevent anything from appearing in the status
 	}
-
-	a := strings.Split(gvknn, "/")
-	// The affected is a namespace.
-	if len(a) == 1 {
-		return api.AffectedObject{Version: "v1", Kind: "Namespace", Name: a[0]}
-	}
-	// The affected is an object.
-	if len(a) == 5 {
-		return api.AffectedObject{
-			Group:     a[0],
-			Version:   a[1],
-			Kind:      a[2],
-			Namespace: a[3],
-			Name:      a[4],
-		}
-	}
-
-	// Return an invalid object with key as name if the key is invalid.
-	log.Info("Invalid key for the affected object", "key", gvknn)
-	return api.AffectedObject{
-		Group:     "",
-		Version:   "",
-		Kind:      "",
-		Namespace: "INVALID OBJECT",
-		Name:      gvknn,
-	}
+	return conds
 }
 
 // DescendantNames returns a slice of strings like ["child" ... "grandchildren" ...] of

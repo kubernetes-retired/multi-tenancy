@@ -154,7 +154,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Clear locally-set conditions in the forest so we can set them to the latest.
 	hadCrit := ns.HasLocalCritCondition()
-	ns.ClearConditions(forest.Local, "")
+	ns.ClearLocalCondition("")
 
 	r.syncOwner(log, inst, nsInst, ns)
 	r.markExisting(log, ns)
@@ -194,7 +194,7 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *fore
 func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Clear the HNS_MISSING condition if this is not an owned namespace or to
 	// reset it for the updated condition later.
-	ns.ClearAllConditions(api.HNSMissing)
+	ns.ClearConditionsByCode(log, api.HNSMissing)
 	nm := ns.Name()
 	onm := nsInst.Annotations[api.AnnotationOwner]
 	ons := r.Forest.Get(onm)
@@ -223,7 +223,7 @@ func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.Hierarc
 		}
 	}
 	if !found {
-		ns.SetCondition(onm, api.HNSMissing, "The HNS instance is missing in the owner namespace")
+		ns.SetCondition(api.NewAffectedNamespace(onm), api.HNSMissing, "The HNS instance is missing in the owner namespace")
 	}
 }
 
@@ -247,7 +247,7 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 		curParent = r.Forest.Get(inst.Spec.Parent)
 		if !curParent.Exists() {
 			log.Info("Missing parent", "parent", inst.Spec.Parent)
-			ns.SetCondition(forest.Local, api.CritParentMissing, "missing parent")
+			ns.SetLocalCondition(api.CritParentMissing, "missing parent")
 		}
 	}
 
@@ -257,7 +257,7 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 		log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
 		if err := ns.SetParent(curParent); err != nil {
 			log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
-			ns.SetCondition(forest.Local, api.CritParentInvalid, err.Error())
+			ns.SetLocalCondition(api.CritParentInvalid, err.Error())
 			return
 		}
 
@@ -316,7 +316,7 @@ func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.Hi
 	r.syncCritConditions(log, ns, hadCrit)
 
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
-	inst.Status.Conditions = ns.Conditions(log)
+	inst.Status.Conditions = ns.Conditions()
 	setCritAncestorCondition(log, inst, ns)
 }
 
