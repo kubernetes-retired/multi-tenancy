@@ -43,7 +43,7 @@ type Object struct {
 func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := o.Log.WithValues("nm", req.Name, "nnm", req.Namespace)
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
-		log.Info("Allowed change by HNC SA")
+		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
 	}
 
@@ -64,7 +64,7 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	}
 
 	resp := o.handle(ctx, log, inst, oldInst)
-	log.Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
 }
 
