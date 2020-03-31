@@ -196,7 +196,7 @@ Within the `reconcilers` directory, there are three reconcilers:
 
 1. Ensure you have a Personal Access Token from Github with permissions to write
    to the repo, and
-   [permisison]((https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566))
+   [permission](https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566)
    to access `k8s-staging-multitenancy`'s GCR.
 
 2. Set the following environment variables:
