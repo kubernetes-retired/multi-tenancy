@@ -89,7 +89,7 @@ func init() {
 	rootCmd.AddCommand(newSetCmd())
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
-	rootCmd.AddCommand(newCreate2Cmd())
+	rootCmd.AddCommand(newCreateCmd())
 }
 
 func Execute() {
