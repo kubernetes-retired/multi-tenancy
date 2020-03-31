@@ -14,7 +14,7 @@ Self-Service Operations
 
 **Description:**
 
-Tenants should be able to do self service by creating own roles and role-bindings in their namespaces by binding them together.
+Tenants should be able to perform self-service operations by creating own roles and role-bindings in their namespaces by binding them together.
 
 Tenants
 
@@ -30,4 +30,22 @@ Run the following commands to check for permissions to manage `rolebinding` and 
 
 Each command must return 'yes'
 
-Create a `role` and `rolebinding` in the tenant namespace as tenant-administrator for the `namespaced resources` and further bind the role with the help of newly created rolebinding. It should be a success.
+Create a `rolebinding` to cluster role `edit`
+
+    kubectl --kubeconfig=tenant-a -n a1 create rolebinding fake-editor --clusterrole=edit
+
+Create a `role` pod-reader with permission to view pods and create a `role binding` to this role.
+
+    kubectl apply -f- <<EOF
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      namespace: a1 # a1 indicates the tenant's namespace
+      name: pod-reader
+    rules:
+    - apiGroups: [""] # "" indicates the core API group
+      resources: ["pods"]
+      verbs: ["get", "watch", "list"]
+    EOF
+
+    kubectl --kubeconfig=tenant-a -n a1 create rolebinding pode-view --role=pod-reader
