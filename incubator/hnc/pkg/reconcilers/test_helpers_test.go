@@ -158,6 +158,16 @@ func makeObject(ctx context.Context, kind string, nsName, name string) {
 	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
 }
 
+// deleteObject deletes an object of the given kind in a specific namespace. The kind and
+// its corresponding GVK should be included in the GVKs map.
+func deleteObject(ctx context.Context, kind string, nsName, name string) {
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetNamespace(nsName)
+	inst.SetName(name)
+	ExpectWithOffset(1, k8sClient.Delete(ctx, inst)).Should(Succeed())
+}
+
 // objectInheritedFrom returns the name of the namespace where a specific object of a given kind
 // is propagated from or an empty string if the object is not a propagated object. The kind and
 // its corresponding GVK should be included in the GVKs map.

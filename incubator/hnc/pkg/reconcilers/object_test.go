@@ -129,6 +129,34 @@ var _ = Describe("Secret", func() {
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeTrue())
 	})
 
+	It("should have deletions propagated after crit conditions are removed", func() {
+		// Create tree: bar -> foo (root) and make sure foo-role is propagated
+		setParent(ctx, barName, fooName)
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+
+		// Create a critical condition on foo (and also bar by extension)
+		brumpfName := createNSName("brumpf")
+		fooHier := newOrGetHierarchy(ctx, fooName)
+		fooHier.Spec.Parent = brumpfName
+		updateHierarchy(ctx, fooHier)
+		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(BeTrue())
+
+		// Delete the object from `foo`, wait until we're sure that it's gone, and then wait a while
+		// longer and verify it *isn't* deleted from `bar`, because the critical condition has paused
+		// deletions.
+		deleteObject(ctx, "Role", fooName, "foo-role")
+		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeFalse())
+		time.Sleep(1 * time.Second) // todo: merge with similar constants elsewhere
+		Expect(hasObject(ctx, "Role", barName, "foo-role")()).Should(BeTrue())
+
+		// Resolve the critical condition and verify that the object is deleted
+		fooHier = newOrGetHierarchy(ctx, fooName)
+		fooHier.Spec.Parent = ""
+		updateHierarchy(ctx, fooHier)
+		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
+	})
+
 	It("shouldn't propagate/delete if the namespace has Crit condition", func() {
 		// Set tree as baz -> bar -> foo(root).
 		setParent(ctx, barName, fooName)
