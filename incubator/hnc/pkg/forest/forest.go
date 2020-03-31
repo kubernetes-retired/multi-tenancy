@@ -168,11 +168,9 @@ type Namespace struct {
 	// on this namespace.
 	conditions conditions
 
-	// Todo remove Owner field or replace it with isOwned bool field. See issue:
-	//  https://github.com/kubernetes-sigs/multi-tenancy/issues/552
-	// Owner indicates that this namespace is being or was created solely to live as a
+	// IsOwned indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
-	Owner string
+	IsOwned bool
 
 	// HNSes store a list of HNS instances in the namespace.
 	HNSes []string

@@ -142,6 +142,12 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return allow("parent unchanged")
 	}
 
+	// Prevent changing parent of an owned child
+	if ns.IsOwned {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's an owned namespace of %q", ns.Name(), newParent.Name(), curParent.Name())
+		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+	}
+
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
 		return deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
@@ -154,30 +160,6 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
-	}
-
-	// Prevent changing parent of an owned child
-	if ns.Owner != "" && ns.Owner != newParent.Name() {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a self-serve subnamespace of %q", ns.Name(), newParent.Name(), ns.Owner)
-		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
-	}
-
-	return allow("")
-}
-
-func (v *Hierarchy) checkRequiredChildren(ns *forest.Namespace, requiredChildren []string) admission.Response {
-	for _, child := range requiredChildren {
-		cns := v.Forest.Get(child)
-		// A newly-created requiredChild is always valid.
-		if !cns.Exists() {
-			continue
-		}
-		// If this is already a child, or is about to be, no problem.
-		if cns.Parent() == ns || (cns.Parent() == nil && cns.Owner == ns.Name()) {
-			continue
-		}
-		reason := fmt.Sprintf("Cannot set %q as the required child of %q because it already exists and is not a child of %q", cns.Name(), ns.Name(), ns.Name())
-		return deny(metav1.StatusReasonConflict, "Illegal requiredChild: "+reason)
 	}
 
 	return allow("")

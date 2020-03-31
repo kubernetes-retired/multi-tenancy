@@ -200,13 +200,11 @@ func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.Hierarc
 	ons := r.Forest.Get(onm)
 
 	if onm == "" {
+		ns.IsOwned = false
 		return
 	}
 
-	if ns.Owner != onm {
-		log.Info("Owner annotation was updated", "old", ns.Owner, "new", onm)
-		ns.Owner = nsInst.Annotations[api.AnnotationOwner]
-	}
+	ns.IsOwned = true
 
 	if inst.Spec.Parent != onm {
 		log.Info("The parent doesn't match the owner. Setting the owner as the parent.", "parent", inst.Spec.Parent, "owner", onm)
@@ -233,9 +231,9 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.Owner != "" {
-			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Owner)
-			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "the missing owned namespace is found")
+		if ns.IsOwned {
+			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Parent().Name())
+			r.hnsr.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing owned namespace is found")
 		}
 	}
 }
