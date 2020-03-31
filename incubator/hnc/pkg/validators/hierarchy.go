@@ -79,7 +79,7 @@ func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission
 	}
 
 	resp := v.handle(ctx, log, decoded)
-	log.Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
 }
 
@@ -99,7 +99,7 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 	// object wouldn't pass legality. We should probably only give the HNC SA the ability to modify
 	// the _status_, though. TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/80.
 	if isHNCServiceAccount(req.ui) {
-		log.Info("Allowed change by HNC SA")
+		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
 	}
 
