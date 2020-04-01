@@ -120,6 +120,11 @@ spec:
                       by HNC.
                     minimum: 0
                     type: integer
+                  numSourceObjects:
+                    description: Tracks the number of objects that are created by
+                      users.
+                    minimum: 0
+                    type: integer
                 type: object
               type: array
           type: object

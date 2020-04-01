@@ -392,6 +392,10 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 	// Update or create a copy of the source object in the forest
 	ns.SetOriginalObject(src.DeepCopy())
 
+	// Signal the config reconciler for reconciliation because it is possible that a source object is
+	// added to the apiserver.
+	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+
 	// Enqueue all the descendant copies
 	r.enqueueDescendants(ctx, log, src)
 }
@@ -590,6 +594,10 @@ func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.
 	gvk := inst.GroupVersionKind()
 	r.Forest.Get(nnm).DeleteOriginalObject(gvk, nm)
 
+	// Signal the config reconciler for reconciliation because it is possible that the source object is
+	// deleted on the apiserver.
+	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+
 	r.enqueueDescendants(ctx, log, inst)
 }
 
@@ -640,7 +648,7 @@ func (r *ObjectReconciler) recordPropagatedObject(log logr.Logger, namespace, na
 		Name:      name,
 	}
 	r.propagatedObjects[nnm] = true
-	r.Forest.ObjectsStatusSyncer.SyncNumPropagatedObjects(log)
+	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
 }
 
 // recordRemovedObject records the fact that this (possibly) previously propagated object no longer
@@ -654,7 +662,7 @@ func (r *ObjectReconciler) recordRemovedObject(log logr.Logger, namespace, name 
 		Name:      name,
 	}
 	delete(r.propagatedObjects, nnm)
-	r.Forest.ObjectsStatusSyncer.SyncNumPropagatedObjects(log)
+	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
 }
 
 func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
