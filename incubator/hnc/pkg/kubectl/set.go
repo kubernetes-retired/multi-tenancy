@@ -33,7 +33,7 @@ type hcUpdates struct {
 }
 
 var setCmd = &cobra.Command{
-	Use:   "set <namespace>",
+	Use:   "set NAMESPACE",
 	Short: "Sets hierarchical properties of the given namespace",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
