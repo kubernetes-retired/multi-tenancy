@@ -409,13 +409,13 @@ func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr
 
 	stats.WriteHierConfig()
 	if inst.CreationTimestamp.IsZero() {
-		log.Info("Creating singleton on apiserver")
+		log.Info("Creating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
 			return false, err
 		}
 	} else {
-		log.Info("Updating singleton on apiserver")
+		log.Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
 			return false, err

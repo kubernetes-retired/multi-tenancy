@@ -43,14 +43,13 @@ import (
 
 // syncAction is the action to take after Reconcile syncs with the in-memory forest.
 // This is introduced to consolidate calls with forest lock.
-type syncAction int
+type syncAction string
 
 const (
-	// Start with an “actionUnknown” to be sure of enum’s initialization.
-	actionUnknown syncAction = iota
-	actionRemove
-	actionWrite
-	actionNop
+	actionUnknown syncAction = "<hnc internal error - unknown action>"
+	actionRemove  syncAction = "remove"
+	actionWrite   syncAction = "write"
+	actionNop     syncAction = "no-op"
 )
 
 // namespacedNameSet is used to keep track of existing propagated objects of
@@ -226,11 +225,6 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	if r.skipNamespace(ctx, log, inst) {
 		return actionNop, nil
 	}
-
-	// Clear any existing conditions associated with this object. TODO: this will never be called if
-	// the source namespace holding this object goes away (i.e., if this namespace gets a new parent).
-	// See https://github.com/kubernetes-sigs/multi-tenancy/issues/328.
-	r.clearConditions(log, inst)
 
 	// If the object's missing and we know how to handle it, return early.
 	if missingAction := r.syncMissingObject(ctx, log, inst); missingAction != actionUnknown {
@@ -462,18 +456,24 @@ func (r *ObjectReconciler) enqueuePropagatedObjects(ctx context.Context, log log
 
 // operate operates the action generated from syncing the object with the forest.
 func (r *ObjectReconciler) operate(ctx context.Context, log logr.Logger, act syncAction, inst, srcInst *unstructured.Unstructured) error {
+	var err error
+
 	switch act {
 	case actionNop:
-		return nil
+		// nop
 	case actionRemove:
-		return r.deleteObject(ctx, log, inst)
+		err = r.deleteObject(ctx, log, inst)
 	case actionWrite:
-		return r.writeObject(ctx, log, inst, srcInst)
-	default:
-		// Generate log for any unset action.
-		log.Error(nil, "ACTION UNSET!!")
-		return nil
+		err = r.writeObject(ctx, log, inst, srcInst)
+	default: // this should never, ever happen. But if it does, try to make a very obvious error message.
+		if act == "" {
+			act = actionUnknown
+		}
+		err = fmt.Errorf("HNC couldn't determine how to update this object (desired action: %s)", act)
 	}
+
+	r.setConditions(log, srcInst, inst, act, err)
+	return err
 }
 
 func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
@@ -483,8 +483,10 @@ func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, in
 	if errors.IsNotFound(err) {
 		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
 		return nil
-	} else if err != nil {
-		r.setErrorConditions(log, nil, inst, "delete", err)
+	}
+
+	if err != nil {
+		// Don't log the error since controller-runtime will do it for us
 		return err
 	}
 
@@ -504,58 +506,73 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	log.V(1).Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
 
 	var err error = nil
-	var op string
 	stats.WriteObject(inst.GroupVersionKind())
 	if exist {
 		err = r.Update(ctx, inst)
-		op = "update"
 	} else {
 		err = r.Create(ctx, inst)
-		op = "create"
 	}
 	if err != nil {
-		r.setErrorConditions(log, srcInst, inst, op, err)
-		log.Error(err, "Couldn't write", "object", inst)
-	} else {
-		// Add the object to the map if it does not exist because we are confident that the object was updated/created
-		// successfully on the apiserver.
-		r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
+		// Don't log the error since controller-runtime will do it for us
+		return err
 	}
-	return err
+
+	// Add the object to the map if it does not exist because we are confident that the object was updated/created
+	// successfully on the apiserver.
+	r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
+	return nil
 }
 
-func (r *ObjectReconciler) setErrorConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, op string, err error) {
+// setConditions is called when the reconciler has performed all necessary actions and knows if
+// they've succeeded or failed. It re-locks the forest just long enough to set or clear all
+// conditions. Since we didn't hold the lock while we were contacting the apiserver, we need to be
+// aware that the hierarchy may have changed in arbitrary ways; see below for details.
+//
+// This function also enqueues any modified namespaces for reconciliation.
+func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, act syncAction, err error) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
-
-	ao := getAO(inst)
-	msg := fmt.Sprintf("Could not %s: %s", op, err.Error())
-	r.setCondition(log, ao, api.CannotUpdate, inst.GetNamespace(), msg)
-	if srcInst != nil {
-		r.setCondition(log, ao, api.CannotPropagate, srcInst.GetNamespace(), msg)
-	}
-}
-
-func (r *ObjectReconciler) setCondition(log logr.Logger, ao api.AffectedObject, code api.Code, nnm, msg string) {
-	r.Forest.Get(nnm).SetCondition(ao, code, msg)
-	r.enqueueNamespace(log, nnm, "Set condition "+string(code))
-}
-
-func getAO(inst *unstructured.Unstructured) api.AffectedObject {
-	gvk := inst.GetObjectKind().GroupVersionKind()
-	return api.NewAffectedObject(gvk, inst.GetNamespace(), inst.GetName())
-}
-
-func (r *ObjectReconciler) clearConditions(log logr.Logger, inst *unstructured.Unstructured) {
-	ao := getAO(inst)
+	ao := api.NewAffectedObject(inst.GetObjectKind().GroupVersionKind(), inst.GetNamespace(), inst.GetName())
 	ns := r.Forest.Get(inst.GetNamespace())
-	for ns != nil {
-		if ns.ClearCondition(ao, "") {
-			// TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/326
-			// Don't enqueue if we're just going to put the same conditions back
-			r.enqueueNamespace(log, ns.Name(), "Removed conditions")
+
+	switch {
+	case hasFinalizers(inst):
+		// Propagated objects can never have finalizers
+		if ns.SetCondition(ao, api.CannotPropagate, "Objects with finalizers cannot be propagated") {
+			r.enqueueNamespace(log, ns.Name(), "Set CannotPropagate since it has finalizers")
 		}
-		ns = ns.Parent()
+
+	case err != nil:
+		// There was an error updating this object; set a local condition.
+		msg := fmt.Sprintf("Could not %s: %s", act, err.Error())
+		if ns.SetCondition(ao, api.CannotUpdate, msg) {
+			r.enqueueNamespace(log, ns.Name(), "Set CannotUpdate due to error")
+		}
+		// Also set a condition on the source if one exists.
+		if srcInst != nil {
+			srcNS := r.Forest.Get(srcInst.GetNamespace())
+			if ns.IsAncestor(srcNS) {
+				if srcNS.SetCondition(ao, api.CannotPropagate, msg) {
+					r.enqueueNamespace(log, srcNS.Name(), "Set CannotPropagate on source namespace due to error updating")
+				}
+			} else {
+				// Because we released the lock for a bit, there's a chance that srcInst is no longer a parent
+				// of inst. If that happened, any conditions on srcInst related to this object should already
+				// have been cleared by the HCR.
+				log.Info("Not setting conditions on source namespace since it's no longer an ancestor", "srcNS", srcNS.Name())
+			}
+		}
+
+	default:
+		// No error conditions exist for this object; clear all conditions in the namespace and all its
+		// ancestors (technically, srcNS is the only feasible ancestor, but because we don't hold the
+		// lock, it's safer to just do everything).
+		for ns != nil {
+			if ns.ClearCondition(ao, "") {
+				r.enqueueNamespace(log, ns.Name(), "Removed condition")
+			}
+			ns = ns.Parent()
+		}
 	}
 }
 
@@ -592,10 +609,10 @@ func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.
 	r.enqueueDescendants(ctx, log, inst)
 }
 
-// shouldPropagateSource returns true if the object should be propagated by the HNC, and in some
-// non-obvious cases sets a condition on the namespace. The following objects are not propagated:
-// - Objects with nonempty finalizer list
+// shouldPropagateSource returns true if the object should be propagated by the HNC. The following
+// objects are not propagated:
 // - Objects of a type whose mode is set to "remove" in the HNCConfiguration singleton
+// - Objects with nonempty finalizer list
 // - Service Account token secrets
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured) bool {
 	switch {
@@ -605,8 +622,7 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 		return false
 
 	// Object with nonempty finalizer list is not propagated
-	case len(inst.GetFinalizers()) != 0:
-		r.setCondition(log, getAO(inst), api.CannotPropagate, inst.GetNamespace(), "Objects with finalizers cannot be propagated")
+	case hasFinalizers(inst):
 		return false
 
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":
@@ -654,6 +670,10 @@ func (r *ObjectReconciler) recordRemovedObject(log logr.Logger, namespace, name 
 	}
 	delete(r.propagatedObjects, nnm)
 	r.Forest.ObjectsStatusSyncer.SyncNumPropagatedObjects(log)
+}
+
+func hasFinalizers(inst *unstructured.Unstructured) bool {
+	return len(inst.GetFinalizers()) != 0
 }
 
 func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
