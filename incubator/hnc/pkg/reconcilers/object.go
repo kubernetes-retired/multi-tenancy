@@ -528,33 +528,32 @@ func (r *ObjectReconciler) setErrorConditions(log logr.Logger, srcInst, inst *un
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
-	key := getObjectKey(inst)
+	ao := getAO(inst)
 	msg := fmt.Sprintf("Could not %s: %s", op, err.Error())
-	r.setCondition(log, api.CannotUpdate, inst.GetNamespace(), key, msg)
+	r.setCondition(log, ao, api.CannotUpdate, inst.GetNamespace(), msg)
 	if srcInst != nil {
-		r.setCondition(log, api.CannotPropagate, srcInst.GetNamespace(), key, msg)
+		r.setCondition(log, ao, api.CannotPropagate, srcInst.GetNamespace(), msg)
 	}
 }
 
-func (r *ObjectReconciler) setCondition(log logr.Logger, code api.Code, nnm, key, msg string) {
-	r.Forest.Get(nnm).SetCondition(key, code, msg)
-	r.enqueueNamespace(log, nnm, "Set condition for "+key+": "+msg)
+func (r *ObjectReconciler) setCondition(log logr.Logger, ao api.AffectedObject, code api.Code, nnm, msg string) {
+	r.Forest.Get(nnm).SetCondition(ao, code, msg)
+	r.enqueueNamespace(log, nnm, "Set condition "+string(code))
 }
 
-func getObjectKey(inst *unstructured.Unstructured) string {
+func getAO(inst *unstructured.Unstructured) api.AffectedObject {
 	gvk := inst.GetObjectKind().GroupVersionKind()
-	return fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
+	return api.NewAffectedObject(gvk, inst.GetNamespace(), inst.GetName())
 }
 
 func (r *ObjectReconciler) clearConditions(log logr.Logger, inst *unstructured.Unstructured) {
-	gvk := inst.GetObjectKind().GroupVersionKind()
-	key := fmt.Sprintf("%s/%s/%s/%s/%s", gvk.Group, gvk.Version, gvk.Kind, inst.GetNamespace(), inst.GetName())
+	ao := getAO(inst)
 	ns := r.Forest.Get(inst.GetNamespace())
 	for ns != nil {
-		if ns.ClearConditions(key, "") {
+		if ns.ClearCondition(ao, "") {
 			// TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/326
 			// Don't enqueue if we're just going to put the same conditions back
-			r.enqueueNamespace(log, ns.Name(), "Removed conditions for "+key)
+			r.enqueueNamespace(log, ns.Name(), "Removed conditions")
 		}
 		ns = ns.Parent()
 	}
@@ -607,7 +606,7 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 
 	// Object with nonempty finalizer list is not propagated
 	case len(inst.GetFinalizers()) != 0:
-		r.setCondition(log, api.CannotPropagate, inst.GetNamespace(), getObjectKey(inst), "Objects with finalizers cannot be propagated")
+		r.setCondition(log, getAO(inst), api.CannotPropagate, inst.GetNamespace(), "Objects with finalizers cannot be propagated")
 		return false
 
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":

@@ -16,7 +16,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"sort"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Constants for types and well-known names
@@ -143,6 +147,60 @@ type AffectedObject struct {
 	Kind      string `json:"kind,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
+}
+
+func NewAffectedNamespace(ns string) AffectedObject {
+	return AffectedObject{
+		Version: "v1",
+		Kind:    "Namespace",
+		Name:    ns,
+	}
+}
+
+func NewAffectedObject(gvk schema.GroupVersionKind, ns, nm string) AffectedObject {
+	return AffectedObject{
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Kind:      gvk.Kind,
+		Namespace: ns,
+		Name:      nm,
+	}
+}
+
+// String should only be used for debug purposes
+func (a AffectedObject) String() string {
+	// No affected object (i.e. affects this namespace?). Note that this will never be returned by the
+	// API, but it is used internally to indicate that the API doesn't need to show an affected
+	// object.
+	if a.Name == "" {
+		return "<local>"
+	}
+
+	// No namespace -> it *is* a namespace
+	if a.Namespace != "" {
+		return a.Namespace
+	}
+
+	// Generic object (note that Group may be empty for core objects, don't worry about it)
+	return fmt.Sprintf("%s/%s/%s/%s/%s", a.Group, a.Version, a.Kind, a.Namespace, a.Name)
+}
+
+func SortAffectedObjects(objs []AffectedObject) {
+	sort.Slice(objs, func(i, j int) bool {
+		if objs[i].Group != objs[j].Group {
+			return objs[i].Group < objs[j].Group
+		}
+		if objs[i].Version != objs[j].Version {
+			return objs[i].Version < objs[j].Version
+		}
+		if objs[i].Version != objs[j].Version {
+			return objs[i].Version < objs[j].Version
+		}
+		if objs[i].Namespace != objs[j].Namespace {
+			return objs[i].Namespace < objs[j].Namespace
+		}
+		return objs[i].Name < objs[j].Name
+	})
 }
 
 func init() {
