@@ -93,13 +93,12 @@ func (c *controller) processNextWorkItem() bool {
 }
 
 func (c *controller) backPopulate(key string) error {
-	op := reconciler.AddEvent
 	pPV, err := c.pvLister.Get(key)
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return err
+		if errors.IsNotFound(err) {
+			return nil
 		}
-		op = reconciler.DeleteEvent
+		return err
 	}
 
 	if pPV.Spec.ClaimRef == nil {
@@ -129,45 +128,33 @@ func (c *controller) backPopulate(key string) error {
 	vPVObj, err := c.multiClusterPersistentVolumeController.Get(clusterName, "", key)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if op == reconciler.AddEvent {
-				// Create a new pv with bound claim in tenant master
-				vPVC, err := tenantClient.CoreV1().PersistentVolumeClaims(vNamespace).Get(pPVC.Name, metav1.GetOptions{})
-				if err != nil {
-					// If corresponding pvc does not exist in tenant, we'll let checker fix any possible race.
-					klog.Errorf("Cannot find the bound pvc %s/%s in tenant cluster %s for pv %v", vNamespace, pPVC.Name, clusterName, pPV)
-					return nil
-				}
+			// Create a new pv with bound claim in tenant master
+			vPVC, err := tenantClient.CoreV1().PersistentVolumeClaims(vNamespace).Get(pPVC.Name, metav1.GetOptions{})
+			if err != nil {
+				// If corresponding pvc does not exist in tenant, we'll let checker fix any possible race.
+				klog.Errorf("Cannot find the bound pvc %s/%s in tenant cluster %s for pv %v", vNamespace, pPVC.Name, clusterName, pPV)
+				return nil
+			}
 
-				vPV := conversion.BuildVirtualPersistentVolume(clusterName, pPV, vPVC)
-				_, err = tenantClient.CoreV1().PersistentVolumes().Create(vPV)
-				if err != nil {
-					return err
-				}
+			vPV := conversion.BuildVirtualPersistentVolume(clusterName, pPV, vPVC)
+			_, err = tenantClient.CoreV1().PersistentVolumes().Create(vPV)
+			if err != nil {
+				return err
 			}
 			return nil
 		}
 		return err
 	}
 
-	if op == reconciler.DeleteEvent {
-		opts := &metav1.DeleteOptions{
-			PropagationPolicy: &constants.DefaultDeletionPolicy,
-		}
-		err := tenantClient.CoreV1().PersistentVolumes().Delete(key, opts)
+	vPV := vPVObj.(*v1.PersistentVolume)
+	// We only update PV.Spec, PV.Status is managed by tenant/super pv binder controller independently.
+	updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+	if updatedPVSpec != nil {
+		newPV := vPV.DeepCopy()
+		newPV.Spec = *updatedPVSpec
+		_, err := tenantClient.CoreV1().PersistentVolumes().Update(newPV)
 		if err != nil {
 			return err
-		}
-	} else {
-		vPV := vPVObj.(*v1.PersistentVolume)
-		// We only update PV.Spec, PV.Status is managed by tenant/super pv binder controller independently.
-		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
-		if updatedPVSpec != nil {
-			newPV := vPV.DeepCopy()
-			newPV.Spec = *updatedPVSpec
-			_, err := tenantClient.CoreV1().PersistentVolumes().Update(newPV)
-			if err != nil {
-				return err
-			}
 		}
 	}
 	return nil
