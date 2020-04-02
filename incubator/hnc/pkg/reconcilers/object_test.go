@@ -27,6 +27,9 @@ var _ = Describe("Secret", func() {
 		barName = createNS(ctx, "bar")
 		bazName = createNS(ctx, "baz")
 
+		// We want to ensure we're working with a clean slate, in case a previous tests objects still exist
+		cleanupObjects(ctx)
+
 		// Give them each a role.
 		makeObject(ctx, "Role", fooName, "foo-role")
 		makeObject(ctx, "Role", barName, "bar-role")
@@ -38,6 +41,7 @@ var _ = Describe("Secret", func() {
 		Eventually(func() error {
 			return resetHNCConfigToDefault(ctx)
 		}).Should(Succeed())
+		cleanupObjects(ctx)
 	})
 
 	It("should be copied to descendents", func() {
