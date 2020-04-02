@@ -499,6 +499,27 @@ func (ns *Namespace) ClearLocalCondition(code api.Code) bool {
 	return ns.ClearCondition(api.AffectedObject{}, code)
 }
 
+// ClearConditionsByNamespace accepts a set of namespace names, and clears any condition that
+// matches those names. It's only used to flush obsolete object conditions.
+//
+// This is a bit ugly but I'm not sure what the better answer is.
+func (ns *Namespace) ClearConditionsByNamespace(log logr.Logger, nses map[string]bool) bool {
+	if len(nses) == 0 {
+		return false
+	}
+	found := false
+	for obj := range ns.conditions {
+		if nses[obj.Namespace] {
+			found = true
+			for code := range ns.conditions[obj] {
+				log.Info("Cleared conditions by namespace", "on", ns.name, "obj", obj.String(), "code", code)
+			}
+			delete(ns.conditions, obj)
+		}
+	}
+	return found
+}
+
 // ClearConditionsByCode clears all conditions of a given code from this namespace across all
 // objects. It should only be called by the code that also *sets* the condition.
 //
