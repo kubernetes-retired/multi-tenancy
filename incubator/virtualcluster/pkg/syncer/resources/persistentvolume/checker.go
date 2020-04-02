@@ -121,31 +121,43 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 	pvList := listObj.(*v1.PersistentVolumeList)
 	for _, vPV := range pvList.Items {
 		pPV, err := c.pvLister.Get(vPV.Name)
+		shouldDelete := false
 		if err != nil {
-			if errors.IsNotFound(err) {
-				// We disallow tenant to create its own PVs, hence we delete them.
-				// If this pv is still bound to pvc, print an error msg. Normally, the deleted PV should be in Relased phase.
-				if vPV.Spec.ClaimRef != nil && vPV.Status.Phase == "Bound" {
-					klog.Errorf("Removed pv %s in cluster %s is bound to a pvc", vPV.Name, clusterName)
-				}
-				tenantClient, err := c.multiClusterPersistentVolumeController.GetClusterClient(clusterName)
-				if err != nil {
-					klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
-					continue
-				}
-				opts := &metav1.DeleteOptions{
-					PropagationPolicy: &constants.DefaultDeletionPolicy,
-				}
-				if err := tenantClient.CoreV1().PersistentVolumes().Delete(vPV.Name, opts); err != nil {
-					klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
-				} else {
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantPVs").Inc()
-				}
-			} else {
+			if !errors.IsNotFound(err) {
 				klog.Errorf("failed to get pPV %s from super master cache: %v", vPV.Name, err)
+				continue
+			}
+			shouldDelete = true
+			// We delete any PV created by tenant.
+			// If the pv is still bound to pvc, print an error msg. Normally, the deleted PV should be in Relased phase.
+			if vPV.Spec.ClaimRef != nil && vPV.Status.Phase == "Bound" {
+				klog.Errorf("Removed pv %s in cluster %s is bound to a pvc", vPV.Name, clusterName)
+			}
+
+		}
+
+		if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
+			klog.Errorf("Found vPV %s in cluster %s delegated UID is different from super master object.", vPV.Name, clusterName)
+			shouldDelete = true
+		}
+		if shouldDelete {
+			tenantClient, err := c.multiClusterPersistentVolumeController.GetClusterClient(clusterName)
+			if err != nil {
+				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
+				continue
+			}
+			opts := &metav1.DeleteOptions{
+				PropagationPolicy: &constants.DefaultDeletionPolicy,
+				Preconditions:     metav1.NewUIDPreconditions(string(vPV.UID)),
+			}
+			if err := tenantClient.CoreV1().PersistentVolumes().Delete(vPV.Name, opts); err != nil {
+				klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantPVs").Inc()
 			}
 			continue
 		}
+
 		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
 			atomic.AddUint64(&numSpecMissMatchedPVs, 1)
