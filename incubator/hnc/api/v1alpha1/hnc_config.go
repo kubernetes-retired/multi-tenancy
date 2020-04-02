@@ -78,6 +78,11 @@ type TypeSynchronizationStatus struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	NumPropagatedObjects *int `json:"numPropagatedObjects,omitempty"`
+
+	// Tracks the number of objects that are created by users.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	NumSourceObjects *int `json:"numSourceObjects,omitempty"`
 }
 
 // +kubebuilder:object:root=true

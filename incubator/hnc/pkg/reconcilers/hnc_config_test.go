@@ -190,7 +190,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// Change to ignore and wait for reconciler
 		updateHNCConfigSpec(ctx, "v1", "Secret", api.Ignore)
-		Eventually(typeHasStatus(ctx, "v1", "Secret")).Should(Equal(api.Ignore))
+		Eventually(typeStatusHasMode(ctx, "v1", "Secret")).Should(Equal(api.Ignore))
 
 		bazName := createNS(ctx, "baz")
 		setParent(ctx, bazName, fooName)
@@ -266,7 +266,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// Remove from spec and wait for the reconciler to pick it up
 		removeHNCConfigType(ctx, "v1", "Secret")
-		Eventually(typeHasStatus(ctx, "v1", "Secret")).Should(Equal(testModeMisssing))
+		Eventually(typeStatusHasMode(ctx, "v1", "Secret")).Should(Equal(testModeMisssing))
 
 		// Give foo another secret.
 		makeObject(ctx, "Secret", fooName, "foo-sec-2")
@@ -323,6 +323,47 @@ var _ = Describe("HNCConfiguration", func() {
 		updateHNCConfigSpec(ctx, "v1", "LimitRange", api.Remove)
 
 		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
+
+		// TODO: Delete objects created via makeObject after each test case.
+		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
+	})
+
+	It("should set NumSourceObjects for a type in propagate mode", func() {
+		addToHNCConfig(ctx, "v1", "LimitRange", api.Propagate)
+		makeObject(ctx, "LimitRange", fooName, "foo-lr")
+
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+
+		// TODO: Delete objects created via makeObject after each test case.
+		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
+	})
+
+	// If a mode is unset, it is treated as `propagate` by default, in which case we will also compute NumSourceObjects
+	It("should set NumSourceObjects for a type with unset mode", func() {
+		addToHNCConfig(ctx, "v1", "LimitRange", "")
+		makeObject(ctx, "LimitRange", fooName, "foo-lr")
+
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+
+		// TODO: Delete objects created via makeObject after each test case.
+		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
+	})
+
+	It("should decrement NumSourceObjects correctly after deleting an object of a type in propagate mode", func() {
+		addToHNCConfig(ctx, "v1", "LimitRange", api.Propagate)
+		makeObject(ctx, "LimitRange", fooName, "foo-lr")
+
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+
+		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
+
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
+	})
+
+	It("should not set NumSourceObjects for a type not in propagate mode", func() {
+		addToHNCConfig(ctx, "v1", "LimitRange", api.Remove)
+
+		Eventually(hasNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(BeFalse())
 	})
 })
 
@@ -338,7 +379,7 @@ func typeSpecHasMode(ctx context.Context, apiVersion, kind string) func() api.Sy
 	}
 }
 
-func typeHasStatus(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
+func typeStatusHasMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
 	return func() api.SynchronizationMode {
 		config := getHNCConfig(ctx)
 		for _, t := range config.Status.Types {
@@ -497,6 +538,38 @@ func getNumPropagatedObjects(ctx context.Context, apiVersion, kind string) func(
 					return *t.NumPropagatedObjects, nil
 				}
 				return -1, errors.New(fmt.Sprintf("NumPropagatedObjects field is not set for "+
+					"apiversion %s, kind %s", apiVersion, kind))
+			}
+		}
+		return -1, errors.New(fmt.Sprintf("apiversion %s, kind %s is not found in status", apiVersion, kind))
+	}
+}
+
+// hasNumSourceObjects returns true if NumSourceObjects is set (not nil) for a specific type and returns false
+// if NumSourceObjects is not set. It returns false and an error if the type does not exist in the status.
+func hasNumSourceObjects(ctx context.Context, apiVersion, kind string) func() (bool, error) {
+	return func() (bool, error) {
+		c := getHNCConfig(ctx)
+		for _, t := range c.Status.Types {
+			if t.APIVersion == apiVersion && t.Kind == kind {
+				return t.NumSourceObjects != nil, nil
+			}
+		}
+		return false, errors.New(fmt.Sprintf("apiversion %s, kind %s is not found in status", apiVersion, kind))
+	}
+}
+
+// getNumSourceObjects returns NumSourceObjects status for a given type. If NumSourceObjects is
+// not set or if type does not exist in status, it returns -1 and an error.
+func getNumSourceObjects(ctx context.Context, apiVersion, kind string) func() (int, error) {
+	return func() (int, error) {
+		c := getHNCConfig(ctx)
+		for _, t := range c.Status.Types {
+			if t.APIVersion == apiVersion && t.Kind == kind {
+				if t.NumSourceObjects != nil {
+					return *t.NumSourceObjects, nil
+				}
+				return -1, errors.New(fmt.Sprintf("NumSourceObjects field is not set for "+
 					"apiversion %s, kind %s", apiVersion, kind))
 			}
 		}
