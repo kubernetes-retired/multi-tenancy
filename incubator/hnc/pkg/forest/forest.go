@@ -142,7 +142,10 @@ func (f *Forest) GetNamespaceNames() []string {
 
 type namedNamespaces map[string]*Namespace
 
-// TODO Store source objects by GK in the forest - https://github.com/kubernetes-sigs/multi-tenancy/issues/281
+// While storing the V in GVK is not strictly necessary to match what's in the HNC type configuration,
+// as a client of the API server, HNC will be to be reading and writing versions of the API to communicate
+// with the API server. Since we need the V to work with the API server anyways anyways, we will choose to
+// use the GVK as the key in this map.
 type objects map[schema.GroupVersionKind]map[string]*unstructured.Unstructured
 
 // conditions stores the conditions for a single namespace, in the form obj -> code -> msg. Note
