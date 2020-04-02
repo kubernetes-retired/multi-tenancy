@@ -17,19 +17,31 @@ limitations under the License.
 package server
 
 import (
+	"bytes"
+	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"net/http"
 	"net/url"
 
 	"github.com/emicklei/go-restful"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
 // Server is a http.Handler which exposes vn-agent functionality over HTTP.
 type Server struct {
-	config      *config.Config
-	restfulCont *restful.Container
+	superMasterClient client.Client
+	config            *config.Config
+	restfulCont       *restful.Container
 }
 
 // ServeHTTP responds to HTTP requests on the vn-agent.
@@ -45,11 +57,52 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	}
 	cfg.KubeletServerHost = u.Host
 
+	// create the super-master client to read Virtualcluster information
+	kbCfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "fail to create the super-master client")
+	}
+	cliScheme := runtime.NewScheme()
+	smCli, err := client.New(kbCfg, client.Options{Scheme: cliScheme})
+	if err != nil {
+		return nil, err
+	}
+	if err = tenancyv1alpha1.AddToScheme(cliScheme); err != nil {
+		return nil, errors.Wrap(err, "faill to virtualcluster to the super-master client scheme")
+	}
+
 	server := &Server{
-		restfulCont: restful.NewContainer(),
-		config:      cfg,
+		superMasterClient: smCli,
+		restfulCont:       restful.NewContainer(),
+		config:            cfg,
 	}
 
 	server.InstallHandlers()
 	return server, nil
+}
+
+// GetTenantName finds the virtualcluster with the signature that matches the `reqCrt`
+func (s *Server) GetTenantName(reqCrt *x509.Certificate) (string, error) {
+	vcLst := &tenancyv1alpha1.VirtualclusterList{}
+	if err := s.superMasterClient.List(context.TODO(), vcLst, &client.ListOptions{}); err != nil {
+		return "", errors.Wrap(err, "fail to list Virtualclusters on the super master")
+	}
+
+	reqSig := reqCrt.Signature
+
+	for _, vc := range vcLst.Items {
+		sigB64, exist := vc.Annotations[constants.AnnoX509SignatureBase64]
+		if !exist {
+			continue
+		}
+		sig, err := base64.StdEncoding.DecodeString(sigB64)
+		if err != nil {
+			return "", errors.Wrap(err, "fail to decode signature content from the base64 format")
+		}
+		if bytes.Equal(reqSig, sig) {
+			klog.V(4).Infof("received request from vc %s", vc.GetName())
+			return conversion.ToClusterKey(&vc), nil
+		}
+	}
+	return "", errors.New("there exist no virtualcluster that matches the signature in the request")
 }

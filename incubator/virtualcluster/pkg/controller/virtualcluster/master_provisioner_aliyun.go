@@ -18,6 +18,7 @@ package virtualcluster
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -562,6 +563,12 @@ PollASK:
 	}
 	log.Info("the node selector service account is deleted", "vc", vc.GetName())
 	return nil
+}
+
+// TODO GetClusterCertificate gets the tenant apiserver's certificate by sending a basic GET request and extract
+// the certificate from the TLSConnection
+func (mpa *MasterProvisionerAliyun) GetClusterCertificate(vc *tenancyv1alpha1.Virtualcluster) (*x509.Certificate, error) {
+	return nil, nil
 }
 
 // DeleteVirtualCluster deletes the ASK cluster corresponding to the given Virtualcluster

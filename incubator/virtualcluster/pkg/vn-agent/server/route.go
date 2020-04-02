@@ -132,7 +132,13 @@ func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 			resp.ResponseWriter.WriteHeader(http.StatusForbidden)
 			return
 		}
-		tenantName := req.Request.TLS.PeerCertificates[0].Subject.CommonName
+		tenantName, err := s.GetTenantName(req.Request.TLS.PeerCertificates[0])
+		if err != nil {
+			klog.Errorf("fail to identify the owner for the request: %s", err)
+			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
+			resp.ResponseWriter.Write([]byte(err.Error()))
+			return
+		}
 		TranslatePath(req, tenantName)
 
 		klog.V(4).Infof("request after translate %+v", req.Request.URL)
@@ -169,7 +175,13 @@ func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 
 		// 2. As we use the sa of the vn-agent, to forward the request, make sure
 		// the sa has the permission to access the pods
-		tenantName := req.Request.TLS.PeerCertificates[0].Subject.CommonName
+		tenantName, err := s.GetTenantName(req.Request.TLS.PeerCertificates[0])
+		if err != nil {
+			klog.Errorf("fail to identify the owner for the request: %s", err)
+			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
+			resp.ResponseWriter.Write([]byte(err.Error()))
+			return
+		}
 		err = TranslatePathForSuper(req, tenantName)
 		if err != nil {
 			klog.Errorf("fail to translate url path for super master: %s", err)

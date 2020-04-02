@@ -18,6 +18,8 @@ package virtualcluster
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -34,6 +36,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/constants"
+	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
@@ -181,6 +185,24 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		if err != nil {
 			return
 		}
+
+		// add annotation of signature to the Virtualcluster. vn-agent require it
+		// to identify the owner of a request
+		var clusterCrt *x509.Certificate
+		clusterCrt, err = r.mp.GetClusterCertificate(vc)
+		if err != nil {
+			return
+		}
+		if clusterCrt != nil {
+			log.Info("Adding the signature annotation to the vc", "vc", vc.Name)
+			sigB64Str := base64.StdEncoding.EncodeToString(clusterCrt.Signature)
+			if err = kubeutil.AnnotateVC(r,
+				vc.DeepCopy(),
+				constants.AnnoX509SignatureBase64, sigB64Str, log); err != nil {
+				return
+			}
+		}
+
 		// all components are ready, update vc status
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			vc.Status.Phase = "Running"

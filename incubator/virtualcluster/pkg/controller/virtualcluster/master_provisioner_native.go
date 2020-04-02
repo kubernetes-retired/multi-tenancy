@@ -19,12 +19,15 @@ package virtualcluster
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -102,6 +105,8 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	if err != nil {
 		return err
 	}
+
+	// 7. add annotation of the signature to the Virtualcluster
 
 	return nil
 }
@@ -313,6 +318,30 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	}
 
 	return nil
+}
+
+// GetClusterCertificate get the tenant apiserver's certificate from the secret
+func (mpn *MasterProvisionerNative) GetClusterCertificate(vc *tenancyv1alpha1.Virtualcluster) (*x509.Certificate, error) {
+	// get the secret that contains the apiserver certificate
+	srt := &v1.Secret{}
+	if err := mpn.Get(context.TODO(), types.NamespacedName{
+		Namespace: conversion.ToClusterKey(vc),
+		Name:      secret.APIServerCASecretName,
+	}, srt); err != nil {
+		return nil, err
+	}
+
+	crtByts, exist := srt.Data[v1.TLSCertKey]
+	if !exist {
+		return nil, fmt.Errorf("secret %s doesn't have the certificate data",
+			secret.APIServerCASecretName)
+	}
+	block, _ := pem.Decode(crtByts)
+	if block == nil {
+		return nil, errors.New("fail to parse certificate PEM")
+	}
+	crt, err := x509.ParseCertificate(block.Bytes)
+	return crt, err
 }
 
 func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {

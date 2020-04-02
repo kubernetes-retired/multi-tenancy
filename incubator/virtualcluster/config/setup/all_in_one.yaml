@@ -338,6 +338,14 @@ rules:
   - get
   - list
   - create
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - virtualclusters
+  - virtualclusters/status
+  verbs:
+  - get
+  - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
