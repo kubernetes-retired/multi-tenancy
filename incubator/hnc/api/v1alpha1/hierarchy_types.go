@@ -37,15 +37,13 @@ const (
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
-// TODO change condition codes to CamelCase strings. See issue:
-//  https://github.com/kubernetes-sigs/multi-tenancy/issues/500
 const (
-	CritParentMissing Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid Code = "CRIT_PARENT_INVALID"
-	CritAncestor      Code = "CRIT_ANCESTOR"
-	HNSMissing        Code = "HNS_MISSING"
-	CannotUpdate      Code = "CANNOT_UPDATE_OBJECT"
-	CannotPropagate   Code = "CANNOT_PROPAGATE_OBJECT"
+	CritParentMissing Code = "CritParentMissing"
+	CritParentInvalid Code = "CritParentInvalid"
+	CritAncestor      Code = "CritAncestor"
+	HNSMissing        Code = "HNSMissing"
+	CannotUpdate      Code = "CannotUpdateObject"
+	CannotPropagate   Code = "CannotPropagateObject"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
