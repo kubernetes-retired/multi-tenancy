@@ -45,9 +45,9 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid         HNCConfigurationCode = "critSingletonNameInvalid"
-	ObjectReconcilerCreationFailed   HNCConfigurationCode = "objectReconcilerCreationFailed"
-	MultipleConfigurationsForOneType HNCConfigurationCode = "multipleConfigurationsForOneType"
+	CritSingletonNameInvalid         HNCConfigurationCode = "CritSingletonNameInvalid"
+	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
+	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
