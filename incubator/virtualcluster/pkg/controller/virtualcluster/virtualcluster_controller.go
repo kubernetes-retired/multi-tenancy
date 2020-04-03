@@ -142,8 +142,10 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			vc.ObjectMeta.Finalizers = strutil.RemoveString(vc.ObjectMeta.Finalizers, vcFinalizerName)
 			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				updateErr := r.Update(context.TODO(), vc)
-				if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
-					log.Info("fail to get vc on update failure", "error", err.Error())
+				if updateErr != nil {
+					if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+						log.Info("fail to get vc on update failure", "error", err.Error())
+					}
 				}
 				return updateErr
 			})
@@ -163,8 +165,10 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			vc.Status.Message = "creating virtual cluster..."
 			vc.Status.Reason = "ClusterCreating"
 			updateErr := r.Update(context.TODO(), vc)
-			if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
-				log.Info("fail to get vc on update failure", "error", err.Error())
+			if updateErr != nil {
+				if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+					log.Info("fail to get vc on update failure", "error", err.Error())
+				}
 			}
 			return updateErr
 		})
@@ -187,8 +191,10 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 				Message:            fmt.Sprintf("virtualcluster(%s) starts running", vc.GetName()),
 			})
 			updateErr := r.Update(context.TODO(), vc)
-			if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
-				log.Info("fail to get vc on update failure", "error", err.Error())
+			if updateErr != nil {
+				if err = r.Get(context.TODO(), request.NamespacedName, vc); err != nil {
+					log.Info("fail to get vc on update failure", "error", err.Error())
+				}
 			}
 			return updateErr
 		})

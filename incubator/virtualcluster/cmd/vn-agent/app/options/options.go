@@ -19,6 +19,7 @@ package options
 import (
 	"crypto/tls"
 	"fmt"
+	"os"
 
 	"github.com/pkg/errors"
 	cliflag "k8s.io/component-base/cli/flag"
@@ -76,18 +77,26 @@ func (o *Options) Flags() cliflag.NamedFlagSets {
 	return fss
 }
 
+func fileNotExistOrEmpty(fn string) bool {
+	if fn == "" {
+		return true
+	}
+	fi, _ := os.Stat(fn)
+	return fi.Size() == 0
+}
+
 // Config is the config to create a vn-agent server handler.
 func (o *Options) Config() (*config.Config, *ServerOption, error) {
-	if o.KubeletOption.CertFile != "" && o.KubeletOption.KeyFile != "" {
-		kubeletClientCertPair, err := tls.LoadX509KeyPair(o.KubeletOption.CertFile, o.KubeletOption.KeyFile)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to load kubelet tls config")
-		}
-		return &config.Config{
-			KubeletClientCert: &kubeletClientCertPair,
-			KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", o.KubeletOption.Port),
-		}, &o.ServerOption, nil
+	// vc-kubelet-client may be a place holder that contains empty certificate and key data
+	if fileNotExistOrEmpty(o.KubeletOption.CertFile) || fileNotExistOrEmpty(o.KubeletOption.KeyFile) {
+		return &config.Config{KubeletClientCert: nil}, &o.ServerOption, nil
 	}
-
-	return &config.Config{KubeletClientCert: nil}, &o.ServerOption, nil
+	kubeletClientCertPair, err := tls.LoadX509KeyPair(o.KubeletOption.CertFile, o.KubeletOption.KeyFile)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to load kubelet tls config")
+	}
+	return &config.Config{
+		KubeletClientCert: &kubeletClientCertPair,
+		KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", o.KubeletOption.Port),
+	}, &o.ServerOption, nil
 }

@@ -29,9 +29,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	vcctlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -63,25 +63,21 @@ func Create(yamlPath, vcKbCfg string) error {
 	if err != nil {
 		return err
 	}
-	mgr, err := manager.New(kbCfg,
-		manager.Options{MetricsBindAddress: ":8081"})
+	// create a new scheme that has virtualcluster and clusterversion registered
+	cliScheme := scheme.Scheme
+	err = tenancyv1alpha1.AddToScheme(cliScheme)
 	if err != nil {
 		return err
 	}
 
-	err = tenancyv1alpha1.AddToScheme(mgr.GetScheme())
-	if err != nil {
-		return err
-	}
-
-	obj, err := vcctlutil.YamlToObj(mgr.GetScheme(), yamlPath)
+	obj, err := vcctlutil.YamlToObj(cliScheme, yamlPath)
 	if err != nil {
 		return err
 	}
 
 	// create a new client to talk to apiserver directly
 	// NOTE the client returned by manager.GetClient() will talk to local cache
-	cli, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	cli, err := client.New(kbCfg, client.Options{Scheme: cliScheme})
 	if err != nil {
 		return err
 	}
