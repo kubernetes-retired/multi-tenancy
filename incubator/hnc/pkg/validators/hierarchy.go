@@ -70,9 +70,8 @@ type request struct {
 // responsibilities to monitor these conditions and ensure that, transient exceptions aside, all
 // namespaces are condition-free.
 func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission.Response {
+	log := v.Log.WithValues("ns", req.Namespace, "user", req.UserInfo.Username)
 	decoded, err := v.decodeRequest(req)
-	log := v.Log.WithValues("ns", decoded.hc.ObjectMeta.Namespace, "user", decoded.ui.Username)
-
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
