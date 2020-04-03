@@ -251,38 +251,77 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	// Sync this namespace with its current parent.
-	var curParent *forest.Namespace
-	if inst.Spec.Parent != "" {
-		curParent = r.Forest.Get(inst.Spec.Parent)
-		if !curParent.Exists() {
-			log.Info("Missing parent", "parent", inst.Spec.Parent)
-			ns.SetLocalCondition(api.CritParentMissing, "missing parent")
-		}
+	curParent := r.Forest.Get(inst.Spec.Parent)
+	if curParent != nil && !curParent.Exists() {
+		log.Info("Missing parent", "parent", inst.Spec.Parent)
+		ns.SetLocalCondition(api.CritParentMissing, "missing parent")
 	}
 
-	// Update the in-memory hierarchy if it's changed
+	// If the parent hasn't changed, there's nothing more to do.
 	oldParent := ns.Parent()
-	if oldParent != curParent {
-		log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
-		if err := ns.SetParent(curParent); err != nil {
-			log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
-			ns.SetLocalCondition(api.CritParentInvalid, err.Error())
-			return
-		}
-
-		// Only call other parts of the hierarchy recursively if this one was successfully updated;
-		// otherwise, if you get a cycle, this could get into an infinite loop.
-		if oldParent != nil {
-			r.enqueueAffected(log, "removed as parent", oldParent.Name())
-		}
-		if curParent != nil {
-			r.enqueueAffected(log, "set as parent", curParent.Name())
-		}
-
-		// Also update all descendants so they can update their labels (and in future, annotations) if
-		// necessary.
-		r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
+	if curParent == oldParent {
+		return
 	}
+
+	// Try to update the graph to reflect the new parent. If this fails, don't attempt to notify any
+	// other part of the hierarchy, otherwise we can get into an infinite notification loop.
+	log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
+	if err := ns.SetParent(curParent); err != nil {
+		log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
+		ns.SetLocalCondition(api.CritParentInvalid, err.Error())
+		return
+	}
+
+	// We now need to update the old and new parents, as well as all descendants of this namespace
+	// (since they need to update their tree labels and possibly other data).
+	if oldParent != nil {
+		r.enqueueAffected(log, "removed as parent", oldParent.Name())
+	}
+	if curParent != nil {
+		r.enqueueAffected(log, "set as parent", curParent.Name())
+	}
+	r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
+
+	// Get rid of any obsolete object conditions (issue #328)
+	r.flushObsoleteObjectConditions(log, ns, oldParent)
+}
+
+// flushObsoleteObjectConditions looks for object conditions from objects that were in one of the
+// namespaces that's been removed as a descendant, and enqueues any affected namespaces.
+func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logger, ns, oldAns *forest.Namespace) {
+	// Create the set of all relevant names
+	wasDesc := map[string]bool{ns.Name(): true}
+	for _, desc := range ns.DescendantNames() {
+		wasDesc[desc] = true
+	}
+
+	// Remove conditions referring to this namespace and its descendants from all old ancestors.
+	for oldAns != nil {
+		if oldAns.ClearConditionsByNamespace(log, wasDesc) {
+			r.enqueueAffected(log, "cleared obsolete conditions", oldAns.Name())
+		}
+		oldAns = oldAns.Parent()
+	}
+
+	// In addition, this namespace may have conditions caused by a propagated object from another
+	// namespace that we need to clear. For example, we may not have been able to copy a RoleBinding
+	// from a parent into this namespace because we didn't have permission, and we've put a condition
+	// on this namespace as a result. Now that the parent has changed, we'll no longer attempt to copy
+	// that object - but we'll never clear its condition, because it's not in the list of objects seen
+	// by the object reconciler's enqueueLocalObjects.
+	//
+	// As of March 2020, the only known case like this is the CannodUpdate code, set by the object
+	// reconciler. Since we're about to resync all objects in this namespace anyway - which will
+	// result in their conditions being re-added to this namespace - it's safe to blow them all away
+	// here and just let the ones that are still applicable get reapplied.
+	//
+	// In theory, I wouldn't have expected that this would be necessary. If there was an error that
+	// caused this condition to be set, we should have returned an error to controller-runtime, which
+	// would have caused the object to be re-enqueued for reconciliation. However, when I actually
+	// watched the logs carefully, this didn't appear to happen, even after 30s. I'm not sure why.
+	//
+	// TODO: this really doesn't belong here. Find a way to move it to the object reconciler.
+	ns.ClearConditionsByCode(log, api.CannotUpdate)
 }
 
 // syncHNSes updates the HNS list. If any HNS is created/deleted, it will enqueue
