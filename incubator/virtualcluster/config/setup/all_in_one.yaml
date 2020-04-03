@@ -357,6 +357,15 @@ metadata:
   name: vn-agent
   namespace: vc-manager
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: empty-kubelet-client
+  namespace: vc-manager
+data:
+  client.crt: ""
+  client.key: ""
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -391,4 +400,4 @@ spec:
       volumes:
       - name: kubelet-client-cert
         secret:
-          secretName: vc-kubelet-client
+          secretName: empty-kubelet-client
