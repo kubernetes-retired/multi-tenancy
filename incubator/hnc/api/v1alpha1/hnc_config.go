@@ -21,7 +21,8 @@ import (
 
 // Constants for types and well-known names.
 const (
-	HNCConfigSingleton = "config"
+	HNCConfigSingleton  = "config"
+	HNCConfigSingletons = "hncconfigurations"
 )
 
 // SynchronizationMode describes propagation mode of objects of the same kind.

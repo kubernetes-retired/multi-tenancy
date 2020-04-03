@@ -46,6 +46,7 @@ type Client interface {
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
 	createHierarchicalNamespace(nnm string, hnnm string)
 	getHierarchicalNamespacesNames(nnm string) []string
+	getHNCConfig() *api.HNCConfiguration
 }
 
 func init() {
@@ -90,6 +91,7 @@ func init() {
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
 	rootCmd.AddCommand(newCreateCmd())
+	rootCmd.AddCommand(newConfigCmd())
 }
 
 func Execute() {
@@ -167,4 +169,15 @@ func (cl *realClient) createHierarchicalNamespace(nnm string, hnnm string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Successfully created \"%s\" hierarchicalnamespace instance in \"%s\" namespace\n", hnnm, nnm)
+}
+
+func (cl *realClient) getHNCConfig() *api.HNCConfiguration {
+	config := &api.HNCConfiguration{}
+	config.Name = api.HNCConfigSingleton
+	err := hncClient.Get().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Do().Into(config)
+	if err != nil && !errors.IsNotFound(err) {
+		fmt.Printf("Error reading the HNC Configuration: %s\n", err)
+		os.Exit(1)
+	}
+	return config
 }
