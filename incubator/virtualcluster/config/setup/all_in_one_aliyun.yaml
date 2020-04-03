@@ -241,6 +241,7 @@ rules:
     - delete
 - apiGroups:
     - ""
+    - storage.k8s.io
   resources:
     - events
     - nodes

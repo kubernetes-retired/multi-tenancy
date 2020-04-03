@@ -147,6 +147,10 @@ func (c *controller) backPopulate(key string) error {
 	}
 
 	vPV := vPVObj.(*v1.PersistentVolume)
+	if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
+		return fmt.Errorf("vPV %s in cluster %s delegated UID is different from pPV.", vPV.Name, clusterName)
+	}
+
 	// We only update PV.Spec, PV.Status is managed by tenant/super pv binder controller independently.
 	updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 	if updatedPVSpec != nil {
