@@ -134,9 +134,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 				klog.Errorf("Removed pv %s in cluster %s is bound to a pvc", vPV.Name, clusterName)
 			}
 
-		}
-
-		if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
+		} else if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
 			klog.Errorf("Found vPV %s in cluster %s delegated UID is different from super master object.", vPV.Name, clusterName)
 			shouldDelete = true
 		}
