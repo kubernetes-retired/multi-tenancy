@@ -18,6 +18,6 @@ spec:
           arch: amd64
       sha256: --- will be populated by make krew-build ---
       files:
-        - from: "bin/kubectl/kubectl-hierarchical_namespaces"
+        - from: "bin/kubectl/kubectl-hns"
           to: "."
-      bin: "./kubectl-hierarchical_namespaces"
+      bin: "./kubectl-hns"
