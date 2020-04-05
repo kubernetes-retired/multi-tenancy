@@ -109,7 +109,7 @@ var _ = framework.KubeDescribe("Tenants should have explicit control over ingres
 
 		kclientTenantB := configutil.NewKubeClientWithKubeconfig(config.TenantB.Kubeconfig)
 		
-		// Making nginx pod in TenantB to connect to service in TenantA
+		// Making busybox pod in TenantB to connect to service in TenantA
 		testpod := e2epod.MakeSecPod(config.TenantB.Namespace, nil, nil, false, "", false, false, nil, nil)
 		_, err = kclientTenantB.CoreV1().Pods(config.TenantB.Namespace).Create(testpod)
 		framework.ExpectNoError(err)
