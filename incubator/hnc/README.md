@@ -46,10 +46,15 @@ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/downl
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
 PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
+
+# Instructions for hnc-v0.2.0 and before
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-# If desired to make 'kubectl hns' work:
+chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces	
 ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
+
+# Instructions for hnc-v0.3.0 and later
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
+chmod +x ${PLUGIN_DIR}/kubectl-hns
 ```
 
 ### Getting started and learning more
@@ -79,6 +84,7 @@ is no need to uninstall HNC before upgrading it.
 
 ```bash
 rm ${PLUGIN_DIR}/kubectl-hns
+# hnc-v0.2.0 and before only, noop for hnc-v0.3.0 and after
 rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 # Don't need to delete the cert manager if you plan to reinstall it later.
@@ -137,9 +143,10 @@ To deploy to a cluster:
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
       deploy this way, or if we change the recommended version of cert-manager.
-    - This will also install the `kubectl-hierarchical_namespaces` plugin into
-      `$GOPATH/bin` (as well as its alias, `kubectl-hns`), so make sure that's
+    - For v0.2.0 and before, this will also install the `kubectl-hierarchical_namespaces` 
+      plugin into `$GOPATH/bin` (as well as its alias, `kubectl-hns`), so make sure that's
       in your path if you want to use commands like `kubectl hns tree`.
+    - For v0.3.0 and after, this will install the `kubectl-hns` plugin into `$GOPATH/bin`
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
