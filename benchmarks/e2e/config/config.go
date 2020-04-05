@@ -31,7 +31,7 @@ func (c *BenchmarkConfig) GetValidTenant() (TenantSpec, error) {
 	return c.TenantB, nil
 }
 
-func (c *BenchmarkConfig) ValidateTenant(t TenantSpec) (error) {
+func (c *BenchmarkConfig) ValidateTenant(t TenantSpec) error {
 	if c == nil {
 		return errors.New("Please fill in a valid/non-empty config.yaml")
 	}
@@ -41,4 +41,4 @@ func (c *BenchmarkConfig) ValidateTenant(t TenantSpec) (error) {
 	}
 
 	return errors.New("Given tenant does not match with TenantSpec")
-} 
+}
