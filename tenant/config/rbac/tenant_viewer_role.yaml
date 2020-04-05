@@ -1,0 +1,20 @@
+# permissions for end users to view tenants.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tenant-viewer-role
+rules:
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenants
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - tenancy.x-k8s.io
+  resources:
+  - tenants/status
+  verbs:
+  - get

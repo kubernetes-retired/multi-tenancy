@@ -1,13 +1,7 @@
 apiVersion: tenancy.x-k8s.io/v1alpha1
 kind: Tenant
 metadata:
-  labels:
-    controller-tools.k8s.io: "1.0"
   name: tenant-sample
 spec:
   # Add fields here
-  tenantAdminNamespaceName: "tenant1admin"
-  tenantAdmins:
-    - kind: ServiceAccount
-      name: t1-user1
-      namespace: default
+  foo: bar

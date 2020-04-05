@@ -1,3 +1,10 @@
-version: "1"
 domain: x-k8s.io
-repo: github.com/multi-tenancy/tenant
+repo: github.com/kubernetes-sigs/multi-tenancy/tenant
+resources:
+- group: tenancy
+  kind: Tenant
+  version: v1alpha1
+- group: tenancy
+  kind: TenantNamespace
+  version: v1alpha1
+version: "2"
