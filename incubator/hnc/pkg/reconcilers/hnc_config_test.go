@@ -48,6 +48,9 @@ var _ = Describe("HNCConfiguration", func() {
 	)
 
 	BeforeEach(func() {
+		// We want to ensure we're working with a clean slate, in case a previous tests objects still exist
+		cleanupObjects(ctx)
+
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
 	})
@@ -57,6 +60,7 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(func() error {
 			return resetHNCConfigToDefault(ctx)
 		}).Should(Succeed())
+		cleanupObjects(ctx)
 	})
 
 	It("should set mode of Roles and RoleBindings as propagate by default", func() {
