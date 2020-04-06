@@ -309,8 +309,10 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
-			if assignedPod(pPod) {
-				c.enqueuePod(pPod)
+			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
+				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPods").Inc()
 			}
 		}
 

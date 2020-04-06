@@ -23,6 +23,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -143,9 +144,15 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		if updatedService != nil {
 			atomic.AddUint64(&numMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
-			if isLoadBalancerService(pService) {
-				c.enqueueService(pService)
+			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
+				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
 			}
+			continue
+		}
+		if isLoadBalancerService(pService) && !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
+			c.enqueueService(pService)
 		}
 	}
 }
