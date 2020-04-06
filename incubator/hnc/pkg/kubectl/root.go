@@ -47,6 +47,7 @@ type Client interface {
 	createHierarchicalNamespace(nnm string, hnnm string)
 	getHierarchicalNamespacesNames(nnm string) []string
 	getHNCConfig() *api.HNCConfiguration
+	updateHNCConfig(*api.HNCConfiguration)
 }
 
 func init() {
@@ -184,4 +185,17 @@ func (cl *realClient) getHNCConfig() *api.HNCConfiguration {
 		os.Exit(1)
 	}
 	return config
+}
+
+func (cl *realClient) updateHNCConfig(config *api.HNCConfiguration) {
+	var err error
+	if config.CreationTimestamp.IsZero() {
+		err = hncClient.Post().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+	} else {
+		err = hncClient.Put().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+	}
+	if err != nil {
+		fmt.Printf("\nCould not update the HNC Configuration: %s\n", err)
+		os.Exit(1)
+	}
 }
