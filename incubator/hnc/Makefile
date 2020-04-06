@@ -55,7 +55,6 @@ clean: krew-uninstall
 	-rm -rf bin/*
 	-rm -rf manifests/*
 	-rm -f ${GOPATH}/bin/kubectl-hns
-	-rm -f ${GOPATH}/bin/kubectl-hns
 
 # Install kubectl plugin
 kubectl: build

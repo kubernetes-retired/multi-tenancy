@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
@@ -74,7 +75,7 @@ type HierarchyConfigReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if EX[req.Namespace] {
+	if config.EX[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
 

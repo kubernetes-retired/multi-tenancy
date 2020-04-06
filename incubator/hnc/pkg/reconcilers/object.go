@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
@@ -182,7 +183,7 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("trigger", req.NamespacedName)
 
-	if EX[req.Namespace] {
+	if config.EX[req.Namespace] {
 		return resp, nil
 	}
 
