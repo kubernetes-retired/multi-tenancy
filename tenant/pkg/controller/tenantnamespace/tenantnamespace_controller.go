@@ -43,8 +43,6 @@ var log = logf.Log.WithName("controller")
 const (
 	// TenantAdminNamespaceAnnotation is the key for tenantAdminNamespace annotation
 	TenantAdminNamespaceAnnotation = "x-k8s.io/tenantAdminNamespace"
-
-	TenantNamespaceFinalizer = "tenantnamespace.finalizer.x-k8s.io"
 )
 
 // Add creates a new TenantNamespace Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
@@ -169,9 +167,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 			return reconcile.Result{}, err
 		} else {
 			instanceClone := instance.DeepCopy()
-			if containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
-				instanceClone.Finalizers = removeString(instanceClone.Finalizers, TenantNamespaceFinalizer)
-			}
 			err = r.Update(context.TODO(), instanceClone)
 			return reconcile.Result{}, err
 		}
@@ -236,9 +231,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	// Update status
 	instanceClone := instance.DeepCopy()
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		if !containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
-			instanceClone.Finalizers = append(instanceClone.Finalizers, TenantNamespaceFinalizer)
-		}
 		instanceClone.Status.OwnedNamespace = tenantNsName
 		updateErr := r.Update(context.TODO(), instanceClone)
 		if updateErr == nil {
