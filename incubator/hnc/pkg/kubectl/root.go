@@ -57,7 +57,11 @@ func init() {
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	rootCmd = &cobra.Command{
-		Use:   "kubectl hierarchical-namespaces",
+		// We should use "kubectl hns" instead of "kubectl-hns" to invoke the plugin.
+		// However, since only the first word of the Use field will be displayed in the
+		// "Usage" section of a root command, we set it to "kubectl-hns" here so that both
+		// "kubectl" and "hns" will be shown in the "Usage" section.
+		Use:   "kubectl-hns",
 		Short: "Manipulates hierarchical namespaces provided by HNC",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			config, err := kubecfgFlags.ToRESTConfig()
