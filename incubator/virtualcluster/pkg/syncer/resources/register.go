@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ import (
 )
 
 func Register(config *config.SyncerConfiguration, client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
-	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1().Namespaces(), controllerManager)
+	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
 	secret.Register(config, client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)
