@@ -19,12 +19,13 @@ func TestInheritedFromLabel(t *testing.T) {
 	l := zap.Logger(false)
 
 	tests := []struct {
-		name     string
-		oldLabel string
-		oldValue string
-		newLabel string
-		newValue string
-		fail     bool
+		name      string
+		oldLabel  string
+		oldValue  string
+		newLabel  string
+		newValue  string
+		namespace string
+		fail      bool
 	}{{
 		name:     "Regular labels can be changed",
 		oldLabel: "oldLabel", oldValue: "foo",
@@ -46,7 +47,13 @@ func TestInheritedFromLabel(t *testing.T) {
 		name:     "Label is added",
 		newLabel: api.LabelInheritedFrom, newValue: "foo",
 		fail: true,
-	}}
+	}, {
+		name:     "Objects in excluded namespace is ignored",
+		oldLabel: api.LabelInheritedFrom, oldValue: "foo",
+		newLabel: api.LabelInheritedFrom, newValue: "bar",
+		namespace: "hnc-system",
+	},
+	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -55,6 +62,7 @@ func TestInheritedFromLabel(t *testing.T) {
 			oldInst := &unstructured.Unstructured{}
 			metadata.SetLabel(oldInst, tc.oldLabel, tc.oldValue)
 			inst := &unstructured.Unstructured{}
+			inst.SetNamespace(tc.namespace)
 			metadata.SetLabel(inst, tc.newLabel, tc.newValue)
 
 			// Test

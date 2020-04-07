@@ -9,16 +9,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
-// The EX map is used by reconcilers to exclude namespaces to reconcile. We explicitly
-// exclude some default namespaces with constantly changing objects.
-// TODO make the exclusion configurable - https://github.com/kubernetes-sigs/multi-tenancy/issues/374
-var EX = map[string]bool{
-	"kube-system":  true,
-	"kube-public":  true,
-	"hnc-system":   true,
-	"cert-manager": true,
-}
-
 // Create creates all reconcilers.
 //
 // This function is called both from main.go as well as from the integ tests.

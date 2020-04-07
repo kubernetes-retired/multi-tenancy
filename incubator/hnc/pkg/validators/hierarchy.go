@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -139,6 +140,11 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if curParent == newParent {
 		return allow("parent unchanged")
+	}
+
+	if config.EX[newParent.Name()] {
+		reason := fmt.Sprintf("Cannot set the parent to an excluded namespace %q", newParent.Name())
+		return deny(metav1.StatusReasonForbidden, "Excluded parent: "+reason)
 	}
 
 	// Prevent changing parent of an owned child
