@@ -131,7 +131,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
 	// Fetch namespace list
 	nsList := &corev1.NamespaceList{}
 	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
@@ -263,7 +262,11 @@ func (r *ReconcileTenantNamespace) updateTenantClusterRole(tenantName, tenantNsN
 	var err error
 	cr := &rbacv1.ClusterRole{}
 	if err = r.Get(context.TODO(), types.NamespacedName{Name: fmt.Sprintf("%s-tenant-admin-role", tenantName)}, cr); err != nil {
-		return err
+		if errors.IsNotFound(err) {
+			return nil
+		} else {
+			return err
+		}
 	}
 	cr = cr.DeepCopy()
 	foundNsRule := false
