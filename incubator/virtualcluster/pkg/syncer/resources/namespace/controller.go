@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,6 @@ import (
 )
 
 type controller struct {
-	reconcileHandler mc.TenantClusterReconcileHandler
 	// super master namespace client
 	namespaceClient v1core.NamespacesGetter
 	// super master namespace lister
@@ -47,11 +46,11 @@ type controller struct {
 
 func Register(
 	config *config.SyncerConfiguration,
-	namespaceClient v1core.NamespacesGetter,
-	namespaceInformer coreinformers.NamespaceInformer,
+	namespaceClient v1core.CoreV1Interface,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, err := NewNamespaceController(namespaceClient, namespaceInformer)
+	c, _, err := NewNamespaceController(namespaceClient, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
@@ -60,23 +59,28 @@ func Register(
 	controllerManager.AddController(c)
 }
 
-func NewNamespaceController(namespaceClient v1core.NamespacesGetter, namespaceInformer coreinformers.NamespaceInformer) (*controller, error) {
+func NewNamespaceController(namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
 	c := &controller{
 		namespaceClient:     namespaceClient,
 		periodCheckerPeriod: 60 * time.Second,
 	}
-
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, options)
+	if options == nil {
+		options = &mc.Options{Reconciler: c}
+	}
+	options.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *options)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
-	c.nsLister = namespaceInformer.Lister()
-	c.nsSynced = namespaceInformer.Informer().HasSynced
-	c.reconcileHandler = c.reconcile
+	c.nsLister = informer.Namespaces().Lister()
+	if options.IsFake {
+		c.nsSynced = func() bool { return true }
+	} else {
+		c.nsSynced = informer.Namespaces().Informer().HasSynced
+	}
 
-	return c, nil
+	return c, multiClusterNamespaceController, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {

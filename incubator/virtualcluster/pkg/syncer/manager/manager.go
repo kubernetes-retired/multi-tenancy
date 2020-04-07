@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // ControllerManager manages number of controllers. It starts their caches, waits for those to sync,
@@ -40,6 +41,7 @@ type Controller interface {
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
 	StartPeriodChecker(stopCh <-chan struct{}) error
+	Reconcile(request reconciler.Request) (reconciler.Result, error)
 }
 
 // AddController adds a controller to the ControllerManager.
