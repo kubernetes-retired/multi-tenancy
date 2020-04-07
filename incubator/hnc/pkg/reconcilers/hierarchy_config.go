@@ -423,28 +423,34 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 }
 
 func (r *HierarchyConfigReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
-	ret := false
-	if updated, err := r.writeHierarchy(ctx, log, oldHC, newHC); err != nil {
+	isDeletingNS := !newNS.DeletionTimestamp.IsZero()
+	updated := false
+	if up, err := r.writeHierarchy(ctx, log, oldHC, newHC, isDeletingNS); err != nil {
 		return false, err
 	} else {
-		ret = ret || updated
+		updated = updated || up
 	}
 
-	if updated, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
+	if up, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
 		return false, err
 	} else {
-		ret = ret || updated
+		updated = updated || up
 	}
-	return ret, nil
+	return updated, nil
 }
 
-func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) (bool, error) {
+func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration, isDeletingNS bool) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
+		return false, nil
+	}
+	exists := !inst.CreationTimestamp.IsZero()
+	if !exists && isDeletingNS {
+		log.Info("Will not create singleton since namespace is being deleted")
 		return false, nil
 	}
 
 	stats.WriteHierConfig()
-	if inst.CreationTimestamp.IsZero() {
+	if !exists {
 		log.Info("Creating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
@@ -466,19 +472,12 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 		return false, nil
 	}
 
+	// NB: HCR can't create namespaces anymore, that's only in HNSR
 	stats.WriteNamespace()
-	if inst.CreationTimestamp.IsZero() {
-		log.Info("Creating namespace on apiserver")
-		if err := r.Create(ctx, inst); err != nil {
-			log.Error(err, "while creating on apiserver")
-			return false, err
-		}
-	} else {
-		log.Info("Updating namespace on apiserver")
-		if err := r.Update(ctx, inst); err != nil {
-			log.Error(err, "while updating apiserver")
-			return false, err
-		}
+	log.Info("Updating namespace on apiserver")
+	if err := r.Update(ctx, inst); err != nil {
+		log.Error(err, "while updating apiserver")
+		return false, err
 	}
 
 	return true, nil
