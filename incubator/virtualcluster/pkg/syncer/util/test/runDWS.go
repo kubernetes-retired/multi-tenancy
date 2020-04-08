@@ -110,7 +110,7 @@ func RunDownwardSync(
 	defer close(stopCh)
 	go controller.StartDWS(stopCh)
 
-	// add object to informer.
+	// add object to super informer.
 	for _, each := range existingObjectInSuper {
 		informer := getObjectInformer(superInformer.Core().V1(), each)
 		informer.GetStore().Add(each)
@@ -135,6 +135,8 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 	switch obj.(type) {
 	case *v1.Namespace:
 		return informer.Namespaces().Informer()
+	case *v1.Service:
+		return informer.Services().Informer()
 	default:
 		return nil
 
