@@ -54,10 +54,19 @@ type controller struct {
 
 func Register(
 	config *config.SyncerConfiguration,
-	serviceClient v1core.ServicesGetter,
+	serviceClient v1core.CoreV1Interface,
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, err := NewServiceController(serviceClient, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster namespace controller %v", err)
+		return
+	}
+	controllerManager.AddController(c)
+}
+
+func NewServiceController(serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
@@ -65,17 +74,22 @@ func Register(
 		workers:             constants.UwsControllerWorkerLow,
 	}
 
-	// Create the multi cluster service controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, options)
+	if options == nil {
+		options = &mc.Options{Reconciler: c}
+	}
+	options.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, *options)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster service controller %v", err)
-		return
+		return nil, nil, err
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
 	c.serviceLister = informer.Services().Lister()
-	c.serviceSynced = informer.Services().Informer().HasSynced
+	if options.IsFake {
+		c.serviceSynced = func() bool { return true }
+	} else {
+		c.serviceSynced = informer.Services().Informer().HasSynced
+	}
 
 	informer.Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -106,7 +120,7 @@ func Register(
 				DeleteFunc: c.enqueueService,
 			},
 		})
-	controllerManager.AddController(c)
+	return c, multiClusterServiceController, nil
 }
 
 func isLoadBalancerService(svc *v1.Service) bool {
