@@ -151,6 +151,17 @@ To deploy to a cluster:
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
 
+### Development Workflow
+
+Once HNC is installed via `make deploy`, the development cycle looks like the following: 
+  - Make changes locally and write new unit and integration tests as necessary
+  - Ensure `make test` passes
+  - Deploy to your cluster with `make deploy`
+  - Monitor changes. Some ways you can do that are:
+    - Look at logging with `make deploy-watch`
+    - Look at the result of the structure of your namespaces with `kubectl-hns tree -A` or `kubectl-hns tree NAMESPACE`
+    - See the resultant conditions or labels on namespaces by using `kubectl describe namespace NAMESPACE`
+
 ### Developing with KIND
 
 While developing the HNC, it's usually faster to deploy locally to
