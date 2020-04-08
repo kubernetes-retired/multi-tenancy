@@ -27,25 +27,47 @@ import (
 
 //hcUpdates struct stores name of namespaces against type of flag passed
 type hcUpdates struct {
-	root                 bool
-	parent               string
-	allowCascadingDelete bool
+	root     bool
+	parent   string
+	allowCD  bool
+	forbidCD bool
 }
 
 var setCmd = &cobra.Command{
 	Use:   "set NAMESPACE",
 	Short: "Sets hierarchical properties of the given namespace",
-	Args:  cobra.ExactArgs(1),
+	Example: `	# Make 'foo' the parent of 'bar'
+	kubectl hns set bar --parent foo
+	kubectl hns set bar -p foo
+
+	# Make 'foo' a root (remove 'bar' as its parent)
+	kubectl hns set bar --root
+	kubectl hns set bar -r
+
+	# Not allowed: give 'bar' a parent and make it a root at the same time
+	kubectl hns set bar --root --parent foo # error
+
+	# Allow 'foo', or any of its descendants, to be cascading deleted
+	kubectl hns set foo --allowCascadingDelete
+	kubectl hns set foo -a
+
+	# Forbids cascading deletion on 'foo' and its subtree (unless specifically
+	# allowed on any descendants).
+	kubectl hns set foo --forbidCascadingDelete
+	kubectl hns set foo -f`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
 		flags := cmd.Flags()
 		parent, _ := flags.GetString("parent")
-		allowCascadingDelete, _ := flags.GetBool("allowCascadingDelete")
+		allowCD, _ := flags.GetBool("allowCascadingDelete")
+		forbidCD, _ := flags.GetBool("forbidCascadingDelete")
 
 		updates := hcUpdates{
-			root:                 flags.Changed("root"),
-			parent:               parent,
-			allowCascadingDelete: allowCascadingDelete,
+			root:     flags.Changed("root"),
+			parent:   parent,
+			allowCD:  allowCD,
+			forbidCD: forbidCD,
 		}
 
 		updateHC(client, updates, nnm)
@@ -55,7 +77,6 @@ var setCmd = &cobra.Command{
 func updateHC(cl Client, updates hcUpdates, nnm string) {
 	hc := cl.getHierarchy(nnm)
 	oldpnm := hc.Spec.Parent
-	oldacd := hc.Spec.AllowCascadingDelete
 	numChanges := 0
 
 	if updates.root && updates.parent != "" {
@@ -71,7 +92,7 @@ func updateHC(cl Client, updates hcUpdates, nnm string) {
 		setParent(hc, oldpnm, updates.parent, nnm, &numChanges)
 	}
 
-	setAllowCascadingDelete(hc, nnm, oldacd, updates.allowCascadingDelete, &numChanges)
+	setAllowCascadingDelete(hc, nnm, updates.allowCD, updates.forbidCD, &numChanges)
 
 	if numChanges > 0 {
 		cl.updateHierarchy(hc, fmt.Sprintf("update the hierarchical configuration of %s", nnm))
@@ -109,12 +130,27 @@ func setParent(hc *api.HierarchyConfiguration, oldpnm, pnm, nnm string, numChang
 	}
 }
 
-func setAllowCascadingDelete(hc *api.HierarchyConfiguration, nnm string, oldacd, acd bool, numChanges *int) {
-	if oldacd == acd {
-		fmt.Printf("%s allowCascadingDelete is already %t; unchanged\n", nnm, acd)
+func setAllowCascadingDelete(hc *api.HierarchyConfiguration, nnm string, allow, forbid bool, numChanges *int) {
+	if allow && forbid {
+		fmt.Printf("Cannot set both --allowCascadingDelete and --forbidCascadingDelete\n")
+		os.Exit(1)
+	}
+
+	if !allow && !forbid {
+		// nothing specified
+		return
+	}
+
+	// We now know that allow != forbid, so we can just look at allow
+	if hc.Spec.AllowCascadingDelete == allow {
+		fmt.Printf("Cascading deletion for '%s' is already set to %t; unchanged\n", nnm, allow)
 	} else {
-		hc.Spec.AllowCascadingDelete = acd
-		fmt.Printf("Changing %s allowCascadingDelete to %t\n", nnm, acd)
+		hc.Spec.AllowCascadingDelete = allow
+		if allow {
+			fmt.Printf("Allowing cascading deletion on '%s'\n", nnm)
+		} else {
+			fmt.Printf("Forbidding cascading deletion on '%s'\n", nnm)
+		}
 		*numChanges++
 	}
 }
@@ -130,8 +166,9 @@ func normalizeStringArray(in []string) []string {
 }
 
 func newSetCmd() *cobra.Command {
-	setCmd.Flags().Bool("root", false, "Turns namespace into root namespace")
-	setCmd.Flags().String("parent", "", "Parent namespace")
-	setCmd.Flags().Bool("allowCascadingDelete", false, "Allows cascading deletion of its self-serve subnamespaces.")
+	setCmd.Flags().BoolP("root", "r", false, "Removes the current parent namespace, making this namespace a root")
+	setCmd.Flags().StringP("parent", "p", "", "Sets the parent namespace")
+	setCmd.Flags().BoolP("allowCascadingDelete", "a", false, "Allows cascading deletion of its self-serve subnamespaces.")
+	setCmd.Flags().BoolP("forbidCascadingDelete", "f", false, "Protects cascading deletion of its self-serve subnamespaces.")
 	return setCmd
 }
