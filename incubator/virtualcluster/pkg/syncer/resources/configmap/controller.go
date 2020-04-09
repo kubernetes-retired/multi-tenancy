@@ -66,10 +66,14 @@ func Register(
 	c.configMapLister = configMapInformer.Lister()
 	c.configMapSynced = configMapInformer.Informer().HasSynced
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

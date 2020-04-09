@@ -112,7 +112,7 @@ func Register(
 				DeleteFunc: c.enqueuePersistentVolume,
 			},
 		})
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func boundPersistentVolume(e *v1.PersistentVolume) bool {

@@ -64,13 +64,9 @@ type Options struct {
 	JitterPeriod time.Duration
 
 	// MaxConcurrentReconciles is the number of concurrent control loops.
-	// Use this if your Reconciler is slow, but thread safe.
 	MaxConcurrentReconciles int
 
-	// Reconciler is a function that can be called at any time with the Name / Namespace of an object and
-	// ensures that the state of the system matches the state specified in the object.
-	// Defaults to the DefaultReconcileFunc.
-	Reconciler reconciler.Reconciler
+	Reconciler reconciler.DWReconciler
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface

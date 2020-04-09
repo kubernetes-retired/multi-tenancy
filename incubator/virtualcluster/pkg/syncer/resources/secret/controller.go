@@ -70,10 +70,14 @@ func Register(
 	c.secretLister = secretInformer.Lister()
 	c.secretSynced = secretInformer.Informer().HasSynced
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

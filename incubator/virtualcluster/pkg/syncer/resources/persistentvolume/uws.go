@@ -76,7 +76,7 @@ func (c *controller) processNextWorkItem() bool {
 	}
 
 	klog.Infof("back populate persistentvolume %+v", req.Key)
-	err := c.backPopulate(req.Key)
+	err := c.BackPopulate(req.Key)
 	if err == nil {
 		c.queue.Forget(obj)
 		return true
@@ -92,7 +92,7 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(key string) error {
+func (c *controller) BackPopulate(key string) error {
 	pPV, err := c.pvLister.Get(key)
 	if err != nil {
 		if errors.IsNotFound(err) {

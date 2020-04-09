@@ -56,10 +56,10 @@ func Register(
 		return
 	}
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
-func NewNamespaceController(config *config.SyncerConfiguration, namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
+func NewNamespaceController(config *config.SyncerConfiguration, namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
 	c := &controller{
 		namespaceClient:     namespaceClient,
 		periodCheckerPeriod: 60 * time.Second,
@@ -84,6 +84,10 @@ func NewNamespaceController(config *config.SyncerConfiguration, namespaceClient 
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

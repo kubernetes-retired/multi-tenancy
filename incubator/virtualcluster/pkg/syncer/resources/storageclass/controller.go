@@ -109,7 +109,7 @@ func Register(
 			},
 		})
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func publicStorageClass(e *v1.StorageClass) bool {
@@ -131,7 +131,7 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 	}
 
 	for _, clusterName := range clusterNames {
-		c.queue.Add(reconciler.UwsRequest{Key: key, ClusterName: clusterName})
+		c.queue.Add(reconciler.UwsRequest{Key: clusterName + "/" + key})
 	}
 }
 
