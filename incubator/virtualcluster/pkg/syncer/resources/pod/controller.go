@@ -83,6 +83,15 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, err := NewPodController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster Pod controller %v", err)
+		return
+	}
+	controllerManager.AddController(c)
+}
+
+func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
 	c := &controller{
 		config:              config,
 		client:              client,
@@ -94,23 +103,29 @@ func Register(
 		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
 	}
 
-	// Create the multi cluster pod controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerHigh}
-	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, options)
+	if options == nil {
+		options = &mc.Options{Reconciler: c}
+	}
+	options.MaxConcurrentReconciles = constants.DwsControllerWorkerHigh
+	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, *options)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster pod controller %v", err)
-		return
+		return nil, nil, err
 	}
 	c.multiClusterPodController = multiClusterPodController
 
 	c.serviceLister = informer.Services().Lister()
-	c.serviceSynced = informer.Services().Informer().HasSynced
-
 	c.secretLister = informer.Secrets().Lister()
-	c.secretSynced = informer.Secrets().Informer().HasSynced
-
 	c.podLister = informer.Pods().Lister()
-	c.podSynced = informer.Pods().Informer().HasSynced
+	if options.IsFake {
+		c.serviceSynced = func() bool { return true }
+		c.secretSynced = func() bool { return true }
+		c.podSynced = func() bool { return true }
+	} else {
+		c.serviceSynced = informer.Services().Informer().HasSynced
+		c.secretSynced = informer.Secrets().Informer().HasSynced
+		c.podSynced = informer.Pods().Informer().HasSynced
+	}
 	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -145,8 +160,7 @@ func Register(
 			},
 		},
 	)
-
-	controllerManager.AddController(c)
+	return c, multiClusterPodController, nil
 }
 
 func (c *controller) enqueuePod(obj interface{}) {

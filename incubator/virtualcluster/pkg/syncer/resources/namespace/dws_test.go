@@ -101,7 +101,11 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant)
+			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController,
+				testTenant,
+				tc.ExistingObjectInSuper,
+				[]runtime.Object{tc.ExistingObjectInTenant},
+				tc.ExistingObjectInTenant)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -109,9 +113,9 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {
@@ -194,9 +198,9 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {

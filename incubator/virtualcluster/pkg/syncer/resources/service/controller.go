@@ -58,15 +58,15 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, err := NewServiceController(serviceClient, informer, nil)
+	c, _, err := NewServiceController(config, serviceClient, informer, nil)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster namespace controller %v", err)
+		klog.Errorf("failed to create multi cluster service controller %v", err)
 		return
 	}
 	controllerManager.AddController(c)
 }
 
-func NewServiceController(serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
+func NewServiceController(config *config.SyncerConfiguration, serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
