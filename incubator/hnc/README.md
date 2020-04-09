@@ -200,13 +200,15 @@ interesting directories are probably:
 * `/pkg/forest`: the in-memory data structure, shared between the reconcilers
   and validators.
 
-Within the `reconcilers` directory, there are three reconcilers:
+Within the `reconcilers` directory, there are four reconcilers:
 
 * **HNCConfiguration reconciler:** manages the HNCConfiguration via the
   cluster-wide `config` singleton.
-* **Hierarchy reconciler:** manages the hierarchy via the `Hierarchy` singleton
-  as well as the namespace in which it lives.
-* **Object reconciler:** Propagates (copies and deletes) the relevant objects
+* **HierarchicalNamespace reconciler:** manages the self-service namespaces via 
+  the `hierarchicalnamespace` resources.
+* **HierarchyConfiguration reconciler:** manages the hierarchy and the
+  namespaces via the `hierarchy` singleton per namespace.
+* **Object reconciler:** propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 
