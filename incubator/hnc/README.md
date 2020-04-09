@@ -33,7 +33,10 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Installing or upgrading HNC
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.2.0
+HNC_VERSION=v0.3.0-rc1
+
+# The instructions below are all for HNC v0.3.x. For v0.2.x, please use Git
+# history to view an earlier version of this README.
 
 # Install prerequisites on your cluster
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
@@ -46,13 +49,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/downl
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
 PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
-
-# Instructions for hnc-v0.2.0 and before
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces	
-ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
-
-# Instructions for hnc-v0.3.0 and later
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
 chmod +x ${PLUGIN_DIR}/kubectl-hns
 ```
@@ -84,9 +80,8 @@ is no need to uninstall HNC before upgrading it.
 
 ```bash
 rm ${PLUGIN_DIR}/kubectl-hns
-# hnc-v0.2.0 and before only, noop for hnc-v0.3.0 and after
-rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
 # Don't need to delete the cert manager if you plan to reinstall it later.
 kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 ```
@@ -101,7 +96,8 @@ milestones are defined:
   not suitable for any real workloads.
 * [v0.2 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
   contains enough functionality to be suitable for non-production workloads.
-* v0.3: definition in progress (as of Jan 2020)
+* [v0.3 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
+  type configuration and better self-service namespace UX.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
