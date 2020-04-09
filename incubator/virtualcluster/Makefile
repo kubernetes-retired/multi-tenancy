@@ -2,7 +2,16 @@
 export GO111MODULE=on
 
 # Image URL to use all building/pushing image targets
-IMG ?= virtualcluster/manager-amd64 virtualcluster/vn-agent-amd64 virtualcluster/syncer-amd64 
+IMG ?= virtualcluster/manager-amd64 virtualcluster/vn-agent-amd64 virtualcluster/syncer-amd64
+
+# TEST_FLAGS used as flags of go test.
+TEST_FLAGS ?= -v --race
+
+# COVERAGE_PACKAGES is the coverage we care about.
+COVERAGE_PACKAGES=$(shell go list ./... | \
+				  grep -v github.com/multi-tenancy/incubator/virtualcluster/pkg/client | \
+				  grep -v github.com/multi-tenancy/incubator/virtualcluster/pkg/apis | \
+				  grep -v github.com/multi-tenancy/incubator/virtualcluster/cmd)
 
 # Build code.
 #
@@ -31,7 +40,24 @@ build:
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	@mkdir -p coverage
+	@( for pkg in ${COVERAGE_PACKAGES}; do \
+		go test ${TEST_FLAGS} \
+			-coverprofile=coverage/unit-test-`echo $$pkg | tr "/" "_"`.out \
+			$$pkg ;\
+	done )
+
+.PHONY: coverage
+coverage: ## combine coverage after test
+	@mkdir -p coverage
+	@gocovmerge coverage/* > coverage/coverage.txt
+	@go tool cover -html=coverage/coverage.txt -o coverage/coverage.html
+
+.PHONY: clean
+clean: ## clean to remove bin/* and files created by module
+	@go mod tidy
+	@rm -rf _output/*
+	@rm -rf coverage/*
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
