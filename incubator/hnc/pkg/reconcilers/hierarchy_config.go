@@ -296,10 +296,25 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 // flushObsoleteObjectConditions looks for object conditions from objects that were in one of the
 // namespaces that's been removed as a descendant, and enqueues any affected namespaces.
 func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logger, ns, oldAns *forest.Namespace) {
-	// Create the set of all relevant names
+	// There should be no obsolete object conditions if the old parent is empty.
+	if oldAns == nil {
+		return
+	}
+
+	// To clear all descendants conditions introduced by ancestors, create a set of all ancestor names.
+	wasAnc := map[string]bool{}
+	for _, anc := range oldAns.AncestryNames(nil) {
+		wasAnc[anc] = true
+	}
+
+	// Remove conditions referring to its ancestors from all its descendants. Also create a set of
+	// all descendant names to clear ancestors conditions introduced by descendants later.
 	wasDesc := map[string]bool{ns.Name(): true}
 	for _, desc := range ns.DescendantNames() {
 		wasDesc[desc] = true
+		if r.Forest.Get(desc).ClearConditionsByNamespace(log, wasAnc) {
+			r.enqueueAffected(log, "cleared obsolete conditions", desc)
+		}
 	}
 
 	// Remove conditions referring to this namespace and its descendants from all old ancestors.
