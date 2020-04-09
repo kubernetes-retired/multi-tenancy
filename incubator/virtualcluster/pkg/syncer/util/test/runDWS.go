@@ -31,6 +31,7 @@ import (
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -59,21 +60,23 @@ func (r *fakeReconciler) SetController(c manager.Controller) {
 	r.controller = c
 }
 
-type controllerNew func(corev1.CoreV1Interface, coreinformers.Interface, *mc.Options) (manager.Controller, *mc.MultiClusterController, error)
+type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *mc.Options) (manager.Controller, *mc.MultiClusterController, error)
 
 func RunDownwardSync(
 	newControllerFunc controllerNew,
 	testTenant *v1alpha1.Virtualcluster,
 	existingObjectInSuper []runtime.Object,
-	existingObjectInTenant runtime.Object,
+	existingObjectInTenant []runtime.Object,
 	enqueueObject runtime.Object,
 ) (actions []core.Action, reconcileError error, err error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
 	tenantClient := fakeClient.NewFakeClient()
 	if existingObjectInTenant != nil {
-		tenantClientset = fake.NewSimpleClientset(existingObjectInTenant)
-		tenantClient = fakeClient.NewFakeClient(existingObjectInTenant)
+		tenantClientset = fake.NewSimpleClientset(existingObjectInTenant...)
+		// For controller runtime client, if the informer cache is empty, the request goes to client obj tracker.
+		// Hence we don't have to populate the infomer cache.
+		tenantClient = fakeClient.NewFakeClient(existingObjectInTenant...)
 	}
 	tenantCluster, err := cluster.NewFakeTenantCluster(testTenant, tenantClientset, tenantClient)
 	if err != nil {
@@ -94,6 +97,9 @@ func RunDownwardSync(
 	options := &mc.Options{Reconciler: fakeRc, IsFake: true}
 
 	controller, mccontroller, err := newControllerFunc(
+		&config.SyncerConfiguration{
+			DisableServiceAccountToken: true,
+		},
 		superClient.CoreV1(),
 		superInformer.Core().V1(),
 		options,
@@ -137,6 +143,12 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 		return informer.Namespaces().Informer()
 	case *v1.Service:
 		return informer.Services().Informer()
+	case *v1.Pod:
+		return informer.Pods().Informer()
+	case *v1.ServiceAccount:
+		return informer.ServiceAccounts().Informer()
+	case *v1.Secret:
+		return informer.Secrets().Informer()
 	default:
 		return nil
 

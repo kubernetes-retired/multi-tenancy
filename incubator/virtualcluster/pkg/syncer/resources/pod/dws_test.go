@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package service
+package pod
 
 import (
 	"strings"
@@ -33,12 +33,39 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
-func tenantService(name, namespace, uid string) *v1.Service {
-	return &v1.Service{
+func tenantPod(name, namespace, uid string) *v1.Pod {
+	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			UID:       types.UID(uid),
+		},
+	}
+}
+
+func superPod(name, namespace, uid string) *v1.Pod {
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Annotations: map[string]string{
+				constants.LabelUID: uid,
+			},
+		},
+	}
+}
+
+func tenantServiceAccount(name, namespace, uid string) *v1.ServiceAccount {
+	return &v1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			UID:       types.UID(uid),
+		},
+		Secrets: []v1.ObjectReference{
+			{
+				Name: "default-token-x6nbf",
+			},
 		},
 	}
 }
@@ -55,7 +82,19 @@ func superService(name, namespace, uid string) *v1.Service {
 	}
 }
 
-func TestDWServiceCreation(t *testing.T) {
+func superSecret(name, namespace, uid string) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				constants.LabelServiceAccountUID: uid,
+			},
+		},
+	}
+}
+
+func TestDWPodCreation(t *testing.T) {
 	testTenant := &v1alpha1.Virtualcluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -73,41 +112,46 @@ func TestDWServiceCreation(t *testing.T) {
 
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
-		ExistingObjectInTenant *v1.Service
-
-		ExpectedCreatedServices []string
-		ExpectedError           string
+		ExistingObjectInTenant []runtime.Object
+		ExpectedCreatedPods    []string
+		ExpectedError          string
 	}{
-		"new service": {
-			ExistingObjectInSuper:   []runtime.Object{},
-			ExistingObjectInTenant:  tenantService("svc-1", "default", "12345"),
-			ExpectedCreatedServices: []string{superDefaultNSName + "/svc-1"},
-		},
-		"new service but already exists": {
+		"new Pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "12345"),
+				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superService("kubernetes", superDefaultNSName, "12345"),
 			},
-			ExistingObjectInTenant:  tenantService("svc-1", "default", "12345"),
-			ExpectedCreatedServices: []string{},
-			ExpectedError:           "",
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedCreatedPods: []string{superDefaultNSName + "/pod-1"},
 		},
-		"new serivce but existing different uid one": {
+		"new Pod but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "123456"),
+				superPod("pod-1", superDefaultNSName, "12345"),
 			},
-			ExistingObjectInTenant:  tenantService("svc-1", "default", "12345"),
-			ExpectedCreatedServices: []string{},
-			ExpectedError:           "delegated UID is different",
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+			},
+			ExpectedCreatedPods: []string{},
+			ExpectedError:       "",
+		},
+		"new Pod but existing different uid one": {
+			ExistingObjectInSuper: []runtime.Object{
+				superPod("pod-1", superDefaultNSName, "123456"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+			},
+			ExpectedCreatedPods: []string{},
+			ExpectedError:       "delegated UID is different",
 		},
 	}
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController,
-				testTenant,
-				tc.ExistingObjectInSuper,
-				[]runtime.Object{tc.ExistingObjectInTenant},
-				tc.ExistingObjectInTenant)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -125,17 +169,17 @@ func TestDWServiceCreation(t *testing.T) {
 				}
 			}
 
-			if len(tc.ExpectedCreatedServices) != len(actions) {
-				t.Errorf("%s: Expected to create service %#v. Actual actions were: %#v", k, tc.ExpectedCreatedServices, actions)
+			if len(tc.ExpectedCreatedPods) != len(actions) {
+				t.Errorf("%s: Expected to create Pod %#v. Actual actions were: %#v", k, tc.ExpectedCreatedPods, actions)
 				return
 			}
-			for i, expectedName := range tc.ExpectedCreatedServices {
+			for i, expectedName := range tc.ExpectedCreatedPods {
 				action := actions[i]
-				if !action.Matches("create", "services") {
+				if !action.Matches("create", "pods") {
 					t.Errorf("%s: Unexpected action %s", k, action)
 				}
-				createdSVC := action.(core.CreateAction).GetObject().(*v1.Service)
-				fullName := createdSVC.Namespace + "/" + createdSVC.Name
+				createdPod := action.(core.CreateAction).GetObject().(*v1.Pod)
+				fullName := createdPod.Namespace + "/" + createdPod.Name
 				if fullName != expectedName {
 					t.Errorf("%s: Expected %s to be created, got %s", k, expectedName, fullName)
 				}
@@ -144,7 +188,7 @@ func TestDWServiceCreation(t *testing.T) {
 	}
 }
 
-func TestDWServiceDeletion(t *testing.T) {
+func TestDWPodDeletion(t *testing.T) {
 	testTenant := &v1alpha1.Virtualcluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -162,37 +206,36 @@ func TestDWServiceDeletion(t *testing.T) {
 
 	testcases := map[string]struct {
 		ExistingObjectInSuper []runtime.Object
-		EnqueueObject         *v1.Service
-
-		ExpectedDeletedServices []string
-		ExpectedError           string
+		EnqueueObject         *v1.Pod
+		ExpectedDeletedPods   []string
+		ExpectedError         string
 	}{
-		"delete service": {
+		"delete Pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "12345"),
+				superPod("pod-1", superDefaultNSName, "12345"),
 			},
-			EnqueueObject:           tenantService("svc-1", "default", "12345"),
-			ExpectedDeletedServices: []string{superDefaultNSName + "/svc-1"},
+			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
+			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
 		},
-		"delete service but already gone": {
-			ExistingObjectInSuper:   []runtime.Object{},
-			EnqueueObject:           tenantService("svc-1", "default", "12345"),
-			ExpectedDeletedServices: []string{},
-			ExpectedError:           "",
+		"delete Pod but already gone": {
+			ExistingObjectInSuper: []runtime.Object{},
+			EnqueueObject:         tenantPod("pod-1", "default", "12345"),
+			ExpectedDeletedPods:   []string{},
+			ExpectedError:         "",
 		},
-		"delete service but existing different uid one": {
+		"delete Pod but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "123456"),
+				superPod("pod-1", superDefaultNSName, "123456"),
 			},
-			EnqueueObject:           tenantService("svc-1", "default", "12345"),
-			ExpectedDeletedServices: []string{},
-			ExpectedError:           "delegated UID is different",
+			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
+			ExpectedDeletedPods: []string{},
+			ExpectedError:       "delegated UID is different",
 		},
 	}
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -210,13 +253,13 @@ func TestDWServiceDeletion(t *testing.T) {
 				}
 			}
 
-			if len(tc.ExpectedDeletedServices) != len(actions) {
-				t.Errorf("%s: Expected to delete service %#v. Actual actions were: %#v", k, tc.ExpectedDeletedServices, actions)
+			if len(tc.ExpectedDeletedPods) != len(actions) {
+				t.Errorf("%s: Expected to delete pod %#v. Actual actions were: %#v", k, tc.ExpectedDeletedPods, actions)
 				return
 			}
-			for i, expectedName := range tc.ExpectedDeletedServices {
+			for i, expectedName := range tc.ExpectedDeletedPods {
 				action := actions[i]
-				if !action.Matches("delete", "services") {
+				if !action.Matches("delete", "pods") {
 					t.Errorf("%s: Unexpected action %s", k, action)
 				}
 				fullName := action.(core.DeleteAction).GetNamespace() + "/" + action.(core.DeleteAction).GetName()
@@ -228,12 +271,12 @@ func TestDWServiceDeletion(t *testing.T) {
 	}
 }
 
-func applySpecToService(svc *v1.Service, spec *v1.ServiceSpec) *v1.Service {
-	svc.Spec = *spec.DeepCopy()
-	return svc
+func applySpecToPod(pod *v1.Pod, spec *v1.PodSpec) *v1.Pod {
+	pod.Spec = *spec.DeepCopy()
+	return pod
 }
 
-func TestDWServiceUpdate(t *testing.T) {
+func TestDWPodUpdate(t *testing.T) {
 	testTenant := &v1alpha1.Virtualcluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -249,77 +292,64 @@ func TestDWServiceUpdate(t *testing.T) {
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
-	spec1 := &v1.ServiceSpec{
-		Type:      "ClusterIP",
-		ClusterIP: "1.1.1.1",
-		Selector: map[string]string{
-			"a": "b",
+	spec1 := &v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Image: "ngnix",
+				Name:  "c-1",
+			},
 		},
 	}
 
-	spec2 := &v1.ServiceSpec{
-		Type:      "ClusterIP",
-		ClusterIP: "2.2.2.2",
-		Selector: map[string]string{
-			"a": "b",
-		},
-	}
-
-	spec3 := &v1.ServiceSpec{
-		Type:      "ClusterIP",
-		ClusterIP: "3.3.3.3",
-		Selector: map[string]string{
-			"b": "c",
-		},
-	}
-
-	spec4 := &v1.ServiceSpec{
-		Type:      "ClusterIP",
-		ClusterIP: "1.1.1.1",
-		Selector: map[string]string{
-			"b": "c",
+	spec2 := &v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Image: "busybox",
+				Name:  "c-1",
+			},
 		},
 	}
 
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
-		ExistingObjectInTenant *v1.Service
-
-		ExpectedUpdatedServices []runtime.Object
-		ExpectedError           string
+		ExistingObjectInTenant []runtime.Object
+		ExpectedUpdatedPods    []runtime.Object
+		ExpectedError          string
 	}{
 		"no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
 			},
-			ExistingObjectInTenant:  applySpecToService(tenantService("svc-1", "default", "12345"), spec2),
-			ExpectedUpdatedServices: []runtime.Object{},
+			ExistingObjectInTenant: []runtime.Object{
+				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
+			},
+			ExpectedUpdatedPods: []runtime.Object{},
 		},
-		"diff in selector": {
+		"diff in container": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
 			},
-			ExistingObjectInTenant: applySpecToService(tenantService("svc-1", "default", "12345"), spec3),
-			ExpectedUpdatedServices: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec4),
+			ExistingObjectInTenant: []runtime.Object{
+				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec2),
+			},
+			ExpectedUpdatedPods: []runtime.Object{
+				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec2),
 			},
 		},
 		"diff exists but uid is wrong": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
 			},
-			ExistingObjectInTenant:  applySpecToService(tenantService("svc-1", "default", "123456"), spec3),
-			ExpectedUpdatedServices: []runtime.Object{},
-			ExpectedError:           "delegated UID is different",
+			ExistingObjectInTenant: []runtime.Object{
+				applySpecToPod(tenantPod("pod-1", "default", "123456"), spec2),
+			},
+			ExpectedUpdatedPods: []runtime.Object{},
+			ExpectedError:       "delegated UID is different",
 		},
 	}
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController,
-				testTenant,
-				tc.ExistingObjectInSuper,
-				[]runtime.Object{tc.ExistingObjectInTenant},
-				tc.ExistingObjectInTenant)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -337,18 +367,18 @@ func TestDWServiceUpdate(t *testing.T) {
 				}
 			}
 
-			if len(tc.ExpectedUpdatedServices) != len(actions) {
-				t.Errorf("%s: Expected to update service %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedServices, actions)
+			if len(tc.ExpectedUpdatedPods) != len(actions) {
+				t.Errorf("%s: Expected to update pod %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedPods, actions)
 				return
 			}
-			for i, obj := range tc.ExpectedUpdatedServices {
+			for i, obj := range tc.ExpectedUpdatedPods {
 				action := actions[i]
-				if !action.Matches("update", "services") {
+				if !action.Matches("update", "pods") {
 					t.Errorf("%s: Unexpected action %s", k, action)
 				}
 				actionObj := action.(core.UpdateAction).GetObject()
 				if !equality.Semantic.DeepEqual(obj, actionObj) {
-					t.Errorf("%s: Expected updated service is %v, got %v", k, obj, actionObj)
+					t.Errorf("%s: Expected updated pod is %v, got %v", k, obj, actionObj)
 				}
 			}
 		})

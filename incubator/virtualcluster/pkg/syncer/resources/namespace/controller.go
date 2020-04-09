@@ -50,7 +50,7 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, err := NewNamespaceController(namespaceClient, informer, nil)
+	c, _, err := NewNamespaceController(config, namespaceClient, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
@@ -59,7 +59,7 @@ func Register(
 	controllerManager.AddController(c)
 }
 
-func NewNamespaceController(namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
+func NewNamespaceController(config *config.SyncerConfiguration, namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
 	c := &controller{
 		namespaceClient:     namespaceClient,
 		periodCheckerPeriod: 60 * time.Second,
