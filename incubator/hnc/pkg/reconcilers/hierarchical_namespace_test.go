@@ -2,13 +2,12 @@ package reconcilers_test
 
 import (
 	"context"
-	"time"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var _ = Describe("HierarchicalNamespace", func() {
@@ -56,25 +55,13 @@ var _ = Describe("HierarchicalNamespace", func() {
 		Eventually(getHNSState(ctx, "kube-system", barName)).Should(Equal(api.Forbidden))
 	})
 
-	It("should set the hns.status.state to Conflict if the namespace's owner annotation is wrong", func() {
-		// Create "bar" hns in "foo" namespace.
-		foo_hns_bar := newHierarchicalNamespace(barName, fooName)
-		updateHierarchicalNamespace(ctx, foo_hns_bar)
-
-		// It should set the self-serve subnamespace's owner annotation to the owner
-		// namespace (should set bar's owner annotation to "foo").
-		Eventually(func() string {
-			return getNamespace(ctx, barName).GetAnnotations()[api.AnnotationOwner]
-		}).Should(Equal(fooName))
-
-		// Todo fix this flacky test on changing the namespace annotation. See issue:
-		//	 https://github.com/kubernetes-sigs/multi-tenancy/issues/560
-		// Sleep 1 second to avoid updating the namespace instance too quickly.
-		time.Sleep(1 * time.Second)
-
-		// Clear the owner annotation and the HNS state should be set to "Conflict".
-		clearAnnotations(ctx, barName)
-		Eventually(getHNSState(ctx, fooName, barName)).Should(Equal(api.Conflict))
+	It("should set the hns.status.state to Conflict if a namespace of the same name already exists", func() {
+		// Create "baz" namespace.
+		bazName := createNS(ctx, "baz")
+		// Create an hns instance still with the same name "baz" in "foo" namespace.
+		foo_hns_baz := newHierarchicalNamespace(bazName, fooName)
+		updateHierarchicalNamespace(ctx, foo_hns_baz)
+		Eventually(getHNSState(ctx, fooName, bazName)).Should(Equal(api.Conflict))
 	})
 
 	It("should always set the owner as the parent if otherwise", func() {
@@ -137,16 +124,4 @@ func updateHierarchicalNamespace(ctx context.Context, hns *api.HierarchicalNames
 	} else {
 		ExpectWithOffset(1, k8sClient.Update(ctx, hns)).Should(Succeed())
 	}
-}
-
-func clearAnnotations(ctx context.Context, nnm string) {
-	ns := &corev1.Namespace{}
-	ns.Name = nnm
-	updateNamespace(ctx, ns)
-}
-
-func updateNamespace(ctx context.Context, ns *corev1.Namespace) {
-	EventuallyWithOffset(1, func() error {
-		return k8sClient.Update(ctx, ns)
-	}).Should(Succeed())
 }
