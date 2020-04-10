@@ -76,7 +76,7 @@ func (c *controller) processNextWorkItem() bool {
 	}
 
 	klog.Infof("back populate storageclass %+v", req.Key)
-	err := c.backPopulate(req)
+	err := c.BackPopulate(req.Key)
 	if err == nil {
 		c.queue.Forget(obj)
 		return true
@@ -92,9 +92,12 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(req reconciler.UwsRequest) error {
+func (c *controller) BackPopulate(key string) error {
+	// The key format is clsutername/scName.
+	clusterName, scName, _ := cache.SplitMetaNamespaceKey(key)
+
 	op := reconciler.AddEvent
-	pStorageClass, err := c.storageclassLister.Get(req.Key)
+	pStorageClass, err := c.storageclassLister.Get(scName)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -102,17 +105,17 @@ func (c *controller) backPopulate(req reconciler.UwsRequest) error {
 		op = reconciler.DeleteEvent
 	}
 
-	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(req.ClusterName)
+	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", req.ClusterName, err)
+		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	vStorageClassObj, err := c.multiClusterStorageClassController.Get(req.ClusterName, "", req.Key)
+	vStorageClassObj, err := c.multiClusterStorageClassController.Get(clusterName, "", scName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if op == reconciler.AddEvent {
 				// Available in super, hence create a new in tenant master
-				vStorageClass := conversion.BuildVirtualStorageClass(req.ClusterName, pStorageClass)
+				vStorageClass := conversion.BuildVirtualStorageClass(clusterName, pStorageClass)
 				_, err := tenantClient.StorageV1().StorageClasses().Create(vStorageClass)
 				if err != nil {
 					return err
@@ -127,7 +130,7 @@ func (c *controller) backPopulate(req reconciler.UwsRequest) error {
 		opts := &metav1.DeleteOptions{
 			PropagationPolicy: &constants.DefaultDeletionPolicy,
 		}
-		err := tenantClient.StorageV1().StorageClasses().Delete(req.Key, opts)
+		err := tenantClient.StorageV1().StorageClasses().Delete(scName, opts)
 		if err != nil {
 			return err
 		}

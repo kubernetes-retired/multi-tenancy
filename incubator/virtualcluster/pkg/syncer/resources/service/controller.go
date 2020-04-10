@@ -63,10 +63,10 @@ func Register(
 		klog.Errorf("failed to create multi cluster service controller %v", err)
 		return
 	}
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
-func NewServiceController(config *config.SyncerConfiguration, serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
+func NewServiceController(config *config.SyncerConfiguration, serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,

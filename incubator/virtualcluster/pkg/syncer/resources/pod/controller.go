@@ -88,10 +88,10 @@ func Register(
 		klog.Errorf("failed to create multi cluster Pod controller %v", err)
 		return
 	}
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
-func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.Controller, *mc.MultiClusterController, error) {
+func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
 	c := &controller{
 		config:              config,
 		client:              client,

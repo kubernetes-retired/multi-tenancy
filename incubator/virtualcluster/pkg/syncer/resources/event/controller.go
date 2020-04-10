@@ -102,7 +102,7 @@ func Register(
 			},
 		})
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func assignPodEvent(e *v1.Event) bool {

@@ -40,15 +40,15 @@ import (
 )
 
 type fakeReconciler struct {
-	controller manager.Controller
-	errCh      chan error
+	resourceSyncer manager.ResourceSyncer
+	errCh          chan error
 }
 
 func (r *fakeReconciler) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	var res reconciler.Result
 	var err error
-	if r.controller != nil {
-		res, err = r.controller.Reconcile(request)
+	if r.resourceSyncer != nil {
+		res, err = r.resourceSyncer.Reconcile(request)
 	} else {
 		res, err = reconciler.Result{}, fmt.Errorf("fake reconciler's controller is not initialized")
 	}
@@ -56,11 +56,11 @@ func (r *fakeReconciler) Reconcile(request reconciler.Request) (reconciler.Resul
 	return res, err
 }
 
-func (r *fakeReconciler) SetController(c manager.Controller) {
-	r.controller = c
+func (r *fakeReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
+	r.resourceSyncer = c
 }
 
-type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *mc.Options) (manager.Controller, *mc.MultiClusterController, error)
+type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error)
 
 func RunDownwardSync(
 	newControllerFunc controllerNew,
@@ -96,7 +96,7 @@ func RunDownwardSync(
 	fakeRc := &fakeReconciler{errCh: syncErr}
 	options := &mc.Options{Reconciler: fakeRc, IsFake: true}
 
-	controller, mccontroller, err := newControllerFunc(
+	resourceSyncer, mccontroller, err := newControllerFunc(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
@@ -107,14 +107,14 @@ func RunDownwardSync(
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating dws controller: %v", err)
 	}
-	fakeRc.SetController(controller)
+	fakeRc.SetResourceSyncer(resourceSyncer)
 
 	// register tenant cluster to controller.
-	controller.AddCluster(tenantCluster)
+	resourceSyncer.AddCluster(tenantCluster)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
-	go controller.StartDWS(stopCh)
+	go resourceSyncer.StartDWS(stopCh)
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {

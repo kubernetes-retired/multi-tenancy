@@ -64,10 +64,14 @@ func Register(
 	c.endpointsLister = endpointsInformer.Lister()
 	c.endpointsSynced = endpointsInformer.Informer().HasSynced
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

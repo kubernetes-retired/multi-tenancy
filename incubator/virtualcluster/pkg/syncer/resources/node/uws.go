@@ -73,7 +73,7 @@ func (c *controller) processNextWorkItem() bool {
 	}
 	defer c.queue.Done(key)
 
-	err := c.backPopulate(key.(string))
+	err := c.BackPopulate(key.(string))
 	if err == nil {
 		c.queue.Forget(key)
 		return true
@@ -84,7 +84,7 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(nodeName string) error {
+func (c *controller) BackPopulate(nodeName string) error {
 	node, err := c.nodeLister.Get(nodeName)
 	if err != nil {
 		if errors.IsNotFound(err) {

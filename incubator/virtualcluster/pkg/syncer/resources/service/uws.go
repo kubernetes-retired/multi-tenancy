@@ -77,7 +77,7 @@ func (c *controller) processNextWorkItem() bool {
 	}
 
 	klog.Infof("back populate service %+v", req.Key)
-	err := c.backPopulate(req.Key)
+	err := c.BackPopulate(req.Key)
 	if err == nil {
 		c.queue.Forget(obj)
 		return true
@@ -93,7 +93,7 @@ func (c *controller) processNextWorkItem() bool {
 	return true
 }
 
-func (c *controller) backPopulate(key string) error {
+func (c *controller) BackPopulate(key string) error {
 	pNamespace, pName, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key %v: %v", key, err))

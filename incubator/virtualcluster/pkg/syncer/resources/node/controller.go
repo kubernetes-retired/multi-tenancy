@@ -92,7 +92,7 @@ func Register(
 		},
 	)
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
