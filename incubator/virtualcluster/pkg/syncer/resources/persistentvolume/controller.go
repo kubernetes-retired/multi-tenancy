@@ -26,7 +26,6 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -34,6 +33,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -47,11 +47,8 @@ type controller struct {
 	pvcSynced cache.InformerSynced
 	// Connect to all tenant master pv informers
 	multiClusterPersistentVolumeController *mc.MultiClusterController
-
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
-
+	// UWcontroller
+	upwardPersistentVolumeController *uw.UpwardController
 	// Checker timer
 	periodCheckerPeriod time.Duration
 }
@@ -65,8 +62,6 @@ func Register(
 	c := &controller{
 		client:              client,
 		informer:            informer,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_persistentvolumes"),
-		workers:             constants.UwsControllerWorkerLow,
 		periodCheckerPeriod: 60 * time.Second,
 	}
 
@@ -82,6 +77,15 @@ func Register(
 	c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
 	c.pvcLister = informer.PersistentVolumeClaims().Lister()
 	c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
+	upwardPersistentVolumeController, err := uw.NewUWController("pv-upward-controller", &v1.PersistentVolume{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create pv upward controller %v", err)
+		return
+	}
+	c.upwardPersistentVolumeController = upwardPersistentVolumeController
 
 	informer.PersistentVolumes().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -125,7 +129,7 @@ func (c *controller) enqueuePersistentVolume(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardPersistentVolumeController.AddToQueue(reconciler.UwsRequest{Key: key})
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

@@ -24,64 +24,25 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartUWS starts the upward syncer
 // and blocks until an empty struct is sent to the stop channel.
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	defer utilruntime.HandleCrash()
-	defer c.queue.ShutDown()
-
-	klog.Infof("starting node upward syncer")
-
 	if !cache.WaitForCacheSync(stopCh, c.nodeSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-
-	klog.V(5).Infof("starting workers")
-	for i := 0; i < c.workers; i++ {
-		go wait.Until(c.run, 1*time.Second, stopCh)
-	}
-	<-stopCh
-	klog.V(1).Infof("shutting down")
-
-	return nil
+	return c.upwardNodeController.Start(stopCh)
 }
 
 func (c *controller) enqueueNode(obj interface{}) {
 	node := obj.(*v1.Node)
-	c.queue.Add(node.Name)
-}
-
-// run runs a run thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
-func (c *controller) run() {
-	for c.processNextWorkItem() {
-	}
-}
-
-func (c *controller) processNextWorkItem() bool {
-	key, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	defer c.queue.Done(key)
-
-	err := c.BackPopulate(key.(string))
-	if err == nil {
-		c.queue.Forget(key)
-		return true
-	}
-
-	utilruntime.HandleError(fmt.Errorf("error processing pod %v (will retry): %v", key, err))
-	c.queue.AddRateLimited(key)
-	return true
+	c.upwardNodeController.AddToQueue(reconciler.UwsRequest{Key: node.Name})
 }
 
 func (c *controller) BackPopulate(nodeName string) error {

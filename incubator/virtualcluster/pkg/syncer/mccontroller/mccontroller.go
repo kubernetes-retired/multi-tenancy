@@ -93,9 +93,6 @@ type ClusterInterface interface {
 	Cache
 }
 
-// TenantClusterReconcileHandler is the handler to process the event from tenant cluster.
-type TenantClusterReconcileHandler func(request reconciler.Request) (reconciler.Result, error)
-
 // NewMCController creates a new MultiClusterController.
 func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
 	if options.Reconciler == nil {

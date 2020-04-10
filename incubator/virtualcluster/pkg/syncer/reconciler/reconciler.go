@@ -45,6 +45,11 @@ type DWReconciler interface {
 	Reconcile(Request) (Result, error)
 }
 
+// UWReconciler is the interface used by a Controller to do upward reconcile (super->tenant).
+type UWReconciler interface {
+	BackPopulate(string) error
+}
+
 type UwsRequest struct {
 	Key string
 	// Optional, in many cases, the cluster name is unknown when uws request is created
