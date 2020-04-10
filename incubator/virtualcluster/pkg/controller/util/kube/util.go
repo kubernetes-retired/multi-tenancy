@@ -129,8 +129,39 @@ func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv
 			Namespace: vc.GetNamespace(),
 			Name:      vc.GetName(),
 		}, vc); err != nil {
-			log.Info("fail to get obj on patch failure", "object", "error", err.Error())
+			log.Info("fail to get obj on patch failure", "object", vc.GetName(), "error", err.Error())
 		}
 		return patchErr
+	})
+}
+
+// RetryUpdateVCStatusOnConflict tries to update the Virtualcluster 'vc' status. It will retry
+// to update the 'vc' if there are conflicts caused by other code
+func RetryUpdateVCStatusOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.Virtualcluster, log logr.Logger) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		vcStatus := vc.Status
+		updateErr := cli.Update(ctx, vc)
+		if updateErr != nil {
+			if err := cli.Get(ctx, types.NamespacedName{
+				Namespace: vc.GetNamespace(),
+				Name:      vc.GetName(),
+			}, vc); err != nil {
+				log.Info("fail to get obj on update failure", "object", vc.GetName(), "error", err.Error())
+			}
+			vc.Status = vcStatus
+		}
+		return updateErr
+	})
+}
+
+// SetVCStatus set the virtualcluster 'vc' status, and append the new status to conditions list
+func SetVCStatus(vc *tenancyv1alpha1.Virtualcluster, phase tenancyv1alpha1.ClusterPhase, message, reason string) {
+	vc.Status.Phase = phase
+	vc.Status.Message = message
+	vc.Status.Reason = reason
+	vc.Status.Conditions = append(vc.Status.Conditions, tenancyv1alpha1.ClusterCondition{
+		LastTransitionTime: metav1.NewTime(time.Now()),
+		Reason:             reason,
+		Message:            message,
 	})
 }
