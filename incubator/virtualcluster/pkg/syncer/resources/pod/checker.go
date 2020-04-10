@@ -257,6 +257,11 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			// We should skip pods with NodeName set in the spec
 			continue
 		}
+		// Ensure the ClusterVNodePodMap is consistent
+		if vPod.Spec.NodeName != "" && !c.checkClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID)) {
+			klog.Errorf("Found vPod %s/%s in cluster %s is missing in ClusterVNodePodMap, added back!", vPod.Namespace, vPod.Name, clusterName)
+			c.updateClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID), reconciler.UpdateEvent)
+		}
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {
