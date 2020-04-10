@@ -70,9 +70,6 @@ type Options struct {
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
-
-	// A Fake controller is created for testing purpose.
-	IsFake bool
 }
 
 // Cache is the interface used by Controller to start and wait for caches to sync.

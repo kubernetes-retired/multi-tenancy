@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
@@ -57,7 +56,7 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, err := NewServiceController(config, serviceClient, informer, nil)
+	c, _, _, err := NewServiceController(config, serviceClient, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster service controller %v", err)
 		return
@@ -65,35 +64,45 @@ func Register(
 	controllerManager.AddResourceSyncer(c)
 }
 
-func NewServiceController(config *config.SyncerConfiguration, serviceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
+func NewServiceController(config *config.SyncerConfiguration,
+	serviceClient v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
 	}
-
-	if options == nil {
-		options = &mc.Options{Reconciler: c}
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
 	}
-	options.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, *options)
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, *mcOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
 	c.serviceLister = informer.Services().Lister()
-	if options.IsFake {
+	if options != nil && options.IsFake {
 		c.serviceSynced = func() bool { return true }
 	} else {
 		c.serviceSynced = informer.Services().Informer().HasSynced
 	}
 
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardServiceController, err := uw.NewUWController("service-upward-controller", &v1.Service{}, *uwOptions)
 	if err != nil {
 		klog.Errorf("failed to create service upward controller %v", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.upwardServiceController = upwardServiceController
 
@@ -126,7 +135,7 @@ func NewServiceController(config *config.SyncerConfiguration, serviceClient v1co
 				DeleteFunc: c.enqueueService,
 			},
 		})
-	return c, multiClusterServiceController, nil
+	return c, multiClusterServiceController, upwardServiceController, nil
 }
 
 func isLoadBalancerService(svc *v1.Service) bool {
@@ -149,7 +158,7 @@ func (c *controller) enqueueService(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.upwardServiceController.AddToQueue(reconciler.UwsRequest{Key: key})
+	c.upwardServiceController.AddToQueue(key)
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

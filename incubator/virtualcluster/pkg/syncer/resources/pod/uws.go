@@ -101,7 +101,7 @@ func (c *controller) BackPopulate(key string) error {
 			return err
 		}
 
-		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, vNamespace, n.GetName(), &v1.Node{}); err != nil {
+		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, "", n.GetName(), &v1.Node{}); err != nil {
 			// check if target node has already registered on the vc
 			// before creating
 			if !errors.IsNotFound(err) {
@@ -133,8 +133,8 @@ func (c *controller) BackPopulate(key string) error {
 		}
 	} else {
 		// Check if the vNode exists in Tenant master.
-		if _, err := tenantClient.CoreV1().Nodes().Get(vPod.Spec.NodeName, metav1.GetOptions{}); err != nil {
-			if !errors.IsNotFound(err) {
+		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, "", vPod.Spec.NodeName, &v1.Node{}); err != nil {
+			if errors.IsNotFound(err) {
 				// We have consistency issue here, do not fix for now. TODO: add to metrics
 			}
 			return fmt.Errorf("failed to check vNode %s of vPod %s in cluster %s: %v ", vPod.Spec.NodeName, vPod.Name, clusterName, err)

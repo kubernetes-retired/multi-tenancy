@@ -80,7 +80,7 @@ func NewUWController(name string, objectType runtime.Object, options Options) (*
 }
 
 func (c *UpwardController) Start(stop <-chan struct{}) error {
-	klog.Infof("start uw-controller %q", c.name)
+	klog.Infof("start uw-controller %s", c.name)
 	defer utilruntime.HandleCrash()
 	defer c.Queue.ShutDown()
 
@@ -88,14 +88,13 @@ func (c *UpwardController) Start(stop <-chan struct{}) error {
 		go wait.Until(c.worker, c.JitterPeriod, stop)
 	}
 
-	select {
-	case <-stop:
-		return nil
-	}
+	<-stop
+	klog.Infof("shutting down uw-controller %s", c.name)
+	return nil
 }
 
-func (c *UpwardController) AddToQueue(req reconciler.UwsRequest) {
-	c.Queue.Add(req)
+func (c *UpwardController) AddToQueue(key string) {
+	c.Queue.Add(key)
 }
 
 func (c *UpwardController) worker() {
@@ -110,22 +109,22 @@ func (c *UpwardController) processNextWorkItem() bool {
 	}
 	defer c.Queue.Done(obj)
 
-	req, ok := obj.(reconciler.UwsRequest)
+	key, ok := obj.(string)
 	if !ok {
 		c.Queue.Forget(obj)
 		return true
 	}
 
-	klog.V(4).Infof("%s back populate %+v", c.name, req.Key)
-	err := c.Reconciler.BackPopulate(req.Key)
+	klog.V(4).Infof("%s back populate %+v", c.name, key)
+	err := c.Reconciler.BackPopulate(key)
 	if err == nil {
 		c.Queue.Forget(obj)
 		return true
 	}
 
-	utilruntime.HandleError(fmt.Errorf("%s error processing %v (will retry): %v", c.name, req.Key, err))
-	if c.Queue.NumRequeues(req) >= constants.MaxUwsRetryAttempts {
-		klog.Warningf("%s uws request is dropped due to reaching max retry limit: %v", c.name, req)
+	utilruntime.HandleError(fmt.Errorf("%s error processing %s (will retry): %v", c.name, key, err))
+	if c.Queue.NumRequeues(key) >= constants.MaxUwsRetryAttempts {
+		klog.Warningf("%s uws request is dropped due to reaching max retry limit: %s", c.name, key)
 		c.Queue.Forget(obj)
 		return true
 	}

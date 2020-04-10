@@ -30,6 +30,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -50,7 +51,7 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, err := NewNamespaceController(config, namespaceClient, informer, nil)
+	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
@@ -59,28 +60,34 @@ func Register(
 	controllerManager.AddResourceSyncer(c)
 }
 
-func NewNamespaceController(config *config.SyncerConfiguration, namespaceClient v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
+func NewNamespaceController(config *config.SyncerConfiguration,
+	namespaceClient v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		namespaceClient:     namespaceClient,
 		periodCheckerPeriod: 60 * time.Second,
 	}
-	if options == nil {
-		options = &mc.Options{Reconciler: c}
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
 	}
-	options.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *options)
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *mcOptions)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
 	c.nsLister = informer.Namespaces().Lister()
-	if options.IsFake {
+	if options != nil && options.IsFake {
 		c.nsSynced = func() bool { return true }
 	} else {
 		c.nsSynced = informer.Namespaces().Informer().HasSynced
 	}
 
-	return c, multiClusterNamespaceController, nil
+	return c, multiClusterNamespaceController, nil, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {

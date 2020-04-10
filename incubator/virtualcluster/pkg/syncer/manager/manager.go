@@ -20,13 +20,21 @@ import (
 	"sync"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 // ControllerManager manages number of resource syncers. It starts their caches, waits for those to sync,
 // then starts the controllers.
 type ControllerManager struct {
 	resourceSyncers map[ResourceSyncer]struct{}
+}
+
+type ResourceSyncerOptions struct {
+	MCOptions *mc.Options
+	UWOptions *uw.Options
+	IsFake    bool
 }
 
 func New() *ControllerManager {

@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedStorageClasses uint64
@@ -83,7 +82,7 @@ func (c *controller) checkStorageClass() {
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
-					c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + pStorageClass.Name})
+					c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}
@@ -131,7 +130,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 			if publicStorageClass(pStorageClass) {
-				c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + pStorageClass.Name})
+				c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 			}
 		}
 	}
