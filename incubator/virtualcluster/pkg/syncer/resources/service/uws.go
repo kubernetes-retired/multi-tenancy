@@ -18,79 +18,25 @@ package service
 
 import (
 	"fmt"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartUWS starts the upward syncer
 // and blocks until an empty struct is sent to the stop channel.
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	defer utilruntime.HandleCrash()
-	defer c.queue.ShutDown()
-
-	klog.Infof("starting service upward syncer")
-
 	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-
-	klog.V(5).Infof("starting workers")
-	for i := 0; i < c.workers; i++ {
-		go wait.Until(c.run, 1*time.Second, stopCh)
-	}
-	<-stopCh
-	klog.V(1).Infof("shutting down")
-
-	return nil
-}
-
-// run runs a run thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
-func (c *controller) run() {
-	for c.processNextWorkItem() {
-	}
-}
-
-func (c *controller) processNextWorkItem() bool {
-	obj, quit := c.queue.Get()
-
-	if quit {
-		return false
-	}
-	defer c.queue.Done(obj)
-
-	req, ok := obj.(reconciler.UwsRequest)
-	if !ok {
-		c.queue.Forget(obj)
-		return true
-	}
-
-	klog.Infof("back populate service %+v", req.Key)
-	err := c.BackPopulate(req.Key)
-	if err == nil {
-		c.queue.Forget(obj)
-		return true
-	}
-
-	utilruntime.HandleError(fmt.Errorf("error processing service %v (will retry): %v", req.Key, err))
-	if c.queue.NumRequeues(req) >= constants.MaxUwsRetryAttempts {
-		klog.Warningf(" Service uws request is dropped due to reaching max retry limit: %v", req)
-		c.queue.Forget(obj)
-		return true
-	}
-	c.queue.AddRateLimited(obj)
-	return true
+	return c.upwardServiceController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {

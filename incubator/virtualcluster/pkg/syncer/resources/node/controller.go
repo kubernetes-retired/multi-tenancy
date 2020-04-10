@@ -25,13 +25,13 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -46,9 +46,8 @@ type controller struct {
 	nodeSynced cache.InformerSynced
 	// Connect to all tenant master node informers
 	multiClusterNodeController *mc.MultiClusterController
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
+	// UWcontroller
+	upwardNodeController *uw.UpwardController
 }
 
 func Register(
@@ -60,8 +59,6 @@ func Register(
 	c := &controller{
 		nodeNameToCluster: make(map[string]map[string]struct{}),
 		nodeClient:        client,
-		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_node"),
-		workers:           constants.UwsControllerWorkerHigh,
 	}
 
 	// Create the multi cluster node controller
@@ -75,6 +72,16 @@ func Register(
 
 	c.nodeLister = nodeInformer.Lister()
 	c.nodeSynced = nodeInformer.Informer().HasSynced
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
+	upwardNodeController, err := uw.NewUWController("node-upward-controller", &v1.Node{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create node upward controller %v", err)
+		return
+	}
+	c.upwardNodeController = upwardNodeController
+
 	nodeInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.enqueueNode,

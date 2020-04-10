@@ -28,7 +28,6 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -37,6 +36,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -54,9 +54,8 @@ type controller struct {
 	secretSynced  cache.InformerSynced
 	// Connect to all tenant master pod informers
 	multiClusterPodController *mc.MultiClusterController
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
+	// UWcontroller
+	upwardPodController *uw.UpwardController
 	// Checker timer
 	periodCheckerPeriod time.Duration
 	// Cluster vNode PodMap and GCMap, needed for vNode garbage collection
@@ -96,8 +95,6 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 		config:              config,
 		client:              client,
 		informer:            informer,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers:             constants.UwsControllerWorkerHigh,
 		periodCheckerPeriod: 60 * time.Second,
 		clusterVNodePodMap:  make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
@@ -113,7 +110,6 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 		return nil, nil, err
 	}
 	c.multiClusterPodController = multiClusterPodController
-
 	c.serviceLister = informer.Services().Lister()
 	c.secretLister = informer.Secrets().Lister()
 	c.podLister = informer.Pods().Lister()
@@ -126,6 +122,16 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 		c.secretSynced = informer.Secrets().Informer().HasSynced
 		c.podSynced = informer.Pods().Informer().HasSynced
 	}
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
+	upwardPodController, err := uw.NewUWController("pod-upward-controller", &v1.Pod{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create pod upward controller %v", err)
+		return nil, nil, err
+	}
+	c.upwardPodController = upwardPodController
+
 	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -180,7 +186,7 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardPodController.AddToQueue(reconciler.UwsRequest{Key: key})
 }
 
 // c.Mutex needs to be Locked before calling addToClusterVNodeGCMap

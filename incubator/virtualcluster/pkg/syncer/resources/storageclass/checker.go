@@ -83,7 +83,7 @@ func (c *controller) checkStorageClass() {
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
-					c.queue.Add(reconciler.UwsRequest{Key: pStorageClass.Name, ClusterName: clusterName})
+					c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + pStorageClass.Name})
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}
@@ -131,8 +131,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 			if publicStorageClass(pStorageClass) {
-				key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(pStorageClass)
-				c.queue.Add(reconciler.UwsRequest{Key: key, ClusterName: clusterName})
+				c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + pStorageClass.Name})
 			}
 		}
 	}

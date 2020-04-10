@@ -25,7 +25,6 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -33,6 +32,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -47,10 +47,8 @@ type controller struct {
 
 	// Connect to all tenant master event informers
 	multiClusterEventController *mc.MultiClusterController
-
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
+	// UWcontroller
+	upwardEventController *uw.UpwardController
 }
 
 func Register(
@@ -62,8 +60,6 @@ func Register(
 	c := &controller{
 		client:   client,
 		informer: informer,
-		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_event"),
-		workers:  constants.UwsControllerWorkerLow,
 	}
 
 	// Create the multi cluster pod controller
@@ -80,6 +76,16 @@ func Register(
 
 	c.eventLister = informer.Events().Lister()
 	c.eventSynced = informer.Events().Informer().HasSynced
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
+	upwardEventController, err := uw.NewUWController("event-upward-controller", &v1.Event{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create event upward controller %v", err)
+		return
+	}
+	c.upwardEventController = upwardEventController
+
 	informer.Events().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -115,7 +121,7 @@ func (c *controller) enqueueEvent(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardEventController.AddToQueue(reconciler.UwsRequest{Key: key})
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

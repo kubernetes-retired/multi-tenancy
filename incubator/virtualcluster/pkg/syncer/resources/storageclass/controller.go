@@ -26,7 +26,6 @@ import (
 	v1storage "k8s.io/client-go/kubernetes/typed/storage/v1"
 	listersv1 "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -34,6 +33,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -46,10 +46,8 @@ type controller struct {
 
 	// Connect to all tenant master storageclass informers
 	multiClusterStorageClassController *mc.MultiClusterController
-
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
+	// UWcontroller
+	upwardStorageClassController *uw.UpwardController
 
 	// Checker timer
 	periodCheckerPeriod time.Duration
@@ -64,8 +62,6 @@ func Register(
 	c := &controller{
 		client:              client,
 		informer:            informer,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_storageclasses"),
-		workers:             constants.UwsControllerWorkerLow,
 		periodCheckerPeriod: 60 * time.Second,
 	}
 
@@ -79,6 +75,16 @@ func Register(
 
 	c.storageclassLister = informer.StorageClasses().Lister()
 	c.storageclassSynced = informer.StorageClasses().Informer().HasSynced
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
+	upwardStorageClassController, err := uw.NewUWController("storageclass-upward-controller", &v1.StorageClass{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create storageclass upward controller %v", err)
+		return
+	}
+	c.upwardStorageClassController = upwardStorageClassController
+
 	informer.StorageClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -131,7 +137,7 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 	}
 
 	for _, clusterName := range clusterNames {
-		c.queue.Add(reconciler.UwsRequest{Key: clusterName + "/" + key})
+		c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + key})
 	}
 }
 

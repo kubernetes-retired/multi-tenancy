@@ -26,7 +26,6 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -35,6 +34,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -45,9 +45,8 @@ type controller struct {
 	serviceSynced cache.InformerSynced
 	// Connect to all tenant master service informers
 	multiClusterServiceController *mc.MultiClusterController
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
+	// UWcontroller
+	upwardServiceController *uw.UpwardController
 	// Checker timer
 	periodCheckerPeriod time.Duration
 }
@@ -70,8 +69,6 @@ func NewServiceController(config *config.SyncerConfiguration, serviceClient v1co
 	c := &controller{
 		serviceClient:       serviceClient,
 		periodCheckerPeriod: 60 * time.Second,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_service"),
-		workers:             constants.UwsControllerWorkerLow,
 	}
 
 	if options == nil {
@@ -90,6 +87,15 @@ func NewServiceController(config *config.SyncerConfiguration, serviceClient v1co
 	} else {
 		c.serviceSynced = informer.Services().Informer().HasSynced
 	}
+
+	uwOptions := &uw.Options{Reconciler: c}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
+	upwardServiceController, err := uw.NewUWController("service-upward-controller", &v1.Service{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create service upward controller %v", err)
+		return nil, nil, err
+	}
+	c.upwardServiceController = upwardServiceController
 
 	informer.Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -143,8 +149,7 @@ func (c *controller) enqueueService(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardServiceController.AddToQueue(reconciler.UwsRequest{Key: key})
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
