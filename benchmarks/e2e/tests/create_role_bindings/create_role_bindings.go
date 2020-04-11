@@ -73,8 +73,8 @@ var _ = framework.KubeDescribe("Test tenant's role management permissions", func
 			}
 		})
 
-		ginkgo.It("Tenant can create rolebinding to a cluster-role", func() {
-			ginkgo.By(fmt.Sprintf("Tenant %s can create rolebinding to a cluster-role", user))
+		ginkgo.It("Tenant can create rolebinding to a role", func() {
+			ginkgo.By(fmt.Sprintf("Tenant %s can create rolebinding to a role", user))
 
 			verb := "--verb=get"
 			resource := "--resource=pods"
