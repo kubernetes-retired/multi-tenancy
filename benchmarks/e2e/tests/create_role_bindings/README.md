@@ -30,22 +30,7 @@ Run the following commands to check for permissions to manage `rolebinding` and 
 
 Each command must return 'yes'
 
-Create a `rolebinding` to cluster role `edit`
-
-    kubectl --kubeconfig=tenant-a -n a1 create rolebinding fake-editor --clusterrole=edit
-
 Create a `role` pod-reader with permission to view pods and create a `role binding` to this role.
 
-    kubectl --kubeconfig=tenant-a apply -f- <<EOF
-    apiVersion: rbac.authorization.k8s.io/v1
-    kind: Role
-    metadata:
-      namespace: a1 # a1 indicates the tenant's namespace
-      name: pod-reader
-    rules:
-    - apiGroups: [""] # "" indicates the core API group
-      resources: ["pods"]
-      verbs: ["get", "watch", "list"]
-    EOF
-
-    kubectl --kubeconfig=tenant-a -n a1 create rolebinding pode-view --role=pod-reader
+    kubectl --kubeconfig=tenant-a -n a1 create role <role-name> --verb=get --resource=pods
+    kubectl --kubeconfig=tenant-a -n a1 create rolebinding <rolebinding-name> --role=<role-name>
