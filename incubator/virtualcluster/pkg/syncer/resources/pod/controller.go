@@ -215,6 +215,19 @@ func (c *controller) removeQuiescingNodeFromClusterVNodeGCMap(cluster string, no
 	return true
 }
 
+func (c *controller) checkClusterVNodePodMap(clusterName, nodeName, uid string) bool {
+	c.Lock()
+	defer c.Unlock()
+	if _, exist := c.clusterVNodePodMap[clusterName]; !exist {
+		return false
+	} else if _, exist := c.clusterVNodePodMap[clusterName][nodeName]; !exist {
+		return false
+	} else if _, exist := c.clusterVNodePodMap[clusterName][nodeName][uid]; !exist {
+		return false
+	}
+	return true
+}
+
 func (c *controller) updateClusterVNodePodMap(clusterName, nodeName, requestUID string, event reconciler.EventType) {
 	c.Lock()
 	defer c.Unlock()
