@@ -3,7 +3,6 @@ package create_role_bindings
 import(
 	"fmt"
 	"os"
-	// "strings"
 	"time"
 
 	"github.com/onsi/ginkgo"
