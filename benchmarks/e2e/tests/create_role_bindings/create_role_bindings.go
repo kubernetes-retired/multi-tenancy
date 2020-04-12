@@ -28,7 +28,7 @@ var _ = framework.KubeDescribe("Test tenant's role management permissions", func
 		framework.ExpectNoError(err)
 	})
 
-	framework.KubeDescribe("Tenant can has RBAC privileges for Roles and Rolebindings", func() {
+	framework.KubeDescribe("Tenant has RBAC privileges for Roles and Rolebindings", func() {
 		var user string
 		var verbs = []string{"get", "list", "create", "update", "patch", "watch", "delete", "deletecollection"}
 		var namespaceflag = "-n"
