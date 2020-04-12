@@ -24,7 +24,7 @@ Enables self-service management of network-policies.
 
 **Audit:**
 
-Run the following commands to check for permissions to manage `network-policy` for each verb(get, list, create, update, patch, watch, delete, and deletecollection) in the tenant namespace:
+Run the following commands to check for permissions to manage `network-policy` for each verb(get, create, update, patch, delete, and deletecollection) in the tenant namespace:
 
     kubectl --kubeconfig=tenant-a -n a1 auth can-i <verb> networkpolicy
 
