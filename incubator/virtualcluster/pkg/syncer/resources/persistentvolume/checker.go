@@ -33,7 +33,6 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numClaimMissMatchedPVs uint64
@@ -95,7 +94,7 @@ func (c *controller) checkPVs() {
 		if err != nil {
 			if errors.IsNotFound(err) {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterPVs").Inc()
-				c.upwardPersistentVolumeController.AddToQueue(reconciler.UwsRequest{Key: pPV.Name})
+				c.upwardPersistentVolumeController.AddToQueue(pPV.Name)
 			}
 			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
 		} else {

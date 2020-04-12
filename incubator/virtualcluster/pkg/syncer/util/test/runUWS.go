@@ -20,55 +20,45 @@ import (
 	"fmt"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	core "k8s.io/client-go/testing"
-	cache "k8s.io/client-go/tools/cache"
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
-	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
-type fakeReconciler struct {
+type fakeUWReconciler struct {
 	resourceSyncer manager.ResourceSyncer
 	errCh          chan error
 }
 
-func (r *fakeReconciler) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	var res reconciler.Result
+func (r *fakeUWReconciler) BackPopulate(key string) error {
 	var err error
 	if r.resourceSyncer != nil {
-		res, err = r.resourceSyncer.Reconcile(request)
+		err = r.resourceSyncer.BackPopulate(key)
 	} else {
-		res, err = reconciler.Result{}, fmt.Errorf("fake reconciler's controller is not initialized")
+		err = fmt.Errorf("fake reconciler's upward controller is not initialized")
 	}
 	r.errCh <- err
-	return res, err
+	return err
 }
 
-func (r *fakeReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
+func (r *fakeUWReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 	r.resourceSyncer = c
 }
 
-type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
-
-func RunDownwardSync(
+func RunUpwardSync(
 	newControllerFunc controllerNew,
 	testTenant *v1alpha1.Virtualcluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
-	enqueueObject runtime.Object,
+	enqueueKey string,
 ) (actions []core.Action, reconcileError error, err error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
@@ -94,13 +84,13 @@ func RunDownwardSync(
 	// setup fake controller
 	syncErr := make(chan error)
 	defer close(syncErr)
-	fakeRc := &fakeReconciler{errCh: syncErr}
+	fakeRc := &fakeUWReconciler{errCh: syncErr}
 	rsOptions := &manager.ResourceSyncerOptions{
-		MCOptions: &mc.Options{Reconciler: fakeRc},
+		UWOptions: &uw.Options{Reconciler: fakeRc},
 		IsFake:    true,
 	}
 
-	resourceSyncer, mccontroller, _, err := newControllerFunc(
+	resourceSyncer, _, upwardController, err := newControllerFunc(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
@@ -109,7 +99,7 @@ func RunDownwardSync(
 		rsOptions,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating dws controller: %v", err)
+		return nil, nil, fmt.Errorf("error creating uws controller: %v", err)
 	}
 	fakeRc.SetResourceSyncer(resourceSyncer)
 
@@ -118,7 +108,7 @@ func RunDownwardSync(
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
-	go resourceSyncer.StartDWS(stopCh)
+	go resourceSyncer.StartUWS(stopCh)
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
@@ -127,34 +117,14 @@ func RunDownwardSync(
 	}
 
 	// start testing
-	if err := mccontroller.RequeueObject(conversion.ToClusterKey(testTenant), enqueueObject); err != nil {
-		return nil, nil, fmt.Errorf("error enqueue object %v: %v", enqueueObject, err)
-	}
+	upwardController.AddToQueue(enqueueKey)
 
 	// wait to be called
 	select {
 	case reconcileError = <-syncErr:
 	case <-time.After(10 * time.Second):
-		return nil, nil, fmt.Errorf("timeout wating for sync")
+		return nil, nil, fmt.Errorf("timeout waiting for sync")
 	}
 
-	return superClient.Actions(), reconcileError, nil
-}
-
-func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cache.SharedIndexInformer {
-	switch obj.(type) {
-	case *v1.Namespace:
-		return informer.Namespaces().Informer()
-	case *v1.Service:
-		return informer.Services().Informer()
-	case *v1.Pod:
-		return informer.Pods().Informer()
-	case *v1.ServiceAccount:
-		return informer.ServiceAccounts().Informer()
-	case *v1.Secret:
-		return informer.Secrets().Informer()
-	default:
-		return nil
-
-	}
+	return tenantClientset.Actions(), reconcileError, nil
 }

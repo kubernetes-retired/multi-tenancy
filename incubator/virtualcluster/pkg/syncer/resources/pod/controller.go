@@ -82,7 +82,7 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, err := NewPodController(config, client, informer, nil)
+	c, _, _, err := NewPodController(config, client, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster Pod controller %v", err)
 		return
@@ -90,7 +90,10 @@ func Register(
 	controllerManager.AddResourceSyncer(c)
 }
 
-func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1Interface, informer coreinformers.Interface, options *mc.Options) (manager.ResourceSyncer, *mc.MultiClusterController, error) {
+func NewPodController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:              config,
 		client:              client,
@@ -99,21 +102,23 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 		clusterVNodePodMap:  make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
 	}
-
-	if options == nil {
-		options = &mc.Options{Reconciler: c}
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
 	}
-	options.MaxConcurrentReconciles = constants.DwsControllerWorkerHigh
-	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, *options)
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerHigh
+	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, *mcOptions)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster pod controller %v", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.multiClusterPodController = multiClusterPodController
 	c.serviceLister = informer.Services().Lister()
 	c.secretLister = informer.Secrets().Lister()
 	c.podLister = informer.Pods().Lister()
-	if options.IsFake {
+	if options != nil && options.IsFake {
 		c.serviceSynced = func() bool { return true }
 		c.secretSynced = func() bool { return true }
 		c.podSynced = func() bool { return true }
@@ -122,13 +127,17 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 		c.secretSynced = informer.Secrets().Informer().HasSynced
 		c.podSynced = informer.Pods().Informer().HasSynced
 	}
-
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
 	upwardPodController, err := uw.NewUWController("pod-upward-controller", &v1.Pod{}, *uwOptions)
 	if err != nil {
 		klog.Errorf("failed to create pod upward controller %v", err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.upwardPodController = upwardPodController
 
@@ -166,7 +175,7 @@ func NewPodController(config *config.SyncerConfiguration, client v1core.CoreV1In
 			},
 		},
 	)
-	return c, multiClusterPodController, nil
+	return c, multiClusterPodController, upwardPodController, nil
 }
 
 func (c *controller) enqueuePod(obj interface{}) {
@@ -186,7 +195,7 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	c.upwardPodController.AddToQueue(reconciler.UwsRequest{Key: key})
+	c.upwardPodController.AddToQueue(key)
 }
 
 // c.Mutex needs to be Locked before calling addToClusterVNodeGCMap

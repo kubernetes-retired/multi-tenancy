@@ -28,7 +28,6 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // StartUWS starts the upward syncer
@@ -42,7 +41,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 
 func (c *controller) enqueueNode(obj interface{}) {
 	node := obj.(*v1.Node)
-	c.upwardNodeController.AddToQueue(reconciler.UwsRequest{Key: node.Name})
+	c.upwardNodeController.AddToQueue(node.Name)
 }
 
 func (c *controller) BackPopulate(nodeName string) error {

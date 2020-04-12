@@ -129,7 +129,7 @@ func (c *controller) enqueuePersistentVolume(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.upwardPersistentVolumeController.AddToQueue(reconciler.UwsRequest{Key: key})
+	c.upwardPersistentVolumeController.AddToQueue(key)
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

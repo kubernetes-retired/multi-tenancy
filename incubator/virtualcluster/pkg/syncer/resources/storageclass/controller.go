@@ -137,7 +137,7 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 	}
 
 	for _, clusterName := range clusterNames {
-		c.upwardStorageClassController.AddToQueue(reconciler.UwsRequest{Key: clusterName + "/" + key})
+		c.upwardStorageClassController.AddToQueue(clusterName + "/" + key)
 	}
 }
 
