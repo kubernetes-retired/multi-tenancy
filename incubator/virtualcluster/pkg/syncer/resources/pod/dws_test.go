@@ -19,6 +19,7 @@ package pod
 import (
 	"strings"
 	"testing"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
+	"k8s.io/utils/pointer"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -41,6 +43,18 @@ func tenantPod(name, namespace, uid string) *v1.Pod {
 			UID:       types.UID(uid),
 		},
 	}
+}
+
+func applyNodeNameToPod(vPod *v1.Pod, nodeName string) *v1.Pod {
+	vPod.Spec.NodeName = nodeName
+	return vPod
+}
+
+func applyDeletionTimestampToPod(vPod *v1.Pod, t time.Time) *v1.Pod {
+	metaTime := metav1.NewTime(t)
+	vPod.DeletionTimestamp = &metaTime
+	vPod.DeletionGracePeriodSeconds = pointer.Int64Ptr(30)
+	return vPod
 }
 
 func superPod(name, namespace, uid string) *v1.Pod {
@@ -70,8 +84,8 @@ func tenantServiceAccount(name, namespace, uid string) *v1.ServiceAccount {
 	}
 }
 
-func superService(name, namespace, uid string) *v1.Service {
-	return &v1.Service{
+func superService(name, namespace, uid string, clusterIP string) *v1.Service {
+	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -80,6 +94,10 @@ func superService(name, namespace, uid string) *v1.Service {
 			},
 		},
 	}
+	if clusterIP != "" {
+		svc.Spec.ClusterIP = clusterIP
+	}
+	return svc
 }
 
 func superSecret(name, namespace, uid string) *v1.Secret {
@@ -119,13 +137,64 @@ func TestDWPodCreation(t *testing.T) {
 		"new Pod": {
 			ExistingObjectInSuper: []runtime.Object{
 				superSecret("default-token-12345", superDefaultNSName, "12345"),
-				superService("kubernetes", superDefaultNSName, "12345"),
+				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
 			ExpectedCreatedPods: []string{superDefaultNSName + "/pod-1"},
+		},
+		"load pod which under deletion": {
+			ExistingObjectInSuper: []runtime.Object{},
+			ExistingObjectInTenant: []runtime.Object{
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			},
+			ExpectedCreatedPods: []string{},
+			ExpectedError:       "",
+		},
+		"missing service account token secret": {
+			ExistingObjectInSuper: []runtime.Object{
+				superService("kubernetes", superDefaultNSName, "12345", ""),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedError: "service account token secret for pod is not ready",
+		},
+		"without any services": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", superDefaultNSName, "12345"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedError: "service is not ready",
+		},
+		"only a dns service": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", conversion.ToSuperMasterNamespace(defaultClusterKey, "kube-system"), "12345"),
+				superService(constants.TenantDNSServerServiceName, conversion.ToSuperMasterNamespace(defaultClusterKey, constants.TenantDNSServerNS), "12345", "192.168.0.10"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "kube-system", "12345"),
+				tenantServiceAccount("default", "kube-system", "12345"),
+			},
+			ExpectedCreatedPods: []string{conversion.ToSuperMasterNamespace(defaultClusterKey, "kube-system") + "/pod-1"},
+			ExpectedError:       "",
+		},
+		"new pod with nodeName": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superService("kubernetes", superDefaultNSName, "12345", ""),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyNodeNameToPod(tenantPod("pod-1", "default", "12345"), "i-xxxx"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedCreatedPods: []string{},
 		},
 		"new Pod but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -205,14 +274,22 @@ func TestDWPodDeletion(t *testing.T) {
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
-		ExistingObjectInSuper []runtime.Object
-		EnqueueObject         *v1.Pod
-		ExpectedDeletedPods   []string
-		ExpectedError         string
+		ExistingObjectInSuper  []runtime.Object
+		ExistingObjectInTenant []runtime.Object
+		EnqueueObject          *v1.Pod
+		ExpectedDeletedPods    []string
+		ExpectedError          string
 	}{
 		"delete Pod": {
 			ExistingObjectInSuper: []runtime.Object{
 				superPod("pod-1", superDefaultNSName, "12345"),
+			},
+			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
+			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
+		},
+		"delete vPod and pPod is already running": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyNodeNameToPod(superPod("pod-1", superDefaultNSName, "12345"), "i-xxx"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
@@ -231,11 +308,33 @@ func TestDWPodDeletion(t *testing.T) {
 			ExpectedDeletedPods: []string{},
 			ExpectedError:       "delegated UID is different",
 		},
+		"terminating vPod but running pPod": {
+			ExistingObjectInSuper: []runtime.Object{
+				superPod("pod-1", superDefaultNSName, "12345"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			},
+			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
+			ExpectedError:       "",
+		},
+		"terminating vPod and terminating pPod": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyDeletionTimestampToPod(superPod("pod-1", superDefaultNSName, "12345"), time.Now()),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			},
+			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			ExpectedDeletedPods: []string{},
+			ExpectedError:       "",
+		},
 	}
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueueObject)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -299,6 +398,7 @@ func TestDWPodUpdate(t *testing.T) {
 				Name:  "c-1",
 			},
 		},
+		NodeName: "i-xxx",
 	}
 
 	spec2 := &v1.PodSpec{
@@ -308,6 +408,7 @@ func TestDWPodUpdate(t *testing.T) {
 				Name:  "c-1",
 			},
 		},
+		NodeName: "i-xxx",
 	}
 
 	testcases := map[string]struct {
