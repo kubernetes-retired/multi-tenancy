@@ -17,8 +17,6 @@ limitations under the License.
 package namespace
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,6 +28,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
@@ -41,8 +40,8 @@ type controller struct {
 	nsSynced cache.InformerSynced
 	// Connect to all tenant master namespace informers
 	multiClusterNamespaceController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	namespacePatroller *pa.Patroller
 }
 
 func Register(
@@ -65,8 +64,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		namespaceClient:     namespaceClient,
-		periodCheckerPeriod: 60 * time.Second,
+		namespaceClient: namespaceClient,
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -86,6 +84,19 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	} else {
 		c.nsSynced = informer.Namespaces().Informer().HasSynced
 	}
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	namespacePatroller, err := pa.NewPatroller("namespace-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create namespace patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.namespacePatroller = namespacePatroller
 
 	return c, multiClusterNamespaceController, nil, nil
 }

@@ -24,7 +24,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -35,26 +34,20 @@ import (
 var numMissingEndPoints uint64
 var numMissMatchedEndPoints uint64
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
-// blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.endpointsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Endpoint checker")
 	}
-
-	// Start a loop to periodically check if endPoints keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkEndPoints, c.periodCheckerPeriod, stopCh)
-
+	c.endPointsPatroller.Start(stopCh)
 	return nil
 }
 
-// checkEndPoints checks to see if Endpoints in super master informer cache and tenant master
+// PatrollerDo checks to see if Endpoints in super master informer cache and tenant master
 // keep consistency.
 // Note that eps are managed by tenant/super ep controller separately. The checker will not do GC but only report diff.
-func (c *controller) checkEndPoints() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterEndpointsController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")

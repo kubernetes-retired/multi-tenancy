@@ -19,7 +19,6 @@ package pod
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +34,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
@@ -56,8 +56,8 @@ type controller struct {
 	multiClusterPodController *mc.MultiClusterController
 	// UWcontroller
 	upwardPodController *uw.UpwardController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	podPatroller *pa.Patroller
 	// Cluster vNode PodMap and GCMap, needed for vNode garbage collection
 	sync.Mutex
 	clusterVNodePodMap map[string]map[string]map[string]struct{}
@@ -95,12 +95,11 @@ func NewPodController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		config:              config,
-		client:              client,
-		informer:            informer,
-		periodCheckerPeriod: 60 * time.Second,
-		clusterVNodePodMap:  make(map[string]map[string]map[string]struct{}),
-		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
+		config:             config,
+		client:             client,
+		informer:           informer,
+		clusterVNodePodMap: make(map[string]map[string]map[string]struct{}),
+		clusterVNodeGCMap:  make(map[string]map[string]VNodeGCStatus),
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -140,6 +139,19 @@ func NewPodController(config *config.SyncerConfiguration,
 		return nil, nil, nil, err
 	}
 	c.upwardPodController = upwardPodController
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	podPatroller, err := pa.NewPatroller("pod-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create pod patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.podPatroller = podPatroller
 
 	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{

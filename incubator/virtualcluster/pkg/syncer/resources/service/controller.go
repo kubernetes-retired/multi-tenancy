@@ -18,7 +18,6 @@ package service
 
 import (
 	"fmt"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -33,6 +32,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
@@ -46,8 +46,8 @@ type controller struct {
 	multiClusterServiceController *mc.MultiClusterController
 	// UWcontroller
 	upwardServiceController *uw.UpwardController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	servicePatroller *pa.Patroller
 }
 
 func Register(
@@ -69,8 +69,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		serviceClient:       serviceClient,
-		periodCheckerPeriod: 60 * time.Second,
+		serviceClient: serviceClient,
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -105,6 +104,19 @@ func NewServiceController(config *config.SyncerConfiguration,
 		return nil, nil, nil, err
 	}
 	c.upwardServiceController = upwardServiceController
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	servicePatroller, err := pa.NewPatroller("service-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create service patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.servicePatroller = servicePatroller
 
 	informer.Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{

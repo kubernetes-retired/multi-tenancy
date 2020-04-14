@@ -47,9 +47,9 @@ var numStatusMissMatchedPods uint64
 var numSpecMissMatchedPods uint64
 var numUWMetaMissMatchedPods uint64
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
+// StartPatrol starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
@@ -59,16 +59,14 @@ func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
 	// Start a loop to do periodic GC of unused(orphan) vNodes in tenant masters.
 	go c.vNodeGCWorker(stopCh)
 
-	// Start a loop to periodically check if pods keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkPods, c.periodCheckerPeriod, stopCh)
+	c.podPatroller.Start(stopCh)
 
 	return nil
 }
 
 func (c *controller) vNodeGCWorker(stopCh <-chan struct{}) {
 	klog.Infof("Start VNode GarbageCollector")
-	wait.Until(c.vNodeGCDo, c.periodCheckerPeriod, stopCh)
+	wait.Until(c.vNodeGCDo, c.podPatroller.Period, stopCh)
 }
 
 type Candidate struct {
@@ -137,9 +135,9 @@ func (c *controller) deleteClusterVNode(cluster, nodeName string) {
 	c.Unlock()
 }
 
-// checkPods checks to see if pods in super master informer cache and tenant master
+// PatrollerDo checks to see if pods in super master informer cache and tenant master
 // keep consistency.
-func (c *controller) checkPods() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterPodController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")

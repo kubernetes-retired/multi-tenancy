@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -34,25 +33,19 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
-// blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.nsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Namespace checker")
 	}
-
-	// Start a loop to periodically check if namespaces keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkNamespaces, c.periodCheckerPeriod, stopCh)
-
+	c.namespacePatroller.Start(stopCh)
 	return nil
 }
 
-// checkNamespaces checks to see if namespaces in super master informer cache and tenant master
+// PatrollerDo checks to see if namespaces in super master informer cache and tenant master
 // keep consistency.
-func (c *controller) checkNamespaces() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")

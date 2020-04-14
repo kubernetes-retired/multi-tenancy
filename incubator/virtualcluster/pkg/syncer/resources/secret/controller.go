@@ -17,8 +17,6 @@ limitations under the License.
 package secret
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -31,6 +29,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
@@ -42,8 +41,8 @@ type controller struct {
 	secretSynced   cache.InformerSynced
 	// Connect to all tenant master secret informers
 	multiClusterSecretController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	secretPatroller *pa.Patroller
 }
 
 func Register(
@@ -53,9 +52,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		secretClient:        secretClient,
-		secretInformer:      secretInformer,
-		periodCheckerPeriod: 60 * time.Second,
+		secretClient:   secretClient,
+		secretInformer: secretInformer,
 	}
 
 	// Create the multi cluster secret controller
@@ -69,6 +67,14 @@ func Register(
 
 	c.secretLister = secretInformer.Lister()
 	c.secretSynced = secretInformer.Informer().HasSynced
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	secretPatroller, err := pa.NewPatroller("secret-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create secret patroller %v", err)
+		return
+	}
+	c.secretPatroller = secretPatroller
 
 	controllerManager.AddResourceSyncer(c)
 }

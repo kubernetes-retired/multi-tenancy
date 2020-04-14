@@ -17,8 +17,6 @@ limitations under the License.
 package configmap
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,6 +28,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
@@ -40,8 +39,8 @@ type controller struct {
 	configMapSynced cache.InformerSynced
 	// Connect to all tenant master configMap informers
 	multiClusterConfigMapController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	configMapPatroller *pa.Patroller
 }
 
 func Register(
@@ -51,8 +50,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		configMapClient:     configMapClient,
-		periodCheckerPeriod: 60 * time.Second,
+		configMapClient: configMapClient,
 	}
 
 	// Create the multi cluster configmap controller
@@ -65,6 +63,14 @@ func Register(
 	c.multiClusterConfigMapController = multiClusterConfigMapController
 	c.configMapLister = configMapInformer.Lister()
 	c.configMapSynced = configMapInformer.Informer().HasSynced
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	configMapPatroller, err := pa.NewPatroller("configMap-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create configMap patroller %v", err)
+		return
+	}
+	c.configMapPatroller = configMapPatroller
 
 	controllerManager.AddResourceSyncer(c)
 }

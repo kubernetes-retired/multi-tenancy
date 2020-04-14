@@ -17,8 +17,6 @@ limitations under the License.
 package persistentvolumeclaim
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,6 +28,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
@@ -40,8 +39,8 @@ type controller struct {
 	pvcSynced cache.InformerSynced
 	// Connect to all tenant master pvc informers
 	multiClusterPersistentVolumeClaimController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	persistentVolumeClaimPatroller *pa.Patroller
 }
 
 func Register(
@@ -51,8 +50,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		pvcClient:           pvcClient,
-		periodCheckerPeriod: 60 * time.Second,
+		pvcClient: pvcClient,
 	}
 
 	// Create the multi cluster PersistentVolumeClaim controller
@@ -65,6 +63,14 @@ func Register(
 	c.multiClusterPersistentVolumeClaimController = multiClusterPersistentVolumeClaimController
 	c.pvcLister = pvcInformer.Lister()
 	c.pvcSynced = pvcInformer.Informer().HasSynced
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	persistentVolumeClaimPatroller, err := pa.NewPatroller("pvc-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create persistentVolumeClaim patroller %v", err)
+		return
+	}
+	c.persistentVolumeClaimPatroller = persistentVolumeClaimPatroller
 
 	controllerManager.AddResourceSyncer(c)
 }
