@@ -28,6 +28,7 @@ require (
 )
 
 replace (
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.0.0+incompatible
 	k8s.io/api => k8s.io/api v0.16.5
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.16.5
 	k8s.io/apimachinery => k8s.io/apimachinery v0.16.7-beta.0

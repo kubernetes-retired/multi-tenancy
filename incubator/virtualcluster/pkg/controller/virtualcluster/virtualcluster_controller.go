@@ -44,24 +44,37 @@ var log = logf.Log.WithName("virtualcluster-controller")
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
 func Add(mgr *vcmanager.VirtualclusterManager, masterProvisioner string) error {
-	return add(mgr, newReconciler(mgr, masterProvisioner))
+	rcl, err := newReconciler(mgr, masterProvisioner)
+	if err != nil {
+		return err
+	}
+	return add(mgr, rcl)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, masterProv string) reconcile.Reconciler {
-	var mp MasterProvisioner
+func newReconciler(mgr manager.Manager, masterProv string) (reconcile.Reconciler, error) {
+	var (
+		mp  MasterProvisioner
+		err error
+	)
 	switch masterProv {
 	case "native":
-		mp = NewMasterProvisionerNative(mgr)
+		mp, err = NewMasterProvisionerNative(mgr)
+		if err != nil {
+			return nil, err
+		}
 	case "aliyun":
-		mp = NewMasterProvisionerAliyun(mgr)
+		mp, err = NewMasterProvisionerAliyun(mgr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &ReconcileVirtualcluster{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		mp:     mp,
-	}
+	}, nil
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
