@@ -21,6 +21,7 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
@@ -32,9 +33,10 @@ type ControllerManager struct {
 }
 
 type ResourceSyncerOptions struct {
-	MCOptions *mc.Options
-	UWOptions *uw.Options
-	IsFake    bool
+	MCOptions     *mc.Options
+	UWOptions     *uw.Options
+	PatrolOptions *pa.Options
+	IsFake        bool
 }
 
 func New() *ControllerManager {
@@ -46,9 +48,10 @@ type ResourceSyncer interface {
 	listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
-	StartPeriodChecker(stopCh <-chan struct{}) error
+	StartPatrol(stopCh <-chan struct{}) error
 	Reconcile(request reconciler.Request) (reconciler.Result, error)
 	BackPopulate(string) error
+	PatrollerDo()
 }
 
 // AddController adds a resource syncer to the ControllerManager.
@@ -80,10 +83,10 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 				errCh <- err
 			}
 		}(s)
-		// start period checker
+		// start periodic checker
 		go func(s ResourceSyncer) {
 			defer wg.Done()
-			if err := s.StartPeriodChecker(stop); err != nil {
+			if err := s.StartPatrol(stop); err != nil {
 				errCh <- err
 			}
 		}(s)

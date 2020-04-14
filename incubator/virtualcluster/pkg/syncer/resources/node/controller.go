@@ -102,8 +102,11 @@ func Register(
 	controllerManager.AddResourceSyncer(c)
 }
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	return nil
+}
+
+func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

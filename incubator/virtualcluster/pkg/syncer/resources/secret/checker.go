@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -38,16 +37,16 @@ import (
 var numMissMatchedOpaqueSecrets uint64
 var numMissMatchedSASecrets uint64
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting secret checker")
 	}
-
-	wait.Until(c.checkSecrets, c.periodCheckerPeriod, stopCh)
+	c.secretPatroller.Start(stopCh)
 	return nil
 }
 
-func (c *controller) checkSecrets() {
+// PatrollerDo check if normal secrets and service account secrets keep consistency between super master and tenant masters.
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterSecretController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up secret period checker")

@@ -18,7 +18,6 @@ package storageclass
 
 import (
 	"fmt"
-	"time"
 
 	v1 "k8s.io/api/storage/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -32,6 +31,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
@@ -48,9 +48,8 @@ type controller struct {
 	multiClusterStorageClassController *mc.MultiClusterController
 	// UWcontroller
 	upwardStorageClassController *uw.UpwardController
-
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	storageClassPatroller *pa.Patroller
 }
 
 func Register(
@@ -60,9 +59,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:              client,
-		informer:            informer,
-		periodCheckerPeriod: 60 * time.Second,
+		client:   client,
+		informer: informer,
 	}
 
 	options := mc.Options{Reconciler: c}
@@ -84,6 +82,14 @@ func Register(
 		return
 	}
 	c.upwardStorageClassController = upwardStorageClassController
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	storageClassPatroller, err := pa.NewPatroller("storageClass-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create storageClass patroller %v", err)
+		return
+	}
+	c.storageClassPatroller = storageClassPatroller
 
 	informer.StorageClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{

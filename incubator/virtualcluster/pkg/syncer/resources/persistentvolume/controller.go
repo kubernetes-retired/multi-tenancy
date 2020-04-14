@@ -18,7 +18,6 @@ package persistentvolume
 
 import (
 	"fmt"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -32,6 +31,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
@@ -49,8 +49,8 @@ type controller struct {
 	multiClusterPersistentVolumeController *mc.MultiClusterController
 	// UWcontroller
 	upwardPersistentVolumeController *uw.UpwardController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	persistentVolumePatroller *pa.Patroller
 }
 
 func Register(
@@ -60,9 +60,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		client:              client,
-		informer:            informer,
-		periodCheckerPeriod: 60 * time.Second,
+		client:   client,
+		informer: informer,
 	}
 
 	// Create the multi cluster PersistentVolume controller
@@ -86,6 +85,14 @@ func Register(
 		return
 	}
 	c.upwardPersistentVolumeController = upwardPersistentVolumeController
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create persistentVolume patroller %v", err)
+		return
+	}
+	c.persistentVolumePatroller = persistentVolumePatroller
 
 	informer.PersistentVolumes().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{

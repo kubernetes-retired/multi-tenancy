@@ -17,8 +17,6 @@ limitations under the License.
 package endpoints
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -29,6 +27,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
@@ -39,8 +38,8 @@ type controller struct {
 	endpointsSynced cache.InformerSynced
 	// Connect to all tenant master endpoints informers
 	multiClusterEndpointsController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	endPointsPatroller *pa.Patroller
 }
 
 func Register(
@@ -50,8 +49,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		endpointClient:      endpointsClient,
-		periodCheckerPeriod: 60 * time.Second,
+		endpointClient: endpointsClient,
 	}
 
 	options := mc.Options{Reconciler: c}
@@ -63,6 +61,14 @@ func Register(
 	c.multiClusterEndpointsController = multiClusterEndpointsController
 	c.endpointsLister = endpointsInformer.Lister()
 	c.endpointsSynced = endpointsInformer.Informer().HasSynced
+
+	patrolOptions := &pa.Options{Reconciler: c}
+	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create endpoints patroller %v", err)
+		return
+	}
+	c.endPointsPatroller = endPointsPatroller
 
 	controllerManager.AddResourceSyncer(c)
 }
