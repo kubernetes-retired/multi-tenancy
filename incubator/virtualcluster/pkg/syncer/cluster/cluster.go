@@ -105,14 +105,15 @@ var _ mccontroller.ClusterInterface = &Cluster{}
 // New creates a new Cluster.
 func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build rest config: %v", err)
+	}
+
 	if clusterRestConfig.QPS == 0 {
 		clusterRestConfig.QPS = constants.DefaultSyncerClientQPS
 	}
 	if clusterRestConfig.Burst == 0 {
 		clusterRestConfig.Burst = constants.DefaultSyncerClientBurst
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to build rest config: %v", err)
 	}
 
 	return &Cluster{
