@@ -322,8 +322,6 @@ func TestVNodeGC(t *testing.T) {
 		ExistingObjectInTenant []runtime.Object
 		ExpectedDeletedVNodes  []string
 		StateModifyFunc        func(manager.ResourceSyncer)
-		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
-		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
 	}{
 		"vNode is bound with a vPod": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -375,7 +373,7 @@ func TestVNodeGC(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			tenantActions, _, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, tc.StateModifyFunc)
+			tenantActions, _, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, false, false, tc.StateModifyFunc)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
 				return
