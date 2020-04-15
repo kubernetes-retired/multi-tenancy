@@ -50,11 +50,11 @@ type MasterProvisionerNative struct {
 	scheme *runtime.Scheme
 }
 
-func NewMasterProvisionerNative(mgr manager.Manager) *MasterProvisionerNative {
+func NewMasterProvisionerNative(mgr manager.Manager) (*MasterProvisionerNative, error) {
 	return &MasterProvisionerNative{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
-	}
+	}, nil
 }
 
 // CreateVirtualCluster sets up the control plane for vc on meta k8s

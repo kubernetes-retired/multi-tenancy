@@ -27,9 +27,12 @@ import (
 	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
@@ -164,4 +167,35 @@ func SetVCStatus(vc *tenancyv1alpha1.Virtualcluster, phase tenancyv1alpha1.Clust
 		Reason:             reason,
 		Message:            message,
 	})
+}
+
+// IsObjExist check if object with 'key' exist
+func IsObjExist(cli client.Client, key client.ObjectKey, obj runtime.Object, log logr.Logger) bool {
+	if err := cli.Get(context.TODO(), key, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false
+		}
+		log.Error(err, "fail to get object", "object name", key.Name, "object namespace", key.Namespace)
+		return false
+	}
+	return true
+}
+
+// NewInClusterClient creates a client that has virtualcluster and clusterversion schemes registered
+func NewInClusterClient() (client.Client, error) {
+	kbCfg, err := config.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	cliScheme := scheme.Scheme
+	err = tenancyv1alpha1.AddToScheme(cliScheme)
+	if err != nil {
+		return nil, err
+	}
+	// create a new client to talk to apiserver directly
+	cli, err := client.New(kbCfg, client.Options{Scheme: cliScheme})
+	if err != nil {
+		return nil, err
+	}
+	return cli, nil
 }
