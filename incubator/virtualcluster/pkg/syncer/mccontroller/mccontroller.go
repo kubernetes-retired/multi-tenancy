@@ -343,7 +343,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 
 	if shutdown {
 		// Stop working
-		klog.Warning("Shutting down. Ignore work item and stop working.")
+		klog.V(4).Info("Shutting down. Ignore work item and stop working.")
 		return false
 	}
 
@@ -378,7 +378,6 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	if result, err := c.Reconciler.Reconcile(req); err != nil {
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
-		klog.Error("Could not reconcile Request. Stop working.")
 		return false
 	} else if result.RequeueAfter > 0 {
 		c.Queue.AddAfter(req, result.RequeueAfter)

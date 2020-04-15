@@ -34,7 +34,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
-func uwTenantPod(name, namespace, uid, nodename string) *v1.Pod {
+func tenantAssignedPod(name, namespace, uid, nodename string) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -51,7 +51,7 @@ func uwTenantPod(name, namespace, uid, nodename string) *v1.Pod {
 	}
 }
 
-func uwSuperPod(name, namespace, uid, nodename, clusterKey string) *v1.Pod {
+func superAssignedPod(name, namespace, uid, nodename, clusterKey string) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -118,24 +118,24 @@ func TestUWPodUpdate(t *testing.T) {
 	}{
 		"update vPod status": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyStatusToPod(uwSuperPod("pod-1", superDefaultNSName, "12345", "n1", defaultClusterKey), statusRunning),
+				applyStatusToPod(superAssignedPod("pod-1", superDefaultNSName, "12345", "n1", defaultClusterKey), statusRunning),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				applyStatusToPod(uwTenantPod("pod-1", "default", "12345", "n1"), statusPending),
+				applyStatusToPod(tenantAssignedPod("pod-1", "default", "12345", "n1"), statusPending),
 				tenantNode("n1"),
 			},
 			EnquedKey: superDefaultNSName + "/pod-1",
 			ExpectedUpdatedPods: []runtime.Object{
-				applyStatusToPod(uwTenantPod("pod-1", "default", "12345", "n1"), statusRunning),
+				applyStatusToPod(tenantAssignedPod("pod-1", "default", "12345", "n1"), statusRunning),
 			},
 			ExpectedError: "",
 		},
 		"vPod existing with different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				uwSuperPod("pod-1", superDefaultNSName, "123456", "n1", defaultClusterKey),
+				superAssignedPod("pod-1", superDefaultNSName, "123456", "n1", defaultClusterKey),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				uwTenantPod("pod-1", "default", "12345", "n1"),
+				tenantAssignedPod("pod-1", "default", "12345", "n1"),
 			},
 			EnquedKey:           superDefaultNSName + "/pod-1",
 			ExpectedUpdatedPods: []runtime.Object{},

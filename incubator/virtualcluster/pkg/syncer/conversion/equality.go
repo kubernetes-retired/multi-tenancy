@@ -276,16 +276,17 @@ func (e vcEquality) checkContainersImageEquality(pObj, vObj []v1.Container) []v1
 		return nil
 	}
 
-	for i, v := range pObj {
+	var updated []v1.Container
+	for _, v := range pObj {
 		if diff[v.Name] == v.Image {
-			continue
+			updated = append(updated, v)
+		} else {
+			c := v.DeepCopy()
+			c.Image = diff[v.Name]
+			updated = append(updated, *c)
 		}
-		c := v.DeepCopy()
-		c.Image = diff[v.Name]
-		pObj[i] = *c
 	}
-
-	return pObj
+	return updated
 }
 
 func (e vcEquality) checkInt64Equality(pObj, vObj *int64) (*int64, bool) {
