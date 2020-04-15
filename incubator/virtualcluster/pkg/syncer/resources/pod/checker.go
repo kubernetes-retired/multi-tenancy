@@ -296,7 +296,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if pPod.Spec.NodeName != "" && vPod.Spec.NodeName != "" && pPod.Spec.NodeName != vPod.Spec.NodeName {
 			// If pPod can be deleted arbitrarily, e.g., evicted by node controller, this inconsistency may happen.
 			// For example, if pPod is deleted just before uws tries to bind the vPod and dws gets a request from checker or
-			// user update at the same time, a new pPod is going to be created potentially in a differnt node.
+			// user update at the same time, a new pPod is going to be created potentially in a different node.
 			// However, uws bound vPod to a wrong node already. There is no easy remediation besides deleting tenant pod.
 			c.forceDeletevPod(clusterName, &vPod, true)
 			klog.Errorf("Found pPod %s/%s nodename is different from tenant pod nodename, delete the vPod.", targetNamespace, pPod.Name)

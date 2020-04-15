@@ -129,7 +129,7 @@ func (c *controller) BackPopulate(key string) error {
 		}
 		// virtual pod has been updated, refetch the latest version
 		if vPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
-			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vNamespace, pName, clusterName, err)
 		}
 	} else {
 		// Check if the vNode exists in Tenant master.
