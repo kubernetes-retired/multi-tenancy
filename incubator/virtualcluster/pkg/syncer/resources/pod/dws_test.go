@@ -50,10 +50,10 @@ func applyNodeNameToPod(vPod *v1.Pod, nodeName string) *v1.Pod {
 	return vPod
 }
 
-func applyDeletionTimestampToPod(vPod *v1.Pod, t time.Time) *v1.Pod {
+func applyDeletionTimestampToPod(vPod *v1.Pod, t time.Time, gracePeriodSeconds int64) *v1.Pod {
 	metaTime := metav1.NewTime(t)
 	vPod.DeletionTimestamp = &metaTime
-	vPod.DeletionGracePeriodSeconds = pointer.Int64Ptr(30)
+	vPod.DeletionGracePeriodSeconds = pointer.Int64Ptr(gracePeriodSeconds)
 	return vPod
 }
 
@@ -148,7 +148,7 @@ func TestDWPodCreation(t *testing.T) {
 		"load pod which under deletion": {
 			ExistingObjectInSuper: []runtime.Object{},
 			ExistingObjectInTenant: []runtime.Object{
-				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			},
 			ExpectedCreatedPods: []string{},
 			ExpectedError:       "",
@@ -313,20 +313,20 @@ func TestDWPodDeletion(t *testing.T) {
 				superPod("pod-1", superDefaultNSName, "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			},
-			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
 			ExpectedError:       "",
 		},
 		"terminating vPod and terminating pPod": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDeletionTimestampToPod(superPod("pod-1", superDefaultNSName, "12345"), time.Now()),
+				applyDeletionTimestampToPod(superPod("pod-1", superDefaultNSName, "12345"), time.Now(), 30),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			},
-			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now()),
+			EnqueueObject:       applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			ExpectedDeletedPods: []string{},
 			ExpectedError:       "",
 		},

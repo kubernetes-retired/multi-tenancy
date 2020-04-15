@@ -126,7 +126,7 @@ func TestPodPatrol(t *testing.T) {
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyStatusToPod(tenantAssignedPod("pod-4", "default", "12345", "n1"), statusPending),
-				tenantNode("n1"),
+				fakeNode("n1"),
 			},
 			ExpectedUpdatedVPods: []runtime.Object{
 				applyStatusToPod(tenantAssignedPod("pod-4", "default", "12345", "n1"), statusReadyAndRunning),
@@ -149,7 +149,7 @@ func TestPodPatrol(t *testing.T) {
 		},
 		"vPod scheduled with DeletionTimestamp, pPod does not exists": {
 			ExistingObjectInTenant: []runtime.Object{
-				applyStatusToPod(applyDeletionTimestampToPod(tenantAssignedPod("pod-6", "default", "12345", "n1"), time.Now()), statusReadyAndRunning),
+				applyStatusToPod(applyDeletionTimestampToPod(tenantAssignedPod("pod-6", "default", "12345", "n1"), time.Now(), 30), statusReadyAndRunning),
 			},
 			ExpectedDeletedVPods: []string{
 				"default/pod-6",

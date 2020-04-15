@@ -153,8 +153,9 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 		return informer.ServiceAccounts().Informer()
 	case *v1.Secret:
 		return informer.Secrets().Informer()
+	case *v1.Node:
+		return informer.Nodes().Informer()
 	default:
 		return nil
-
 	}
 }
