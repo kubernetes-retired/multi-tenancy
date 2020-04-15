@@ -18,11 +18,13 @@ package options
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"time"
 
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
@@ -63,7 +65,16 @@ type ResourceSyncerOptions struct {
 func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 	return &ResourceSyncerOptions{
 		ComponentConfig: syncerconfig.SyncerConfiguration{
-			LeaderElection:             syncerconfig.SyncerLeaderElectionConfiguration{},
+			LeaderElection: syncerconfig.SyncerLeaderElectionConfiguration{
+				LeaderElectionConfiguration: componentbaseconfig.LeaderElectionConfiguration{
+					LeaderElect:   true,
+					LeaseDuration: v1.Duration{Duration: 15 * time.Second},
+					RenewDeadline: v1.Duration{Duration: 10 * time.Second},
+					RetryPeriod:   v1.Duration{Duration: 2 * time.Second},
+					ResourceLock:  resourcelock.ConfigMapsResourceLock,
+				},
+				LockObjectName: "vc-syncer-leaderelection-lock",
+			},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
 			DisableServiceAccountToken: true,
 		},
@@ -114,7 +125,7 @@ func BindFlags(l *syncerconfig.SyncerLeaderElectionConfiguration, fs *pflag.Flag
 		"of a leadership. This is only applicable if leader election is enabled.")
 	fs.StringVar(&l.ResourceLock, "leader-elect-resource-lock", l.ResourceLock, ""+
 		"The type of resource object that is used for locking during "+
-		"leader election. Supported options are `endpoints` (default) and `configmaps`.")
+		"leader election. Supported options are `endpoints` and `configmaps` (default).")
 	fs.StringVar(&l.LockObjectNamespace, "lock-object-namespace", l.LockObjectNamespace, "DEPRECATED: define the namespace of the lock object.")
 	fs.StringVar(&l.LockObjectName, "lock-object-name", l.LockObjectName, "DEPRECATED: define the name of the lock object.")
 }
@@ -172,6 +183,14 @@ func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfigurat
 	// add a uniquifier so that two processes on the same host don't accidentally both become active
 	id := hostname + "_" + string(uuid.NewUUID())
 
+	if config.LockObjectNamespace == "" {
+		var err error
+		config.LockObjectNamespace, err = getInClusterNamespace()
+		if err != nil {
+			return nil, fmt.Errorf("unable to find leader election namespace: %v", err)
+		}
+	}
+
 	rl, err := resourcelock.New(config.ResourceLock,
 		config.LockObjectNamespace,
 		config.LockObjectName,
@@ -193,6 +212,24 @@ func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfigurat
 		WatchDog:      leaderelection.NewLeaderHealthzAdaptor(time.Second * 20),
 		Name:          constants.ResourceSyncerUserAgent,
 	}, nil
+}
+
+func getInClusterNamespace() (string, error) {
+	// Check whether the namespace file exists.
+	// If not, we are not running in cluster so can't guess the namespace.
+	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("not running in-cluster, please specify LeaderElectionNamespace")
+	} else if err != nil {
+		return "", fmt.Errorf("error checking namespace file: %v", err)
+	}
+
+	// Load the namespace file and return its content
+	namespace, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", fmt.Errorf("error reading namespace file: %v", err)
+	}
+	return string(namespace), nil
 }
 
 // createClients creates a meta cluster kube client and a super master custer client from the given config and masterOverride.
