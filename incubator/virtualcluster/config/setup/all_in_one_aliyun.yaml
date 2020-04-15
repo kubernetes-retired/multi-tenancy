@@ -321,6 +321,14 @@ spec:
           image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/syncer-amd64
           imagePullPolicy: Always
           name: vc-syncer
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

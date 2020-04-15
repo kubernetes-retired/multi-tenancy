@@ -32,7 +32,7 @@ type Patroller struct {
 	Options
 }
 
-// Options are the arguments for creating a new UpwardController.
+// Options are the arguments for creating a new Patrol.
 type Options struct {
 	Reconciler reconciler.PatrolReconciler
 	Period     time.Duration
