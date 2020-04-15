@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -55,18 +54,8 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Pod checker")
 	}
-
-	// Start a loop to do periodic GC of unused(orphan) vNodes in tenant masters.
-	go c.vNodeGCWorker(stopCh)
-
 	c.podPatroller.Start(stopCh)
-
 	return nil
-}
-
-func (c *controller) vNodeGCWorker(stopCh <-chan struct{}) {
-	klog.Infof("Start VNode GarbageCollector")
-	wait.Until(c.vNodeGCDo, c.podPatroller.Period, stopCh)
 }
 
 type Candidate struct {
@@ -81,7 +70,7 @@ func (c *controller) vNodeGCDo() {
 		var candidates []Candidate
 		for cluster, nodeMap := range c.clusterVNodeGCMap {
 			for nodeName, status := range nodeMap {
-				if status.Phase == VNodeQuiescing && metav1.Now().After(status.QuiesceStartTime.Add(constants.DefaultvNodeGCGracePeriod)) {
+				if status.Phase == VNodeQuiescing && metav1.Now().After(status.QuiesceStartTime.Add(c.vNodeGCGracePeriod)) {
 					c.clusterVNodeGCMap[cluster][nodeName] = VNodeGCStatus{
 						QuiesceStartTime: status.QuiesceStartTime,
 						Phase:            VNodeDeleting,
@@ -130,6 +119,7 @@ func (c *controller) deleteClusterVNode(cluster, nodeName string) {
 			return
 		}
 	}
+
 	c.Lock()
 	delete(c.clusterVNodeGCMap[cluster], nodeName)
 	c.Unlock()
@@ -211,6 +201,9 @@ func (c *controller) PatrollerDo() {
 			}
 		}
 	}
+
+	// GC unused(orphan) vNodes in tenant masters
+	c.vNodeGCDo()
 
 	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedPods").Set(float64(numStatusMissMatchedPods))
 	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPods").Set(float64(numSpecMissMatchedPods))

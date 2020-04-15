@@ -55,6 +55,8 @@ func (r *fakePatrolReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 	r.resourceSyncer = c
 }
 
+type controllerStateModifier func(manager.ResourceSyncer)
+
 func RunPatrol(
 	newControllerFunc controllerNew,
 	testTenant *v1alpha1.Virtualcluster,
@@ -62,6 +64,7 @@ func RunPatrol(
 	existingObjectInTenant []runtime.Object,
 	waitDWS bool,
 	waitUWS bool,
+	controllerStateModifyFunc controllerStateModifier,
 ) ([]core.Action, []core.Action, error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
@@ -116,6 +119,11 @@ func RunPatrol(
 	fakePatrolRc.SetResourceSyncer(resourceSyncer)
 	fakeDWRc.SetResourceSyncer(resourceSyncer)
 	fakeUWRc.SetResourceSyncer(resourceSyncer)
+
+	// Update controller internal state
+	if controllerStateModifyFunc != nil {
+		controllerStateModifyFunc(resourceSyncer)
+	}
 
 	// register tenant cluster to controller.
 	resourceSyncer.AddCluster(tenantCluster)

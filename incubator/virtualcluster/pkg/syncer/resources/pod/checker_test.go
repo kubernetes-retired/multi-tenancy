@@ -17,7 +17,6 @@ limitations under the License.
 package pod
 
 import (
-	stdlog "log"
 	"testing"
 	"time"
 
@@ -29,6 +28,8 @@ import (
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
@@ -178,8 +179,7 @@ func TestPodPatrol(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			stdlog.Printf("%s: start to run.", k)
-			tenantActions, superActions, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS)
+			tenantActions, superActions, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
 				return
@@ -267,6 +267,138 @@ func TestPodPatrol(t *testing.T) {
 					if !equality.Semantic.DeepEqual(obj, actionObj) {
 						t.Errorf("%s: Expected updated vPod is %v, got %v", k, obj, actionObj)
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestVNodeGC(t *testing.T) {
+	testTenant := &v1alpha1.Virtualcluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "tenant-1",
+			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
+		},
+		Spec: v1alpha1.VirtualclusterSpec{},
+		Status: v1alpha1.VirtualclusterStatus{
+			Phase: v1alpha1.ClusterRunning,
+		},
+	}
+	defaultClusterKey := conversion.ToClusterKey(testTenant)
+	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
+	statusReadyAndRunning := &v1.PodStatus{
+		Phase: "Running",
+		Conditions: []v1.PodCondition{
+			{
+				Type:   "PodScheduled",
+				Status: "True",
+			},
+		},
+	}
+	mFunc1 := func(r manager.ResourceSyncer) {
+		podController := r.(*controller)
+		podController.updateClusterVNodePodMap(defaultClusterKey, "n1", "12345", reconciler.UpdateEvent)
+	}
+	mFunc2 := func(r manager.ResourceSyncer) {
+		podController := r.(*controller)
+		podController.updateClusterVNodePodMap(defaultClusterKey, "n1", "12345", reconciler.UpdateEvent)
+		// Add "n1" to vNodeGCMap
+		podController.updateClusterVNodePodMap(defaultClusterKey, "n1", "12345", reconciler.DeleteEvent)
+	}
+	mFunc3 := func(r manager.ResourceSyncer) {
+		podController := r.(*controller)
+		podController.vNodeGCGracePeriod = 0
+		podController.updateClusterVNodePodMap(defaultClusterKey, "n1", "12345", reconciler.UpdateEvent)
+		// Add "n1" to vNodeGCMap
+		podController.updateClusterVNodePodMap(defaultClusterKey, "n1", "12345", reconciler.DeleteEvent)
+	}
+	mFunc4 := func(r manager.ResourceSyncer) {
+		podController := r.(*controller)
+		podController.vNodeGCGracePeriod = 0
+	}
+	testcases := map[string]struct {
+		ExistingObjectInSuper  []runtime.Object
+		ExistingObjectInTenant []runtime.Object
+		ExpectedDeletedVNodes  []string
+		StateModifyFunc        func(manager.ResourceSyncer)
+		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
+		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
+	}{
+		"vNode is bound with a vPod": {
+			ExistingObjectInSuper: []runtime.Object{
+				superAssignedPod("pod-1", superDefaultNSName, "12345", "n1", defaultClusterKey),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantAssignedPod("pod-1", "default", "12345", "n1"),
+				fakeNode("n1"),
+			},
+			StateModifyFunc:       mFunc1,
+			ExpectedDeletedVNodes: []string{},
+		},
+		"vNode is in gc map with default gc grace period": {
+			ExistingObjectInSuper: []runtime.Object{},
+			ExistingObjectInTenant: []runtime.Object{
+				fakeNode("n1"),
+			},
+			StateModifyFunc:       mFunc2,
+			ExpectedDeletedVNodes: []string{},
+		},
+		"vNode is in gc map with 0 gc grace period": {
+			ExistingObjectInSuper: []runtime.Object{},
+			ExistingObjectInTenant: []runtime.Object{
+				fakeNode("n1"),
+			},
+			StateModifyFunc:       mFunc3,
+			ExpectedDeletedVNodes: []string{"n1"},
+		},
+		"orphan vNode with 0 gc grace period": {
+			ExistingObjectInSuper: []runtime.Object{},
+			ExistingObjectInTenant: []runtime.Object{
+				fakeNode("n1"),
+			},
+			StateModifyFunc:       mFunc4,
+			ExpectedDeletedVNodes: []string{"n1"},
+		},
+		"vNode is INCORRECTLY in gc map with 0 gc grace period": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyStatusToPod(superAssignedPod("pod-2", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyStatusToPod(tenantAssignedPod("pod-2", "default", "12345", "n1"), statusReadyAndRunning),
+				fakeNode("n1"),
+			},
+			StateModifyFunc:       mFunc3,
+			ExpectedDeletedVNodes: []string{},
+		},
+	}
+
+	for k, tc := range testcases {
+		t.Run(k, func(t *testing.T) {
+			tenantActions, _, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, tc.StateModifyFunc)
+			if err != nil {
+				t.Errorf("%s: error running patrol: %v", k, err)
+				return
+			}
+			if len(tc.ExpectedDeletedVNodes) == 0 && len(tenantActions) != 0 {
+				t.Errorf("%s: expect no action but got actions: %v", k, tenantActions)
+				return
+			}
+			for _, expectedName := range tc.ExpectedDeletedVNodes {
+				matched := false
+				for _, action := range tenantActions {
+					if !action.Matches("delete", "nodes") {
+						continue
+					}
+					name := action.(core.DeleteAction).GetName()
+					if name != expectedName {
+						t.Errorf("%s: Expected %s to be deleted, got %s", k, expectedName, name)
+					}
+					matched = true
+					break
+				}
+				if !matched {
+					t.Errorf("%s: Expect deleted vNode %s but not found", k, expectedName)
 				}
 			}
 		})

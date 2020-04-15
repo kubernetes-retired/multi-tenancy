@@ -52,7 +52,7 @@ func tenantAssignedPod(name, namespace, uid, nodename string) *v1.Pod {
 	}
 }
 
-func badSuperPod(name, namespace string) *v1.Pod {
+func unKnownSuperPod(name, namespace string) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -90,6 +90,9 @@ func fakeNode(name string) *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
+			Labels: map[string]string{
+				constants.LabelVirtualNode: "true",
+			},
 		},
 	}
 }
@@ -185,7 +188,7 @@ func TestUWPodUpdate(t *testing.T) {
 		},
 		"pPod not created by syncer": {
 			ExistingObjectInSuper: []runtime.Object{
-				badSuperPod("pod-1", superDefaultNSName),
+				unKnownSuperPod("pod-1", superDefaultNSName),
 			},
 			EnquedKey: superDefaultNSName + "/pod-1",
 		},
