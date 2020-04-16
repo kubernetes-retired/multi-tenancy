@@ -19,6 +19,7 @@ package pod
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +63,7 @@ type controller struct {
 	sync.Mutex
 	clusterVNodePodMap map[string]map[string]map[string]struct{}
 	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
+	vNodeGCGracePeriod time.Duration
 }
 
 type VirtulNodeDeletionPhase string
@@ -100,6 +102,7 @@ func NewPodController(config *config.SyncerConfiguration,
 		informer:           informer,
 		clusterVNodePodMap: make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:  make(map[string]map[string]VNodeGCStatus),
+		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {

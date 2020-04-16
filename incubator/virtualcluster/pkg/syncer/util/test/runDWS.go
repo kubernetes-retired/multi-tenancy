@@ -54,7 +54,8 @@ func (r *fakeReconciler) Reconcile(request reconciler.Request) (reconciler.Resul
 		res, err = reconciler.Result{}, fmt.Errorf("fake reconciler's controller is not initialized")
 	}
 	r.errCh <- err
-	return res, err
+	// Make sure Reconcile is called once by returning no error.
+	return res, nil
 }
 
 func (r *fakeReconciler) SetResourceSyncer(c manager.ResourceSyncer) {

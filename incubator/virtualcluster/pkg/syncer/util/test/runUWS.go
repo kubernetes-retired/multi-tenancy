@@ -46,7 +46,8 @@ func (r *fakeUWReconciler) BackPopulate(key string) error {
 		err = fmt.Errorf("fake reconciler's upward controller is not initialized")
 	}
 	r.errCh <- err
-	return err
+	// Make sure the BackPopulate is called once by returning no error
+	return nil
 }
 
 func (r *fakeUWReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
