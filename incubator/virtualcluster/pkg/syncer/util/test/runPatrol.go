@@ -162,5 +162,24 @@ func RunPatrol(
 		}
 	}
 
-	return tenantClientset.Actions(), superClient.Actions(), nil
+	tenantActions := tenantClientset.Actions()
+	superActions := superClient.Actions()
+
+	// filter readonly action while we check the write operation in tests.
+	for i := 0; i < len(tenantActions); {
+		if tenantActions[i].GetVerb() == "get" {
+			tenantActions = append(tenantActions[:i], tenantActions[i+1:]...)
+		} else {
+			i++
+		}
+	}
+	for i := 0; i < len(superActions); {
+		if superActions[i].GetVerb() == "get" {
+			superActions = append(superActions[:i], superActions[i+1:]...)
+		} else {
+			i++
+		}
+	}
+
+	return tenantActions, superActions, nil
 }

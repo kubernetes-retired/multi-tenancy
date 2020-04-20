@@ -73,7 +73,7 @@ func (c *controller) PatrollerDo() {
 	}
 
 	for _, pPV := range pvList {
-		if pPV.Spec.ClaimRef == nil {
+		if !boundPersistentVolume(pPV) {
 			continue
 		}
 		pPVC, err := c.pvcLister.PersistentVolumeClaims(pPV.Spec.ClaimRef.Namespace).Get(pPV.Spec.ClaimRef.Name)
@@ -99,7 +99,7 @@ func (c *controller) PatrollerDo() {
 			// Double check if the vPV is bound to the correct PVC.
 			vPV := vPVObj.(*v1.PersistentVolume)
 			if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
-				klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
+				//klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
 				numClaimMissMatchedPVs++
 			}
 		}
