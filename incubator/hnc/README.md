@@ -33,18 +33,19 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Installing or upgrading HNC
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.3.0-rc1
+HNC_VERSION=v0.3.0
 
 # The instructions below are all for HNC v0.3.x. For v0.2.x, please use Git
 # history to view an earlier version of this README.
 
 # Install prerequisites on your cluster
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+
 # WAIT for the cert-manager deployments to all become healthy. This can take a
-# minute or two.
+# few minutes.
 
 # Install HNC on your cluster. If this fails due to the cert-manager webhook not
-# being ready yet, wait for the webhook to become ready, then re-run it. Usually the cert-manager webhook takes five minutes to be ready.
+# being ready yet, wait for the webhook to become ready, then re-run it.
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
