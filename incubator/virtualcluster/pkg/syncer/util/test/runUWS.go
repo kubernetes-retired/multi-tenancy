@@ -106,6 +106,7 @@ func RunUpwardSync(
 
 	// register tenant cluster to controller.
 	resourceSyncer.AddCluster(tenantCluster)
+	defer resourceSyncer.RemoveCluster(tenantCluster)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
