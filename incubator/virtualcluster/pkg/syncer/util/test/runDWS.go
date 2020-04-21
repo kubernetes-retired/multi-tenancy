@@ -157,6 +157,8 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 		return informer.Secrets().Informer()
 	case *v1.Node:
 		return informer.Nodes().Informer()
+	case *v1.PersistentVolume:
+		return informer.PersistentVolumes().Informer()
 	case *v1.PersistentVolumeClaim:
 		return informer.PersistentVolumeClaims().Informer()
 	default:

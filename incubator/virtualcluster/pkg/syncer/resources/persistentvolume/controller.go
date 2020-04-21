@@ -59,38 +59,70 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, _, err := NewPVController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster PV controller %v", err)
+		return
+	}
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewPVController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		client:   client,
 		informer: informer,
 	}
 
-	// Create the multi cluster PersistentVolume controller
-	options := mc.Options{Reconciler: c}
-	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, *mcOptions)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster PersistentVolume controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.multiClusterPersistentVolumeController = multiClusterPersistentVolumeController
 	c.pvLister = informer.PersistentVolumes().Lister()
-	c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
 	c.pvcLister = informer.PersistentVolumeClaims().Lister()
-	c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
 
-	uwOptions := &uw.Options{Reconciler: c}
+	if options != nil && options.IsFake {
+		c.pvSynced = func() bool { return true }
+		c.pvcSynced = func() bool { return true }
+	} else {
+		c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
+		c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+	}
+
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardPersistentVolumeController, err := uw.NewUWController("pv-upward-controller", &v1.PersistentVolume{}, *uwOptions)
 	if err != nil {
 		klog.Errorf("failed to create pv upward controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.upwardPersistentVolumeController = upwardPersistentVolumeController
 
-	patrolOptions := &pa.Options{Reconciler: c}
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
 	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", *patrolOptions)
 	if err != nil {
 		klog.Errorf("failed to create persistentVolume patroller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.persistentVolumePatroller = persistentVolumePatroller
 
@@ -123,7 +155,8 @@ func Register(
 				DeleteFunc: c.enqueuePersistentVolume,
 			},
 		})
-	controllerManager.AddResourceSyncer(c)
+
+	return c, multiClusterPersistentVolumeController, upwardPersistentVolumeController, nil
 }
 
 func boundPersistentVolume(e *v1.PersistentVolume) bool {
