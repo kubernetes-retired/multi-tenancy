@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
@@ -74,7 +75,7 @@ type HierarchyConfigReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	if EX[req.Namespace] {
+	if config.EX[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
 
@@ -91,8 +92,22 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 }
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
-	// Get the singleton and namespace.
-	inst, nsInst, err := r.GetInstances(ctx, log, nm)
+	nsInst, err := r.getNamespace(ctx, nm)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// The namespace doesn't exist or is purged. Update the forest and exit.
+			// (There must be no HC instance and we cannot create one.)
+			r.onMissingNamespace(log, nm)
+			return nil
+		}
+		return err
+	}
+	// Get singleton from apiserver. If it doesn't exist, initialize one.
+	inst, err := r.getSingleton(ctx, nm)
+	if err != nil {
+		return err
+	}
+	// Get a list of HNS instance namespaces from apiserver.
 	hnsnms, err := r.getHierarchicalNamespaceNames(ctx, nm)
 	if err != nil {
 		return err
@@ -101,23 +116,10 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	origHC := inst.DeepCopy()
 	origNS := nsInst.DeepCopy()
 
-	// If either object exists but is being deleted, we won't update them when we're finished syncing
-	// (we should sync our internal data structure anyway just in case something's changed).  I'm not
-	// sure if this is the right thing to do but the kubebuilder boilerplate included this case
-	// explicitly.
-	update := true
-	if !inst.GetDeletionTimestamp().IsZero() || !nsInst.GetDeletionTimestamp().IsZero() {
-		log.Info("Singleton or namespace are being deleted; will not update")
-		update = false
-	}
+	r.updateFinalizers(ctx, log, inst, nsInst, hnsnms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
 	r.syncWithForest(log, nsInst, inst, hnsnms)
-
-	// Early exit if we don't need to write anything back.
-	if !update {
-		return nil
-	}
 
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
 	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
@@ -136,6 +138,44 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	return r.updateObjects(ctx, log, nm)
 }
 
+func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm string) {
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+	ns := r.Forest.Get(nm)
+
+	if ns.Exists() {
+		r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
+		ns.UnsetExists()
+		log.Info("Removed namespace")
+	}
+}
+
+func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, hnsnms []string) {
+	// No-one should put a finalizer on a hierarchy config except us. See
+	// https://github.com/kubernetes-sigs/multi-tenancy/issues/623 as we try to enforce that.
+	switch {
+	case len(hnsnms) == 0:
+		// There's no owned namespaces in this namespace. The HC instance can be
+		// safely deleted anytime.
+		if len(inst.ObjectMeta.Finalizers) > 0 {
+			log.Info("Removing finalizers since there's no longer any HNS instance in the namespace.")
+		}
+		inst.ObjectMeta.Finalizers = nil
+	case !inst.DeletionTimestamp.IsZero() && nsInst.DeletionTimestamp.IsZero():
+		// If the HC instance is being deleted but not the namespace (which means
+		// it's not a cascading delete), remove the finalizers to let it go through.
+		// This is the only case the finalizers can be removed even when the
+		// namespace has owned namespaces. (A default HC will be recreated later.)
+		log.Info("Removing finalizers to allow a single deletion of the singleton (not involved in a cascading deletion).")
+		inst.ObjectMeta.Finalizers = nil
+	default:
+		if len(inst.ObjectMeta.Finalizers) == 0 {
+			log.Info("Adding finalizers since there's at least one HNS instance in the namespace.")
+		}
+		inst.ObjectMeta.Finalizers = []string{api.FinalizerHasOwnedNamespace}
+	}
+}
+
 // syncWithForest synchronizes the in-memory forest with the (in-memory) Hierarchy instance. If any
 // *other* namespaces have changed, it enqueues them for later reconciliation. This method is
 // guarded by the forest mutex, which means that none of the other namespaces being reconciled will
@@ -147,14 +187,9 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 
-	// Handle missing namespaces.
-	if r.onMissingNamespace(log, ns, nsInst) {
-		return
-	}
-
 	// Clear locally-set conditions in the forest so we can set them to the latest.
 	hadCrit := ns.HasLocalCritCondition()
-	ns.ClearConditions(forest.Local, "")
+	ns.ClearLocalCondition("")
 
 	r.syncOwner(log, inst, nsInst, ns)
 	r.markExisting(log, ns)
@@ -162,6 +197,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncParent(log, inst, ns)
 	inst.Status.Children = ns.ChildNames()
 	r.syncHNSes(log, ns, hnsnms)
+	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
 
 	r.syncLabel(log, nsInst, ns)
 
@@ -169,51 +205,31 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncConditions(log, inst, ns, hadCrit)
 }
 
-func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, ns *forest.Namespace, nsInst *corev1.Namespace) bool {
-	if nsInst.Name != "" {
-		return false
-	}
-
-	// If the namespace is removed, no more action need on the reconciliation. The
-	// namespace is only unset existence below.
-	if !ns.Exists() {
-		return true
-	}
-
-	// Remove it from the forest and notify its relatives
-	r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
-	ns.UnsetExists()
-	log.Info("Removed namespace")
-	return true
-}
-
-// syncOwner sets the parent to the owner and updates the HNS_MISSING condition
+// syncOwner sets the parent to the owner and updates the HNSMissing condition
 // if the HNS instance is missing in the owner namespace according to the forest.
 // The namespace owner annotation is the source of truth of the ownership, since
 // modifying a namespace has higher privilege than what HNC users can do.
 func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Clear the HNS_MISSING condition if this is not an owned namespace or to
+	// Clear the HNSMissing condition if this is not an owned namespace or to
 	// reset it for the updated condition later.
-	ns.ClearAllConditions(api.HNSMissing)
+	ns.ClearConditionsByCode(log, api.HNSMissing)
 	nm := ns.Name()
 	onm := nsInst.Annotations[api.AnnotationOwner]
 	ons := r.Forest.Get(onm)
 
 	if onm == "" {
+		ns.IsOwned = false
 		return
 	}
 
-	if ns.Owner != onm {
-		log.Info("Owner annotation was updated", "old", ns.Owner, "new", onm)
-		ns.Owner = nsInst.Annotations[api.AnnotationOwner]
-	}
+	ns.IsOwned = true
 
 	if inst.Spec.Parent != onm {
 		log.Info("The parent doesn't match the owner. Setting the owner as the parent.", "parent", inst.Spec.Parent, "owner", onm)
 		inst.Spec.Parent = onm
 	}
 
-	// Look up the HNSes in the owner namespace. Set HNS_MISSING condition if it's
+	// Look up the HNSes in the owner namespace. Set HNSMissing condition if it's
 	// not there.
 	found := false
 	for _, hnsnm := range ons.HNSes {
@@ -223,7 +239,7 @@ func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.Hierarc
 		}
 	}
 	if !found {
-		ns.SetCondition(onm, api.HNSMissing, "The HNS instance is missing in the owner namespace")
+		ns.SetCondition(api.NewAffectedNamespace(onm), api.HNSMissing, "The HNS instance is missing in the owner namespace")
 	}
 }
 
@@ -233,56 +249,110 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.Owner != "" {
-			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Owner)
-			r.hnsr.enqueue(log, ns.Name(), ns.Owner, "the missing owned namespace is found")
+		if ns.IsOwned {
+			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Parent().Name())
+			r.hnsr.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing owned namespace is found")
 		}
 	}
 }
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
 	// Sync this namespace with its current parent.
-	var curParent *forest.Namespace
-	if inst.Spec.Parent != "" {
-		curParent = r.Forest.Get(inst.Spec.Parent)
-		if !curParent.Exists() {
-			log.Info("Missing parent", "parent", inst.Spec.Parent)
-			ns.SetCondition(forest.Local, api.CritParentMissing, "missing parent")
-		}
+	curParent := r.Forest.Get(inst.Spec.Parent)
+	if curParent != nil && !curParent.Exists() {
+		log.Info("Missing parent", "parent", inst.Spec.Parent)
+		ns.SetLocalCondition(api.CritParentMissing, "missing parent")
 	}
 
-	// Update the in-memory hierarchy if it's changed
+	// If the parent hasn't changed, there's nothing more to do.
 	oldParent := ns.Parent()
-	if oldParent != curParent {
-		log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
-		if err := ns.SetParent(curParent); err != nil {
-			log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
-			ns.SetCondition(forest.Local, api.CritParentInvalid, err.Error())
-			return
-		}
-
-		// Only call other parts of the hierarchy recursively if this one was successfully updated;
-		// otherwise, if you get a cycle, this could get into an infinite loop.
-		if oldParent != nil {
-			r.enqueueAffected(log, "removed as parent", oldParent.Name())
-		}
-		if curParent != nil {
-			r.enqueueAffected(log, "set as parent", curParent.Name())
-		}
-
-		// Also update all descendants so they can update their labels (and in future, annotations) if
-		// necessary.
-		r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
+	if curParent == oldParent {
+		return
 	}
+
+	// Try to update the graph to reflect the new parent. If this fails, don't attempt to notify any
+	// other part of the hierarchy, otherwise we can get into an infinite notification loop.
+	log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
+	if err := ns.SetParent(curParent); err != nil {
+		log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
+		ns.SetLocalCondition(api.CritParentInvalid, err.Error())
+		return
+	}
+
+	// We now need to update the old and new parents, as well as all descendants of this namespace
+	// (since they need to update their tree labels and possibly other data).
+	if oldParent != nil {
+		r.enqueueAffected(log, "removed as parent", oldParent.Name())
+	}
+	if curParent != nil {
+		r.enqueueAffected(log, "set as parent", curParent.Name())
+	}
+	r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
+
+	// Get rid of any obsolete object conditions (issue #328)
+	r.flushObsoleteObjectConditions(log, ns, oldParent)
+}
+
+// flushObsoleteObjectConditions looks for object conditions from objects that were in one of the
+// namespaces that's been removed as a descendant, and enqueues any affected namespaces.
+func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logger, ns, oldAns *forest.Namespace) {
+	// There should be no obsolete object conditions if the old parent is empty.
+	if oldAns == nil {
+		return
+	}
+
+	// To clear all descendants conditions introduced by ancestors, create a set of all ancestor names.
+	wasAnc := map[string]bool{}
+	for _, anc := range oldAns.AncestryNames(nil) {
+		wasAnc[anc] = true
+	}
+
+	// Remove conditions referring to its ancestors from all its descendants. Also create a set of
+	// all descendant names to clear ancestors conditions introduced by descendants later.
+	wasDesc := map[string]bool{ns.Name(): true}
+	for _, desc := range ns.DescendantNames() {
+		wasDesc[desc] = true
+		if r.Forest.Get(desc).ClearConditionsByNamespace(log, wasAnc) {
+			r.enqueueAffected(log, "cleared obsolete conditions", desc)
+		}
+	}
+
+	// Remove conditions referring to this namespace and its descendants from all old ancestors.
+	for oldAns != nil {
+		if oldAns.ClearConditionsByNamespace(log, wasDesc) {
+			r.enqueueAffected(log, "cleared obsolete conditions", oldAns.Name())
+		}
+		oldAns = oldAns.Parent()
+	}
+
+	// In addition, this namespace may have conditions caused by a propagated object from another
+	// namespace that we need to clear. For example, we may not have been able to copy a RoleBinding
+	// from a parent into this namespace because we didn't have permission, and we've put a condition
+	// on this namespace as a result. Now that the parent has changed, we'll no longer attempt to copy
+	// that object - but we'll never clear its condition, because it's not in the list of objects seen
+	// by the object reconciler's enqueueLocalObjects.
+	//
+	// As of March 2020, the only known case like this is the CannodUpdate code, set by the object
+	// reconciler. Since we're about to resync all objects in this namespace anyway - which will
+	// result in their conditions being re-added to this namespace - it's safe to blow them all away
+	// here and just let the ones that are still applicable get reapplied.
+	//
+	// In theory, I wouldn't have expected that this would be necessary. If there was an error that
+	// caused this condition to be set, we should have returned an error to controller-runtime, which
+	// would have caused the object to be re-enqueued for reconciliation. However, when I actually
+	// watched the logs carefully, this didn't appear to happen, even after 30s. I'm not sure why.
+	//
+	// TODO: this really doesn't belong here. Find a way to move it to the object reconciler.
+	ns.ClearConditionsByCode(log, api.CannotUpdate)
 }
 
 // syncHNSes updates the HNS list. If any HNS is created/deleted, it will enqueue
-// the child to update its HNS_MISSING condition. A modified HNS will appear
+// the child to update its HNSMissing condition. A modified HNS will appear
 // twice in the change list (one in deleted, one in created), both owned namespace
 // needs to be enqueued in this case.
 func (r *HierarchyConfigReconciler) syncHNSes(log logr.Logger, ns *forest.Namespace, hnsnms []string) {
 	for _, changedHNS := range ns.SetHNSes(hnsnms) {
-		r.enqueueAffected(log, "the HNS instance is created/deleted", changedHNS)
+		r.enqueueAffected(log, "HNSMissing condition may have changed due to HNS instance being created/deleted", changedHNS)
 	}
 }
 
@@ -316,7 +386,7 @@ func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.Hi
 	r.syncCritConditions(log, ns, hadCrit)
 
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
-	inst.Status.Conditions = ns.Conditions(log)
+	inst.Status.Conditions = ns.Conditions()
 	setCritAncestorCondition(log, inst, ns)
 }
 
@@ -373,51 +443,42 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 	}()
 }
 
-func (r *HierarchyConfigReconciler) GetInstances(ctx context.Context, log logr.Logger, nm string) (inst *api.HierarchyConfiguration, ns *corev1.Namespace, err error) {
-	inst, err = r.getSingleton(ctx, nm)
-	if err != nil {
-		log.Error(err, "Couldn't read singleton")
-		return nil, nil, err
-	}
-	ns, err = r.getNamespace(ctx, nm)
-	if err != nil {
-		log.Error(err, "Couldn't read namespace")
-		return nil, nil, err
-	}
-
-	return inst, ns, nil
-}
-
 func (r *HierarchyConfigReconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
-	ret := false
-	if updated, err := r.writeHierarchy(ctx, log, oldHC, newHC); err != nil {
+	isDeletingNS := !newNS.DeletionTimestamp.IsZero()
+	updated := false
+	if up, err := r.writeHierarchy(ctx, log, oldHC, newHC, isDeletingNS); err != nil {
 		return false, err
 	} else {
-		ret = ret || updated
+		updated = updated || up
 	}
 
-	if updated, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
+	if up, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
 		return false, err
 	} else {
-		ret = ret || updated
+		updated = updated || up
 	}
-	return ret, nil
+	return updated, nil
 }
 
-func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration) (bool, error) {
+func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration, isDeletingNS bool) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
+		return false, nil
+	}
+	exists := !inst.CreationTimestamp.IsZero()
+	if !exists && isDeletingNS {
+		log.Info("Will not create singleton since namespace is being deleted")
 		return false, nil
 	}
 
 	stats.WriteHierConfig()
-	if inst.CreationTimestamp.IsZero() {
-		log.Info("Creating singleton on apiserver")
+	if !exists {
+		log.Info("Creating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
 			return false, err
 		}
 	} else {
-		log.Info("Updating singleton on apiserver")
+		log.Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
 			return false, err
@@ -432,19 +493,12 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 		return false, nil
 	}
 
+	// NB: HCR can't create namespaces anymore, that's only in HNSR
 	stats.WriteNamespace()
-	if inst.CreationTimestamp.IsZero() {
-		log.Info("Creating namespace on apiserver")
-		if err := r.Create(ctx, inst); err != nil {
-			log.Error(err, "while creating on apiserver")
-			return false, err
-		}
-	} else {
-		log.Info("Updating namespace on apiserver")
-		if err := r.Update(ctx, inst); err != nil {
-			log.Error(err, "while updating apiserver")
-			return false, err
-		}
+	log.Info("Updating namespace on apiserver")
+	if err := r.Update(ctx, inst); err != nil {
+		log.Error(err, "while updating apiserver")
+		return false, err
 	}
 
 	return true, nil
@@ -490,10 +544,7 @@ func (r *HierarchyConfigReconciler) getNamespace(ctx context.Context, nm string)
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
-		return &corev1.Namespace{}, nil
+		return nil, err
 	}
 	return ns, nil
 }

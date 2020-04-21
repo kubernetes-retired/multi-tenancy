@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -64,13 +64,9 @@ type Options struct {
 	JitterPeriod time.Duration
 
 	// MaxConcurrentReconciles is the number of concurrent control loops.
-	// Use this if your Reconciler is slow, but thread safe.
 	MaxConcurrentReconciles int
 
-	// Reconciler is a function that can be called at any time with the Name / Namespace of an object and
-	// ensures that the state of the system matches the state specified in the object.
-	// Defaults to the DefaultReconcileFunc.
-	Reconciler reconciler.Reconciler
+	Reconciler reconciler.DWReconciler
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
@@ -93,9 +89,6 @@ type ClusterInterface interface {
 	GetDelegatingClient() (client.Client, error)
 	Cache
 }
-
-// TenantClusterReconcileHandler is the handler to process the event from tenant cluster.
-type TenantClusterReconcileHandler func(request reconciler.Request) (reconciler.Result, error)
 
 // NewMCController creates a new MultiClusterController.
 func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
@@ -350,7 +343,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 
 	if shutdown {
 		// Stop working
-		klog.Warning("Shutting down. Ignore work item and stop working.")
+		klog.V(4).Info("Shutting down. Ignore work item and stop working.")
 		return false
 	}
 
@@ -385,7 +378,6 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	if result, err := c.Reconciler.Reconcile(req); err != nil {
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
-		klog.Error("Could not reconcile Request. Stop working.")
 		return false
 	} else if result.RequeueAfter > 0 {
 		c.Queue.AddAfter(req, result.RequeueAfter)

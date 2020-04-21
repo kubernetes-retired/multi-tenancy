@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,28 +17,20 @@ limitations under the License.
 package namespace
 
 import (
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
-
-var alwaysReady = func() bool { return true }
 
 func tenantNamespace(name, uid string) *v1.Namespace {
 	return &v1.Namespace{
@@ -109,7 +101,11 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := runDownwardSync(testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant)
+			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController,
+				testTenant,
+				tc.ExistingObjectInSuper,
+				[]runtime.Object{tc.ExistingObjectInTenant},
+				tc.ExistingObjectInTenant)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -117,9 +113,9 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {
@@ -194,7 +190,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := runDownwardSync(testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -202,9 +198,9 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {
@@ -228,74 +224,4 @@ func TestDWNamespaceDeletion(t *testing.T) {
 			}
 		})
 	}
-}
-
-func runDownwardSync(
-	testTenant *v1alpha1.Virtualcluster,
-	existingObjectInSuper []runtime.Object,
-	existingObjectInTenant *v1.Namespace,
-	enqueueObject *v1.Namespace,
-) (actions []core.Action, reconcileError error, err error) {
-	// setup fake tenant cluster
-	tenantClientset := fake.NewSimpleClientset()
-	tenantClient := fakeClient.NewFakeClient()
-	if existingObjectInTenant != nil {
-		tenantClientset = fake.NewSimpleClientset(existingObjectInTenant)
-		tenantClient = fakeClient.NewFakeClient(existingObjectInTenant)
-	}
-	tenantCluster, err := cluster.NewFakeTenantCluster(testTenant, tenantClientset, tenantClient)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error creating tenantCluster: %v", err)
-	}
-
-	// setup fake super cluster
-	superClient := fake.NewSimpleClientset()
-	if existingObjectInSuper != nil {
-		superClient = fake.NewSimpleClientset(existingObjectInSuper...)
-	}
-	superInformer := informers.NewSharedInformerFactory(superClient, 0)
-	nsInformer := superInformer.Core().V1().Namespaces()
-
-	controller, err := NewNamespaceController(
-		superClient.CoreV1(),
-		nsInformer,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error creating namespace controller: %v", err)
-	}
-	controller.nsSynced = alwaysReady
-
-	syncCalls := make(chan struct{})
-	controller.reconcileHandler = func(request reconciler.Request) (result reconciler.Result, err error) {
-		res, err := controller.reconcile(request)
-		reconcileError = err
-		syncCalls <- struct{}{}
-		return res, err
-	}
-
-	// register tenant cluster to controller.
-	controller.AddCluster(tenantCluster)
-
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	go controller.StartDWS(stopCh)
-
-	// add object to informer.
-	for _, ns := range existingObjectInSuper {
-		nsInformer.Informer().GetStore().Add(ns)
-	}
-
-	// start testing
-	if err := controller.multiClusterNamespaceController.RequeueObject(conversion.ToClusterKey(testTenant), enqueueObject); err != nil {
-		return nil, nil, fmt.Errorf("error enqueue object %v: %v", enqueueObject, err)
-	}
-
-	// wait to be called
-	select {
-	case <-syncCalls:
-	case <-time.After(10 * time.Second):
-		return nil, nil, fmt.Errorf("timeout wating for sync")
-	}
-
-	return superClient.Actions(), reconcileError, nil
 }

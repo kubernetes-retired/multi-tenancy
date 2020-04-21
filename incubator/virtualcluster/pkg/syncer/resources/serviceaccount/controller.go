@@ -17,8 +17,6 @@ limitations under the License.
 package serviceaccount
 
 import (
-	"time"
-
 	"k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,6 +28,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
@@ -40,8 +39,8 @@ type controller struct {
 	saSynced cache.InformerSynced
 	// Connect to all tenant master sa informers
 	multiClusterServiceAccountController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	serviceAccountPatroller *pa.Patroller
 }
 
 func Register(
@@ -51,8 +50,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		saClient:            client,
-		periodCheckerPeriod: 60 * time.Second,
+		saClient: client,
 	}
 
 	// Create the multi cluster secret controller
@@ -66,10 +64,22 @@ func Register(
 	c.saLister = saInformer.Lister()
 	c.saSynced = saInformer.Informer().HasSynced
 
-	controllerManager.AddController(c)
+	patrolOptions := &pa.Options{Reconciler: c}
+	serviceAccountPatroller, err := pa.NewPatroller("serviceAccount-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create serviceAccount patroller %v", err)
+		return
+	}
+	c.serviceAccountPatroller = serviceAccountPatroller
+
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

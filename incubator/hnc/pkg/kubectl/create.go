@@ -23,7 +23,7 @@ import (
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create -n parent child",
+	Use:   "create -n PARENT CHILD",
 	Short: "Creates a subnamespace under the given parent.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

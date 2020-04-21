@@ -1,162 +1,82 @@
-# Virtual Cluster
+# Virtualcluster - Enabling Kubernetes Hard Multi-tenancy
+
+Virtualcluster represents a new architecture to address various Kubernetes control plane isolation challenges.
+It extends existing namespace based Kubernetes multi-tenancy model by providing each tenant a cluster view.
+Virtual cluster completely leverages Kubernetes extendability and preserves full API compatibility.
+That being said, the core Kubernetes components are not modified in virtual cluster.
+
+In virtualcluster, each tenant is assigned a dedicated tenant master, which is a vanilla Kubernetes.
+Tenant can create cluster scope resources such as namespaces and CRDs in tenant master without affecting others.
+As a result, most of the isolation problems due to sharing one apiserver disappear.
+The Kubernetes cluster that manages the actual physical nodes is called the super master, which now
+becomes a Pod resource provider. Virtualcluster is composed of the following components:
+
+- **vc-manager**: A new CRD [virtualcluster](pkg/apis/tenancy/v1alpha1/virtualcluster_types.go) is introduced
+to model the tenant master. vc-manager manages the lifecycle of each virtualcluster custom resource.
+Based on the CR specification, it either creates apiserver and controller-manager Pods in local K8s cluster,
+or imports an existing cluster if its valid kubeconfig is provided.
+
+- **syncer**: A centralized controller that populates API objects needed for Pod provision from every tenant master
+to the super master, and update the object statuses back. It also periodically scans the synced objects to ensure
+the states between tenant master and super master are consistent.
+
+- **vn-agent**: A node daemon that proxies all tenant kubelet API requests to the kubelet process that running
+in the node. It ensures each tenant can only access its own Pods in the node.
+
+With all above, from the tenant’s perspective, each tenant master behaves like an intact Kubernetes with nearly
+full API capabilities.
 
 ## A Short Demo
 
-Following is a short demo by [@zhuangqh](https://github.com/zhuangqh).
+The below is a short demo created by [@zhuangqh](https://github.com/zhuangqh) which illustrates the high level
+usage of a virtualcluster.
 
 [![](http://img.youtube.com/vi/QvpNehTNRyk/0.jpg)](http://www.youtube.com/watch?v=QvpNehTNRyk "vc-demo")
 
-## How to use
+## Quick Start
 
-1. Install tenant and tenantnamespace crd
-```bash
-kubectl apply -f ../../tenant/config/crds/
-```
-<br />
-<br />
+Please follow the [instructions](./doc/demo.md) to install virtualcluster in your local K8s cluster.
 
-2. Start the tenant controller
-```bash
-kubectl apply -f ../../tenant/config/manager/all_in_one.yaml
-```
-<br />
-<br />
+## Supported/Not Supported
 
-3. Create a tenant CR
-```bash
-kubectl apply -f ../../tenant/config/samples/tenancy_v1alpha1_tenant.yaml
-```
-a tenant admin namespace `tenant1admin` will be created.
-<br />
-<br />
+Virtualcluster passes most of the Kubernetes conformance tests. One failed test asks for supporting
+`subdomain` which cannot be easily done in current architecture. There are other considerations
+that users should be aware of: 
 
-4. Build vcctl
-```bash
-# on osx
-make vcctl-osx
-# on linux 
-make all WHAT=cmd/vcctl
-```
-<br />
-<br />
+- Virtualclsuter follows a serverless design pattern. The super master node topology is not fully exposed in
+tenant master. Only the nodes that tenant Pods are running on will be shown in tenant master. As a result,
+virtualcluster does not support DaemonSet alike workloads in tenant master. In other words, the syncer controller
+rejects a newly created tenant Pod if its `nodename` has been set in the spec.
 
-5. Install Virtualcluster and ClusterVersion crd
-```bash
-kubectl apply -f config/crds
-```
-<br />
-<br />
+- It is recommended to increase the tenant master node controller `--node-monitor-grace-period` parameter to a larger value 
+( >60 seconds, done in sample clusterversion [yaml](config/sampleswithspec/clusterversion_v1_nodeport.yaml) already). 
+The syncer controller does not update the node lease objects in tenant master, 
+hence the default grace period is too small.
 
-6. Create an independent namespace for running management controllers (i.e. 
-vc-manager, vn-agent and syncer).
-```bash
-kubectl create ns vc-manager
-```
-<br />
-<br />
+- Coredns is not tenant-aware. Hence, tenant should install coredns in tenant master if DNS is required. 
+The DNS service should be created in tenant master `kube-system` namespace using name `kube-dns`. The syncer controller can then
+recognize the DNS service cluster IP and inject it into Pod spec `dnsConfig`.
 
-7. when communicating with kubelets, vn-agents will act like the supert master, thus
-we need to pass the kubelet client ca of the supert master to vn-agents. 
-We achieve this by serializing the ca into a secret that will be mounted on 
-vn-agents.
-```bash
-# if using minikube, the client CA (i.e. client.crt and client.key) is located in ~/.minikube/
-# if using other cloud platforms, please copy the kubelet-client-certificate from master node
-cp ~/.minikube/client.crt ~/.minikube/client.key .
-# create secret
-kubectl create secret generic vc-kubelet-client --from-file=./client.crt --from-file=./client.key --namespace vc-manager
-```
-If the client certificates are not available, vn-agent will first forward 
-the request to the super master, and then the super master will send the request to
-the corresponding kubelet. To enable this, we comment out lines after 
-"- --cert-dir=/etc/vn-agent/" the all_in_one.yaml
-<br />
-<br />
+- To fully support service in virtualcluster, the tenant master CIDR and super master CIDR should be the same.
 
-8. Setup the three management controllers
-```bash
-kubectl apply -f config/setup/all_in_one.yaml
-```
-<br />
-<br />
+- Virtualcluster fully support tenant service account.
 
-9. Create the clusterversion (e.g. cv-sample), once the management 
-controllers are ready.
-```bash 
-_output/bin/vcctl create -yaml config/sampleswithspec/clusterversion_v1_nodeport.yaml
-```
-<br />
-<br />
+- Virtualclsuter does not support tenant PersistentVolumes. All PVs and Storageclasses are provided by the super master. 
 
-10. If using minikube, create the tenant namespace and virtualcluster
-```bash
-# when using minikube, the tenant apiserver is exposed through nodeport service
-_output/bin/vcctl create -yaml config/sampleswithspec/virtualcluster_1_nodeport.yaml -vckbcfg vc-1.kubeconfig
-```
-Once the tenant master is created, a kubeconfig file `vc-1.kubeconfig` will 
-be created
-<br />
-<br />
+- It is recommended that tenant masters and super master use the same Kubernetes version to avoid
+incompatible API behaviors. The syncer controller and vn-agent are built using Kubernetes 1.16 APIs, hence
+higher Kubernetes versions are not supported.
 
-11. Check if tenant master is up and running
-```bash
-$ kubectl cluster-info --kubeconfig vc-1.kubeconfig
-Kubernetes master is running at https://XXX.XXX.XX.XXX:XXXXX
 
-To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
-```
-<br />
-<br />
+## Release
 
-12. There is no node registered with the Virtualcluster
-```bash
-$ kubectl get node --kubeconfig vc-1.kubeconfig
-No resources found in default namespace.
-```
-<br />
-<br />
+The first release is coming soon.
 
-13. Let's create a test deployment
-```bash
-kubectl apply --kubeconfig vc-1.kubeconfig -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: test-deploy
-  labels:
-    app: vc-test
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: vc-test
-  template:
-    metadata:
-      labels:
-        app: vc-test
-    spec:
-      containers:
-      - name: poc
-        image: busybox
-        command:
-        - top
-EOF
-```
-up to successful creation, we will see the newly created pod in 
-views of both Virtualcluster and Metacluster 
-```bash
-$ kubectl get po --kubeconfig vc-1.kubeconfig
-NAME                          READY   STATUS    RESTARTS   AGE
-test-deploy-f5dbf6b69-vcwf6   1/1     Running   0          10s
-$ kubectl get po -A
-NAMESPACE             NAME                               READY   STATUS    RESTARTS   AGE
-...
-vc-sample-1-default   test-deploy-f5dbf6b69-vcwf6        1/1     Running   0          35s
-```
-also, if the pod is run on a node that was previously unkonwn 
-to the Virtualcluster, the node will be registered with the Virtualcluster
-```bash
-$ kubectl get node --kubeconfig vc-1.kubeconfig 
-NAME       STATUS   ROLES    AGE     VERSION
-minikube   Ready    <none>   2m14s
-```
+## Community
+Virtualcluster is a SIG multi-tenancy WG incubator project. 
+If you have any questions or want to contribute, you are welcome to file issues or pull requests.
+
+You can also directly contact virtualcluster maintainers via the WG [slack channel](https://kubernetes.slack.com/messages/wg-multitenancy).
+
+Lead developer: @Fei-Guo(f.guo@alibaba-inc.com)
+

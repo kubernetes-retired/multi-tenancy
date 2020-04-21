@@ -92,11 +92,32 @@ type MasterProvisionerAliyun struct {
 	scheme *runtime.Scheme
 }
 
-func NewMasterProvisionerAliyun(mgr manager.Manager) *MasterProvisionerAliyun {
+func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, error) {
+	// if running under aliyun mode, 'AliyunAkSrt' and 'AliyunASKConfigMap' is required
+	ns, err := kubeutil.GetPodNsFromInside()
+	if err != nil {
+		return nil, fmt.Errorf("fail to get vc-manager's namespace: %s", err)
+	}
+	cli, err := kubeutil.NewInClusterClient()
+	if err != nil {
+		return nil, fmt.Errorf("fail to create incluster client: %s", err)
+	}
+	if !kubeutil.IsObjExist(cli, types.NamespacedName{
+		Namespace: ns,
+		Name:      AliyunAkSrt,
+	}, &v1.Secret{}, log) {
+		return nil, fmt.Errorf("secret/%s doesnot exist", AliyunAkSrt)
+	}
+	if !kubeutil.IsObjExist(cli, types.NamespacedName{
+		Namespace: ns,
+		Name:      AliyunASKConfigMap,
+	}, &v1.ConfigMap{}, log) {
+		return nil, fmt.Errorf("configmap/%s doesnot exist", AliyunASKConfigMap)
+	}
 	return &MasterProvisionerAliyun{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
-	}
+	}, nil
 }
 
 // getClusterIDByName returns the clusterID of the cluster with clusterName

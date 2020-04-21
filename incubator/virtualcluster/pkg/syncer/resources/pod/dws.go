@@ -262,7 +262,6 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 		}
 		return err
 	}
-
 	spec, err := c.multiClusterPodController.GetSpec(clusterName)
 	if err != nil {
 		return err

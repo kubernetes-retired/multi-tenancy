@@ -6,6 +6,7 @@
 *.so
 *.dylib
 _output
+coverage
 
 # Test binary, build with `go test -c`
 *.test

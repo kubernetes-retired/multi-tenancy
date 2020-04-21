@@ -3,8 +3,6 @@ module github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
 go 1.12
 
 require (
-	github.com/Azure/go-autorest v14.0.0+incompatible // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.8.2 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
 	github.com/emicklei/go-restful v2.9.6+incompatible
 	github.com/go-logr/logr v0.1.0
@@ -15,6 +13,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
+	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	k8s.io/api v0.16.5
 	k8s.io/apimachinery v0.16.5
@@ -29,6 +28,7 @@ require (
 )
 
 replace (
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.0.0+incompatible
 	k8s.io/api => k8s.io/api v0.16.5
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.16.5
 	k8s.io/apimachinery => k8s.io/apimachinery v0.16.7-beta.0

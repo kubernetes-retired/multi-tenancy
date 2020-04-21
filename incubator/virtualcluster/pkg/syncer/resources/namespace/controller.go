@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@ limitations under the License.
 package namespace
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,10 +28,11 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
-	reconcileHandler mc.TenantClusterReconcileHandler
 	// super master namespace client
 	namespaceClient v1core.NamespacesGetter
 	// super master namespace lister
@@ -41,45 +40,72 @@ type controller struct {
 	nsSynced cache.InformerSynced
 	// Connect to all tenant master namespace informers
 	multiClusterNamespaceController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	namespacePatroller *pa.Patroller
 }
 
 func Register(
 	config *config.SyncerConfiguration,
-	namespaceClient v1core.NamespacesGetter,
-	namespaceInformer coreinformers.NamespaceInformer,
+	namespaceClient v1core.CoreV1Interface,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, err := NewNamespaceController(namespaceClient, namespaceInformer)
+	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
 	}
 
-	controllerManager.AddController(c)
+	controllerManager.AddResourceSyncer(c)
 }
 
-func NewNamespaceController(namespaceClient v1core.NamespacesGetter, namespaceInformer coreinformers.NamespaceInformer) (*controller, error) {
+func NewNamespaceController(config *config.SyncerConfiguration,
+	namespaceClient v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		namespaceClient:     namespaceClient,
-		periodCheckerPeriod: 60 * time.Second,
+		namespaceClient: namespaceClient,
 	}
-
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *mcOptions)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
-	c.nsLister = namespaceInformer.Lister()
-	c.nsSynced = namespaceInformer.Informer().HasSynced
-	c.reconcileHandler = c.reconcile
+	c.nsLister = informer.Namespaces().Lister()
+	if options != nil && options.IsFake {
+		c.nsSynced = func() bool { return true }
+	} else {
+		c.nsSynced = informer.Namespaces().Informer().HasSynced
+	}
 
-	return c, nil
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	namespacePatroller, err := pa.NewPatroller("namespace-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create namespace patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.namespacePatroller = namespacePatroller
+
+	return c, multiClusterNamespaceController, nil, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

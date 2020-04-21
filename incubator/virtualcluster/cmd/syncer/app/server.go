@@ -151,6 +151,10 @@ func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.Compl
 			// start a pprof http server
 			klog.Fatal(http.ListenAndServe(":6060", nil))
 		}()
+		go func() {
+			// start a health port.
+			klog.Fatal(http.ListenAndServe(":8080", nil))
+		}()
 		<-ctx.Done()
 	}
 }

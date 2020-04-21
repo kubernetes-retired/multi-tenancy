@@ -187,8 +187,8 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 }
 
 func BuildVirtualPersistentVolume(cluster string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {
-	vPV := pPV.DeepCopy()
-	ResetMetadata(vPV)
+	vPVobj, _ := BuildMetadata(cluster, "", pPV)
+	vPV := vPVobj.(*v1.PersistentVolume)
 	// The pv needs to bind with the vPVC
 	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace
 	vPV.Spec.ClaimRef.UID = vPVC.UID

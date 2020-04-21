@@ -46,6 +46,8 @@ type Client interface {
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
 	createHierarchicalNamespace(nnm string, hnnm string)
 	getHierarchicalNamespacesNames(nnm string) []string
+	getHNCConfig() *api.HNCConfiguration
+	updateHNCConfig(*api.HNCConfiguration)
 }
 
 func init() {
@@ -56,7 +58,11 @@ func init() {
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	rootCmd = &cobra.Command{
-		Use:   "kubectl hierarchical-namespaces",
+		// We should use "kubectl hns" instead of "kubectl-hns" to invoke the plugin.
+		// However, since only the first word of the Use field will be displayed in the
+		// "Usage" section of a root command, we set it to "kubectl-hns" here so that both
+		// "kubectl" and "hns" will be shown in the "Usage" section.
+		Use:   "kubectl-hns",
 		Short: "Manipulates hierarchical namespaces provided by HNC",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			config, err := kubecfgFlags.ToRESTConfig()
@@ -90,6 +96,7 @@ func init() {
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
 	rootCmd.AddCommand(newCreateCmd())
+	rootCmd.AddCommand(newConfigCmd())
 }
 
 func Execute() {
@@ -167,4 +174,28 @@ func (cl *realClient) createHierarchicalNamespace(nnm string, hnnm string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Successfully created \"%s\" hierarchicalnamespace instance in \"%s\" namespace\n", hnnm, nnm)
+}
+
+func (cl *realClient) getHNCConfig() *api.HNCConfiguration {
+	config := &api.HNCConfiguration{}
+	config.Name = api.HNCConfigSingleton
+	err := hncClient.Get().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Do().Into(config)
+	if err != nil && !errors.IsNotFound(err) {
+		fmt.Printf("Error reading the HNC Configuration: %s\n", err)
+		os.Exit(1)
+	}
+	return config
+}
+
+func (cl *realClient) updateHNCConfig(config *api.HNCConfiguration) {
+	var err error
+	if config.CreationTimestamp.IsZero() {
+		err = hncClient.Post().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+	} else {
+		err = hncClient.Put().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+	}
+	if err != nil {
+		fmt.Printf("\nCould not update the HNC Configuration: %s\n", err)
+		os.Exit(1)
+	}
 }

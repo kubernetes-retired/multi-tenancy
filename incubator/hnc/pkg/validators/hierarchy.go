@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -70,16 +71,15 @@ type request struct {
 // responsibilities to monitor these conditions and ensure that, transient exceptions aside, all
 // namespaces are condition-free.
 func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission.Response {
+	log := v.Log.WithValues("ns", req.Namespace, "user", req.UserInfo.Username)
 	decoded, err := v.decodeRequest(req)
-	log := v.Log.WithValues("ns", decoded.hc.ObjectMeta.Namespace, "user", decoded.ui.Username)
-
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 
 	resp := v.handle(ctx, log, decoded)
-	log.Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
 }
 
@@ -99,7 +99,7 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 	// object wouldn't pass legality. We should probably only give the HNC SA the ability to modify
 	// the _status_, though. TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/80.
 	if isHNCServiceAccount(req.ui) {
-		log.Info("Allowed change by HNC SA")
+		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
 	}
 
@@ -142,6 +142,17 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return allow("parent unchanged")
 	}
 
+	if config.EX[newParent.Name()] {
+		reason := fmt.Sprintf("Cannot set the parent to an excluded namespace %q", newParent.Name())
+		return deny(metav1.StatusReasonForbidden, "Excluded parent: "+reason)
+	}
+
+	// Prevent changing parent of an owned child
+	if ns.IsOwned {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's an owned namespace of %q", ns.Name(), newParent.Name(), curParent.Name())
+		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+	}
+
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
 		return deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
@@ -154,30 +165,6 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
-	}
-
-	// Prevent changing parent of an owned child
-	if ns.Owner != "" && ns.Owner != newParent.Name() {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a self-serve subnamespace of %q", ns.Name(), newParent.Name(), ns.Owner)
-		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
-	}
-
-	return allow("")
-}
-
-func (v *Hierarchy) checkRequiredChildren(ns *forest.Namespace, requiredChildren []string) admission.Response {
-	for _, child := range requiredChildren {
-		cns := v.Forest.Get(child)
-		// A newly-created requiredChild is always valid.
-		if !cns.Exists() {
-			continue
-		}
-		// If this is already a child, or is about to be, no problem.
-		if cns.Parent() == ns || (cns.Parent() == nil && cns.Owner == ns.Name()) {
-			continue
-		}
-		reason := fmt.Sprintf("Cannot set %q as the required child of %q because it already exists and is not a child of %q", cns.Name(), ns.Name(), ns.Name())
-		return deny(metav1.StatusReasonConflict, "Illegal requiredChild: "+reason)
 	}
 
 	return allow("")
@@ -400,13 +387,26 @@ func deny(reason metav1.StatusReason, msg string) admission.Response {
 			},
 		}}
 	} else {
-		// metav1.StatusReasonInvalid shows the custom message in the Details field instead of
-		// Message field of metav1.Status.
+		// We need to set the custom message in both Details and Message fields.
+		//
+		// When manipulating the HNC configuration object via kubectl directly, kubectl
+		// ignores the Message field and displays the Details field if an error is
+		// StatusReasonInvalid (see implementation here: https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/util/helpers.go#L145-L160).
+		//
+		// When manipulating the HNC configuration object via the hns kubectl plugin,
+		// if an error is StatusReasonInvalid, only the Message field will be displayed. This is because
+		// the Error method (https://github.com/kubernetes/client-go/blob/cb664d40f84c27bee45c193e4acb0fcd549b0305/rest/request.go#L1273)
+		// calls FromObject (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L100),
+		// which generates a StatusError (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L35) object.
+		// *StatusError implements the Error interface using only the Message
+		// field (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L49)).
+		// Therefore, when displaying the error, only the Message field will be available.
 		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
 			Allowed: false,
 			Result: &metav1.Status{
-				Code:   codeFromReason(reason),
-				Reason: reason,
+				Code:    codeFromReason(reason),
+				Reason:  reason,
+				Message: msg,
 				Details: &metav1.StatusDetails{
 					Causes: []metav1.StatusCause{
 						{
