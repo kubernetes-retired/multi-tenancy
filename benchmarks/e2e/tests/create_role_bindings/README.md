@@ -14,13 +14,11 @@ Self-Service Operations
 
 **Description:**
 
-Tenants should be able to perform self-service operations by creating own roles and role-bindings in their namespaces by binding them together.
-
-Tenants
+Tenants should be able to create roles and role-bindings in their namespaces.
 
 **Rationale:**
 
-Enables self-service management of roles/role-bindings to bind allowed roles/tenant users.
+Enables self-service management of roles and role-bindings within a tenant namespace.
 
 **Audit:**
 
