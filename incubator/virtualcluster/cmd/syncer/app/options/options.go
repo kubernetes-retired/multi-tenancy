@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgokubescheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -235,24 +236,21 @@ func getInClusterNamespace() (string, error) {
 // createClients creates a meta cluster kube client and a super master custer client from the given config and masterOverride.
 func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface,
 	vcclient.Interface, clientset.Interface, error) {
-	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
-		klog.Warningf("Neither --kubeconfig nor --master was specified. Using in-cluster API client.")
-	}
-
 	// This creates a client, first loading any specified kubeconfig
 	// file, and then overriding the Master flag, if non-empty.
-	var restConfig *restclient.Config
-	var err error
-	if len(config.Kubeconfig) == 0 {
-		restConfig, err = restclient.InClusterConfig()
+	var (
+		restConfig *restclient.Config
+		err        error
+	)
+	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
+		klog.Info("Neither kubeconfig file nor master URL was specified. Falling back to in-cluster config.")
+		restConfig, err = rest.InClusterConfig()
 	} else {
-		var overrideConfig *clientcmd.ConfigOverrides
-		if len(masterOverride) != 0 {
-			overrideConfig = &clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterOverride}}
-		}
-
+		// This creates a client, first loading any specified kubeconfig
+		// file, and then overriding the Master flag, if non-empty.
 		restConfig, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.Kubeconfig}, overrideConfig).ClientConfig()
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: config.Kubeconfig},
+			&clientcmd.ConfigOverrides{ClusterInfo: clientcmdapi.Cluster{Server: masterOverride}}).ClientConfig()
 	}
 
 	if err != nil {
