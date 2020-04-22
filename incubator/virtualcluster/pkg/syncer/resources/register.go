@@ -47,6 +47,6 @@ func Register(config *config.SyncerConfiguration, client clientset.Interface, in
 	endpoints.Register(config, client.CoreV1(), informerFactory.Core().V1().Endpoints(), controllerManager)
 	event.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	storageclass.Register(config, client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
-	persistentvolumeclaim.Register(config, client.CoreV1(), informerFactory.Core().V1().PersistentVolumeClaims(), controllerManager)
+	persistentvolumeclaim.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	persistentvolume.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 }
