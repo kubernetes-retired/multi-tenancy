@@ -82,6 +82,7 @@ func TestPVCPatrol(t *testing.T) {
 		ExpectedCreatedPObject []string
 		ExpectedUpdatedPObject []runtime.Object
 		ExpectedUpdatedVObject []runtime.Object
+		ExpectedNoOperation    bool
 		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
 		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
 	}{
@@ -89,6 +90,7 @@ func TestPVCPatrol(t *testing.T) {
 			ExistingObjectInSuper: []runtime.Object{
 				unknownPVC("pvc-1", superDefaultNSName),
 			},
+			ExpectedNoOperation: true,
 		},
 		"pPVC exists, vPVC does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -116,6 +118,7 @@ func TestPVCPatrol(t *testing.T) {
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPVC(tenantPVC("pvc-3", "default", "12345"), spec1),
 			},
+			ExpectedNoOperation: true,
 			// notes: have not updated the different pPVC in patrol now.
 		},
 		"vPVC exists, pPVC does not exists": {
@@ -134,6 +137,18 @@ func TestPVCPatrol(t *testing.T) {
 			tenantActions, superActions, err := util.RunPatrol(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
+				return
+			}
+
+			if tc.ExpectedNoOperation {
+				if len(superActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v in super cluster", k, superActions)
+					return
+				}
+				if len(tenantActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v tenant cluster", k, tenantActions)
+					return
+				}
 				return
 			}
 

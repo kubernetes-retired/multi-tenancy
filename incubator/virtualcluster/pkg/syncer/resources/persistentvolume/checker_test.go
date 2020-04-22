@@ -161,6 +161,7 @@ func TestPVPatrol(t *testing.T) {
 		ExpectedCreatedVObject []string
 		ExpectedUpdatedPObject []runtime.Object
 		ExpectedUpdatedVObject []runtime.Object
+		ExpectedNoOperation    bool
 		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
 		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
 	}{
@@ -168,24 +169,28 @@ func TestPVPatrol(t *testing.T) {
 			ExistingObjectInSuper: []runtime.Object{
 				superPV("pv", "12345"),
 			},
+			ExpectedNoOperation: true,
 		},
 		"pPV bound but pPVC missing": {
 			ExistingObjectInSuper: []runtime.Object{
 				boundPV(superPVC("pvc", superDefaultNSName, "23456", defaultClusterKey), superPV("pv", "12345")),
 			},
+			ExpectedNoOperation: true,
 		},
 		"pPVC not created by vc": {
 			ExistingObjectInSuper: []runtime.Object{
 				unknownPVC("pvc", superDefaultNSName, "23456"),
 				boundPV(unknownPVC("pvc", superDefaultNSName, "23456"), superPV("pv", "12345")),
 			},
+			ExpectedNoOperation: true,
 		},
 		"pPV exists, vPV and vPVC does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
 				superPVC("pvc", superDefaultNSName, "23456", defaultClusterKey),
 				boundPV(superPVC("pvc", superDefaultNSName, "23456", defaultClusterKey), superPV("pv", "12345")),
 			},
-			WaitUWS: true,
+			ExpectedNoOperation: true,
+			WaitUWS:             true,
 		},
 		"pPV exists, vPV does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -240,6 +245,18 @@ func TestPVPatrol(t *testing.T) {
 			tenantActions, superActions, err := util.RunPatrol(NewPVController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
+				return
+			}
+
+			if tc.ExpectedNoOperation {
+				if len(superActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v in super cluster", k, superActions)
+					return
+				}
+				if len(tenantActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v tenant cluster", k, tenantActions)
+					return
+				}
 				return
 			}
 
