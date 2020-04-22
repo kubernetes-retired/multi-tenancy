@@ -14,25 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package persistentvolumeclaim
+package namespace
 
 import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
-	"k8s.io/utils/pointer"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
-func TestPVCPatrol(t *testing.T) {
+func TestNamespacePatrol(t *testing.T) {
 	testTenant := &v1alpha1.Virtualcluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -45,32 +43,6 @@ func TestPVCPatrol(t *testing.T) {
 		},
 	}
 
-	spec1 := &v1.PersistentVolumeClaimSpec{
-		AccessModes: []v1.PersistentVolumeAccessMode{
-			v1.ReadWriteOnce,
-		},
-		Resources: v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceStorage: resource.MustParse("20Gi"),
-			},
-		},
-		StorageClassName: pointer.StringPtr("storage-class-1"),
-		VolumeName:       "volume-1",
-	}
-
-	spec2 := &v1.PersistentVolumeClaimSpec{
-		AccessModes: []v1.PersistentVolumeAccessMode{
-			v1.ReadWriteOnce,
-		},
-		Resources: v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceStorage: resource.MustParse("30Gi"),
-			},
-		},
-		StorageClassName: pointer.StringPtr("storage-class-1"),
-		VolumeName:       "volume-1",
-	}
-
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
@@ -78,55 +50,43 @@ func TestPVCPatrol(t *testing.T) {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant []runtime.Object
 		ExpectedDeletedPObject []string
-		ExpectedDeletedVObject []string
 		ExpectedCreatedPObject []string
 		ExpectedUpdatedPObject []runtime.Object
-		ExpectedUpdatedVObject []runtime.Object
 		ExpectedNoOperation    bool
 		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
 		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
 	}{
-		"pPVC not created by vc": {
+		"pNS not created by vc": {
 			ExistingObjectInSuper: []runtime.Object{
-				unknownPVC("pvc-1", superDefaultNSName),
+				unknownNamespace(superDefaultNSName, "12345"),
 			},
 			ExpectedNoOperation: true,
 		},
-		"pPVC exists, vPVC does not exists": {
+		"pNS exists, vNS does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPVC("pvc-1", superDefaultNSName, "12345", defaultClusterKey),
+				superNamespace(superDefaultNSName, "12345", defaultClusterKey),
 			},
 			ExpectedDeletedPObject: []string{
-				superDefaultNSName + "/pvc-1",
+				superDefaultNSName,
 			},
 		},
-		"pPVC exists, vPVC exists with different uid": {
+		"pNS exists, vNS exists with different uid": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPVC("pvc-2", superDefaultNSName, "12345", defaultClusterKey),
+				superNamespace(superDefaultNSName, "12345", defaultClusterKey),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				tenantPVC("pvc-2", "default", "123456"),
+				tenantNamespace("default", "123456"),
 			},
 			ExpectedDeletedPObject: []string{
-				superDefaultNSName + "/pvc-2",
+				superDefaultNSName,
 			},
 		},
-		"pPVC exists, vPVC exists with different spec": {
-			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPVC(superPVC("pvc-3", superDefaultNSName, "12345", defaultClusterKey), spec2),
-			},
+		"vNS exists, pNS does not exists": {
 			ExistingObjectInTenant: []runtime.Object{
-				applySpecToPVC(tenantPVC("pvc-3", "default", "12345"), spec1),
-			},
-			ExpectedNoOperation: true,
-			// notes: have not updated the different pPVC in patrol now.
-		},
-		"vPVC exists, pPVC does not exists": {
-			ExistingObjectInTenant: []runtime.Object{
-				tenantPVC("pvc-4", "default", "12345"),
+				tenantNamespace("default", "12345"),
 			},
 			ExpectedCreatedPObject: []string{
-				superDefaultNSName + "/pvc-4",
+				superDefaultNSName,
 			},
 			WaitDWS: true,
 		},
@@ -134,7 +94,7 @@ func TestPVCPatrol(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			tenantActions, superActions, err := util.RunPatrol(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
+			tenantActions, superActions, err := util.RunPatrol(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
 				return
@@ -159,28 +119,11 @@ func TestPVCPatrol(t *testing.T) {
 				}
 				for i, expectedName := range tc.ExpectedDeletedPObject {
 					action := superActions[i]
-					if !action.Matches("delete", "persistentvolumeclaims") {
+					if !action.Matches("delete", "namespaces") {
 						t.Errorf("%s: Unexpected action %s", k, action)
 						continue
 					}
-					fullName := action.(core.DeleteAction).GetNamespace() + "/" + action.(core.DeleteAction).GetName()
-					if fullName != expectedName {
-						t.Errorf("%s: Expect to delete pPVC %s, got %s", k, expectedName, fullName)
-					}
-				}
-			}
-			if tc.ExpectedDeletedVObject != nil {
-				if len(tc.ExpectedDeletedVObject) != len(tenantActions) {
-					t.Errorf("%s: Expected to delete VPVC %#v. Actual actions were: %#v", k, tc.ExpectedDeletedVObject, tenantActions)
-					return
-				}
-				for i, expectedName := range tc.ExpectedDeletedVObject {
-					action := tenantActions[i]
-					if !action.Matches("delete", "persistentvolumeclaims") {
-						t.Errorf("%s: Unexpected action %s", k, action)
-						continue
-					}
-					fullName := action.(core.DeleteAction).GetNamespace() + "/" + action.(core.DeleteAction).GetName()
+					fullName := action.(core.DeleteAction).GetName()
 					if fullName != expectedName {
 						t.Errorf("%s: Expect to delete pPVC %s, got %s", k, expectedName, fullName)
 					}
@@ -193,12 +136,12 @@ func TestPVCPatrol(t *testing.T) {
 				}
 				for i, expectedName := range tc.ExpectedCreatedPObject {
 					action := superActions[i]
-					if !action.Matches("create", "persistentvolumeclaims") {
+					if !action.Matches("create", "namespaces") {
 						t.Errorf("%s: Unexpected action %s", k, action)
 						continue
 					}
-					created := action.(core.CreateAction).GetObject().(*v1.PersistentVolumeClaim)
-					fullName := created.Namespace + "/" + created.Name
+					created := action.(core.CreateAction).GetObject().(*v1.Namespace)
+					fullName := created.Name
 					if fullName != expectedName {
 						t.Errorf("%s: Expect to create pPVC %s, got %s", k, expectedName, fullName)
 					}
@@ -211,28 +154,12 @@ func TestPVCPatrol(t *testing.T) {
 				}
 				for i, obj := range tc.ExpectedUpdatedPObject {
 					action := superActions[i]
-					if !action.Matches("update", "persistentvolumeclaims") {
+					if !action.Matches("update", "namespaces") {
 						t.Errorf("%s: Unexpected action %s", k, action)
 					}
 					actionObj := action.(core.UpdateAction).GetObject()
 					if !equality.Semantic.DeepEqual(obj, actionObj) {
 						t.Errorf("%s: Expected updated pPVC is %v, got %v", k, obj, actionObj)
-					}
-				}
-			}
-			if tc.ExpectedUpdatedVObject != nil {
-				if len(tc.ExpectedUpdatedVObject) != len(tenantActions) {
-					t.Errorf("%s: Expected to update VPVC %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedVObject, tenantActions)
-					return
-				}
-				for i, obj := range tc.ExpectedUpdatedVObject {
-					action := tenantActions[i]
-					if !action.Matches("update", "persistentvolumeclaims") {
-						t.Errorf("%s: Unexpected action %s", k, action)
-					}
-					actionObj := action.(core.UpdateAction).GetObject()
-					if !equality.Semantic.DeepEqual(obj, actionObj) {
-						t.Errorf("%s: Expected updated vPVC is %v, got %v", k, obj, actionObj)
 					}
 				}
 			}

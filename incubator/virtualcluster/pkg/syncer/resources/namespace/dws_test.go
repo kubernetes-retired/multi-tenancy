@@ -41,13 +41,24 @@ func tenantNamespace(name, uid string) *v1.Namespace {
 	}
 }
 
-func superNamespace(name, uid string) *v1.Namespace {
+func superNamespace(name, uid, clusterKey string) *v1.Namespace {
 	return &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Annotations: map[string]string{
-				constants.LabelUID: uid,
+				constants.LabelUID:       uid,
+				constants.LabelCluster:   clusterKey,
+				constants.LabelNamespace: "default",
 			},
+		},
+	}
+}
+
+func unknownNamespace(name, uid string) *v1.Namespace {
+	return &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			UID:  types.UID(uid),
 		},
 	}
 }
@@ -83,7 +94,7 @@ func TestDWNamespaceCreation(t *testing.T) {
 		},
 		"new namespace but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "12345"),
+				superNamespace(defaultSuperNSName, "12345", defaultClusterKey),
 			},
 			ExistingObjectInTenant:   tenantNamespace(defaultNSName, "12345"),
 			ExpectedCreatedNamespace: []string{},
@@ -91,7 +102,7 @@ func TestDWNamespaceCreation(t *testing.T) {
 		},
 		"new namespace but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "123456"),
+				superNamespace(defaultSuperNSName, "123456", defaultClusterKey),
 			},
 			ExistingObjectInTenant:   tenantNamespace(defaultNSName, "12345"),
 			ExpectedCreatedNamespace: []string{},
@@ -167,7 +178,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 	}{
 		"delete namespace": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "12345"),
+				superNamespace(defaultSuperNSName, "12345", defaultClusterKey),
 			},
 			EnqueueObject:            tenantNamespace(defaultNSName, "12345"),
 			ExpectedDeletedNamespace: []string{defaultSuperNSName},
@@ -180,7 +191,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 		},
 		"delete namespace but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "123456"),
+				superNamespace(defaultSuperNSName, "123456", defaultClusterKey),
 			},
 			EnqueueObject:            tenantNamespace(defaultNSName, "12345"),
 			ExpectedDeletedNamespace: []string{},
