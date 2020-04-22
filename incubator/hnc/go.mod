@@ -14,7 +14,9 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/onsi/ginkgo v1.12.0
 	github.com/onsi/gomega v1.9.0
+	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.5.0
+	github.com/prometheus/common v0.9.1
 	github.com/spf13/cobra v0.0.5
 	go.opencensus.io v0.22.3
 	go.uber.org/atomic v1.4.0 // indirect

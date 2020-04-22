@@ -26,3 +26,4 @@ spec:
         - "--leader-election-id=hnc-controller-leader-election-helper"
         - "--max-reconciles=10"
         - "--apiserver-qps-throttle=50"
+        - "--enable-internal-cert-management=true"
