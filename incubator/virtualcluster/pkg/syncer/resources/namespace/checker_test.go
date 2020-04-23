@@ -26,12 +26,34 @@ import (
 	core "k8s.io/client-go/testing"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
+func superGCCandidate(name, uid, clusterKey, vcName, vcNamespace, vcUID, root string) *v1.Namespace {
+	return &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Annotations: map[string]string{
+				constants.LabelUID:         uid,
+				constants.LabelCluster:     clusterKey,
+				constants.LabelNamespace:   "default",
+				constants.LabelVCName:      vcName,
+				constants.LabelVCNamespace: vcNamespace,
+				constants.LabelVCUID:       vcUID,
+				constants.LabelVCRootNS:    root,
+			},
+		},
+	}
+}
+
 func TestNamespacePatrol(t *testing.T) {
 	testTenant := &v1alpha1.Virtualcluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Virtualcluster",
+			APIVersion: "tenancy/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
@@ -47,24 +69,31 @@ func TestNamespacePatrol(t *testing.T) {
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
-		ExistingObjectInSuper  []runtime.Object
-		ExistingObjectInTenant []runtime.Object
-		ExpectedDeletedPObject []string
-		ExpectedCreatedPObject []string
-		ExpectedUpdatedPObject []runtime.Object
-		ExpectedNoOperation    bool
-		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
-		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
+		ExistingObjectInSuper    []runtime.Object
+		ExistingObjectInTenant   []runtime.Object
+		ExistingObjectInVCClient []runtime.Object
+		ExpectedDeletedPObject   []string
+		ExpectedCreatedPObject   []string
+		ExpectedUpdatedPObject   []runtime.Object
+		ExpectedNoOperation      bool
+		WaitDWS                  bool // Make sure to set this flag if the test involves DWS.
+		WaitUWS                  bool // Make sure to set this flag if the test involves UWS.
 	}{
 		"pNS not created by vc": {
 			ExistingObjectInSuper: []runtime.Object{
 				unknownNamespace(superDefaultNSName, "12345"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
 			},
 			ExpectedNoOperation: true,
 		},
 		"pNS exists, vNS does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
 				superNamespace(superDefaultNSName, "12345", defaultClusterKey),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
 			},
 			ExpectedDeletedPObject: []string{
 				superDefaultNSName,
@@ -77,6 +106,9 @@ func TestNamespacePatrol(t *testing.T) {
 			ExistingObjectInTenant: []runtime.Object{
 				tenantNamespace("default", "123456"),
 			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
 			ExpectedDeletedPObject: []string{
 				superDefaultNSName,
 			},
@@ -85,16 +117,70 @@ func TestNamespacePatrol(t *testing.T) {
 			ExistingObjectInTenant: []runtime.Object{
 				tenantNamespace("default", "12345"),
 			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
 			ExpectedCreatedPObject: []string{
 				superDefaultNSName,
 			},
 			WaitDWS: true,
 		},
+		"pNS's owner vc does not exist ": {
+			ExistingObjectInSuper: []runtime.Object{
+				superGCCandidate(superDefaultNSName, "12345", "12345", "test1", "default", "123456", "false"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedDeletedPObject: []string{
+				superDefaultNSName,
+			},
+		},
+		"rootns's owner vc does not exist ": {
+			ExistingObjectInSuper: []runtime.Object{
+				superGCCandidate(superDefaultNSName, "", defaultClusterKey, "test1", "default", "123456", "true"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedDeletedPObject: []string{
+				superDefaultNSName,
+			},
+		},
+		"rootns's owner vc exists ": {
+			ExistingObjectInSuper: []runtime.Object{
+				superGCCandidate(superDefaultNSName, "", defaultClusterKey, "test", "tenant-1", "7374a172-c35d-45b1-9c8e-bf5c5b614937", "true"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedNoOperation: true,
+		},
+		"rootns's owner vc uid mismatch ": {
+			ExistingObjectInSuper: []runtime.Object{
+				superGCCandidate(superDefaultNSName, "", defaultClusterKey, "test", "tenant-1", "123456", "true"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedDeletedPObject: []string{
+				superDefaultNSName,
+			},
+		},
+		"pNS's owner vc exists but not managed by syncer ": {
+			ExistingObjectInSuper: []runtime.Object{
+				superGCCandidate(superDefaultNSName, "12345", "12345", "test", "tenant-1", "7374a172-c35d-45b1-9c8e-bf5c5b614937", "false"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedNoOperation: true,
+		},
 	}
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			tenantActions, superActions, err := util.RunPatrol(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
+			tenantActions, superActions, err := util.RunPatrolWithVCClient(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInVCClient, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
 				return

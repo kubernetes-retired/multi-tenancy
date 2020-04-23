@@ -17,6 +17,8 @@ limitations under the License.
 package resources
 
 import (
+	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 
@@ -36,8 +38,13 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
 )
 
-func Register(config *config.SyncerConfiguration, client clientset.Interface, informerFactory informers.SharedInformerFactory, controllerManager *manager.ControllerManager) {
-	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
+func Register(config *config.SyncerConfiguration,
+	client clientset.Interface,
+	informerFactory informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualclusterInformer,
+	controllerManager *manager.ControllerManager) {
+	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), vcClient, vcInformer, controllerManager)
 	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
 	secret.Register(config, client.CoreV1(), informerFactory.Core().V1().Secrets(), controllerManager)

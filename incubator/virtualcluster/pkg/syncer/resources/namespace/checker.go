@@ -36,32 +36,64 @@ import (
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
-	if !cache.WaitForCacheSync(stopCh, c.nsSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.nsSynced, c.vcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Namespace checker")
 	}
 	c.namespacePatroller.Start(stopCh)
 	return nil
 }
 
+//  shouldBeGabageCollected checks if the owner vc object is deleted or not. If so, the namespace should be garbage collected.
+func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
+	vcName := ns.Annotations[constants.LabelVCName]
+	vcNamespace := ns.Annotations[constants.LabelVCNamespace]
+	if vcName == "" || vcNamespace == "" {
+		return false
+	}
+	vc, err := c.vcLister.Virtualclusters(vcNamespace).Get(vcName)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// vc does not exist, double check against the apiserver
+			if _, apiservererr := c.vcClient.TenancyV1alpha1().Virtualclusters(vcNamespace).Get(vcName, metav1.GetOptions{}); apiservererr != nil {
+				if errors.IsNotFound(apiservererr) {
+					// vc does not exist in apiserver as well
+					return true
+				}
+			}
+		}
+	} else {
+		// vc exists, check the uid
+		if ns.Annotations[constants.LabelVCUID] != string(vc.UID) {
+			if v, err := c.vcClient.TenancyV1alpha1().Virtualclusters(vcNamespace).Get(vcName, metav1.GetOptions{}); err == nil {
+				if ns.Annotations[constants.LabelVCUID] != string(v.UID) {
+					// uid is indeed different
+					return true
+				}
+			}
+		}
+		klog.V(4).Infof("pNamespace %s's owner vc exists.", ns.Name)
+	}
+	return false
+}
+
 // PatrollerDo checks to see if namespaces in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
-	if len(clusterNames) == 0 {
-		klog.Infof("tenant masters has no clusters, give up period checker")
-		return
-	}
 	defer metrics.RecordCheckerScanDuration("namespace", time.Now())
-	wg := sync.WaitGroup{}
-
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkNamespacesOfTenantCluster(clusterName)
-		}(clusterName)
+	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
+	if len(clusterNames) != 0 {
+		wg := sync.WaitGroup{}
+		for _, clusterName := range clusterNames {
+			wg.Add(1)
+			go func(clusterName string) {
+				defer wg.Done()
+				c.checkNamespacesOfTenantCluster(clusterName)
+			}(clusterName)
+		}
+		wg.Wait()
+	} else {
+		klog.Infof("tenant masters has no clusters, still check pNamespace for gc purpose.")
 	}
-	wg.Wait()
 
 	pNamespaces, err := c.nsLister.List(labels.Everything())
 	if err != nil {
@@ -70,24 +102,32 @@ func (c *controller) PatrollerDo() {
 	}
 
 	for _, pNamespace := range pNamespaces {
-		clusterName, vNamespace := conversion.GetVirtualOwner(pNamespace)
-		if len(clusterName) == 0 || len(vNamespace) == 0 {
-			continue
-		}
 		shouldDelete := false
-		vNamespaceObj, err := c.multiClusterNamespaceController.Get(clusterName, "", vNamespace)
-		if errors.IsNotFound(err) {
-			shouldDelete = true
-		}
-		if err == nil {
-			vNs := vNamespaceObj.(*v1.Namespace)
-			if pNamespace.Annotations[constants.LabelUID] != string(vNs.UID) {
+		if pNamespace.Annotations[constants.LabelVCRootNS] == "true" {
+			if c.shouldBeGabageCollected(pNamespace) {
 				shouldDelete = true
-				klog.Warningf("Found pNamespace %s delegated UID is different from tenant object.", pNamespace.Name)
+			}
+		} else {
+			clusterName, vNamespace := conversion.GetVirtualOwner(pNamespace)
+			if len(clusterName) == 0 || len(vNamespace) == 0 {
+				continue
+			}
+			vNamespaceObj, err := c.multiClusterNamespaceController.Get(clusterName, "", vNamespace)
+			if err != nil {
+				// if vc object is deleted, we should reach here
+				if errors.IsNotFound(err) || c.shouldBeGabageCollected(pNamespace) {
+					shouldDelete = true
+				}
+			} else {
+				vNs := vNamespaceObj.(*v1.Namespace)
+				if pNamespace.Annotations[constants.LabelUID] != string(vNs.UID) {
+					shouldDelete = true
+					klog.Warningf("Found pNamespace %s delegated UID is different from tenant object.", pNamespace.Name)
+				}
 			}
 		}
+
 		if shouldDelete {
-			// vNamespace not found and pNamespace still exist, we need to delete pNamespace manually
 			opts := &metav1.DeleteOptions{
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 				Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),

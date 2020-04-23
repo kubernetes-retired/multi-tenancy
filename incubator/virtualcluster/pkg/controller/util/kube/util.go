@@ -35,6 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // the namespace of the pod can be found in this file
@@ -93,23 +95,23 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 }
 
 // CreateRootNS creates the root namespace for the vc
-func CreateRootNS(cli client.Client, nsName, vcName, vcUID string) error {
+func CreateRootNS(cli client.Client, vc *tenancyv1alpha1.Virtualcluster) (string, error) {
+	nsName := conversion.ToClusterKey(vc)
 	err := cli.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
-			OwnerReferences: []metav1.OwnerReference{
-				metav1.OwnerReference{
-					APIVersion: tenancyv1alpha1.SchemeGroupVersion.String(),
-					Kind:       "Virtualcluster",
-					Name:       vcName,
-					UID:        types.UID(vcUID),
-				}},
+			Annotations: map[string]string{
+				constants.LabelVCName:      vc.Name,
+				constants.LabelVCNamespace: vc.Namespace,
+				constants.LabelVCUID:       string(vc.UID),
+				constants.LabelVCRootNS:    "true",
+			},
 		},
 	})
 	if apierrors.IsAlreadyExists(err) {
-		return nil
+		return nsName, nil
 	}
-	return err
+	return nsName, err
 }
 
 // AnnotateVC add the annotation('key'='val') to the Virtualcluster 'vc'
