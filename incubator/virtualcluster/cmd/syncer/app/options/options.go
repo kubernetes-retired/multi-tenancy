@@ -158,6 +158,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	}
 
 	c.SecretClient = superMasterClient.CoreV1()
+	c.VirtualClusterClient = virtualClusterClient
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().Virtualclusters()
 	c.SuperMasterClient = superMasterClient
 	c.SuperMasterInformerFactory = informers.NewSharedInformerFactory(superMasterClient, 0)

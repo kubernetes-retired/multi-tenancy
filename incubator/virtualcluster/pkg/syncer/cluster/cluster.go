@@ -133,8 +133,8 @@ func (c *Cluster) GetClusterName() string {
 	return c.key
 }
 
-func (c *Cluster) GetOwnerInfo() (string, string) {
-	return c.vcName, c.vcUID
+func (c *Cluster) GetOwnerInfo() (string, string, string) {
+	return c.vcName, c.vcNamespace, c.vcUID
 }
 
 // GetSpec returns the virtual cluster spec.

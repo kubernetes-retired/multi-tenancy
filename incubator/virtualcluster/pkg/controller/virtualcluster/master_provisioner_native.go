@@ -71,10 +71,8 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 			vc.Spec.ClusterVersionName)
 		return err
 	}
-	rootNS := conversion.ToClusterKey(vc)
-
 	// 1. create the root ns
-	err = kubeutil.CreateRootNS(mpn, rootNS, vc.Name, string(vc.UID))
+	_, err = kubeutil.CreateRootNS(mpn, vc)
 	if err != nil {
 		return err
 	}

@@ -53,8 +53,8 @@ func (c *fakeCluster) GetClusterName() string {
 	return c.key
 }
 
-func (c *fakeCluster) GetOwnerInfo() (string, string) {
-	return c.vc.Name, string(c.vc.UID)
+func (c *fakeCluster) GetOwnerInfo() (string, string, string) {
+	return c.vc.Name, c.vc.Namespace, string(c.vc.UID)
 }
 
 func (c *fakeCluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {

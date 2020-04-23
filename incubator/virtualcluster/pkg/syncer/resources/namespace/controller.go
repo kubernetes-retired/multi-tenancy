@@ -24,6 +24,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -38,6 +41,10 @@ type controller struct {
 	// super master namespace lister
 	nsLister listersv1.NamespaceLister
 	nsSynced cache.InformerSynced
+	// super master virtual cluster lister
+	vcClient vcclient.Interface
+	vcLister vclisters.VirtualclusterLister
+	vcSynced cache.InformerSynced
 	// Connect to all tenant master namespace informers
 	multiClusterNamespaceController *mc.MultiClusterController
 	// Periodic checker
@@ -48,23 +55,27 @@ func Register(
 	config *config.SyncerConfiguration,
 	namespaceClient v1core.CoreV1Interface,
 	informer coreinformers.Interface,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualclusterInformer,
 	controllerManager *manager.ControllerManager,
 ) {
-	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, nil)
+	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, vcClient, vcInformer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster namespace controller %v", err)
 		return
 	}
-
 	controllerManager.AddResourceSyncer(c)
 }
 
 func NewNamespaceController(config *config.SyncerConfiguration,
 	namespaceClient v1core.CoreV1Interface,
 	informer coreinformers.Interface,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualclusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		namespaceClient: namespaceClient,
+		vcClient:        vcClient,
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -79,10 +90,13 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
 	c.nsLister = informer.Namespaces().Lister()
+	c.vcLister = vcInformer.Lister()
 	if options != nil && options.IsFake {
 		c.nsSynced = func() bool { return true }
+		c.vcSynced = func() bool { return true }
 	} else {
 		c.nsSynced = informer.Namespaces().Informer().HasSynced
+		c.vcSynced = vcInformer.Informer().HasSynced
 	}
 
 	var patrolOptions *pa.Options

@@ -31,6 +31,10 @@ import (
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	fakevcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned/fake"
+	vcinformerFactory "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
+	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -63,6 +67,93 @@ func (r *fakeReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 }
 
 type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+
+type controllerWithVCClientNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, vcclient.Interface, vcinformers.VirtualclusterInformer, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+
+func RunDownwardSyncWithVCClient(
+	newControllerFunc controllerWithVCClientNew,
+	testTenant *v1alpha1.Virtualcluster,
+	existingObjectInSuper []runtime.Object,
+	existingObjectInTenant []runtime.Object,
+	enqueueObject runtime.Object,
+) (actions []core.Action, reconcileError error, err error) {
+	// setup fake tenant cluster
+	tenantClientset := fake.NewSimpleClientset()
+	tenantClient := fakeClient.NewFakeClient()
+	if existingObjectInTenant != nil {
+		tenantClientset = fake.NewSimpleClientset(existingObjectInTenant...)
+		// For controller runtime client, if the informer cache is empty, the request goes to client obj tracker.
+		// Hence we don't have to populate the infomer cache.
+		tenantClient = fakeClient.NewFakeClient(existingObjectInTenant...)
+	}
+	tenantCluster, err := cluster.NewFakeTenantCluster(testTenant, tenantClientset, tenantClient)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating tenantCluster: %v", err)
+	}
+
+	// setup fake super cluster
+	superClient := fake.NewSimpleClientset()
+	if existingObjectInSuper != nil {
+		superClient = fake.NewSimpleClientset(existingObjectInSuper...)
+	}
+	superInformer := informers.NewSharedInformerFactory(superClient, 0)
+
+	// setup fake vc client
+	vcClient := fakevcclient.NewSimpleClientset()
+	vcInformer := vcinformerFactory.NewSharedInformerFactory(vcClient, 0).Tenancy().V1alpha1().Virtualclusters()
+
+	// setup fake controller
+	syncErr := make(chan error)
+	defer close(syncErr)
+	fakeRc := &fakeReconciler{errCh: syncErr}
+	rsOptions := &manager.ResourceSyncerOptions{
+		MCOptions: &mc.Options{Reconciler: fakeRc},
+		IsFake:    true,
+	}
+
+	resourceSyncer, mccontroller, _, err := newControllerFunc(
+		&config.SyncerConfiguration{
+			DisableServiceAccountToken: true,
+		},
+		superClient.CoreV1(),
+		superInformer.Core().V1(),
+		vcClient,
+		vcInformer,
+		rsOptions,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating dws controller: %v", err)
+	}
+	fakeRc.SetResourceSyncer(resourceSyncer)
+
+	// register tenant cluster to controller.
+	resourceSyncer.AddCluster(tenantCluster)
+	defer resourceSyncer.RemoveCluster(tenantCluster)
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+	go resourceSyncer.StartDWS(stopCh)
+
+	// add object to super informer.
+	for _, each := range existingObjectInSuper {
+		informer := getObjectInformer(superInformer.Core().V1(), each)
+		informer.GetStore().Add(each)
+	}
+
+	// start testing
+	if err := mccontroller.RequeueObject(conversion.ToClusterKey(testTenant), enqueueObject); err != nil {
+		return nil, nil, fmt.Errorf("error enqueue object %v: %v", enqueueObject, err)
+	}
+
+	// wait to be called
+	select {
+	case reconcileError = <-syncErr:
+	case <-time.After(10 * time.Second):
+		return nil, nil, fmt.Errorf("timeout wating for sync")
+	}
+
+	return superClient.Actions(), reconcileError, nil
+}
 
 func RunDownwardSync(
 	newControllerFunc controllerNew,

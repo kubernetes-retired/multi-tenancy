@@ -37,6 +37,14 @@ const (
 	LabelSecretName = "tenancy.x-k8s.io/secret.name"
 	// LabelAdminKubeConfig is the kubeconfig in base64 format for tenant master.
 	LabelAdminKubeConfig = "tenancy.x-k8s.io/admin-kubeconfig"
+	// LabelVCName is the name of the VC CR that owns the object.
+	LabelVCName = "tenancy.x-k8s.io/vcname"
+	// LabelVCNamespace is the namespace of the VC CR that owns the object.
+	LabelVCNamespace = "tenancy.x-k8s.io/vcnamespace"
+	// LabelVCUID is the uid of the VC CR that owns the object.
+	LabelVCUID = "tenancy.x-k8s.io/vcuid"
+	// LabelVCRootNS means the namespace is the rootns created by vc-manager.
+	LabelVCRootNS = "tenancy.x-k8s.io/vcrootns"
 
 	// LabelServiceAccountUID is the tenant service account UID related to the secret.
 	LabelServiceAccountUID = "tenancy.x-k8s.io/service-account.UID"

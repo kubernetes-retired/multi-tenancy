@@ -46,9 +46,12 @@ func superNamespace(name, uid, clusterKey string) *v1.Namespace {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Annotations: map[string]string{
-				constants.LabelUID:       uid,
-				constants.LabelCluster:   clusterKey,
-				constants.LabelNamespace: "default",
+				constants.LabelUID:         uid,
+				constants.LabelCluster:     clusterKey,
+				constants.LabelNamespace:   "default",
+				constants.LabelVCName:      "test",
+				constants.LabelVCNamespace: "tenant-1",
+				constants.LabelVCUID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 			},
 		},
 	}
@@ -112,7 +115,7 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController,
+			actions, reconcileErr, err := util.RunDownwardSyncWithVCClient(NewNamespaceController,
 				testTenant,
 				tc.ExistingObjectInSuper,
 				[]runtime.Object{tc.ExistingObjectInTenant},
@@ -201,7 +204,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSyncWithVCClient(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return

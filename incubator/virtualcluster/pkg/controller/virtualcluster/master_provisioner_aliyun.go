@@ -43,7 +43,6 @@ import (
 	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 const (
@@ -513,13 +512,11 @@ PollASK:
 	}
 
 	// 4. create the root namesapce of the Virtualcluster
-	vcNs := conversion.ToClusterKey(vc)
-
-	err = kubeutil.CreateRootNS(mpa, vcNs, vc.Name, string(vc.UID))
+	vcNs, err := kubeutil.CreateRootNS(mpa, vc)
 	if err != nil {
 		return err
 	}
-	log.Info("virtualcluster ns is created", "ns", vcNs)
+	log.Info("virtualcluster root ns is created", "ns", vcNs)
 
 	// 5. get kubeconfig of the newly created ASK
 	kbCfg, err := getASKKubeConfig(cli, clsID, askCfg.regionID, askCfg.privateKbCfg)

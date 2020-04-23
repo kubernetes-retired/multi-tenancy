@@ -85,12 +85,12 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requestUID string, vNamespace *v1.Namespace) error {
-	vcName, vcUID, err := c.multiClusterNamespaceController.GetOwnerInfo(clusterName)
+	vcName, vcNamespace, vcUID, err := c.multiClusterNamespaceController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
 
-	newObj, err := conversion.BuildSuperMasterNamespace(clusterName, vcName, vcUID, vNamespace)
+	newObj, err := conversion.BuildSuperMasterNamespace(clusterName, vcName, vcNamespace, vcUID, vNamespace)
 	if err != nil {
 		return err
 	}
