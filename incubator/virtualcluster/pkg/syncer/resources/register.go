@@ -46,7 +46,7 @@ func Register(config *config.SyncerConfiguration,
 	controllerManager *manager.ControllerManager) {
 	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), vcClient, vcInformer, controllerManager)
 	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1().ConfigMaps(), controllerManager)
+	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	secret.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	serviceaccount.Register(config, client.CoreV1(), informerFactory.Core().V1().ServiceAccounts(), controllerManager)
 	node.Register(config, client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
