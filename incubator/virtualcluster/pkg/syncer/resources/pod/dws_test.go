@@ -220,7 +220,7 @@ func TestDWPodCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0], nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -334,7 +334,7 @@ func TestDWPodDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueueObject, nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -450,7 +450,7 @@ func TestDWPodUpdate(t *testing.T) {
 	}
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
+			actions, reconcileErr, err := util.RunDownwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0], nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return

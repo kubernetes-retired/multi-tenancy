@@ -107,7 +107,8 @@ func TestDWServiceCreation(t *testing.T) {
 				testTenant,
 				tc.ExistingObjectInSuper,
 				[]runtime.Object{tc.ExistingObjectInTenant},
-				tc.ExistingObjectInTenant)
+				tc.ExistingObjectInTenant,
+				nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -192,7 +193,7 @@ func TestDWServiceDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject, nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -319,7 +320,8 @@ func TestDWServiceUpdate(t *testing.T) {
 				testTenant,
 				tc.ExistingObjectInSuper,
 				[]runtime.Object{tc.ExistingObjectInTenant},
-				tc.ExistingObjectInTenant)
+				tc.ExistingObjectInTenant,
+				nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return

@@ -155,12 +155,15 @@ func RunDownwardSyncWithVCClient(
 	return superClient.Actions(), reconcileError, nil
 }
 
+type FakeClientSetMutator func(tenantClientset, superClientset *fake.Clientset)
+
 func RunDownwardSync(
 	newControllerFunc controllerNew,
 	testTenant *v1alpha1.Virtualcluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueObject runtime.Object,
+	clientSetMutator FakeClientSetMutator,
 ) (actions []core.Action, reconcileError error, err error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
@@ -182,6 +185,10 @@ func RunDownwardSync(
 		superClient = fake.NewSimpleClientset(existingObjectInSuper...)
 	}
 	superInformer := informers.NewSharedInformerFactory(superClient, 0)
+
+	if clientSetMutator != nil {
+		clientSetMutator(tenantClientset, superClient)
+	}
 
 	// setup fake controller
 	syncErr := make(chan error)
