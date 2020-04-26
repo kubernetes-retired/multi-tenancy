@@ -37,6 +37,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master client
 	client v1core.CoreV1Interface
 	// super master pv/pvc lister/synced functions
@@ -72,6 +73,7 @@ func NewPVController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
+		config:   config,
 		client:   client,
 		informer: informer,
 	}

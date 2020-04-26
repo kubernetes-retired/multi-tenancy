@@ -113,7 +113,7 @@ func (c *controller) reconcilePVCUpdate(clusterName, targetNamespace, requestUID
 	if err != nil {
 		return err
 	}
-	updatedPVC := conversion.Equality(spec).CheckPVCEquality(pPVC, vPVC)
+	updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, vPVC)
 	if updatedPVC != nil {
 		pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Update(updatedPVC)
 		if err != nil {

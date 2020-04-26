@@ -132,7 +132,7 @@ func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetName
 }
 
 func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetNamespace string, pSecret, vSecret *v1.Secret) error {
-	updatedBinaryData, equal := conversion.Equality(nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
+	updatedBinaryData, equal := conversion.Equality(c.config, nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
 	if equal {
 		return nil
 	}
@@ -183,7 +183,7 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	if err != nil {
 		return err
 	}
-	updatedSecret := conversion.Equality(spec).CheckSecretEquality(pSecret, vSecret)
+	updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
 		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(updatedSecret)
 		if err != nil {

@@ -34,6 +34,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master secret client
 	secretClient v1core.CoreV1Interface
 	// super master secret lister/synced function

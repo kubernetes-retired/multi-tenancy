@@ -144,7 +144,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updated := conversion.Equality(spec).CheckConfigMapEquality(pConfigMap, &vConfigMap)
+		updated := conversion.Equality(c.config, spec).CheckConfigMapEquality(pConfigMap, &vConfigMap)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedConfigMaps, 1)
 			klog.Warningf("ConfigMap %v/%v diff in super&tenant master", vConfigMap.Namespace, vConfigMap.Name)

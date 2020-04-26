@@ -136,7 +136,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPVC := conversion.Equality(spec).CheckPVCEquality(pPVC, &vPVC)
+		updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, &vPVC)
 		if updatedPVC != nil {
 			atomic.AddUint64(&numMissMatchedPVCs, 1)
 			klog.Warningf("spec of pvc %v/%v diff in super&tenant master", vPVC.Namespace, vPVC.Name)

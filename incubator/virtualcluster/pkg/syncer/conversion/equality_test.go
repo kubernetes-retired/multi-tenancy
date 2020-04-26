@@ -24,9 +24,13 @@ import (
 	"k8s.io/utils/pointer"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 )
 
 func TestCheckDWKVEquality(t *testing.T) {
+	syncerConfig := &config.SyncerConfiguration{
+		DefaultOpaqueMetaDomains: []string{"kubernetes.io"},
+	}
 	spec := v1alpha1.VirtualclusterSpec{
 		TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
 		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
@@ -140,11 +144,37 @@ func TestCheckDWKVEquality(t *testing.T) {
 			isEqual:  true,
 			expected: nil,
 		},
+		{
+			name: "exactly matches defaultOpaqueMetaDomain",
+			super: map[string]string{
+				"a":               "b",
+				"kubernetes.io/a": "b",
+			},
+			virtual: map[string]string{
+				"a":               "b",
+				"kubernetes.io/b": "c",
+			},
+			isEqual: true,
+		},
+		{
+			name: "subdomain matches defaultOpaqueMetaDomain",
+			super: map[string]string{
+				"a":                   "b",
+				"foo.kubernetes.io/a": "b",
+			},
+			virtual: map[string]string{
+				"a":                   "b",
+				"kubernetes.io/b":     "c",
+				"foo.kubernetes.io":   "a",
+				"bar.kubernetes.io/b": "c",
+			},
+			isEqual: true,
+		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got, equal := Equality(&spec).checkDWKVEquality(tt.super, tt.virtual)
+			got, equal := Equality(syncerConfig, &spec).checkDWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
-				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
+				tc.Errorf("expected equal %v, got %v %v", tt.isEqual, equal, got)
 			} else {
 				if !equality.Semantic.DeepEqual(got, tt.expected) {
 					tc.Errorf("expected result %+v, got %+v", tt.expected, got)
@@ -249,7 +279,7 @@ func TestCheckUWKVEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got, equal := Equality(&spec).checkUWKVEquality(tt.super, tt.virtual)
+			got, equal := Equality(nil, &spec).checkUWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			} else {
@@ -327,7 +357,7 @@ func TestCheckContainersImageEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got := Equality(nil).checkContainersImageEquality(tt.pObj, tt.vObj)
+			got := Equality(nil, nil).checkContainersImageEquality(tt.pObj, tt.vObj)
 			if !equality.Semantic.DeepEqual(got, tt.expected) {
 				t.Errorf("expected %+v, got %+v", tt.expected, got)
 			}
@@ -380,7 +410,7 @@ func TestCheckActiveDeadlineSecondsEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			val, equal := Equality(nil).checkInt64Equality(tt.pObj, tt.vObj)
+			val, equal := Equality(nil, nil).checkInt64Equality(tt.pObj, tt.vObj)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			}

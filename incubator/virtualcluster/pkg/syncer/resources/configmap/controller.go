@@ -32,6 +32,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master configMap client
 	configMapClient v1core.ConfigMapsGetter
 	// super master configMap informer lister/synced function
@@ -50,6 +51,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
+		config:          config,
 		configMapClient: configMapClient,
 	}
 

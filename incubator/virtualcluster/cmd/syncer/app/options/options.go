@@ -78,6 +78,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
 			DisableServiceAccountToken: true,
+			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 		},
 		Address:  "",
 		Port:     "80",

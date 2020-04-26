@@ -93,7 +93,7 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 			klog.Errorf("error getting pEp %s/%s from super master cache: %v", targetNamespace, vEp.Name, err)
 			continue
 		}
-		updated := conversion.Equality(nil).CheckEndpointsEquality(pEp, &vEp)
+		updated := conversion.Equality(c.config, nil).CheckEndpointsEquality(pEp, &vEp)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedEndPoints, 1)
 			klog.Warningf("Endpoint %v/%v diff in super&tenant master", targetNamespace, vEp.Name)

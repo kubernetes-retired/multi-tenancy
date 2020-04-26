@@ -33,6 +33,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master pvc client
 	pvcClient v1core.PersistentVolumeClaimsGetter
 	// super master pvc lister
@@ -64,6 +65,7 @@ func NewPVCController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
+		config:    config,
 		pvcClient: client,
 	}
 
