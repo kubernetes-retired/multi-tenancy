@@ -121,7 +121,7 @@ func TestDWPVCCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
+			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0], nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -206,7 +206,7 @@ func TestDWPVCDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueueObject, nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -328,7 +328,7 @@ func TestDWPVCUpdate(t *testing.T) {
 	}
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0])
+			actions, reconcileErr, err := util.RunDownwardSync(NewPVCController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant[0], nil)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return

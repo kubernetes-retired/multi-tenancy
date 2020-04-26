@@ -135,7 +135,7 @@ func BuildSuperMasterNamespace(cluster, vcName, vcNamespace, vcUID string, obj r
 	anno[constants.LabelCluster] = cluster
 	anno[constants.LabelUID] = string(m.GetUID())
 	anno[constants.LabelNamespace] = m.GetName()
-	// We put owner infomation in annotation instead of  metav1.OwnerReference because vc is a namespace scope resource
+	// We put owner information in annotation instead of  metav1.OwnerReference because vc is a namespace scope resource
 	// and metav1.OwnerReference does not provide namespace field. The owner information is needed for super master ns gc.
 	anno[constants.LabelVCName] = vcName
 	anno[constants.LabelVCNamespace] = vcNamespace
