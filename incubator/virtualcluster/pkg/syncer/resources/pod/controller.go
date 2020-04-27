@@ -28,7 +28,6 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -36,7 +35,9 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -54,15 +55,15 @@ type controller struct {
 	secretSynced  cache.InformerSynced
 	// Connect to all tenant master pod informers
 	multiClusterPodController *mc.MultiClusterController
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// UWcontroller
+	upwardPodController *uw.UpwardController
+	// Periodic checker
+	podPatroller *pa.Patroller
 	// Cluster vNode PodMap and GCMap, needed for vNode garbage collection
 	sync.Mutex
 	clusterVNodePodMap map[string]map[string]map[string]struct{}
 	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
+	vNodeGCGracePeriod time.Duration
 }
 
 type VirtulNodeDeletionPhase string
@@ -83,34 +84,78 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c := &controller{
-		config:              config,
-		client:              client,
-		informer:            informer,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_pod"),
-		workers:             constants.UwsControllerWorkerHigh,
-		periodCheckerPeriod: 60 * time.Second,
-		clusterVNodePodMap:  make(map[string]map[string]map[string]struct{}),
-		clusterVNodeGCMap:   make(map[string]map[string]VNodeGCStatus),
-	}
-
-	// Create the multi cluster pod controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerHigh}
-	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, options)
+	c, _, _, err := NewPodController(config, client, informer, nil)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster pod controller %v", err)
+		klog.Errorf("failed to create multi cluster Pod controller %v", err)
 		return
 	}
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewPodController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	c := &controller{
+		config:             config,
+		client:             client,
+		informer:           informer,
+		clusterVNodePodMap: make(map[string]map[string]map[string]struct{}),
+		clusterVNodeGCMap:  make(map[string]map[string]VNodeGCStatus),
+		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
+	}
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerHigh
+	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, *mcOptions)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster pod controller %v", err)
+		return nil, nil, nil, err
+	}
 	c.multiClusterPodController = multiClusterPodController
-
 	c.serviceLister = informer.Services().Lister()
-	c.serviceSynced = informer.Services().Informer().HasSynced
-
 	c.secretLister = informer.Secrets().Lister()
-	c.secretSynced = informer.Secrets().Informer().HasSynced
-
 	c.podLister = informer.Pods().Lister()
-	c.podSynced = informer.Pods().Informer().HasSynced
+	if options != nil && options.IsFake {
+		c.serviceSynced = func() bool { return true }
+		c.secretSynced = func() bool { return true }
+		c.podSynced = func() bool { return true }
+	} else {
+		c.serviceSynced = informer.Services().Informer().HasSynced
+		c.secretSynced = informer.Secrets().Informer().HasSynced
+		c.podSynced = informer.Pods().Informer().HasSynced
+	}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
+	upwardPodController, err := uw.NewUWController("pod-upward-controller", &v1.Pod{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create pod upward controller %v", err)
+		return nil, nil, nil, err
+	}
+	c.upwardPodController = upwardPodController
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	podPatroller, err := pa.NewPatroller("pod-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create pod patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.podPatroller = podPatroller
+
 	informer.Pods().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -145,8 +190,7 @@ func Register(
 			},
 		},
 	)
-
-	controllerManager.AddController(c)
+	return c, multiClusterPodController, upwardPodController, nil
 }
 
 func (c *controller) enqueuePod(obj interface{}) {
@@ -166,7 +210,7 @@ func (c *controller) enqueuePod(obj interface{}) {
 		return
 	}
 
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardPodController.AddToQueue(key)
 }
 
 // c.Mutex needs to be Locked before calling addToClusterVNodeGCMap
@@ -191,6 +235,19 @@ func (c *controller) removeQuiescingNodeFromClusterVNodeGCMap(cluster string, no
 				return false
 			}
 		}
+	}
+	return true
+}
+
+func (c *controller) checkClusterVNodePodMap(clusterName, nodeName, uid string) bool {
+	c.Lock()
+	defer c.Unlock()
+	if _, exist := c.clusterVNodePodMap[clusterName]; !exist {
+		return false
+	} else if _, exist := c.clusterVNodePodMap[clusterName][nodeName]; !exist {
+		return false
+	} else if _, exist := c.clusterVNodePodMap[clusterName][nodeName][uid]; !exist {
+		return false
 	}
 	return true
 }

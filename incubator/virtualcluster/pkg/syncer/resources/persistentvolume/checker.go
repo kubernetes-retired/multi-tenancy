@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -38,17 +37,16 @@ import (
 var numClaimMissMatchedPVs uint64
 var numSpecMissMatchedPVs uint64
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvSynced, c.pvcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-
-	wait.Until(c.checkPVs, c.periodCheckerPeriod, stopCh)
+	c.persistentVolumePatroller.Start(stopCh)
 	return nil
 }
 
-// checkPVs check if persistent volumes keep consistency between super master and tenant masters.
-func (c *controller) checkPVs() {
+// PatrollerDo check if persistent volumes keep consistency between super master and tenant masters.
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterPersistentVolumeController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
@@ -75,7 +73,7 @@ func (c *controller) checkPVs() {
 	}
 
 	for _, pPV := range pvList {
-		if pPV.Spec.ClaimRef == nil {
+		if !boundPersistentVolume(pPV) {
 			continue
 		}
 		pPVC, err := c.pvcLister.PersistentVolumeClaims(pPV.Spec.ClaimRef.Namespace).Get(pPV.Spec.ClaimRef.Name)
@@ -94,14 +92,14 @@ func (c *controller) checkPVs() {
 		if err != nil {
 			if errors.IsNotFound(err) {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterPVs").Inc()
-				c.queue.Add(pPV.Name)
+				c.upwardPersistentVolumeController.AddToQueue(pPV.Name)
 			}
 			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
 		} else {
 			// Double check if the vPV is bound to the correct PVC.
 			vPV := vPVObj.(*v1.PersistentVolume)
 			if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
-				klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
+				//klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
 				numClaimMissMatchedPVs++
 			}
 		}
@@ -156,7 +154,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		updatedPVSpec := conversion.Equality(nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+		updatedPVSpec := conversion.Equality(c.config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
 			atomic.AddUint64(&numSpecMissMatchedPVs, 1)
 			klog.Warningf("spec of pv %v diff in super&tenant master %s", vPV.Name, clusterName)

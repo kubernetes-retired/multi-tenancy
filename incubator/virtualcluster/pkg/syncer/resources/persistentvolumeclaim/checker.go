@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -37,18 +36,17 @@ import (
 
 var numMissMatchedPVCs uint64
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-
-	wait.Until(c.checkPVCs, c.periodCheckerPeriod, stopCh)
+	c.persistentVolumeClaimPatroller.Start(stopCh)
 	return nil
 }
 
-// checkPVCs check if persistent volume claims keep consistency between super
+// PatrollerDo check if persistent volume claims keep consistency between super
 // master and tenant masters.
-func (c *controller) checkPVCs() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterPersistentVolumeClaimController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
@@ -138,7 +136,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPVC := conversion.Equality(spec).CheckPVCEquality(pPVC, &vPVC)
+		updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, &vPVC)
 		if updatedPVC != nil {
 			atomic.AddUint64(&numMissMatchedPVCs, 1)
 			klog.Warningf("spec of pvc %v/%v diff in super&tenant master", vPVC.Namespace, vPVC.Name)

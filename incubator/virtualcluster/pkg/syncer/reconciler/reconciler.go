@@ -30,7 +30,7 @@ const (
 	DeleteEvent EventType = "Delete"
 )
 
-// Request contains the information needed by a multicluster Reconciler to Reconcile:
+// Request contains the information needed by a DWReconciler to reconcile.
 // It ONLY contains the meta that can uniquely identify an object without any state information which can lead to parallel reconcile.
 type Request struct {
 	ClusterName string
@@ -40,13 +40,17 @@ type Request struct {
 
 type Result reconcile.Result
 
-// Reconciler is the interface used by a Controller to reconcile.
-type Reconciler interface {
+// DWReconciler is the interface used by a Controller to do downward reconcile (tenant->super).
+type DWReconciler interface {
 	Reconcile(Request) (Result, error)
 }
 
-type UwsRequest struct {
-	Key string
-	// Optional, in many cases, the cluster name is unknown when uws request is created
-	ClusterName string
+// UWReconciler is the interface used by a Controller to do upward reconcile (super->tenant).
+type UWReconciler interface {
+	BackPopulate(string) error
+}
+
+// PatrolReconciler is the interface used by a peroidic checker to ensure the object consistency between tenant and super master.
+type PatrolReconciler interface {
+	PatrollerDo()
 }

@@ -1,13 +1,13 @@
 package test
 
 import (
-	"io/ioutil"
-	"os"
 	"errors"
 	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	kubernetes "k8s.io/client-go/kubernetes"
 	clientcmd "k8s.io/client-go/tools/clientcmd"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"os"
 )
 
 func GetContextFromKubeconfig(kubeconfigpath string) string {

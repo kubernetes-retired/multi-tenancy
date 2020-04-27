@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
@@ -139,6 +140,11 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if curParent == newParent {
 		return allow("parent unchanged")
+	}
+
+	if config.EX[newParent.Name()] {
+		reason := fmt.Sprintf("Cannot set the parent to an excluded namespace %q", newParent.Name())
+		return deny(metav1.StatusReasonForbidden, "Excluded parent: "+reason)
 	}
 
 	// Prevent changing parent of an owned child
@@ -381,13 +387,26 @@ func deny(reason metav1.StatusReason, msg string) admission.Response {
 			},
 		}}
 	} else {
-		// metav1.StatusReasonInvalid shows the custom message in the Details field instead of
-		// Message field of metav1.Status.
+		// We need to set the custom message in both Details and Message fields.
+		//
+		// When manipulating the HNC configuration object via kubectl directly, kubectl
+		// ignores the Message field and displays the Details field if an error is
+		// StatusReasonInvalid (see implementation here: https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/util/helpers.go#L145-L160).
+		//
+		// When manipulating the HNC configuration object via the hns kubectl plugin,
+		// if an error is StatusReasonInvalid, only the Message field will be displayed. This is because
+		// the Error method (https://github.com/kubernetes/client-go/blob/cb664d40f84c27bee45c193e4acb0fcd549b0305/rest/request.go#L1273)
+		// calls FromObject (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L100),
+		// which generates a StatusError (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L35) object.
+		// *StatusError implements the Error interface using only the Message
+		// field (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L49)).
+		// Therefore, when displaying the error, only the Message field will be available.
 		return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
 			Allowed: false,
 			Result: &metav1.Status{
-				Code:   codeFromReason(reason),
-				Reason: reason,
+				Code:    codeFromReason(reason),
+				Reason:  reason,
+				Message: msg,
 				Details: &metav1.StatusDetails{
 					Causes: []metav1.StatusCause{
 						{

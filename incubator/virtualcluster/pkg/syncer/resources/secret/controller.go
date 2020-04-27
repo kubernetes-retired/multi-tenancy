@@ -17,8 +17,6 @@ limitations under the License.
 package secret
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -31,49 +29,88 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master secret client
 	secretClient v1core.CoreV1Interface
-	// super master secret informer/lister/synced function
-	secretInformer coreinformers.SecretInformer
-	secretLister   listersv1.SecretLister
-	secretSynced   cache.InformerSynced
+	// super master secret lister/synced function
+	secretLister listersv1.SecretLister
+	secretSynced cache.InformerSynced
 	// Connect to all tenant master secret informers
 	multiClusterSecretController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	secretPatroller *pa.Patroller
 }
 
 func Register(
 	config *config.SyncerConfiguration,
-	secretClient v1core.CoreV1Interface,
-	secretInformer coreinformers.SecretInformer,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c := &controller{
-		secretClient:        secretClient,
-		secretInformer:      secretInformer,
-		periodCheckerPeriod: 60 * time.Second,
+	c, _, _, err := NewSecretController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster Secret controller %v", err)
+		return
 	}
 
-	// Create the multi cluster secret controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterSecretController, err := mc.NewMCController("tenant-masters-secret-controller", &v1.Secret{}, options)
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewSecretController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	c := &controller{
+		secretClient: client,
+	}
+
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterSecretController, err := mc.NewMCController("tenant-masters-secret-controller", &v1.Secret{}, *mcOptions)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster secret controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.multiClusterSecretController = multiClusterSecretController
 
-	c.secretLister = secretInformer.Lister()
-	c.secretSynced = secretInformer.Informer().HasSynced
+	c.secretLister = informer.Secrets().Lister()
+	if options != nil && options.IsFake {
+		c.secretSynced = func() bool { return true }
+	} else {
+		c.secretSynced = informer.Secrets().Informer().HasSynced
+	}
 
-	controllerManager.AddController(c)
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	secretPatroller, err := pa.NewPatroller("secret-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create secret patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.secretPatroller = secretPatroller
+
+	return c, multiClusterSecretController, nil, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

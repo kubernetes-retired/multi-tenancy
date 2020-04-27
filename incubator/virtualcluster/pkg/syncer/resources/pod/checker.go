@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -47,28 +46,16 @@ var numStatusMissMatchedPods uint64
 var numSpecMissMatchedPods uint64
 var numUWMetaMissMatchedPods uint64
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
+// StartPatrol starts the period checker for data consistency check. Checker is
 // blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Pod checker")
 	}
-
-	// Start a loop to do periodic GC of unused(orphan) vNodes in tenant masters.
-	go c.vNodeGCWorker(stopCh)
-
-	// Start a loop to periodically check if pods keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkPods, c.periodCheckerPeriod, stopCh)
-
+	c.podPatroller.Start(stopCh)
 	return nil
-}
-
-func (c *controller) vNodeGCWorker(stopCh <-chan struct{}) {
-	klog.Infof("Start VNode GarbageCollector")
-	wait.Until(c.vNodeGCDo, c.periodCheckerPeriod, stopCh)
 }
 
 type Candidate struct {
@@ -83,7 +70,7 @@ func (c *controller) vNodeGCDo() {
 		var candidates []Candidate
 		for cluster, nodeMap := range c.clusterVNodeGCMap {
 			for nodeName, status := range nodeMap {
-				if status.Phase == VNodeQuiescing && metav1.Now().After(status.QuiesceStartTime.Add(constants.DefaultvNodeGCGracePeriod)) {
+				if status.Phase == VNodeQuiescing && metav1.Now().After(status.QuiesceStartTime.Add(c.vNodeGCGracePeriod)) {
 					c.clusterVNodeGCMap[cluster][nodeName] = VNodeGCStatus{
 						QuiesceStartTime: status.QuiesceStartTime,
 						Phase:            VNodeDeleting,
@@ -132,14 +119,15 @@ func (c *controller) deleteClusterVNode(cluster, nodeName string) {
 			return
 		}
 	}
+
 	c.Lock()
 	delete(c.clusterVNodeGCMap[cluster], nodeName)
 	c.Unlock()
 }
 
-// checkPods checks to see if pods in super master informer cache and tenant master
+// PatrollerDo checks to see if pods in super master informer cache and tenant master
 // keep consistency.
-func (c *controller) checkPods() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterPodController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
@@ -214,6 +202,9 @@ func (c *controller) checkPods() {
 		}
 	}
 
+	// GC unused(orphan) vNodes in tenant masters
+	c.vNodeGCDo()
+
 	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedPods").Set(float64(numStatusMissMatchedPods))
 	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPods").Set(float64(numSpecMissMatchedPods))
 	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedPods").Set(float64(numUWMetaMissMatchedPods))
@@ -257,6 +248,11 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			// We should skip pods with NodeName set in the spec
 			continue
 		}
+		// Ensure the ClusterVNodePodMap is consistent
+		if vPod.Spec.NodeName != "" && !c.checkClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID)) {
+			klog.Errorf("Found vPod %s/%s in cluster %s is missing in ClusterVNodePodMap, added back!", vPod.Namespace, vPod.Name, clusterName)
+			c.updateClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID), reconciler.UpdateEvent)
+		}
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPod.Namespace)
 		pPod, err := c.podLister.Pods(targetNamespace).Get(vPod.Name)
 		if errors.IsNotFound(err) {
@@ -293,7 +289,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if pPod.Spec.NodeName != "" && vPod.Spec.NodeName != "" && pPod.Spec.NodeName != vPod.Spec.NodeName {
 			// If pPod can be deleted arbitrarily, e.g., evicted by node controller, this inconsistency may happen.
 			// For example, if pPod is deleted just before uws tries to bind the vPod and dws gets a request from checker or
-			// user update at the same time, a new pPod is going to be created potentially in a differnt node.
+			// user update at the same time, a new pPod is going to be created potentially in a different node.
 			// However, uws bound vPod to a wrong node already. There is no easy remediation besides deleting tenant pod.
 			c.forceDeletevPod(clusterName, &vPod, true)
 			klog.Errorf("Found pPod %s/%s nodename is different from tenant pod nodename, delete the vPod.", targetNamespace, pPod.Name)
@@ -305,7 +301,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPod := conversion.Equality(spec).CheckPodEquality(pPod, &podList.Items[i])
+		updatedPod := conversion.Equality(c.config, spec).CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
@@ -316,7 +312,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			}
 		}
 
-		updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
+		updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedPods, 1)
 			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)

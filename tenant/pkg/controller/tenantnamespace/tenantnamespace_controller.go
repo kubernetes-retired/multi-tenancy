@@ -112,6 +112,20 @@ func (r *ReconcileTenantNamespace) updateNamespace(ns *corev1.Namespace, tenantA
 	return err
 }
 
+func findTenant(adminNsName string, tList *tenancyv1alpha1.TenantList) (string, bool) {
+	// Find the tenant that owns the adminNs
+	requireNamespacePrefix := false
+	var tenantName string
+	for _, each := range tList.Items {
+		if each.Spec.TenantAdminNamespaceName == adminNsName {
+			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
+			tenantName = each.Name
+			break
+		}
+	}
+	return tenantName, requireNamespacePrefix
+}
+
 // Reconcile reads that state of the cluster for a TenantNamespace object and makes changes based on the state read
 // and what is in the TenantNamespace.Spec
 // Automatically generate RBAC rules to allow the Controller to read and write Deployments
@@ -131,7 +145,6 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
 	// Fetch namespace list
 	nsList := &corev1.NamespaceList{}
 	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
@@ -146,35 +159,25 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 		return reconcile.Result{}, err
 	}
 
-	// Find the tenant of this instance
-	requireNamespacePrefix := false
-	var tenantName string
-	for _, each := range tenantList.Items {
-		if each.Spec.TenantAdminNamespaceName == instance.Namespace {
-			requireNamespacePrefix = each.Spec.RequireNamespacePrefix
-			tenantName = each.Name
-			break
-		}
-	}
-	if tenantName == "" {
-		err = fmt.Errorf("TenantNamespace CR %v does not belong to any tenant", instance)
-		return reconcile.Result{}, err
-
-	}
+	tenantName, requireNamespacePrefix := findTenant(instance.Namespace, tenantList)
 
 	// Handle tenantNamespace CR deletion
 	if instance.DeletionTimestamp != nil {
-		// Remove namespace from tenant clusterrole
-		if err = r.updateTenantClusterRole(tenantName, instance.Status.OwnedNamespace, false); err != nil {
-			return reconcile.Result{}, err
-		} else {
-			instanceClone := instance.DeepCopy()
-			if containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
-				instanceClone.Finalizers = removeString(instanceClone.Finalizers, TenantNamespaceFinalizer)
+		if tenantName != "" {
+			// Remove namespace from tenant clusterrole
+			if err = r.updateTenantClusterRole(tenantName, instance.Status.OwnedNamespace, false); err != nil {
+				return reconcile.Result{}, err
 			}
-			err = r.Update(context.TODO(), instanceClone)
-			return reconcile.Result{}, err
 		}
+		instanceClone := instance.DeepCopy()
+		if containsString(instanceClone.Finalizers, TenantNamespaceFinalizer) {
+			instanceClone.Finalizers = removeString(instanceClone.Finalizers, TenantNamespaceFinalizer)
+		}
+		err = r.Update(context.TODO(), instanceClone)
+		return reconcile.Result{}, err
+
+	} else if tenantName == "" {
+		return reconcile.Result{}, fmt.Errorf("TenantNamespace CR %v does not belong to any tenant", instance)
 	}
 
 	// In case namespace already exists
@@ -263,7 +266,11 @@ func (r *ReconcileTenantNamespace) updateTenantClusterRole(tenantName, tenantNsN
 	var err error
 	cr := &rbacv1.ClusterRole{}
 	if err = r.Get(context.TODO(), types.NamespacedName{Name: fmt.Sprintf("%s-tenant-admin-role", tenantName)}, cr); err != nil {
-		return err
+		if errors.IsNotFound(err) {
+			return nil
+		} else {
+			return err
+		}
 	}
 	cr = cr.DeepCopy()
 	foundNsRule := false

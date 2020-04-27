@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-logr/logr"
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	corev1 "k8s.io/api/core/v1"
@@ -74,7 +75,7 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	// the hns instance. Forbidden HNSes won't have finalizers.
 	// TODO refactor/split the EX map for 1) reconciler exclusion and 2) self-serve not allowed
 	//  purposes. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/495
-	if EX[pnm] {
+	if config.EX[pnm] {
 		inst.Status.State = api.Forbidden
 		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 	}

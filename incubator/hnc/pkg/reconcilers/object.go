@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
@@ -182,7 +183,7 @@ func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("trigger", req.NamespacedName)
 
-	if EX[req.Namespace] {
+	if config.EX[req.Namespace] {
 		return resp, nil
 	}
 
@@ -537,6 +538,8 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ao := api.NewAffectedObject(inst.GetObjectKind().GroupVersionKind(), inst.GetNamespace(), inst.GetName())
+	// This affected object is initialized with the source object if it exits.
+	sao := api.NewAffectedObject(inst.GetObjectKind().GroupVersionKind(), inst.GetLabels()[api.LabelInheritedFrom], inst.GetName())
 	ns := r.Forest.Get(inst.GetNamespace())
 
 	switch {
@@ -547,11 +550,13 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 		}
 
 	case err != nil:
-		// There was an error updating this object; set a local condition.
+		// There was an error updating this object; set a condition pointing to the source object. Note we
+		// never take actions on a source object, so only propagated objects could possibly get an error.
 		msg := fmt.Sprintf("Could not %s: %s", act, err.Error())
-		if ns.SetCondition(ao, api.CannotUpdate, msg) {
+		if ns.SetCondition(sao, api.CannotUpdate, msg) {
 			r.enqueueNamespace(log, ns.Name(), "Set CannotUpdate due to error")
 		}
+
 		// Also set a condition on the source if one exists.
 		if srcInst != nil {
 			srcNS := r.Forest.Get(srcInst.GetNamespace())
@@ -571,6 +576,11 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 		// No error conditions exist for this object; clear all conditions in the namespace and all its
 		// ancestors (technically, srcNS is the only feasible ancestor, but because we don't hold the
 		// lock, it's safer to just do everything).
+		if hasPropagatedLabel(inst) {
+			if ns.ClearCondition(sao, "") {
+				r.enqueueNamespace(log, ns.Name(), "Removed condition")
+			}
+		}
 		for ns != nil {
 			if ns.ClearCondition(ao, "") {
 				r.enqueueNamespace(log, ns.Name(), "Removed condition")

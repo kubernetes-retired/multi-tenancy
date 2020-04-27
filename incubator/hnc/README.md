@@ -33,26 +33,23 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Installing or upgrading HNC
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.2.0
+HNC_VERSION=v0.3.0
+
+# The instructions below are all for HNC v0.3.x. For v0.2.x, please use Git
+# history to view an earlier version of this README.
 
 # Install prerequisites on your cluster
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+
 # WAIT for the cert-manager deployments to all become healthy. This can take a
-# minute or two.
+# few minutes.
 
 # Install HNC on your cluster. If this fails due to the cert-manager webhook not
-# being ready yet, wait for the webhook to become ready, then re-run it. Usually the cert-manager webhook takes five minutes to be ready.
+# being ready yet, wait for the webhook to become ready, then re-run it.
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
 PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
-
-# Instructions for hnc-v0.2.0 and before
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces	
-ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
-
-# Instructions for hnc-v0.3.0 and later
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
 chmod +x ${PLUGIN_DIR}/kubectl-hns
 ```
@@ -84,9 +81,8 @@ is no need to uninstall HNC before upgrading it.
 
 ```bash
 rm ${PLUGIN_DIR}/kubectl-hns
-# hnc-v0.2.0 and before only, noop for hnc-v0.3.0 and after
-rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
 # Don't need to delete the cert manager if you plan to reinstall it later.
 kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 ```
@@ -101,7 +97,8 @@ milestones are defined:
   not suitable for any real workloads.
 * [v0.2 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
   contains enough functionality to be suitable for non-production workloads.
-* v0.3: definition in progress (as of Jan 2020)
+* [v0.3 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
+  type configuration and better self-service namespace UX.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
@@ -151,6 +148,17 @@ To deploy to a cluster:
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
 
+### Development Workflow
+
+Once HNC is installed via `make deploy`, the development cycle looks like the following: 
+  - Make changes locally and write new unit and integration tests as necessary
+  - Ensure `make test` passes
+  - Deploy to your cluster with `make deploy`
+  - Monitor changes. Some ways you can do that are:
+    - Look at logging with `make deploy-watch`
+    - Look at the result of the structure of your namespaces with `kubectl-hns tree -A` or `kubectl-hns tree NAMESPACE`
+    - See the resultant conditions or labels on namespaces by using `kubectl describe namespace NAMESPACE`
+
 ### Developing with KIND
 
 While developing the HNC, it's usually faster to deploy locally to
@@ -189,13 +197,15 @@ interesting directories are probably:
 * `/pkg/forest`: the in-memory data structure, shared between the reconcilers
   and validators.
 
-Within the `reconcilers` directory, there are three reconcilers:
+Within the `reconcilers` directory, there are four reconcilers:
 
 * **HNCConfiguration reconciler:** manages the HNCConfiguration via the
   cluster-wide `config` singleton.
-* **Hierarchy reconciler:** manages the hierarchy via the `Hierarchy` singleton
-  as well as the namespace in which it lives.
-* **Object reconciler:** Propagates (copies and deletes) the relevant objects
+* **HierarchicalNamespace reconciler:** manages the self-service namespaces via 
+  the `hierarchicalnamespace` resources.
+* **HierarchyConfiguration reconciler:** manages the hierarchy and the
+  namespaces via the `hierarchy` singleton per namespace.
+* **Object reconciler:** propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 

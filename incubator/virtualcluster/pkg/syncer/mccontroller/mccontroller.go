@@ -64,19 +64,12 @@ type Options struct {
 	JitterPeriod time.Duration
 
 	// MaxConcurrentReconciles is the number of concurrent control loops.
-	// Use this if your Reconciler is slow, but thread safe.
 	MaxConcurrentReconciles int
 
-	// Reconciler is a function that can be called at any time with the Name / Namespace of an object and
-	// ensures that the state of the system matches the state specified in the object.
-	// Defaults to the DefaultReconcileFunc.
-	Reconciler reconciler.Reconciler
+	Reconciler reconciler.DWReconciler
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
-
-	// A Fake controller is created for testing purpose.
-	IsFake bool
 }
 
 // Cache is the interface used by Controller to start and wait for caches to sync.
@@ -89,16 +82,13 @@ type Cache interface {
 // ClusterInterface decouples the controller package from the cluster package.
 type ClusterInterface interface {
 	GetClusterName() string
-	GetOwnerInfo() (string, string)
+	GetOwnerInfo() (string, string, string)
 	GetSpec() (*v1alpha1.VirtualclusterSpec, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
 	Cache
 }
-
-// TenantClusterReconcileHandler is the handler to process the event from tenant cluster.
-type TenantClusterReconcileHandler func(request reconciler.Request) (reconciler.Result, error)
 
 // NewMCController creates a new MultiClusterController.
 func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
@@ -294,13 +284,13 @@ func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.Virtualc
 
 }
 
-func (c *MultiClusterController) GetOwnerInfo(clusterName string) (string, string, error) {
+func (c *MultiClusterController) GetOwnerInfo(clusterName string) (string, string, string, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return "", "", fmt.Errorf("could not find cluster %s", clusterName)
+		return "", "", "", fmt.Errorf("could not find cluster %s", clusterName)
 	}
-	name, uid := cluster.GetOwnerInfo()
-	return name, uid, nil
+	name, namespace, uid := cluster.GetOwnerInfo()
+	return name, namespace, uid, nil
 }
 
 // GetClusterNames returns the name list of all managed tenant clusters
@@ -353,7 +343,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 
 	if shutdown {
 		// Stop working
-		klog.Warning("Shutting down. Ignore work item and stop working.")
+		klog.V(4).Info("Shutting down. Ignore work item and stop working.")
 		return false
 	}
 
@@ -388,7 +378,6 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	if result, err := c.Reconciler.Reconcile(req); err != nil {
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
-		klog.Error("Could not reconcile Request. Stop working.")
 		return false
 	} else if result.RequeueAfter > 0 {
 		c.Queue.AddAfter(req, result.RequeueAfter)

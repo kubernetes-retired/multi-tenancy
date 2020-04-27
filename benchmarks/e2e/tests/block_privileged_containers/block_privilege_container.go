@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/onsi/ginkgo"
-	configutil "github.com/realshuting/multi-tenancy/benchmarks/e2e/config"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 )
@@ -24,19 +24,20 @@ var _ = framework.KubeDescribe("Tenants should not be allowed to run privileged 
 		config, err = configutil.ReadConfig(configutil.ConfigPath)
 		framework.ExpectNoError(err)
 
-		tenantA = config.GetValidTenant()
+		tenantA, err = config.GetValidTenant()
+		framework.ExpectNoError(err)
 		user = configutil.GetContextFromKubeconfig(tenantA.Kubeconfig)
 	})
 
 	ginkgo.It("validate tenants can't create privileged containers", func() {
-		ginkgo.By(fmt.Sprintf("tenant ${user} cannot create pod/container with securityContext.privileged set to true",
+		ginkgo.By(fmt.Sprintf("tenant %s cannot create pod/container with securityContext.privileged set to true",
 			user))
 		kclient := configutil.NewKubeClientWithKubeconfig(tenantA.Kubeconfig)
 		// IsPrivileged set to true so that pod creation would fail
 		pod := e2epod.MakeSecPod(tenantA.Namespace, nil, nil, true, "", false, false, nil, nil)
 		_, err = kclient.CoreV1().Pods(tenantA.Namespace).Create(pod)
 		if !strings.Contains(err.Error(),expectedVal) {
-			framework.Failf("%s must be unable to create pod with HostPID set to true", user)
+			framework.Failf("%s must be unable to create pod that sets privileged to true", user)
 		}
 	})
 })

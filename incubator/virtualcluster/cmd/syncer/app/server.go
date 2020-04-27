@@ -89,6 +89,7 @@ resource isolation policy specified in Tenant CRD.`,
 func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	ss := syncer.New(&cc.ComponentConfig,
 		cc.SecretClient,
+		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
 		cc.SuperMasterClient,
 		cc.SuperMasterInformerFactory)
@@ -150,6 +151,10 @@ func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.Compl
 		go func() {
 			// start a pprof http server
 			klog.Fatal(http.ListenAndServe(":6060", nil))
+		}()
+		go func() {
+			// start a health port.
+			klog.Fatal(http.ListenAndServe(":8080", nil))
 		}()
 		<-ctx.Done()
 	}

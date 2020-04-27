@@ -10,8 +10,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
 )
 
 // HierarchicalNamespaceServingPath is where the validator will run. Must be kept in sync with the
@@ -69,7 +69,7 @@ func (v *HierarchicalNamespace) handle(req *hnsRequest) admission.Response {
 	cns := v.Forest.Get(cnm)
 
 	if req.op == v1beta1.Create {
-		if reconcilers.EX[pnm] {
+		if config.EX[pnm] {
 			msg := fmt.Sprintf("The namespace %s is not allowed to create subnamespaces. Please create subnamespaces in a different namespace.", pnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}

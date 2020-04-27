@@ -41,13 +41,27 @@ func tenantNamespace(name, uid string) *v1.Namespace {
 	}
 }
 
-func superNamespace(name, uid string) *v1.Namespace {
+func superNamespace(name, uid, clusterKey string) *v1.Namespace {
 	return &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Annotations: map[string]string{
-				constants.LabelUID: uid,
+				constants.LabelUID:         uid,
+				constants.LabelCluster:     clusterKey,
+				constants.LabelNamespace:   "default",
+				constants.LabelVCName:      "test",
+				constants.LabelVCNamespace: "tenant-1",
+				constants.LabelVCUID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 			},
+		},
+	}
+}
+
+func unknownNamespace(name, uid string) *v1.Namespace {
+	return &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			UID:  types.UID(uid),
 		},
 	}
 }
@@ -83,7 +97,7 @@ func TestDWNamespaceCreation(t *testing.T) {
 		},
 		"new namespace but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "12345"),
+				superNamespace(defaultSuperNSName, "12345", defaultClusterKey),
 			},
 			ExistingObjectInTenant:   tenantNamespace(defaultNSName, "12345"),
 			ExpectedCreatedNamespace: []string{},
@@ -91,7 +105,7 @@ func TestDWNamespaceCreation(t *testing.T) {
 		},
 		"new namespace but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "123456"),
+				superNamespace(defaultSuperNSName, "123456", defaultClusterKey),
 			},
 			ExistingObjectInTenant:   tenantNamespace(defaultNSName, "12345"),
 			ExpectedCreatedNamespace: []string{},
@@ -101,7 +115,11 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInTenant)
+			actions, reconcileErr, err := util.RunDownwardSyncWithVCClient(NewNamespaceController,
+				testTenant,
+				tc.ExistingObjectInSuper,
+				[]runtime.Object{tc.ExistingObjectInTenant},
+				tc.ExistingObjectInTenant)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -109,9 +127,9 @@ func TestDWNamespaceCreation(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {
@@ -163,7 +181,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 	}{
 		"delete namespace": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "12345"),
+				superNamespace(defaultSuperNSName, "12345", defaultClusterKey),
 			},
 			EnqueueObject:            tenantNamespace(defaultNSName, "12345"),
 			ExpectedDeletedNamespace: []string{defaultSuperNSName},
@@ -176,7 +194,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 		},
 		"delete namespace but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superNamespace(defaultSuperNSName, "123456"),
+				superNamespace(defaultSuperNSName, "123456", defaultClusterKey),
 			},
 			EnqueueObject:            tenantNamespace(defaultNSName, "12345"),
 			ExpectedDeletedNamespace: []string{},
@@ -186,7 +204,7 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunDownwardSync(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
+			actions, reconcileErr, err := util.RunDownwardSyncWithVCClient(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, nil, tc.EnqueueObject)
 			if err != nil {
 				t.Errorf("%s: error running downward sync: %v", k, err)
 				return
@@ -194,9 +212,9 @@ func TestDWNamespaceDeletion(t *testing.T) {
 
 			if reconcileErr != nil {
 				if tc.ExpectedError == "" {
-					t.Errorf("expected no error, but got \"%v\"", err)
+					t.Errorf("expected no error, but got \"%v\"", reconcileErr)
 				} else if !strings.Contains(reconcileErr.Error(), tc.ExpectedError) {
-					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, err)
+					t.Errorf("expected error msg \"%s\", but got \"%v\"", tc.ExpectedError, reconcileErr)
 				}
 			} else {
 				if tc.ExpectedError != "" {

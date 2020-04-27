@@ -79,7 +79,7 @@ spec:
                     description: "Describes the condition in a machine-readable string
                       value. The currently valid values are shown below, but new values
                       may be added over time. This field is always present in a condition.
-                      \n All codes that begin with the prefix `CRIT_` indicate that
+                      \n All codes that begin with the prefix `Crit` indicate that
                       all HNC activities (e.g. propagating objects, updating labels)
                       have been paused in this namespaces. HNC will resume updating
                       the namespace once the condition has been resolved. Non-critical
@@ -90,15 +90,21 @@ spec:
                       any conditions on any namespaces, although some may appear transiently
                       when the HNC controller is restarted. These should quickly resolve
                       themselves (<30s). \n Currently, the supported values are: \n
-                      - \"CRIT_PARENT_MISSING\": the specified parent is missing \n
-                      - \"CRIT_PARENT_INVALID\": the specified parent is invalid (e.g.,
-                      would cause a cycle) \n - \"CRIT_ANCESTOR\": a critical error
+                      - \"CritParentMissing\": the specified parent is missing \n
+                      - \"CritParentInvalid\": the specified parent is invalid (e.g.,
+                      would cause a cycle) \n - \"CritAncestor\": a critical error
                       exists in an ancestor namespace, so this namespace is no longer
-                      being updated either. \n - \"REQUIRED_CHILD_CONFLICT\": this
-                      namespace has a required child, but a namespace of the same
-                      name already exists and is not a child of this namespace. Note
-                      that the condition is _not_ annotated onto the other namespace;
-                      it is considered an error _only_ for the would-be parent namespace."
+                      being updated either. \n - \"HNSMissing\": this namespace is
+                      an owned namespace (created by reconciling an hns instance),
+                      but the hns instance is missing in its owner (referenced in
+                      its owner annotation) or the owner namespace is missing. \n
+                      - \"CannotPropagateObject\": this namespace contains an object
+                      that couldn't be propagated to one or more of its descendants.
+                      The condition's affect objects will include a list of the copies
+                      that couldn't be updated. \n - \"CannotUpdateObject\": this
+                      namespace has an error when updating a propagated object from
+                      its source. The condition's affected object will point to the
+                      source object."
                     type: string
                   msg:
                     description: A human-readable description of the condition, if
