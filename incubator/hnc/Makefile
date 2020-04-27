@@ -35,7 +35,7 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 GOBIN ?= $(shell go env GOPATH)/bin
 
 # Get check sum value of krew archive
-KREW_CKSM=$(shell sha256sum bin/kubectl-hierarchical_namespaces.tar.gz | cut -d " " -f 1)
+KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 all: test docker-build
 
@@ -48,20 +48,17 @@ test: build
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests
 	go build -o bin/manager ./cmd/manager/main.go
-	go build -o bin/kubectl/kubectl-hierarchical_namespaces ./cmd/kubectl/main.go
+	go build -o bin/kubectl/kubectl-hns ./cmd/kubectl/main.go
 
 # Clean all binaries (manager and kubectl)
 clean: krew-uninstall
 	-rm -rf bin/*
 	-rm -rf manifests/*
-	-rm -f ${GOPATH}/bin/kubectl-hierarchical_namespaces
 	-rm -f ${GOPATH}/bin/kubectl-hns
 
 # Install kubectl plugin
 kubectl: build
-	cp bin/kubectl/kubectl-hierarchical_namespaces ${GOPATH}/bin/kubectl-hierarchical_namespaces
-	ln -fs ${GOPATH}/bin/kubectl-hierarchical_namespaces ${GOPATH}/bin/kubectl-hns
-	@echo "Installed kubectl-hierarchical_namespaces and kubectl-hns to GOPATH/bin"
+	cp bin/kubectl/kubectl-hns ${GOPATH}/bin/kubectl-hns
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: build
@@ -77,11 +74,11 @@ krew-build: krew-tar
 
 # Install kubectl plugin locally using krew.
 krew-install: krew-build
-	kubectl krew install --manifest=manifests/krew-hierarchical-namespaces.yaml --archive=bin/kubectl-hierarchical_namespaces.tar.gz
+	kubectl krew install --manifest=manifests/krew-hierarchical-namespaces.yaml --archive=bin/kubectl-hns.tar.gz
 
 # Make krew archive and put into /hack
 krew-tar: build
-	tar -zcvf bin/kubectl-hierarchical_namespaces.tar.gz bin/kubectl
+	tar -zcvf bin/kubectl-hns.tar.gz bin/kubectl
 
 # Uninstall krew
 krew-uninstall:

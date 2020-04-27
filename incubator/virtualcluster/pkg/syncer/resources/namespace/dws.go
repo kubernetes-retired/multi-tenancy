@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,10 +39,6 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 
 // The reconcile logic for tenant master namespace informer
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	return c.reconcileHandler(request)
-}
-
-func (c *controller) reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.V(4).Infof("reconcile namespace %s for cluster %s", request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Name)
 	pNamespace, err := c.nsLister.Get(targetNamespace)
@@ -89,12 +85,12 @@ func (c *controller) reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requestUID string, vNamespace *v1.Namespace) error {
-	vcName, vcUID, err := c.multiClusterNamespaceController.GetOwnerInfo(clusterName)
+	vcName, vcNamespace, vcUID, err := c.multiClusterNamespaceController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
 
-	newObj, err := conversion.BuildSuperMasterNamespace(clusterName, vcName, vcUID, vNamespace)
+	newObj, err := conversion.BuildSuperMasterNamespace(clusterName, vcName, vcNamespace, vcUID, vNamespace)
 	if err != nil {
 		return err
 	}

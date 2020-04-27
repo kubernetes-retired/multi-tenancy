@@ -33,6 +33,10 @@ func TestStructure(t *testing.T) {
 		{name: "missing parent", nnm: "foo", pnm: "brumpf", fail: true},
 		{name: "self-cycle", nnm: "foo", pnm: "foo", fail: true},
 		{name: "other cycle", nnm: "foo", pnm: "bar", fail: true},
+		{name: "exclude kube-system", nnm: "foo", pnm: "kube-system", fail: true},
+		{name: "exclude kube-public", nnm: "foo", pnm: "kube-public", fail: true},
+		{name: "exclude hnc-system", nnm: "foo", pnm: "hnc-system", fail: true},
+		{name: "exclude cert-manager", nnm: "foo", pnm: "cert-manager", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

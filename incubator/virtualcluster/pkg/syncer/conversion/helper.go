@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	listersv1 "k8s.io/client-go/listers/core/v1"
@@ -122,7 +121,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 	return target, nil
 }
 
-func BuildSuperMasterNamespace(cluster, vcName, vcUID string, obj runtime.Object) (runtime.Object, error) {
+func BuildSuperMasterNamespace(cluster, vcName, vcNamespace, vcUID string, obj runtime.Object) (runtime.Object, error) {
 	target := obj.DeepCopyObject()
 	m, err := meta.Accessor(target)
 	if err != nil {
@@ -136,20 +135,17 @@ func BuildSuperMasterNamespace(cluster, vcName, vcUID string, obj runtime.Object
 	anno[constants.LabelCluster] = cluster
 	anno[constants.LabelUID] = string(m.GetUID())
 	anno[constants.LabelNamespace] = m.GetName()
+	// We put owner information in annotation instead of  metav1.OwnerReference because vc is a namespace scope resource
+	// and metav1.OwnerReference does not provide namespace field. The owner information is needed for super master ns gc.
+	anno[constants.LabelVCName] = vcName
+	anno[constants.LabelVCNamespace] = vcNamespace
+	anno[constants.LabelVCUID] = vcUID
 	m.SetAnnotations(anno)
 
 	ResetMetadata(m)
 
 	targetName := ToSuperMasterNamespace(cluster, m.GetName())
 	m.SetName(targetName)
-	owner := []metav1.OwnerReference{
-		metav1.OwnerReference{
-			APIVersion: v1alpha1.SchemeGroupVersion.String(),
-			Kind:       "Virtualcluster",
-			Name:       vcName,
-			UID:        types.UID(vcUID),
-		}}
-	m.SetOwnerReferences(owner)
 	return target, nil
 }
 
@@ -187,8 +183,8 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 }
 
 func BuildVirtualPersistentVolume(cluster string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {
-	vPV := pPV.DeepCopy()
-	ResetMetadata(vPV)
+	vPVobj, _ := BuildMetadata(cluster, "", pPV)
+	vPV := vPVobj.(*v1.PersistentVolume)
 	// The pv needs to bind with the vPVC
 	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace
 	vPV.Spec.ClaimRef.UID = vPVC.UID

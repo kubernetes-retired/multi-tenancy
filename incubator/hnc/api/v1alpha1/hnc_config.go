@@ -21,7 +21,8 @@ import (
 
 // Constants for types and well-known names.
 const (
-	HNCConfigSingleton = "config"
+	HNCConfigSingleton  = "config"
+	HNCConfigSingletons = "hncconfigurations"
 )
 
 // SynchronizationMode describes propagation mode of objects of the same kind.
@@ -45,9 +46,9 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid         HNCConfigurationCode = "critSingletonNameInvalid"
-	ObjectReconcilerCreationFailed   HNCConfigurationCode = "objectReconcilerCreationFailed"
-	MultipleConfigurationsForOneType HNCConfigurationCode = "multipleConfigurationsForOneType"
+	CritSingletonNameInvalid         HNCConfigurationCode = "CritSingletonNameInvalid"
+	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
+	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
@@ -68,12 +69,21 @@ type TypeSynchronizationStatus struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	// Kind to be configured.
 	Kind string `json:"kind,omitempty"`
+	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
+	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
+	// spec and the default is chosen.
+	Mode SynchronizationMode `json:"mode,omitempty"`
 
 	// Tracks the number of objects that are being propagated to descendant namespaces. The propagated
 	// objects are created by HNC.
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	NumPropagatedObjects *int `json:"numPropagatedObjects,omitempty"`
+
+	// Tracks the number of objects that are created by users.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	NumSourceObjects *int `json:"numSourceObjects,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -43,7 +43,6 @@ import (
 	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 const (
@@ -92,11 +91,32 @@ type MasterProvisionerAliyun struct {
 	scheme *runtime.Scheme
 }
 
-func NewMasterProvisionerAliyun(mgr manager.Manager) *MasterProvisionerAliyun {
+func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, error) {
+	// if running under aliyun mode, 'AliyunAkSrt' and 'AliyunASKConfigMap' is required
+	ns, err := kubeutil.GetPodNsFromInside()
+	if err != nil {
+		return nil, fmt.Errorf("fail to get vc-manager's namespace: %s", err)
+	}
+	cli, err := kubeutil.NewInClusterClient()
+	if err != nil {
+		return nil, fmt.Errorf("fail to create incluster client: %s", err)
+	}
+	if !kubeutil.IsObjExist(cli, types.NamespacedName{
+		Namespace: ns,
+		Name:      AliyunAkSrt,
+	}, &v1.Secret{}, log) {
+		return nil, fmt.Errorf("secret/%s doesnot exist", AliyunAkSrt)
+	}
+	if !kubeutil.IsObjExist(cli, types.NamespacedName{
+		Namespace: ns,
+		Name:      AliyunASKConfigMap,
+	}, &v1.ConfigMap{}, log) {
+		return nil, fmt.Errorf("configmap/%s doesnot exist", AliyunASKConfigMap)
+	}
 	return &MasterProvisionerAliyun{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
-	}
+	}, nil
 }
 
 // getClusterIDByName returns the clusterID of the cluster with clusterName
@@ -492,13 +512,11 @@ PollASK:
 	}
 
 	// 4. create the root namesapce of the Virtualcluster
-	vcNs := conversion.ToClusterKey(vc)
-
-	err = kubeutil.CreateRootNS(mpa, vcNs, vc.Name, string(vc.UID))
+	vcNs, err := kubeutil.CreateRootNS(mpa, vc)
 	if err != nil {
 		return err
 	}
-	log.Info("virtualcluster ns is created", "ns", vcNs)
+	log.Info("virtualcluster root ns is created", "ns", vcNs)
 
 	// 5. get kubeconfig of the newly created ASK
 	kbCfg, err := getASKKubeConfig(cli, clsID, askCfg.regionID, askCfg.privateKbCfg)

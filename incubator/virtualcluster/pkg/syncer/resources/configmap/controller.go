@@ -17,8 +17,6 @@ limitations under the License.
 package configmap
 
 import (
-	"time"
-
 	v1 "k8s.io/api/core/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -30,9 +28,11 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master configMap client
 	configMapClient v1core.ConfigMapsGetter
 	// super master configMap informer lister/synced function
@@ -40,8 +40,8 @@ type controller struct {
 	configMapSynced cache.InformerSynced
 	// Connect to all tenant master configMap informers
 	multiClusterConfigMapController *mc.MultiClusterController
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// Periodic checker
+	configMapPatroller *pa.Patroller
 }
 
 func Register(
@@ -51,8 +51,8 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
-		configMapClient:     configMapClient,
-		periodCheckerPeriod: 60 * time.Second,
+		config:          config,
+		configMapClient: configMapClient,
 	}
 
 	// Create the multi cluster configmap controller
@@ -66,10 +66,22 @@ func Register(
 	c.configMapLister = configMapInformer.Lister()
 	c.configMapSynced = configMapInformer.Informer().HasSynced
 
-	controllerManager.AddController(c)
+	patrolOptions := &pa.Options{Reconciler: c}
+	configMapPatroller, err := pa.NewPatroller("configMap-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create configMap patroller %v", err)
+		return
+	}
+	c.configMapPatroller = configMapPatroller
+
+	controllerManager.AddResourceSyncer(c)
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (c *controller) BackPopulate(string) error {
 	return nil
 }
 

@@ -26,29 +26,26 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 var numMissMatchedStorageClasses uint64
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.storageclassSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-
-	wait.Until(c.checkStorageClass, c.periodCheckerPeriod, stopCh)
+	c.storageClassPatroller.Start(stopCh)
 	return nil
 }
 
-// checkStorageClass check if StorageClass keeps consistency between super master and tenant masters.
-func (c *controller) checkStorageClass() {
+// ParollerDo check if StorageClass keeps consistency between super master and tenant masters.
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterStorageClassController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up storage class period checker")
@@ -83,7 +80,7 @@ func (c *controller) checkStorageClass() {
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
-					c.queue.Add(reconciler.UwsRequest{Key: pStorageClass.Name, ClusterName: clusterName})
+					c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}
@@ -126,13 +123,12 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		updatedStorageClass := conversion.Equality(nil).CheckStorageClassEquality(pStorageClass, &scList.Items[i])
+		updatedStorageClass := conversion.Equality(nil, nil).CheckStorageClassEquality(pStorageClass, &scList.Items[i])
 		if updatedStorageClass != nil {
 			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 			if publicStorageClass(pStorageClass) {
-				key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(pStorageClass)
-				c.queue.Add(reconciler.UwsRequest{Key: key, ClusterName: clusterName})
+				c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 			}
 		}
 	}

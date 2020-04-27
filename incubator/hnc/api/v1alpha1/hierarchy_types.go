@@ -16,7 +16,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"sort"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Constants for types and well-known names
@@ -27,21 +31,19 @@ const (
 
 // Constants for labels and annotations
 const (
-	MetaGroup          = "hnc.x-k8s.io"
-	LabelInheritedFrom = MetaGroup + "/inheritedFrom"
+	MetaGroup                  = "hnc.x-k8s.io"
+	LabelInheritedFrom         = MetaGroup + "/inheritedFrom"
+	FinalizerHasOwnedNamespace = MetaGroup + "/hasOwnedNamespace"
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
-// TODO change condition codes to CamelCase strings. See issue:
-//  https://github.com/kubernetes-sigs/multi-tenancy/issues/500
 const (
-	CritParentMissing    Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid    Code = "CRIT_PARENT_INVALID"
-	CritAncestor         Code = "CRIT_ANCESTOR"
-	SubnamespaceConflict Code = "SUBNAMESPACE_CONFLICT"
-	HNSMissing           Code = "HNS_MISSING"
-	CannotUpdate         Code = "CANNOT_UPDATE_OBJECT"
-	CannotPropagate      Code = "CANNOT_PROPAGATE_OBJECT"
+	CritParentMissing Code = "CritParentMissing"
+	CritParentInvalid Code = "CritParentInvalid"
+	CritAncestor      Code = "CritAncestor"
+	HNSMissing        Code = "HNSMissing"
+	CannotPropagate   Code = "CannotPropagateObject"
+	CannotUpdate      Code = "CannotUpdateObject"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -102,7 +104,7 @@ type Condition struct {
 	// shown below, but new values may be added over time. This field is always present in a
 	// condition.
 	//
-	// All codes that begin with the prefix `CRIT_` indicate that all HNC activities (e.g. propagating
+	// All codes that begin with the prefix `Crit` indicate that all HNC activities (e.g. propagating
 	// objects, updating labels) have been paused in this namespaces. HNC will resume updating the
 	// namespace once the condition has been resolved. Non-critical conditions typically indicate some
 	// kind of error that HNC itself can ignore, but likely indicates that the hierarchical structure
@@ -114,17 +116,23 @@ type Condition struct {
 	//
 	// Currently, the supported values are:
 	//
-	// - "CRIT_PARENT_MISSING": the specified parent is missing
+	// - "CritParentMissing": the specified parent is missing
 	//
-	// - "CRIT_PARENT_INVALID": the specified parent is invalid (e.g., would cause a cycle)
+	// - "CritParentInvalid": the specified parent is invalid (e.g., would cause a cycle)
 	//
-	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no
+	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
 	//
-	// - "REQUIRED_CHILD_CONFLICT": this namespace has a required child, but a namespace of the same
-	// name already exists and is not a child of this namespace. Note that the condition is _not_
-	// annotated onto the other namespace; it is considered an error _only_ for the would-be parent
-	// namespace.
+	// - "HNSMissing": this namespace is an owned namespace (created by reconciling an hns instance),
+	// but the hns instance is missing in its owner (referenced in its owner annotation) or the owner
+	// namespace is missing.
+	//
+	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated to
+	// one or more of its descendants. The condition's affect objects will include a list of the
+	// copies that couldn't be updated.
+	//
+	// - "CannotUpdateObject": this namespace has an error when updating a propagated object from its
+	// source. The condition's affected object will point to the source object.
 	Code Code `json:"code"`
 
 	// A human-readable description of the condition, if the `code` and `affects` fields are not
@@ -143,6 +151,60 @@ type AffectedObject struct {
 	Kind      string `json:"kind,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name,omitempty"`
+}
+
+func NewAffectedNamespace(ns string) AffectedObject {
+	return AffectedObject{
+		Version: "v1",
+		Kind:    "Namespace",
+		Name:    ns,
+	}
+}
+
+func NewAffectedObject(gvk schema.GroupVersionKind, ns, nm string) AffectedObject {
+	return AffectedObject{
+		Group:     gvk.Group,
+		Version:   gvk.Version,
+		Kind:      gvk.Kind,
+		Namespace: ns,
+		Name:      nm,
+	}
+}
+
+// String should only be used for debug purposes
+func (a AffectedObject) String() string {
+	// No affected object (i.e. affects this namespace?). Note that this will never be returned by the
+	// API, but it is used internally to indicate that the API doesn't need to show an affected
+	// object.
+	if a.Name == "" {
+		return "<local>"
+	}
+
+	// No namespace -> it *is* a namespace
+	if a.Namespace != "" {
+		return a.Namespace
+	}
+
+	// Generic object (note that Group may be empty for core objects, don't worry about it)
+	return fmt.Sprintf("%s/%s/%s/%s/%s", a.Group, a.Version, a.Kind, a.Namespace, a.Name)
+}
+
+func SortAffectedObjects(objs []AffectedObject) {
+	sort.Slice(objs, func(i, j int) bool {
+		if objs[i].Group != objs[j].Group {
+			return objs[i].Group < objs[j].Group
+		}
+		if objs[i].Version != objs[j].Version {
+			return objs[i].Version < objs[j].Version
+		}
+		if objs[i].Version != objs[j].Version {
+			return objs[i].Version < objs[j].Version
+		}
+		if objs[i].Namespace != objs[j].Namespace {
+			return objs[i].Namespace < objs[j].Namespace
+		}
+		return objs[i].Name < objs[j].Name
+	})
 }
 
 func init() {

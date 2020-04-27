@@ -32,6 +32,18 @@ type SyncerConfiguration struct {
 	// settings for the proxy server to use when communicating with the apiserver.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 
+	// DefaultOpaqueMetaDomains is the default configuration for each Virtual Cluster.
+	// The key prefix of labels or annotations match this domain would be invisible to Virtual Cluster but
+	// are kept in super master.
+	// take tenant labels(annotations) ["foo=bar", "foo.kubernetes.io/foo=bar"] for example,
+	// different configurations and possible final states are as follows:
+	// DefaultOpaqueMetaDomains | labels(annotations) in super cluster
+	// []                       | ["foo=bar", "foo.kubernetes.io/foo=bar"]
+	// ["foo.kubernetes.io"]    | ["foo=bar", "foo.kubernetes.io/foo=foo", "foo.kubernetes.io/a=b"]
+	// ["kubernetes.io"]        | ["foo=bar", "foo.kubernetes.io/foo=foo", "foo.kubernetes.io/a=b", "a.kubernetes.io/b=c"]
+	// ["aaa"]                  | ["foo=bar", "foo.kubernetes.io/foo=bar", "aaa/b=c"]
+	DefaultOpaqueMetaDomains []string
+
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
 }

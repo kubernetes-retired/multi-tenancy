@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/leaderelection"
 
+	vcclient "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	syncerconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 )
@@ -34,7 +35,9 @@ type Config struct {
 	ComponentConfig syncerconfig.SyncerConfiguration
 
 	// the general kube client
-	SecretClient           corev1.SecretsGetter
+	SecretClient corev1.SecretsGetter
+	// virtual cluster CR client
+	VirtualClusterClient   vcclient.Interface
 	VirtualClusterInformer vcinformers.VirtualclusterInformer
 
 	// the super master client

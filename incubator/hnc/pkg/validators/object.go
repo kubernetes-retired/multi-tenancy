@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
@@ -43,7 +44,7 @@ type Object struct {
 func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := o.Log.WithValues("nm", req.Name, "nnm", req.Namespace)
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
-		log.Info("Allowed change by HNC SA")
+		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
 	}
 
@@ -64,16 +65,22 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	}
 
 	resp := o.handle(ctx, log, inst, oldInst)
-	log.Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
 }
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
 func (o *Object) handle(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured, oldInst *unstructured.Unstructured) admission.Response {
+	// We want to ignore validation for objects in the exclusion list.
+	if config.EX[inst.GetNamespace()] {
+		return allow("")
+	}
+
 	// Prevent users from changing the InheritedFrom label
 	oldValue, oldExists := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newValue, newExists := metadata.GetLabel(inst, api.LabelInheritedFrom)
+
 	// If old object holds the label but the new one doesn't, reject it. Vice versa.
 	if oldExists != newExists {
 		verb := "add"

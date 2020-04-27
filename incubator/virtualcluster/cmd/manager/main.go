@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis"
@@ -29,11 +30,13 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
+	logrutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
 	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 func main() {
 	var (
+		logFile                 string
 		metricsAddr             string
 		masterProvisioner       string
 		leaderElection          bool
@@ -45,8 +48,14 @@ func main() {
 	flag.BoolVar(&leaderElection, "leader-election", true, "If enable leaderelection for vc-manager")
 	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
 	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 10, "The max number reconcilers of virtualcluster controller")
+	flag.StringVar(&logFile, "log-file", "", "The path of the logfile, if not set, only log to the stderr")
+
 	flag.Parse()
-	logf.SetLogger(logf.ZapLogger(false))
+	loggr, err := logrutil.NewLoggerToFile(logFile)
+	if err != nil {
+		panic(fmt.Sprintf("fail to initialize logr: %s", err))
+	}
+	logf.SetLogger(loggr)
 	log := logf.Log.WithName("entrypoint")
 
 	// Get a config to talk to the apiserver
