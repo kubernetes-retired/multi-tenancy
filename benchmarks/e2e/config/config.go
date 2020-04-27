@@ -5,7 +5,8 @@ import (
 	"reflect"
 )
 
-const ConfigPath = "../../config.yaml"
+// ConfigFlagType is the type for flags for the tests
+var ConfigPath string
 
 type BenchmarkConfig struct {
 	Adminkubeconfig string     `yaml:"adminKubeconfig"`

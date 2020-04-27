@@ -32,6 +32,11 @@ tenantA:
 go test ./e2e/tests
 ```
 
+#### You can also pass in the path to your  config. The path can either be absolute or a relative file to `benchmarks/e2e/config`
+```shell 
+go test ./e2e/tests -config <path-to-config>
+```
+
 ### To see a more verbose output from the test
 
 ```shell
