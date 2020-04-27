@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
-	"k8s.io/kubernetes/test/e2e/framework"
 	v1 "k8s.io/api/core/v1"
-	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
-	"k8s.io/apimachinery/pkg/util/uuid"
-	imageutils "k8s.io/kubernetes/test/utils/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/kubernetes/test/e2e/framework"
+	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
+	imageutils "k8s.io/kubernetes/test/utils/image"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
@@ -34,14 +34,14 @@ func CreateServiceSpec(serviceName string, selector map[string]string) *v1.Servi
 	return Service
 }
 
-var _ = framework.KubeDescribe("Tenants should not be able to create services of type NodePort.", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Tenants should not be able to create services of type NodePort.", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
 	var err error
 	var deploymentName string
 	var imageName string
-	var podLabels = map[string]string {"test": "multi"}
+	var podLabels = map[string]string{"test": "multi"}
 	var serviceName string
 
 	ginkgo.BeforeEach(func() {
