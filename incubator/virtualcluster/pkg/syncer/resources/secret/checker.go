@@ -88,8 +88,8 @@ func (c *controller) PatrollerDo() {
 
 		// virtual service account token type secret
 		vSecretName := pSecret.Name
-		if saName := pSecret.GetAnnotations()[v1.ServiceAccountNameKey]; saName != "" {
-			vSecretName = pSecret.GetAnnotations()[constants.LabelSecretName]
+		if secretName := pSecret.GetAnnotations()[constants.LabelSecretName]; secretName != "" {
+			vSecretName = secretName
 		}
 		// check whether secret is exists in tenant.
 		vSecretObj, err := c.multiClusterSecretController.Get(clusterName, vNamespace, vSecretName)
