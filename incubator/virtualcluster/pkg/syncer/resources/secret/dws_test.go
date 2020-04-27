@@ -148,6 +148,15 @@ func TestDWSecretCreation(t *testing.T) {
 			},
 			ExpectedError: "delegated UID is different",
 		},
+		"new secret but conflict with generated sa opaque secret": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyGeneratedNameToSecret(superServiceAccountSecret("sa-secret", superDefaultNSName, "123456", defaultClusterKey), "normal-token-1"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantSecret("normal-token-1", "default", "12345", v1.SecretTypeOpaque),
+			},
+			ExpectedError: "delegated UID is different",
+		},
 		"new service account secret": {
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
