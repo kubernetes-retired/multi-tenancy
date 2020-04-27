@@ -37,6 +37,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master service client
 	serviceClient v1core.ServicesGetter
 	// super master informer/listers/synced functions
@@ -69,6 +70,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 	informer coreinformers.Interface,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
+		config:        config,
 		serviceClient: serviceClient,
 	}
 	var mcOptions *mc.Options

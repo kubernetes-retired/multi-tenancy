@@ -138,7 +138,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedService := conversion.Equality(spec).CheckServiceEquality(pService, &svcList.Items[i])
+		updatedService := conversion.Equality(c.config, spec).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
 			atomic.AddUint64(&numMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)

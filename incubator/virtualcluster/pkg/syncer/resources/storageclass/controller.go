@@ -37,6 +37,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master storageclasses client
 	client v1storage.StorageClassesGetter
 	// super master storageclasses informer/lister/synced functions
@@ -59,6 +60,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
+		config:   config,
 		client:   client,
 		informer: informer,
 	}

@@ -78,6 +78,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
 			DisableServiceAccountToken: true,
+			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 		},
 		Address:  "",
 		Port:     "80",
@@ -93,6 +94,7 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
+	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
 
 	serverFlags := fss.FlagSet("metricsServer")
 	serverFlags.StringVar(&o.Address, "address", o.Address, "The server address.")

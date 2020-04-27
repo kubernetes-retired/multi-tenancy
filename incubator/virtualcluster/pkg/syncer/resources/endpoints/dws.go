@@ -123,7 +123,7 @@ func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace, requ
 	if err != nil {
 		return err
 	}
-	updatedEndpoints := conversion.Equality(spec).CheckEndpointsEquality(pEP, vEP)
+	updatedEndpoints := conversion.Equality(c.config, spec).CheckEndpointsEquality(pEP, vEP)
 	if updatedEndpoints != nil {
 		pEP, err = c.endpointClient.Endpoints(targetNamespace).Update(updatedEndpoints)
 		if err != nil {

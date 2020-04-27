@@ -31,6 +31,7 @@ import (
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master endpoints client
 	endpointClient v1core.EndpointsGetter
 	// super master endpoints informer lister/synced function
@@ -49,6 +50,7 @@ func Register(
 	controllerManager *manager.ControllerManager,
 ) {
 	c := &controller{
+		config:         config,
 		endpointClient: endpointsClient,
 	}
 

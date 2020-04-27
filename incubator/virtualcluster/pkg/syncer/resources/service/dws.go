@@ -113,7 +113,7 @@ func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, reques
 	if err != nil {
 		return err
 	}
-	updated := conversion.Equality(spec).CheckServiceEquality(pService, vService)
+	updated := conversion.Equality(c.config, spec).CheckServiceEquality(pService, vService)
 	if updated != nil {
 		_, err = c.serviceClient.Services(targetNamespace).Update(updated)
 		if err != nil {

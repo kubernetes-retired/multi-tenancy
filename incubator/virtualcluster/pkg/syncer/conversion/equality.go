@@ -27,14 +27,16 @@ import (
 	"k8s.io/utils/pointer"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 )
 
 type vcEquality struct {
+	config *config.SyncerConfiguration
 	vcSpec *v1alpha1.VirtualclusterSpec
 }
 
-func Equality(spec *v1alpha1.VirtualclusterSpec) *vcEquality {
-	return &vcEquality{vcSpec: spec}
+func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualclusterSpec) *vcEquality {
+	return &vcEquality{config: syncerConfig, vcSpec: spec}
 }
 
 // CheckPodEquality check whether super master Pod object and virtual Pod object
@@ -174,7 +176,7 @@ func (e vcEquality) checkUWKVEquality(pKV, vKV map[string]string) (map[string]st
 // The exceptional keys that used by super master object are specified in
 // VC.Spec.TransparentMetaPrefixes plus a white list (e.g., tenancy.x-k8s.io).
 func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
-	exceptions := []string{}
+	var exceptions []string
 	if e.vcSpec != nil {
 		exceptions = e.vcSpec.TransparentMetaPrefixes
 		exceptions = append(exceptions, e.vcSpec.OpaqueMetaPrefixes...)
@@ -188,6 +190,9 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 			// tenant pod should not use exceptional keys. it may conflicts with syncer.
 			continue
 		}
+		if e.isOpaquedKey(vk) {
+			continue
+		}
 		pv, ok := pKV[vk]
 		if !ok || pv != vv {
 			moreOrDiff[vk] = vv
@@ -198,6 +203,9 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 	less := make(map[string]string)
 	for pk := range pKV {
 		if hasPrefixInArray(pk, exceptions) {
+			continue
+		}
+		if e.isOpaquedKey(pk) {
 			continue
 		}
 
@@ -223,6 +231,22 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 	}
 
 	return updated, false
+}
+
+func (e vcEquality) isOpaquedKey(key string) bool {
+	if e.config == nil {
+		return false
+	}
+	tokens := strings.SplitN(key, "/", 2)
+	if len(tokens) < 1 {
+		return false
+	}
+	for _, domain := range e.config.DefaultOpaqueMetaDomains {
+		if strings.HasSuffix(tokens[0], domain) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkPodSpecEquality check the whether super master Pod Spec and virtual object
