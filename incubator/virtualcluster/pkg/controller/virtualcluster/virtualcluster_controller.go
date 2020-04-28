@@ -149,8 +149,11 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		if strutil.ContainString(vc.ObjectMeta.Finalizers, vcFinalizerName) {
 			// delete the control plane
 			log.Info("Virtualcluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
-			// NOTE we don't want to block the reconciling process due to deletion error
-			r.mp.DeleteVirtualCluster(vc)
+			// block if fail to delete VC
+			if err = r.mp.DeleteVirtualCluster(vc); err != nil {
+				log.Error(err, "fail to delete virtualcluster", "vc-name", vc.Name)
+				return
+			}
 			// remove finalizer from the list and update it.
 			vc.ObjectMeta.Finalizers = strutil.RemoveString(vc.ObjectMeta.Finalizers, vcFinalizerName)
 			err = kubeutil.RetryUpdateVCStatusOnConflict(context.TODO(), r, vc, log)
