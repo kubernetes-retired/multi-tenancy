@@ -35,6 +35,10 @@ import (
 
 func tenantService(name, namespace, uid string) *v1.Service {
 	return &v1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -43,13 +47,15 @@ func tenantService(name, namespace, uid string) *v1.Service {
 	}
 }
 
-func superService(name, namespace, uid string) *v1.Service {
+func superService(name, namespace, uid, clusterKey string) *v1.Service {
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			Annotations: map[string]string{
-				constants.LabelUID: uid,
+				constants.LabelUID:       uid,
+				constants.LabelNamespace: "default",
+				constants.LabelCluster:   clusterKey,
 			},
 		},
 	}
@@ -85,7 +91,7 @@ func TestDWServiceCreation(t *testing.T) {
 		},
 		"new service but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "12345"),
+				superService("svc-1", superDefaultNSName, "12345", defaultClusterKey),
 			},
 			ExistingObjectInTenant:  tenantService("svc-1", "default", "12345"),
 			ExpectedCreatedServices: []string{},
@@ -93,7 +99,7 @@ func TestDWServiceCreation(t *testing.T) {
 		},
 		"new serivce but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "123456"),
+				superService("svc-1", superDefaultNSName, "123456", defaultClusterKey),
 			},
 			ExistingObjectInTenant:  tenantService("svc-1", "default", "12345"),
 			ExpectedCreatedServices: []string{},
@@ -170,7 +176,7 @@ func TestDWServiceDeletion(t *testing.T) {
 	}{
 		"delete service": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "12345"),
+				superService("svc-1", superDefaultNSName, "12345", defaultClusterKey),
 			},
 			EnqueueObject:           tenantService("svc-1", "default", "12345"),
 			ExpectedDeletedServices: []string{superDefaultNSName + "/svc-1"},
@@ -183,7 +189,7 @@ func TestDWServiceDeletion(t *testing.T) {
 		},
 		"delete service but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superService("svc-1", superDefaultNSName, "123456"),
+				superService("svc-1", superDefaultNSName, "123456", defaultClusterKey),
 			},
 			EnqueueObject:           tenantService("svc-1", "default", "12345"),
 			ExpectedDeletedServices: []string{},
@@ -291,23 +297,23 @@ func TestDWServiceUpdate(t *testing.T) {
 	}{
 		"no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToService(superService("svc-1", superDefaultNSName, "12345", defaultClusterKey), spec1),
 			},
 			ExistingObjectInTenant:  applySpecToService(tenantService("svc-1", "default", "12345"), spec2),
 			ExpectedUpdatedServices: []runtime.Object{},
 		},
 		"diff in selector": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToService(superService("svc-1", superDefaultNSName, "12345", defaultClusterKey), spec1),
 			},
 			ExistingObjectInTenant: applySpecToService(tenantService("svc-1", "default", "12345"), spec3),
 			ExpectedUpdatedServices: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec4),
+				applySpecToService(superService("svc-1", superDefaultNSName, "12345", defaultClusterKey), spec4),
 			},
 		},
 		"diff exists but uid is wrong": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToService(superService("svc-1", superDefaultNSName, "12345"), spec1),
+				applySpecToService(superService("svc-1", superDefaultNSName, "12345", defaultClusterKey), spec1),
 			},
 			ExistingObjectInTenant:  applySpecToService(tenantService("svc-1", "default", "123456"), spec3),
 			ExpectedUpdatedServices: []runtime.Object{},
