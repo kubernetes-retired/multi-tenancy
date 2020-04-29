@@ -28,8 +28,8 @@ Check the `RBAC` privileges of the tenant to create CRDs by running the followin
 
 command must return `yes`
 
-Create a CRD with the sample tenant manifest [file](https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml), it should be created successfully and it must given an error with any change in any field/specs of the CRD.
+Create a tenant in your cluster by creating the CRDs following  [steps](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/tenant#getting-started), Tenant should be created successfully and it must given an error with any change in any field/specs of the CRD.
 
 **Remediation:**
 
-Define a Custom Addmission Controller to validate the CRD manifest file, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to validate against the default pattern.
+Use [VirtualCluster](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/incubator/virtualcluster) to enable Control Plane Virtualization in you K8s cluster and creation of same CRD as different tenants.
