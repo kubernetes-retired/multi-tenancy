@@ -42,16 +42,14 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.V(4).Infof("reconcile secret %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+	var vSecret *v1.Secret
 	vSecretObj, err := c.multiClusterSecretController.Get(request.ClusterName, request.Namespace, request.Name)
-	vExists := true
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconciler.Result{Requeue: true}, err
-		}
-		vExists = false
+	if err == nil {
+		vSecret = vSecretObj.(*v1.Secret)
+	} else if !errors.IsNotFound(err) {
+		return reconciler.Result{Requeue: true}, err
 	}
-	// FIXME: Do we need to add sa name in the selector?
-	pExists := true
+
 	var pSecret *v1.Secret
 	secretList, err := c.secretLister.Secrets(targetNamespace).List(labels.SelectorFromSet(map[string]string{
 		constants.LabelSecretUID: request.UID,
@@ -71,31 +69,30 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 			return reconciler.Result{Requeue: true}, fmt.Errorf("There are pSecrets that represent vSerect %s/%s but the UID is unmatched.", request.Namespace, request.Name)
 		}
 	} else {
-		// We need to use name to search again for normal vScrect
+		// We need to use name to search again for normal vSecret
 		pSecret, err = c.secretLister.Secrets(targetNamespace).Get(request.Name)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				return reconciler.Result{Requeue: true}, err
+		if err == nil {
+			if pSecret.Type == v1.SecretTypeServiceAccountToken {
+				pSecret = nil
 			}
-			pExists = false
+		} else if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
 		}
 	}
 
-	if vExists && !pExists {
-		vSecret := vSecretObj.(*v1.Secret)
+	if vSecret != nil && pSecret == nil {
 		err := c.reconcileSecretCreate(request.ClusterName, targetNamespace, request.UID, vSecret)
 		if err != nil {
 			klog.Errorf("failed reconcile secret %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	} else if !vExists && pExists {
+	} else if vSecret == nil && pSecret != nil {
 		err := c.reconcileSecretRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pSecret)
 		if err != nil {
 			klog.Errorf("failed reconcile secret %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
-	} else if vExists && pExists {
-		vSecret := vSecretObj.(*v1.Secret)
+	} else if vSecret != nil && pSecret != nil {
 		err := c.reconcileSecretUpdate(request.ClusterName, targetNamespace, request.UID, pSecret, vSecret)
 		if err != nil {
 			klog.Errorf("failed reconcile secret %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
@@ -135,7 +132,7 @@ func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetName
 }
 
 func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetNamespace string, pSecret, vSecret *v1.Secret) error {
-	updatedBinaryData, equal := conversion.Equality(nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
+	updatedBinaryData, equal := conversion.Equality(c.config, nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
 	if equal {
 		return nil
 	}
@@ -186,7 +183,7 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	if err != nil {
 		return err
 	}
-	updatedSecret := conversion.Equality(spec).CheckSecretEquality(pSecret, vSecret)
+	updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
 		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(updatedSecret)
 		if err != nil {
@@ -198,12 +195,10 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 }
 
 func (c *controller) reconcileSecretRemove(clusterName, targetNamespace, requestUID, name string, secret *v1.Secret) error {
-	switch secret.Type {
-	case v1.SecretTypeServiceAccountToken:
+	if _, isSaSecret := secret.Labels[constants.LabelSecretUID]; isSaSecret {
 		return c.reconcileServiceAccountTokenSecretRemove(clusterName, targetNamespace, requestUID, name)
-	default:
-		return c.reconcileNormalSecretRemove(clusterName, targetNamespace, requestUID, name, secret)
 	}
+	return c.reconcileNormalSecretRemove(clusterName, targetNamespace, requestUID, name, secret)
 }
 
 func (c *controller) reconcileNormalSecretRemove(clusterName, targetNamespace, requestUID, name string, pSecret *v1.Secret) error {

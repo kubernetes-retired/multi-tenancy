@@ -11,6 +11,24 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-hnc-x-k8s-io-v1alpha1-hierarchicalnamespaces
+  failurePolicy: Fail
+  name: hierarchicalnamespaces.hnc.x-k8s.io
+  rules:
+  - apiGroups:
+    - hnc.x-k8s.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - DELETE
+    resources:
+    - hierarchicalnamespaces
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-hnc-x-k8s-io-v1alpha1-hierarchyconfigurations
   failurePolicy: Fail
   name: hierarchyconfigurations.hnc.x-k8s.io
@@ -43,6 +61,23 @@ webhooks:
     - DELETE
     resources:
     - hncconfigurations
+- clientConfig:
+    caBundle: Cg==
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-v1-namespace
+  failurePolicy: Fail
+  name: vnamespace.k8s.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - DELETE
+    resources:
+    - namespaces
 - clientConfig:
     caBundle: Cg==
     service:

@@ -13,15 +13,15 @@ team's namespace, even if you don't have cluster-level permission to create
 namespaces, and easily apply policies like RBAC and Network Policies across all
 namespaces in your team (e.g. a set of related microservices).
 
-You can read more
-about hierarchical namespaces in the [HNC Concepts doc](http://bit.ly/38YYhE0).
+You can read more about hierarchical namespaces in the [HNC User Guide](http://bit.ly/38YYhE0).
 
 The best way you can help contribute to bringing hierarchical namespaces to the
-Kubernetes ecosystem is to try out HNC and report the problems you have (see
-below). Or, if it's working well for you, let us know on the \#wg-multitenancy
-channel on Slack, or join a MTWG meeting. We'd love to hear from you!
+Kubernetes ecosystem is to try out HNC and report the problems you have with
+either HNC itself or its documentation (see below). Or, if it's working well for
+you, let us know on the \#wg-multitenancy channel on Slack, or join a
+wg-multitenancy meeting. We'd love to hear from you!
 
-With that said, please be cautious - HNC is pre-alpha software. There are no
+With that said, please be cautious - HNC is alpha software. There are no
 guarantees of compatibility or feature support until further notice. HNC also
 requires very high privileges on your cluster and you should not install it on
 clusters with sensitive configurations that you can't afford to lose.
@@ -33,30 +33,32 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Installing or upgrading HNC
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.2.0
+HNC_VERSION=v0.3.0
+
+# The instructions below are all for HNC v0.3.x. For v0.2.x, please use Git
+# history to view an earlier version of this README.
 
 # Install prerequisites on your cluster
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+
 # WAIT for the cert-manager deployments to all become healthy. This can take a
-# minute or two.
+# few minutes.
 
 # Install HNC on your cluster. If this fails due to the cert-manager webhook not
-# being ready yet, wait for the webhook to become ready, then re-run it. Usually the cert-manager webhook takes five minutes to be ready.
+# being ready yet, wait for the webhook to become ready, then re-run it.
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 
 # Download kubectl plugin (Linux only) - will move to Krew soon
 PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hierarchical_namespaces -o ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-chmod +x ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
-# If desired to make 'kubectl hns' work:
-ln -s ${PLUGIN_DIR}/kubectl-hierarchical_namespaces ${PLUGIN_DIR}/kubectl-hns
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
+chmod +x ${PLUGIN_DIR}/kubectl-hns
 ```
 
 ### Getting started and learning more
 As a quick start, I'd recommend following the [HNC demo
 scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
 to get an idea of what HNC can do. For a more in-depth understanding, check out
-the [HNC Concepts doc](http://bit.ly/38YYhE0).
+the [HNC User Guide](http://bit.ly/38YYhE0).
 
 ### Viewing metrics
 You should be able to view all HNC metrics in your preferred backend:
@@ -65,10 +67,10 @@ You should be able to view all HNC metrics in your preferred backend:
 
 |Metric                                              |Description   |
 |:-------------------------------------------------- |:-------------|
-| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened | 
+| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened |
 | hnc/reconcilers/hierconfig/concurrent_peak         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
-| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations | 
-| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations | 
+| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations |
+| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations |
 | hnc/reconcilers/object/total                       | The total number of object reconciliations happened |
 | hnc/reconcilers/object/concurrent_peak             | The peak concurrent object reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
 
@@ -79,8 +81,8 @@ is no need to uninstall HNC before upgrading it.
 
 ```bash
 rm ${PLUGIN_DIR}/kubectl-hns
-rm ${PLUGIN_DIR}/kubectl-hierarchical_namespaces
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
 # Don't need to delete the cert manager if you plan to reinstall it later.
 kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
 ```
@@ -90,12 +92,15 @@ kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined:
 
-* [v0.1 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
+* [v0.1 - COMPLETE NOV 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
   an initial release with all basic functionality so you can play with it, but
   not suitable for any real workloads.
-* [v0.2 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
+* [v0.2 - COMPLETE DEC 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
   contains enough functionality to be suitable for non-production workloads.
-* v0.3: definition in progress (as of Jan 2020)
+* [v0.3 - COMPLETE APR 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
+  type configuration and better self-service namespace UX.
+* [v0.4 - IN PROGRESS](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
+  incremental improvements based on feedback.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
@@ -110,8 +115,6 @@ yourself and are also a developer, we want to know what does and does not work
 for you, and we'd welcome any PRs that might solve your problems.
 
 * Design doc: http://bit.ly/k8s-hnc-design
-* Demonstration: https://youtu.be/XFZhApTlJ88?t=171 (MTWG meeting; Sep 24 '19)
-  * Script for said demo: https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
 
 ### Prerequisites
 
@@ -137,12 +140,21 @@ To deploy to a cluster:
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
       deploy this way, or if we change the recommended version of cert-manager.
-    - This will also install the `kubectl-hierarchical_namespaces` plugin into
-      `$GOPATH/bin` (as well as its alias, `kubectl-hns`), so make sure that's
-      in your path if you want to use commands like `kubectl hns tree`.
+    - This will install the `kubectl-hns` plugin into `$GOPATH/bin`.
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
+
+### Development Workflow
+
+Once HNC is installed via `make deploy`, the development cycle looks like the following:
+  - Make changes locally and write new unit and integration tests as necessary
+  - Ensure `make test` passes
+  - Deploy to your cluster with `make deploy`
+  - Monitor changes. Some ways you can do that are:
+    - Look at logging with `make deploy-watch`
+    - Look at the result of the structure of your namespaces with `kubectl-hns tree -A` or `kubectl-hns tree NAMESPACE`
+    - See the resultant conditions or labels on namespaces by using `kubectl describe namespace NAMESPACE`
 
 ### Developing with KIND
 
@@ -182,13 +194,15 @@ interesting directories are probably:
 * `/pkg/forest`: the in-memory data structure, shared between the reconcilers
   and validators.
 
-Within the `reconcilers` directory, there are three reconcilers:
+Within the `reconcilers` directory, there are four reconcilers:
 
 * **HNCConfiguration reconciler:** manages the HNCConfiguration via the
   cluster-wide `config` singleton.
-* **Hierarchy reconciler:** manages the hierarchy via the `Hierarchy` singleton
-  as well as the namespace in which it lives.
-* **Object reconciler:** Propagates (copies and deletes) the relevant objects
+* **HierarchicalNamespace reconciler:** manages the self-service namespaces via
+  the `hierarchicalnamespace` resources.
+* **HierarchyConfiguration reconciler:** manages the hierarchy and the
+  namespaces via the `hierarchy` singleton per namespace.
+* **Object reconciler:** propagates (copies and deletes) the relevant objects
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 

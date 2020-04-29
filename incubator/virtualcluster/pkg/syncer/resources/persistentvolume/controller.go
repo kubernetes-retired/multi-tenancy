@@ -18,7 +18,6 @@ package persistentvolume
 
 import (
 	"fmt"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -26,17 +25,19 @@ import (
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
+	config *config.SyncerConfiguration
 	// super master client
 	client v1core.CoreV1Interface
 	// super master pv/pvc lister/synced functions
@@ -47,13 +48,10 @@ type controller struct {
 	pvcSynced cache.InformerSynced
 	// Connect to all tenant master pv informers
 	multiClusterPersistentVolumeController *mc.MultiClusterController
-
-	// UWS queue
-	workers int
-	queue   workqueue.RateLimitingInterface
-
-	// Checker timer
-	periodCheckerPeriod time.Duration
+	// UWcontroller
+	upwardPersistentVolumeController *uw.UpwardController
+	// Periodic checker
+	persistentVolumePatroller *pa.Patroller
 }
 
 func Register(
@@ -62,26 +60,73 @@ func Register(
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, _, err := NewPVController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster PV controller %v", err)
+		return
+	}
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewPVController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		client:              client,
-		informer:            informer,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "super_master_persistentvolumes"),
-		workers:             constants.UwsControllerWorkerLow,
-		periodCheckerPeriod: 60 * time.Second,
+		config:   config,
+		client:   client,
+		informer: informer,
 	}
 
-	// Create the multi cluster PersistentVolume controller
-	options := mc.Options{Reconciler: c}
-	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, *mcOptions)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster PersistentVolume controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.multiClusterPersistentVolumeController = multiClusterPersistentVolumeController
 	c.pvLister = informer.PersistentVolumes().Lister()
-	c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
 	c.pvcLister = informer.PersistentVolumeClaims().Lister()
-	c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+
+	if options != nil && options.IsFake {
+		c.pvSynced = func() bool { return true }
+		c.pvcSynced = func() bool { return true }
+	} else {
+		c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
+		c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+	}
+
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
+	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
+	upwardPersistentVolumeController, err := uw.NewUWController("pv-upward-controller", &v1.PersistentVolume{}, *uwOptions)
+	if err != nil {
+		klog.Errorf("failed to create pv upward controller %v", err)
+		return nil, nil, nil, err
+	}
+	c.upwardPersistentVolumeController = upwardPersistentVolumeController
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
+	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", *patrolOptions)
+	if err != nil {
+		klog.Errorf("failed to create persistentVolume patroller %v", err)
+		return nil, nil, nil, err
+	}
+	c.persistentVolumePatroller = persistentVolumePatroller
 
 	informer.PersistentVolumes().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -112,7 +157,8 @@ func Register(
 				DeleteFunc: c.enqueuePersistentVolume,
 			},
 		})
-	controllerManager.AddController(c)
+
+	return c, multiClusterPersistentVolumeController, upwardPersistentVolumeController, nil
 }
 
 func boundPersistentVolume(e *v1.PersistentVolume) bool {
@@ -125,7 +171,7 @@ func (c *controller) enqueuePersistentVolume(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.queue.Add(reconciler.UwsRequest{Key: key})
+	c.upwardPersistentVolumeController.AddToQueue(key)
 }
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {

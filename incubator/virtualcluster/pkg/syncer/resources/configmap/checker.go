@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -37,25 +36,19 @@ import (
 
 var numMissMatchedConfigMaps uint64
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
-// blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.configMapSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting ConfigMap checker")
 	}
-
-	// Start a loop to periodically check if configmaps keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkConfigMaps, c.periodCheckerPeriod, stopCh)
-
+	c.configMapPatroller.Start(stopCh)
 	return nil
 }
 
-// checkConfigMaps checks to see if configmaps in super master informer cache and tenant master
+// PatrollerDo checks to see if configmaps in super master informer cache and tenant master
 // keep consistency.
-func (c *controller) checkConfigMaps() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterConfigMapController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
@@ -151,7 +144,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updated := conversion.Equality(spec).CheckConfigMapEquality(pConfigMap, &vConfigMap)
+		updated := conversion.Equality(c.config, spec).CheckConfigMapEquality(pConfigMap, &vConfigMap)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedConfigMaps, 1)
 			klog.Warningf("ConfigMap %v/%v diff in super&tenant master", vConfigMap.Namespace, vConfigMap.Name)

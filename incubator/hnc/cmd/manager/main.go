@@ -162,6 +162,18 @@ func main() {
 		mgr.GetWebhookServer().Register(validators.ConfigServingPath, &webhook.Admission{Handler: &validators.HNCConfig{
 			Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
 		}})
+
+		// Create webhook for the HierarchicalNamespaces.
+		mgr.GetWebhookServer().Register(validators.HierarchicalNamespaceServingPath, &webhook.Admission{Handler: &validators.HierarchicalNamespace{
+			Log:    ctrl.Log.WithName("validators").WithName("HierarchicalNamespace"),
+			Forest: f,
+		}})
+
+		// Create webhook for the namespaces (core type).
+		mgr.GetWebhookServer().Register(validators.NamespaceServingPath, &webhook.Admission{Handler: &validators.Namespace{
+			Log:    ctrl.Log.WithName("validators").WithName("Namespace"),
+			Forest: f,
+		}})
 	}
 
 	setupLog.Info("starting manager")

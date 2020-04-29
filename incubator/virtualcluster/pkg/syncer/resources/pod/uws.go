@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -39,63 +38,13 @@ import (
 // StartUWS starts the upward syncer
 // and blocks until an empty struct is sent to the stop channel.
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	defer utilruntime.HandleCrash()
-	defer c.queue.ShutDown()
-
-	klog.Infof("starting pod upward syncer")
-
 	if !cache.WaitForCacheSync(stopCh, c.podSynced, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-
-	klog.V(5).Infof("starting workers")
-	for i := 0; i < c.workers; i++ {
-		go wait.Until(c.run, 1*time.Second, stopCh)
-	}
-	<-stopCh
-	klog.V(1).Infof("shutting down")
-
-	return nil
+	return c.upwardPodController.Start(stopCh)
 }
 
-// run runs a run thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
-func (c *controller) run() {
-	for c.processNextWorkItem() {
-	}
-}
-
-func (c *controller) processNextWorkItem() bool {
-	obj, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	defer c.queue.Done(obj)
-
-	req, ok := obj.(reconciler.UwsRequest)
-	if !ok {
-		c.queue.Forget(obj)
-		return true
-	}
-
-	klog.V(4).Infof("back populate pod %+v", req.Key)
-	err := c.backPopulate(req.Key)
-	if err == nil {
-		c.queue.Forget(obj)
-		return true
-	}
-
-	utilruntime.HandleError(fmt.Errorf("error processing pod %v (will retry): %v", req.Key, err))
-	if c.queue.NumRequeues(req) >= constants.MaxUwsRetryAttempts {
-		klog.Warningf("Pod uws request is dropped due to reaching max retry limit: %v", req)
-		c.queue.Forget(obj)
-		return true
-	}
-	c.queue.AddRateLimited(obj)
-	return true
-}
-
-func (c *controller) backPopulate(key string) error {
+func (c *controller) BackPopulate(key string) error {
 	pNamespace, pName, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("invalid resource key %v: %v", key, err))
@@ -152,7 +101,7 @@ func (c *controller) backPopulate(key string) error {
 			return err
 		}
 
-		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, vNamespace, n.GetName(), &v1.Node{}); err != nil {
+		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, "", n.GetName(), &v1.Node{}); err != nil {
 			// check if target node has already registered on the vc
 			// before creating
 			if !errors.IsNotFound(err) {
@@ -180,12 +129,12 @@ func (c *controller) backPopulate(key string) error {
 		}
 		// virtual pod has been updated, refetch the latest version
 		if vPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
-			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vNamespace, pName, clusterName, err)
 		}
 	} else {
 		// Check if the vNode exists in Tenant master.
-		if _, err := tenantClient.CoreV1().Nodes().Get(vPod.Spec.NodeName, metav1.GetOptions{}); err != nil {
-			if !errors.IsNotFound(err) {
+		if _, err := c.multiClusterPodController.GetByObjectType(clusterName, "", vPod.Spec.NodeName, &v1.Node{}); err != nil {
+			if errors.IsNotFound(err) {
 				// We have consistency issue here, do not fix for now. TODO: add to metrics
 			}
 			return fmt.Errorf("failed to check vNode %s of vPod %s in cluster %s: %v ", vPod.Spec.NodeName, vPod.Name, clusterName, err)
@@ -198,7 +147,7 @@ func (c *controller) backPopulate(key string) error {
 	}
 
 	var newPod *v1.Pod
-	updatedMeta := conversion.Equality(spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
+	updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
 	if updatedMeta != nil {
 		newPod = vPod.DeepCopy()
 		newPod.ObjectMeta = *updatedMeta

@@ -49,8 +49,9 @@ func TestReconcile(t *testing.T) {
 	mgr, err := vcmanager.NewVirtualClusterManager(cfg, manager.Options{MetricsBindAddress: ":0"}, 1)
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 	c = mgr.GetClient()
+	testRcl, _ := newReconciler(mgr, "native")
 
-	recFn, requests := SetupTestReconcile(newReconciler(mgr, "native"))
+	recFn, requests := SetupTestReconcile(testRcl)
 	g.Expect(add(mgr, recFn)).NotTo(gomega.HaveOccurred())
 
 	stopMgr, mgrStopped := StartTestManager(mgr, g)

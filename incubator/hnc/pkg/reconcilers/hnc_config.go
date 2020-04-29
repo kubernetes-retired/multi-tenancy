@@ -383,6 +383,11 @@ func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string)
 // types in `propagate` and `remove` modes will be recorded. The Status.Types
 // is sorted in alphabetical order based on APIVersion and Kind.
 func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
+	// We lock the forest here so that other reconcilers cannot modify the
+	// forest while we are reading from the forest.
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+
 	statuses := []api.TypeSynchronizationStatus{}
 	for _, ts := range r.Forest.GetTypeSyncers() {
 		// Don't output a status for any reconciler that isn't explicitly listed in the spec
@@ -399,10 +404,21 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 			Mode:       ts.GetMode(), // may be different from the spec if it's implicit
 		}
 
-		// Only add counts if we're not ignoring this type
+		// Only add NumPropagatedObjects if we're not ignoring this type
 		if ts.GetMode() != api.Ignore {
 			numProp := ts.GetNumPropagatedObjects()
 			status.NumPropagatedObjects = &numProp
+		}
+
+		// Only add NumSourceObjects if we are propagating objects of this type.
+		if ts.GetMode() == api.Propagate {
+			numSrc := 0
+			nms := r.Forest.GetNamespaceNames()
+			for _, nm := range nms {
+				ns := r.Forest.Get(nm)
+				numSrc += ns.GetNumOriginalObjects(gvk)
+			}
+			status.NumSourceObjects = &numSrc
 		}
 
 		// Record the status
@@ -447,15 +463,14 @@ func (r *ConfigReconciler) periodicTrigger() {
 		if r.shouldReconcile == false {
 			continue
 		}
-		r.enqueueSingleton(r.Log, "Syncing NumPropagatedObjects in the status")
+		r.enqueueSingleton(r.Log, "Syncing NumPropagatedObjects and/or NumSourceObjects in the status")
 		r.shouldReconcile = false
 	}
 }
 
-// SyncNumPropagatedObjects will be called by object reconcilers to signal config
-// reconciler to reconcile when an object is reconciled successfully and the status of
-// the `config` object might need to be updated.
-func (r *ConfigReconciler) SyncNumPropagatedObjects(log logr.Logger) {
+// SyncNumObjects will be called by object reconcilers to signal config
+// reconciler to reconcile when the status of the `config` object might need to be updated.
+func (r *ConfigReconciler) SyncNumObjects(log logr.Logger) {
 	log.V(1).Info("Signalling config reconciler for reconciliation.")
 	r.shouldReconcile = true
 }

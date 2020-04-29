@@ -7,6 +7,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,6 +28,11 @@ var GVKs = map[string]schema.GroupVersionKind{
 	// CronTab is a custom resource.
 	"CronTab": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
 }
+
+// createdObjects keeps track of objects created out of the makeObject function.
+// This gives us a reflection of what's stored in the API server so that we can
+// clean it up properly when cleanupObjects is called.
+var createdObjects = []*unstructured.Unstructured{}
 
 func setParent(ctx context.Context, nm string, pnm string) {
 	hier := newOrGetHierarchy(ctx, nm)
@@ -156,6 +162,7 @@ func makeObject(ctx context.Context, kind string, nsName, name string) {
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
 	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
+	createdObjects = append(createdObjects, inst)
 }
 
 // deleteObject deletes an object of the given kind in a specific namespace. The kind and
@@ -166,6 +173,17 @@ func deleteObject(ctx context.Context, kind string, nsName, name string) {
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
 	ExpectWithOffset(1, k8sClient.Delete(ctx, inst)).Should(Succeed())
+}
+
+// cleanupObjects makes a best attempt to cleanup all objects created from makeObject.
+func cleanupObjects(ctx context.Context) {
+	for _, obj := range createdObjects {
+		err := k8sClient.Delete(ctx, obj)
+		if err != nil {
+			Eventually(errors.IsNotFound(k8sClient.Delete(ctx, obj))).Should(BeTrue())
+		}
+	}
+	createdObjects = []*unstructured.Unstructured{}
 }
 
 // objectInheritedFrom returns the name of the namespace where a specific object of a given kind

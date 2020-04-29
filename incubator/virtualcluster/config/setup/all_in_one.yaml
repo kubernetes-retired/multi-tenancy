@@ -215,13 +215,75 @@ spec:
         name: vc-manager
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vc-syncer-role
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - configmaps
+    - endpoints
+    - namespaces
+    - pods
+    - secrets
+    - services
+    - serviceaccounts
+    - persistentvolumeclaims
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+- apiGroups:
+    - ""
+    - storage.k8s.io
+  resources:
+    - events
+    - nodes
+    - persistentvolumes
+    - storageclasses
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - ""
+  resources:
+    - namespaces/status
+    - pods/status
+    - services/status
+    - nodes/status
+    - persistentvolumes/status
+    - persistentvolumeclaims/status
+  verbs:
+    - get
+- apiGroups:
+    - tenancy.x-k8s.io
+  resources:
+    - virtualclusters
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - tenancy.x-k8s.io
+  resources:
+    - virtualclusters/status
+  verbs:
+    - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: vc-syncer-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-admin
+  name: vc-syncer-role
 subjects:
   - kind: ServiceAccount
     name: vc-syncer
@@ -258,6 +320,14 @@ spec:
           image: virtualcluster/syncer-amd64
           imagePullPolicy: Always
           name: vc-syncer
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            tcpSocket:
+              port: 8080
+            timeoutSeconds: 1
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -296,6 +366,15 @@ metadata:
   name: vn-agent
   namespace: vc-manager
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: empty-kubelet-client
+  namespace: vc-manager
+data:
+  client.crt: ""
+  client.key: ""
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -330,4 +409,4 @@ spec:
       volumes:
       - name: kubelet-client-cert
         secret:
-          secretName: vc-kubelet-client
+          secretName: empty-kubelet-client

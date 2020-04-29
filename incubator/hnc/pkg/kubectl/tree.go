@@ -34,7 +34,7 @@ var (
 )
 
 var treeCmd = &cobra.Command{
-	Use:   "tree",
+	Use:   "tree TREE",
 	Short: "Display one or more hierarchy trees",
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()

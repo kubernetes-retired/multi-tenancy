@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -34,25 +33,19 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
-// StartPeriodChecker starts the period checker for data consistency check. Checker is
-// blocking so should be called via a goroutine.
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 
 	if !cache.WaitForCacheSync(stopCh, c.saSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting SA checker")
 	}
-
-	// Start a loop to periodically check if serviceaccounts keep consistency between super
-	// master and tenant masters.
-	wait.Until(c.checkServiceAccounts, c.periodCheckerPeriod, stopCh)
-
+	c.serviceAccountPatroller.Start(stopCh)
 	return nil
 }
 
-// checkServiceAccounts checks to see if serviceaccounts in super master informer cache and tenant master
+// PatrollerDo checks to see if serviceaccounts in super master informer cache and tenant master
 // keep consistency.
-func (c *controller) checkServiceAccounts() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterServiceAccountController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")

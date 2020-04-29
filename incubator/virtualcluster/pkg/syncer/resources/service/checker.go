@@ -23,10 +23,10 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -37,18 +37,17 @@ import (
 
 var numMissMatchedServices uint64
 
-func (c *controller) StartPeriodChecker(stopCh <-chan struct{}) error {
+func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-
-	wait.Until(c.checkServices, c.periodCheckerPeriod, stopCh)
+	c.servicePatroller.Start(stopCh)
 	return nil
 }
 
-// checkServices check if services keep consistency between super
+// PatrollerDo check if services keep consistency between super
 // master and tenant masters.
-func (c *controller) checkServices() {
+func (c *controller) PatrollerDo() {
 	clusterNames := c.multiClusterServiceController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
@@ -139,13 +138,19 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedService := conversion.Equality(spec).CheckServiceEquality(pService, &svcList.Items[i])
+		updatedService := conversion.Equality(c.config, spec).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
 			atomic.AddUint64(&numMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
-			if isLoadBalancerService(pService) {
-				c.enqueueService(pService)
+			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
+				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
 			}
+			continue
+		}
+		if isLoadBalancerService(pService) && !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
+			c.enqueueService(pService)
 		}
 	}
 }

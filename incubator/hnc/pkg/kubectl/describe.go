@@ -24,7 +24,7 @@ import (
 )
 
 var describeCmd = &cobra.Command{
-	Use:   "describe",
+	Use:   "describe NAMESPACE",
 	Short: "Displays information about the hierarchy configuration",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

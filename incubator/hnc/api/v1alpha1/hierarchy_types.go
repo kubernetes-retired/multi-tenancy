@@ -37,15 +37,13 @@ const (
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
-// TODO change condition codes to CamelCase strings. See issue:
-//  https://github.com/kubernetes-sigs/multi-tenancy/issues/500
 const (
-	CritParentMissing Code = "CRIT_PARENT_MISSING"
-	CritParentInvalid Code = "CRIT_PARENT_INVALID"
-	CritAncestor      Code = "CRIT_ANCESTOR"
-	HNSMissing        Code = "HNS_MISSING"
-	CannotUpdate      Code = "CANNOT_UPDATE_OBJECT"
-	CannotPropagate   Code = "CANNOT_PROPAGATE_OBJECT"
+	CritParentMissing Code = "CritParentMissing"
+	CritParentInvalid Code = "CritParentInvalid"
+	CritAncestor      Code = "CritAncestor"
+	HNSMissing        Code = "HNSMissing"
+	CannotPropagate   Code = "CannotPropagateObject"
+	CannotUpdate      Code = "CannotUpdateObject"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -106,7 +104,7 @@ type Condition struct {
 	// shown below, but new values may be added over time. This field is always present in a
 	// condition.
 	//
-	// All codes that begin with the prefix `CRIT_` indicate that all HNC activities (e.g. propagating
+	// All codes that begin with the prefix `Crit` indicate that all HNC activities (e.g. propagating
 	// objects, updating labels) have been paused in this namespaces. HNC will resume updating the
 	// namespace once the condition has been resolved. Non-critical conditions typically indicate some
 	// kind of error that HNC itself can ignore, but likely indicates that the hierarchical structure
@@ -118,17 +116,23 @@ type Condition struct {
 	//
 	// Currently, the supported values are:
 	//
-	// - "CRIT_PARENT_MISSING": the specified parent is missing
+	// - "CritParentMissing": the specified parent is missing
 	//
-	// - "CRIT_PARENT_INVALID": the specified parent is invalid (e.g., would cause a cycle)
+	// - "CritParentInvalid": the specified parent is invalid (e.g., would cause a cycle)
 	//
-	// - "CRIT_ANCESTOR": a critical error exists in an ancestor namespace, so this namespace is no
+	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
 	//
-	// - "REQUIRED_CHILD_CONFLICT": this namespace has a required child, but a namespace of the same
-	// name already exists and is not a child of this namespace. Note that the condition is _not_
-	// annotated onto the other namespace; it is considered an error _only_ for the would-be parent
-	// namespace.
+	// - "HNSMissing": this namespace is an owned namespace (created by reconciling an hns instance),
+	// but the hns instance is missing in its owner (referenced in its owner annotation) or the owner
+	// namespace is missing.
+	//
+	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated to
+	// one or more of its descendants. The condition's affect objects will include a list of the
+	// copies that couldn't be updated.
+	//
+	// - "CannotUpdateObject": this namespace has an error when updating a propagated object from its
+	// source. The condition's affected object will point to the source object.
 	Code Code `json:"code"`
 
 	// A human-readable description of the condition, if the `code` and `affects` fields are not

@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,32 +20,44 @@ import (
 	"sync"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
-// ControllerManager manages number of controllers. It starts their caches, waits for those to sync,
+// ControllerManager manages number of resource syncers. It starts their caches, waits for those to sync,
 // then starts the controllers.
-// A ControllerManager is required to start controllers.
 type ControllerManager struct {
-	controllers map[Controller]struct{}
+	resourceSyncers map[ResourceSyncer]struct{}
 }
 
-// New creates a Manager.
+type ResourceSyncerOptions struct {
+	MCOptions     *mc.Options
+	UWOptions     *uw.Options
+	PatrolOptions *pa.Options
+	IsFake        bool
+}
+
 func New() *ControllerManager {
-	return &ControllerManager{controllers: make(map[Controller]struct{})}
+	return &ControllerManager{resourceSyncers: make(map[ResourceSyncer]struct{})}
 }
 
-// Controller is the interface used by ControllerManager to start the controllers and get their caches (beforehand).
-type Controller interface {
+// ResourceSyncer is the interface used by ControllerManager to manage multiple resource syncers.
+type ResourceSyncer interface {
 	listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
-	StartPeriodChecker(stopCh <-chan struct{}) error
+	StartPatrol(stopCh <-chan struct{}) error
+	Reconcile(request reconciler.Request) (reconciler.Result, error)
+	BackPopulate(string) error
+	PatrollerDo()
 }
 
-// AddController adds a controller to the ControllerManager.
-func (m *ControllerManager) AddController(c Controller) {
-	m.controllers[c] = struct{}{}
-	listener.AddListener(c)
+// AddController adds a resource syncer to the ControllerManager.
+func (m *ControllerManager) AddResourceSyncer(s ResourceSyncer) {
+	m.resourceSyncers[s] = struct{}{}
+	listener.AddListener(s)
 }
 
 // Start gets all the unique caches of the controllers it manages, starts them,
@@ -55,29 +67,29 @@ func (m *ControllerManager) Start(stop <-chan struct{}) error {
 	errCh := make(chan error)
 
 	wg := &sync.WaitGroup{}
-	wg.Add(len(m.controllers) * 3)
+	wg.Add(len(m.resourceSyncers) * 3)
 
-	for co := range m.controllers {
-		go func(co Controller) {
+	for s := range m.resourceSyncers {
+		go func(s ResourceSyncer) {
 			defer wg.Done()
-			if err := co.StartDWS(stop); err != nil {
+			if err := s.StartDWS(stop); err != nil {
 				errCh <- err
 			}
-		}(co)
+		}(s)
 		// start UWS syncer
-		go func(co Controller) {
+		go func(s ResourceSyncer) {
 			defer wg.Done()
-			if err := co.StartUWS(stop); err != nil {
+			if err := s.StartUWS(stop); err != nil {
 				errCh <- err
 			}
-		}(co)
-		// start period checker
-		go func(co Controller) {
+		}(s)
+		// start periodic checker
+		go func(s ResourceSyncer) {
 			defer wg.Done()
-			if err := co.StartPeriodChecker(stop); err != nil {
+			if err := s.StartPatrol(stop); err != nil {
 				errCh <- err
 			}
-		}(co)
+		}(s)
 	}
 
 	doneCh := make(chan struct{})
