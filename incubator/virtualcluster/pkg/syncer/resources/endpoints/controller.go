@@ -25,9 +25,11 @@ import (
 	"k8s.io/klog"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -45,34 +47,61 @@ type controller struct {
 
 func Register(
 	config *config.SyncerConfiguration,
-	endpointsClient v1core.EndpointsGetter,
-	endpointsInformer coreinformers.EndpointsInformer,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c := &controller{
-		config:         config,
-		endpointClient: endpointsClient,
-	}
-
-	options := mc.Options{Reconciler: c}
-	multiClusterEndpointsController, err := mc.NewMCController("tenant-masters-endpoints-controller", &v1.Endpoints{}, options)
+	c, _, _, err := NewEndpointsController(config, client, informer, nil)
 	if err != nil {
 		klog.Errorf("failed to create multi cluster endpoints controller %v", err)
 		return
 	}
-	c.multiClusterEndpointsController = multiClusterEndpointsController
-	c.endpointsLister = endpointsInformer.Lister()
-	c.endpointsSynced = endpointsInformer.Informer().HasSynced
 
-	patrolOptions := &pa.Options{Reconciler: c}
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewEndpointsController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	c := &controller{
+		config:         config,
+		endpointClient: client,
+	}
+
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterEndpointsController, err := mc.NewMCController("tenant-masters-endpoints-controller", &v1.Endpoints{}, *mcOptions)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	c.multiClusterEndpointsController = multiClusterEndpointsController
+	c.endpointsLister = informer.Endpoints().Lister()
+	if options != nil && options.IsFake {
+		c.endpointsSynced = func() bool { return true }
+	} else {
+		c.endpointsSynced = informer.Endpoints().Informer().HasSynced
+	}
+
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
 	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", *patrolOptions)
 	if err != nil {
 		klog.Errorf("failed to create endpoints patroller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.endPointsPatroller = endPointsPatroller
 
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterEndpointsController, nil, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {
