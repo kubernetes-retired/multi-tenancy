@@ -15,6 +15,12 @@ import (
 // ReportingInterval is the exporter reporting period.
 const ReportingInterval = 1 * time.Minute
 
+var (
+	// SuppressObjectTags, if true, will prevent any GroupKind tags from being annotated onto object
+	// metrics.
+	SuppressObjectTags bool
+)
+
 // Create Measures. A measure represents a metric type to be recorded.
 var (
 	hierConfigReconcileTotal      = ocstats.Int64("hierconfig_reconcile_total", "The total number of HierConfig reconciliations happened", "reconciliations")
@@ -122,10 +128,13 @@ func recordMetric(m counter, ms *ocstats.Int64Measure) {
 	ocstats.Record(context.Background(), ms.M(int64(m)))
 }
 
-// recordTagMetric inserts a tag to the context before recording a metric.
-// The tag is used to group and filter collected metrics later on.
-func recordTagMetric(m counter, ms *ocstats.Int64Measure, k tag.Key, v string) {
-	ctx, _ := tag.New(context.Background(), tag.Insert(k, v))
+// recordObjectMetric records a measurement specifically associated with an object. If
+// SuppressObjectTags isn't set, it also tags the measurement with the provided GroupKind.
+func recordObjectMetric(m counter, ms *ocstats.Int64Measure, gk schema.GroupKind) {
+	ctx := context.Background()
+	if !SuppressObjectTags {
+		ctx, _ = tag.New(ctx, tag.Insert(KeyGroupKind, gk.String()))
+	}
 	ocstats.Record(ctx, ms.M(int64(m)))
 }
 
@@ -141,7 +150,7 @@ func recordPeakConcurrentReconciles() {
 		peak.concurrentHierConfigReconcile = 0
 
 		for gk, _ := range peak.concurrentObjectReconcile {
-			recordTagMetric(peak.concurrentObjectReconcile[gk], objectReconcileConcurrent, KeyGroupKind, gk.String())
+			recordObjectMetric(peak.concurrentObjectReconcile[gk], objectReconcileConcurrent, gk)
 			peak.concurrentObjectReconcile[gk] = 0
 		}
 		peak.lock.Unlock()

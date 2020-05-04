@@ -71,7 +71,7 @@ func StartObjReconcile(gvk schema.GroupVersionKind) {
 	stats.objects[gk].totalReconciles.incr()
 	stats.objects[gk].curReconciles.incr()
 
-	recordTagMetric(stats.objects[gk].totalReconciles, objectReconcileTotal, KeyGroupKind, gk.String())
+	recordObjectMetric(stats.objects[gk].totalReconciles, objectReconcileTotal, gk)
 	// Only update the maxConcurrent value in StartReconcile() since it's impossible to
 	// get the max from StopReconcile() when the reconcile number decrements.
 	peak.concurrentObjectReconcile[gk] = max(peak.concurrentObjectReconcile[gk], stats.objects[gk].curReconciles)
@@ -103,7 +103,7 @@ func WriteObject(gvk schema.GroupVersionKind) {
 	gk := gvk.GroupKind()
 	stats.objects[gk].apiWrites.incr()
 
-	recordTagMetric(stats.objects[gk].apiWrites, objectWritesTotal, KeyGroupKind, gk.String())
+	recordObjectMetric(stats.objects[gk].apiWrites, objectWritesTotal, gk)
 }
 
 func init() {
