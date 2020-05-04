@@ -57,6 +57,7 @@ var (
 	testLog              bool
 	internalCert         bool
 	qps                  int
+	webhookServerPort    int
 )
 
 func init() {
@@ -81,6 +82,7 @@ func main() {
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
 	flag.BoolVar(&stats.SuppressObjectTags, "suppress-object-tags", true, "If true, suppresses the kinds of object metrics to reduce metric cardinality.")
+	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -128,6 +130,7 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
+		Port:               webhookServerPort,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
