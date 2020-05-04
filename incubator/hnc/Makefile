@@ -43,7 +43,7 @@ all: test docker-build
 
 # Run tests
 test: build
-	go test ./api/... ./cmd/... ./pkg/... -coverprofile cover.out
+	go test ./api/... ./cmd/... ./pkg/... ./third_party/... -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests
@@ -128,15 +128,15 @@ endif
 # deleting the CRDs will cause all the existing hierarchy configs to be wiped
 # away and b) if we don't delete the deployment, a new image won't be pulled
 # unless the tag changes.
-deploy: deploy-prereq docker-push kubectl manifests
+deploy: docker-push kubectl manifests
 	-kubectl -n hnc-system delete deployment hnc-controller-manager
 	kubectl apply -f manifests/hnc-manager.yaml
 
 deploy-watch:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
 
-# Installs prerequisites. See https://cert-manager.io/docs/installation/kubernetes/ for why we're not validating our YAML.
-deploy-prereq:
+# Installs cert-manager. See https://cert-manager.io/docs/installation/kubernetes/ for why we're not validating our YAML.
+deploy-cm:
 	@kubectl cluster-info
 	-kubectl create namespace cert-manager
 	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
@@ -166,7 +166,7 @@ kind-reboot:
 # Creates a local kind cluster, destroying the old one if necessary. It's not
 # *necessary* to call this wih CONFIG=kind but it's not a bad idea either so
 # the correct manifests get created.
-kind-reset: kind-reboot deploy-prereq
+kind-reset: kind-reboot
 	@echo "If this didn't work, ensure you ran 'source devenv' to point kubectl at kind'"
 
 # Convenience target to deploy specifically for kind
