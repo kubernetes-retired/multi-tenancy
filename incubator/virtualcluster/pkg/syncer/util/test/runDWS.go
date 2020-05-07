@@ -259,6 +259,10 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 		return informer.PersistentVolumes().Informer()
 	case *v1.PersistentVolumeClaim:
 		return informer.PersistentVolumeClaims().Informer()
+	case *v1.ConfigMap:
+		return informer.ConfigMaps().Informer()
+	case *v1.Endpoints:
+		return informer.Endpoints().Informer()
 	default:
 		return nil
 	}

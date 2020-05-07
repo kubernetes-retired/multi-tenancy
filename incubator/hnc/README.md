@@ -13,15 +13,15 @@ team's namespace, even if you don't have cluster-level permission to create
 namespaces, and easily apply policies like RBAC and Network Policies across all
 namespaces in your team (e.g. a set of related microservices).
 
-You can read more
-about hierarchical namespaces in the [HNC Concepts doc](http://bit.ly/38YYhE0).
+You can read more about hierarchical namespaces in the [HNC User Guide](http://bit.ly/38YYhE0).
 
 The best way you can help contribute to bringing hierarchical namespaces to the
-Kubernetes ecosystem is to try out HNC and report the problems you have (see
-below). Or, if it's working well for you, let us know on the \#wg-multitenancy
-channel on Slack, or join a MTWG meeting. We'd love to hear from you!
+Kubernetes ecosystem is to try out HNC and report the problems you have with
+either HNC itself or its documentation (see below). Or, if it's working well for
+you, let us know on the \#wg-multitenancy channel on Slack, or join a
+wg-multitenancy meeting. We'd love to hear from you!
 
-With that said, please be cautious - HNC is pre-alpha software. There are no
+With that said, please be cautious - HNC is alpha software. There are no
 guarantees of compatibility or feature support until further notice. HNC also
 requires very high privileges on your cluster and you should not install it on
 clusters with sensitive configurations that you can't afford to lose.
@@ -58,7 +58,7 @@ chmod +x ${PLUGIN_DIR}/kubectl-hns
 As a quick start, I'd recommend following the [HNC demo
 scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
 to get an idea of what HNC can do. For a more in-depth understanding, check out
-the [HNC Concepts doc](http://bit.ly/38YYhE0).
+the [HNC User Guide](http://bit.ly/38YYhE0).
 
 ### Viewing metrics
 You should be able to view all HNC metrics in your preferred backend:
@@ -67,10 +67,10 @@ You should be able to view all HNC metrics in your preferred backend:
 
 |Metric                                              |Description   |
 |:-------------------------------------------------- |:-------------|
-| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened | 
+| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened |
 | hnc/reconcilers/hierconfig/concurrent_peak         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
-| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations | 
-| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations | 
+| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations |
+| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations |
 | hnc/reconcilers/object/total                       | The total number of object reconciliations happened |
 | hnc/reconcilers/object/concurrent_peak             | The peak concurrent object reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
 
@@ -92,13 +92,15 @@ kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined:
 
-* [v0.1 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
+* [v0.1 - COMPLETE NOV 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
   an initial release with all basic functionality so you can play with it, but
   not suitable for any real workloads.
-* [v0.2 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
+* [v0.2 - COMPLETE DEC 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
   contains enough functionality to be suitable for non-production workloads.
-* [v0.3 - COMPLETE](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
+* [v0.3 - COMPLETE APR 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
   type configuration and better self-service namespace UX.
+* [v0.4 - IN PROGRESS](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
+  incremental improvements based on feedback.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
@@ -113,8 +115,6 @@ yourself and are also a developer, we want to know what does and does not work
 for you, and we'd welcome any PRs that might solve your problems.
 
 * Design doc: http://bit.ly/k8s-hnc-design
-* Demonstration: https://youtu.be/XFZhApTlJ88?t=171 (MTWG meeting; Sep 24 '19)
-  * Script for said demo: https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
 
 ### Prerequisites
 
@@ -140,17 +140,14 @@ To deploy to a cluster:
       so and then try again. The certificate manager takes a few moments for its
       webhook to become available. This should only happen the first time you
       deploy this way, or if we change the recommended version of cert-manager.
-    - For v0.2.0 and before, this will also install the `kubectl-hierarchical_namespaces` 
-      plugin into `$GOPATH/bin` (as well as its alias, `kubectl-hns`), so make sure that's
-      in your path if you want to use commands like `kubectl hns tree`.
-    - For v0.3.0 and after, this will install the `kubectl-hns` plugin into `$GOPATH/bin`
+    - This will install the `kubectl-hns` plugin into `$GOPATH/bin`.
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
   - To view logs, say `make deploy-watch`
 
 ### Development Workflow
 
-Once HNC is installed via `make deploy`, the development cycle looks like the following: 
+Once HNC is installed via `make deploy`, the development cycle looks like the following:
   - Make changes locally and write new unit and integration tests as necessary
   - Ensure `make test` passes
   - Deploy to your cluster with `make deploy`
@@ -201,7 +198,7 @@ Within the `reconcilers` directory, there are four reconcilers:
 
 * **HNCConfiguration reconciler:** manages the HNCConfiguration via the
   cluster-wide `config` singleton.
-* **HierarchicalNamespace reconciler:** manages the self-service namespaces via 
+* **HierarchicalNamespace reconciler:** manages the self-service namespaces via
   the `hierarchicalnamespace` resources.
 * **HierarchyConfiguration reconciler:** manages the hierarchy and the
   namespaces via the `hierarchy` singleton per namespace.

@@ -32,7 +32,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	// +kubebuilder:scaffold:imports
 
@@ -48,6 +47,19 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 )
 
+var (
+	metricsAddr          string
+	maxReconciles        int
+	enableLeaderElection bool
+	leaderElectionId     string
+	novalidation         bool
+	debugLogs            bool
+	testLog              bool
+	internalCert         bool
+	qps                  int
+	webhookServerPort    int
+)
+
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
@@ -58,16 +70,6 @@ func init() {
 }
 
 func main() {
-	var (
-		metricsAddr          string
-		maxReconciles        int
-		enableLeaderElection bool
-		leaderElectionId     string
-		novalidation         bool
-		debugLogs            bool
-		testLog              bool
-		qps                  int
-	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
@@ -76,8 +78,11 @@ func main() {
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
+	flag.BoolVar(&internalCert, "enable-internal-cert-management", false, "Enables internal cert management.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
+	flag.BoolVar(&stats.SuppressObjectTags, "suppress-object-tags", true, "If true, suppresses the kinds of object metrics to reduce metric cardinality.")
+	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -125,11 +130,32 @@ func main() {
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
+		Port:               webhookServerPort,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
+	setupFinished, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert)
+	if err != nil {
+		setupLog.Error(err, "unable to set up cert rotation")
+		os.Exit(1)
+	}
+
+	go startControllers(mgr, setupFinished)
+
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
+	// Block until the setup finishes.
+	<-setupFinished
 
 	if testLog {
 		stats.StartLoggingActivity()
@@ -143,42 +169,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create validating admission controllers
+	// Create all validating admission controllers.
 	if !novalidation {
-		// Create webhook for Hierarchy
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
-		mgr.GetWebhookServer().Register(validators.HierarchyServingPath, &webhook.Admission{Handler: &validators.Hierarchy{
-			Log:    ctrl.Log.WithName("validators").WithName("Hierarchy"),
-			Forest: f,
-		}})
-
-		// Create webhooks for managed objects
-		mgr.GetWebhookServer().Register(validators.ObjectsServingPath, &webhook.Admission{Handler: &validators.Object{
-			Log:    ctrl.Log.WithName("validators").WithName("Object"),
-			Forest: f,
-		}})
-
-		// Create webhook for the config
-		mgr.GetWebhookServer().Register(validators.ConfigServingPath, &webhook.Admission{Handler: &validators.HNCConfig{
-			Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
-		}})
-
-		// Create webhook for the HierarchicalNamespaces.
-		mgr.GetWebhookServer().Register(validators.HierarchicalNamespaceServingPath, &webhook.Admission{Handler: &validators.HierarchicalNamespace{
-			Log:    ctrl.Log.WithName("validators").WithName("HierarchicalNamespace"),
-			Forest: f,
-		}})
-
-		// Create webhook for the namespaces (core type).
-		mgr.GetWebhookServer().Register(validators.NamespaceServingPath, &webhook.Admission{Handler: &validators.Namespace{
-			Log:    ctrl.Log.WithName("validators").WithName("Namespace"),
-			Forest: f,
-		}})
-	}
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+		validators.Create(mgr, f)
 	}
 }

@@ -99,7 +99,7 @@ func (c *controller) reconcileServiceAccountCreate(clusterName, targetNamespace,
 			klog.Infof("service account %s/%s of cluster %s already exist in super master", targetNamespace, pServiceAccount.Name, clusterName)
 			return nil
 		} else {
-			return fmt.Errorf("pServiceAccount %s/%s exists but its delegated object UID is different.", targetNamespace, pServiceAccount.Name)
+			return fmt.Errorf("pServiceAccount %s/%s exists but its delegated UID is different", targetNamespace, pServiceAccount.Name)
 		}
 	}
 	return err
@@ -120,12 +120,17 @@ func (c *controller) reconcileServiceAccountUpdate(clusterName, targetNamespace,
 		}
 		return err
 	}
+
+	if pSa.Annotations[constants.LabelUID] != requestUID {
+		return fmt.Errorf("pServiceAccount %s/%s delegated UID is different from updated object", targetNamespace, pSa.Name)
+	}
+
 	// do nothing.
 	return nil
 }
 
 func (c *controller) reconcileServiceAccountRemove(clusterName, targetNamespace, requestUID, name string, pSa *v1.ServiceAccount) error {
-	if pSa.Annotations[constants.LabelUID] == requestUID {
+	if pSa.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("To be deleted pServiceAccount %s/%s delegated UID is different from deleted object.", targetNamespace, pSa.Name)
 	}
 	opts := &metav1.DeleteOptions{

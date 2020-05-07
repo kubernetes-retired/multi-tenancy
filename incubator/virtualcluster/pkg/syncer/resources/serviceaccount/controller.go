@@ -29,6 +29,7 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -46,33 +47,59 @@ type controller struct {
 func Register(
 	config *config.SyncerConfiguration,
 	client v1core.CoreV1Interface,
-	saInformer coreinformers.ServiceAccountInformer,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, _, err := NewServiceAccountController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster configmap controller %v", err)
+		return
+	}
+
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewServiceAccountController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		saClient: client,
 	}
 
-	// Create the multi cluster secret controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterServiceAccountController, err := mc.NewMCController("tenant-masters-service-account-controller", &v1.ServiceAccount{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterServiceAccountController, err := mc.NewMCController("tenant-masters-service-account-controller", &v1.ServiceAccount{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster secret controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.multiClusterServiceAccountController = multiClusterServiceAccountController
-	c.saLister = saInformer.Lister()
-	c.saSynced = saInformer.Informer().HasSynced
+	c.saLister = informer.ServiceAccounts().Lister()
+	if options != nil && options.IsFake {
+		c.saSynced = func() bool { return true }
+	} else {
+		c.saSynced = informer.ServiceAccounts().Informer().HasSynced
+	}
 
-	patrolOptions := &pa.Options{Reconciler: c}
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
 	serviceAccountPatroller, err := pa.NewPatroller("serviceAccount-patroller", *patrolOptions)
 	if err != nil {
 		klog.Errorf("failed to create serviceAccount patroller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.serviceAccountPatroller = serviceAccountPatroller
 
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterServiceAccountController, nil, nil
 }
 
 func (c *controller) StartUWS(stopCh <-chan struct{}) error {

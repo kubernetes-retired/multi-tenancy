@@ -19,10 +19,7 @@ package virtualcluster
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"k8s.io/api/core/v1"
@@ -36,54 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	aliyunutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/aliyun"
 	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
-	strutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/strings"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-)
-
-const (
-	DefaultVcManagerNs = "vc-manager"
-
-	// consts used to get aliyun accesskey ID/Secret from secret
-	AliyunAkSrt        = "aliyun-accesskey"
-	AliyunAKIDName     = "accessKeyID"
-	AliyunAKSecretName = "accessKeySecret"
-
-	// consts used to get ask configuration from ConfigMap
-	AliyunASKConfigMap       = "aliyun-ask-config"
-	AliyunASKCfgMpRegionID   = "askRegionID"
-	AliyunASKCfgMpZoneID     = "askZoneID"
-	AliyunASKCfgMpVPCID      = "askVpcID"
-	AliyunASKCfgMpVSID       = "askVswitchID"
-	AliyunASKCfgMpPrivateCfg = "askPrivateKbCfg"
-
-	// AnnotationClusterID is the cluster id of the remote virtualcluster master on the cloud
-	AnnotationClusterID = "tenancy.x-k8s.io/ask.clusterID"
-	// AnnotationSlbID is the loadbalancer id of the remote virtualcluster master on the cloud
-	AnnotationSlbID = "tenancy.x-k8s.io/ask.slbID"
-	// AnnotationKubeconfig is the admin-kubeconfig to access the remote virtualcluster master on the cloud
-	AnnotationKubeconfig = "tenancy.x-k8s.io/admin-kubeconfig"
-)
-
-type ASKConfig struct {
-	vpcID        string
-	vswitchID    string
-	regionID     string
-	zoneID       string
-	privateKbCfg string
-}
-
-const (
-	// full list of potential API errors can be found at
-	// https://error-center.alibabacloud.com/status/product/Cos?spm=a2c69.11428812.home.7.2247bb9adTOFxm
-	OprationNotSupported    = "ErrorCheckAcl"
-	ClusterNotFound         = "ErrorClusterNotFound"
-	ClusterNameAlreadyExist = "ClusterNameAlreadyExist"
-	QueryClusterError       = "ErrorQueryCluster"
 )
 
 type MasterProvisionerAliyun struct {
@@ -103,15 +57,15 @@ func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, 
 	}
 	if !kubeutil.IsObjExist(cli, types.NamespacedName{
 		Namespace: ns,
-		Name:      AliyunAkSrt,
+		Name:      aliyunutil.AliyunAkSrt,
 	}, &v1.Secret{}, log) {
-		return nil, fmt.Errorf("secret/%s doesnot exist", AliyunAkSrt)
+		return nil, fmt.Errorf("secret/%s doesnot exist", aliyunutil.AliyunAkSrt)
 	}
 	if !kubeutil.IsObjExist(cli, types.NamespacedName{
 		Namespace: ns,
-		Name:      AliyunASKConfigMap,
+		Name:      aliyunutil.AliyunASKConfigMap,
 	}, &v1.ConfigMap{}, log) {
-		return nil, fmt.Errorf("configmap/%s doesnot exist", AliyunASKConfigMap)
+		return nil, fmt.Errorf("configmap/%s doesnot exist", aliyunutil.AliyunASKConfigMap)
 	}
 	return &MasterProvisionerAliyun{
 		Client: mgr.GetClient(),
@@ -119,339 +73,23 @@ func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, 
 	}, nil
 }
 
-// getClusterIDByName returns the clusterID of the cluster with clusterName
-func getClusterIDByName(cli *sdk.Client, clusterName, regionID string) (string, error) {
-	request := requests.NewCommonRequest()
-	request.Method = "GET"
-	request.Scheme = "http"
-	request.Domain = "cs.aliyuncs.com"
-	request.Version = "2015-12-15"
-	request.PathPattern = "/clusters"
-	request.Headers["Content-Type"] = "application/json"
-	request.QueryParams["RegionId"] = regionID
-	response, err := cli.ProcessCommonRequest(request)
-	if err != nil {
-		return "", err
-	}
-
-	var clsInfoLst []map[string]interface{}
-	if err := json.Unmarshal(response.GetHttpContentBytes(), &clsInfoLst); err != nil {
-		return "", err
-	}
-	for _, clsInfo := range clsInfoLst {
-		clsNameInf, exist := clsInfo["name"]
-		if !exist {
-			return "", errors.New("clusterInfo doesn't contain 'name' field")
-		}
-		clsName, ok := clsNameInf.(string)
-		if !ok {
-			return "", errors.New("fail to assert 'name' to string")
-		}
-		if clsName == clusterName {
-			clsIDInf, exist := clsInfo["cluster_id"]
-			if !exist {
-				return "", errors.New("clusterInfo doesn't contain 'cluster_id' field")
-			}
-			clsID, ok := clsIDInf.(string)
-			if !ok {
-				return "", errors.New("fail to assert 'cluster_id' to string")
-			}
-			return clsID, nil
-		}
-	}
-	return "", fmt.Errorf("can't find cluster information for cluster(%s)", clusterName)
-}
-
-// sendCreationRequest sends ASK creation request to Aliyun. If there exists an ASK
-// with the same clusterName, retrieve and return the clusterID of the ASK instead of
-// creating a new one
-func sendCreationRequest(cli *sdk.Client, clusterName string, askCfg ASKConfig) (string, error) {
-	request := requests.NewCommonRequest()
-	request.Method = "POST"
-	request.Scheme = "http"
-	request.Domain = "cs.aliyuncs.com"
-	request.Version = "2015-12-15"
-	request.PathPattern = "/clusters"
-	request.Headers["Content-Type"] = "application/json"
-	request.QueryParams["RegionId"] = askCfg.regionID
-
-	// set vpc, if vpcID is specified
-	var body string
-	if askCfg.vpcID != "" {
-		body = fmt.Sprintf(`{
-"cluster_type": "Ask",
-"name": "%s", 
-"region_id": "%s",
-"zoneid": "%s", 
-"vpc_id": "%s",
-"vswitch_id": "%s",
-"nat_gateway": false,
-"private_zone": true
-}`, clusterName, askCfg.regionID, askCfg.zoneID, askCfg.vpcID, askCfg.vswitchID)
-	} else {
-		body = fmt.Sprintf(`{
-"cluster_type": "Ask",
-"name": "%s", 
-"region_id": "%s",
-"zoneid": "%s", 
-"nat_gateway": true,
-"private_zone": true
-}`, clusterName, askCfg.regionID, askCfg.zoneID)
-	}
-
-	request.Content = []byte(body)
-	response, err := cli.ProcessCommonRequest(request)
-	if err != nil {
-
-		return "", err
-	}
-
-	// cluster information of the newly created ASK in json format
-	clsInfo := make(map[string]string)
-	if err := json.Unmarshal(response.GetHttpContentBytes(), &clsInfo); err != nil {
-		return "", err
-	}
-	clusterID, exist := clsInfo["cluster_id"]
-	if !exist {
-		return "", errors.New("can't find 'cluster_id' in response body")
-	}
-	return clusterID, nil
-}
-
-func isSDKErr(err error) bool {
-	return strings.HasPrefix(err.Error(), "SDK.ServerError")
-}
-
-func getSDKErrCode(err error) string {
-	// an SDK error looks like:
-	//
-	// SDK.ServerError
-	// ErrorCode:
-	// Recommend:
-	// RequestId:
-	// Message: {"code":"ClusterNameAlreadyExist","message":"cluster name {XXX} already exist in your clusters","requestId":"C2D0F836-DD3D-4749-97AB-10AE8371BABE","status":400}
-	errMsg := strings.Split(err.Error(), "\n")[4]
-	errCodeWithQuote := strutil.SplitFields(errMsg, ':', ',')[2]
-	// remove surrounding quotes
-	return errCodeWithQuote[1 : len(errCodeWithQuote)-1]
-}
-
-// getASKStateAndSlbID gets the slb ID (external_loadbalncer id) and the latest
-// state of the ASK with the given clusterID
-func getASKStateAndSlbID(cli *sdk.Client, clusterID, regionID string) (slbId, state string, err error) {
-	request := requests.NewCommonRequest()
-	request.Method = "GET"
-	request.Scheme = "http"
-	request.Domain = "cs.aliyuncs.com"
-	request.Version = "2015-12-15"
-	request.PathPattern = fmt.Sprintf("/clusters/%s", clusterID)
-	request.Headers["Content-Type"] = "application/json"
-	request.QueryParams["RegionId"] = regionID
-
-	response, err := cli.ProcessCommonRequest(request)
-	if err != nil {
-		return
-	}
-
-	var clsInfo map[string]interface{}
-	if err = json.Unmarshal(response.GetHttpContentBytes(), &clsInfo); err != nil {
-		return
-	}
-	clsIDInf, exist := clsInfo["cluster_id"]
-	if !exist {
-		err = errors.New("cluster info entry doesn't contain 'cluster_id' field")
-		return
-	}
-	clsID, ok := clsIDInf.(string)
-	if !ok {
-		err = errors.New("fail to assert cluster id")
-		return
-	}
-	// find desired cluster
-	if clsID != clusterID {
-		err = fmt.Errorf("cluster id does not match: got %s want %s", clsID, clusterID)
-		return
-	}
-	clsStateInf, exist := clsInfo["state"]
-	if !exist {
-		err = fmt.Errorf("fail to get 'state' of cluster(%s)", clusterID)
-		return
-	}
-	clsSlbIdInf, exist := clsInfo["external_loadbalancer_id"]
-	if !exist {
-		err = fmt.Errorf("fail to get 'external_loadbalancer_id' of cluster(%s)", clusterID)
-		return
-	}
-
-	slbId, ok = clsSlbIdInf.(string)
-	if !ok {
-		err = fmt.Errorf("fail to assert cluster.external_loadbalancer_idstring")
-		return
-	}
-
-	state, ok = clsStateInf.(string)
-	if !ok {
-		err = fmt.Errorf("fail to assert cluster.state to string")
-		return
-	}
-
-	return
-}
-
-// getASKPrivateKubeConfig retrieves the kubeconfig of the ASK with the given clusterID.
-func getASKKubeConfig(cli *sdk.Client, clusterID, regionID, privateKbCfg string) (string, error) {
-	request := requests.NewCommonRequest()
-	request.Method = "GET"
-	request.Scheme = "http"
-	request.Domain = "cs.aliyuncs.com"
-	request.Version = "2015-12-15"
-	request.PathPattern = fmt.Sprintf("/k8s/%s/user_config", clusterID)
-	request.Headers["Content-Type"] = "application/json"
-	request.QueryParams["RegionId"] = regionID
-	if privateKbCfg != "" {
-		// if specified, get kubeconfig that uses private IP
-		request.QueryParams["PrivateIpAddress"] = privateKbCfg
-	}
-	response, err := cli.ProcessCommonRequest(request)
-	if err != nil {
-		return "", err
-	}
-	kbCfgJson := make(map[string]string)
-	if err := json.Unmarshal(response.GetHttpContentBytes(), &kbCfgJson); err != nil {
-		return "", err
-	}
-
-	kbCfg, exist := kbCfgJson["config"]
-	if !exist {
-		return "", fmt.Errorf("kubeconfig of cluster(%s) is not found", clusterID)
-	}
-	return kbCfg, nil
-}
-
-// sendDeletionRequest sends a request for deleting the ASK with the given clusterID
-func sendDeletionRequest(cli *sdk.Client, clusterID, regionID string) error {
-	request := requests.NewCommonRequest()
-	request.Method = "DELETE"
-	request.Scheme = "http"
-	request.Domain = "cs.aliyuncs.com"
-	request.Version = "2015-12-15"
-	request.PathPattern = fmt.Sprintf("/clusters/%s", clusterID)
-	request.Headers["Content-Type"] = "application/json"
-	request.QueryParams["RegionId"] = regionID
-	_, err := cli.ProcessCommonRequest(request)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// getAliyunAKPair gets the current aliyun AccessKeyID/AccessKeySecret from secret
-// NOTE AccessKeyID/AccessKeySecret may be changed if user update the secret `aliyun-accesskey`
-func (mpa *MasterProvisionerAliyun) getAliyunAKPair() (keyID string, keySecret string, err error) {
-	var vcManagerNs string
-	vcManagerNs, getNsErr := kubeutil.GetPodNsFromInside()
-	if getNsErr != nil {
-		log.Info("can't find NS from inside the pod", "err", err)
-		vcManagerNs = DefaultVcManagerNs
-	}
-	akSrt := &v1.Secret{}
-	if getErr := mpa.Get(context.TODO(), types.NamespacedName{
-		Namespace: vcManagerNs,
-		Name:      AliyunAkSrt,
-	}, akSrt); getErr != nil {
-		err = getErr
-	}
-
-	keyIDByt, exist := akSrt.Data[AliyunAKIDName]
-	if !exist {
-		err = errors.New("aliyun accessKeyID doesn't exist")
-	}
-	keyID = string(keyIDByt)
-
-	keySrtByt, exist := akSrt.Data[AliyunAKSecretName]
-	if !exist {
-		err = errors.New("aliyun accessKeySecret doesn't exist")
-	}
-	keySecret = string(keySrtByt)
-	return
-}
-
-// getASKConfigs gets the ASK configuration information from ConfigMap
-func (mpa *MasterProvisionerAliyun) getASKConfigs() (cfg ASKConfig, err error) {
-	var vcManagerNs string
-	vcManagerNs, getNsErr := kubeutil.GetPodNsFromInside()
-	if getNsErr != nil {
-		log.Info("can't find NS from inside the pod", "err", err)
-		vcManagerNs = DefaultVcManagerNs
-	}
-
-	ASKCfgMp := &v1.ConfigMap{}
-	if getErr := mpa.Get(context.TODO(), types.NamespacedName{
-		Namespace: vcManagerNs,
-		Name:      AliyunASKConfigMap,
-	}, ASKCfgMp); getErr != nil {
-		err = getErr
-	}
-
-	regionID, riExist := ASKCfgMp.Data[AliyunASKCfgMpRegionID]
-	if !riExist {
-		err = fmt.Errorf("%s not exist", AliyunASKCfgMpRegionID)
-		return
-	}
-	cfg.regionID = regionID
-
-	zoneID, ziExist := ASKCfgMp.Data[AliyunASKCfgMpZoneID]
-	if !ziExist {
-		err = fmt.Errorf("%s not exist", AliyunASKCfgMpZoneID)
-		return
-	}
-	cfg.zoneID = zoneID
-
-	privateKbCfg, pkcExist := ASKCfgMp.Data[AliyunASKCfgMpPrivateCfg]
-	// cfg.privateKbCfg can only be set as "true" or "false"
-	if pkcExist {
-		if privateKbCfg == "true" || privateKbCfg == "false" {
-			cfg.privateKbCfg = privateKbCfg
-		} else {
-			err = fmt.Errorf("%s.data.%s can only be set as 'true' or 'false'",
-				AliyunASKConfigMap, AliyunASKCfgMpPrivateCfg)
-			return
-		}
-	} else {
-		cfg.privateKbCfg = "false"
-	}
-
-	vpcID, viExist := ASKCfgMp.Data[AliyunASKCfgMpVPCID]
-	vsID, vsiExist := ASKCfgMp.Data[AliyunASKCfgMpVSID]
-	if viExist != vsiExist {
-		err = errors.New("vswitchID and vpcID need to be used together")
-	}
-
-	if viExist && vsiExist {
-		cfg.vpcID = vpcID
-		cfg.vswitchID = vsID
-	}
-
-	return
-}
-
 // CreateVirtualCluster creates a new ASK on aliyun for given Virtualcluster
 func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
 	log.Info("setting up control plane for the Virtualcluster", "Virtualcluster", vc.Name)
 	// 1. load aliyun accessKeyID/accessKeySecret from secret
-	aliyunAKID, aliyunAKSrt, err := mpa.getAliyunAKPair()
+	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {
 		return err
 	}
 
-	askCfg, err := mpa.getASKConfigs()
+	askCfg, err := aliyunutil.GetASKConfigs(mpa, log)
 	if err != nil {
 		return err
 	}
 
 	// 2. send ASK creation request
 	// NOTE http requests of a creation action will be sent by a same client
-	cli, err := sdk.NewClientWithAccessKey(askCfg.regionID, aliyunAKID, aliyunAKSrt)
+	cli, err := sdk.NewClientWithAccessKey(askCfg.RegionID, aliyunAKID, aliyunAKSrt)
 	if err != nil {
 		return err
 	}
@@ -462,22 +100,22 @@ func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 		clsSlbId string
 	)
 	creationTimeout := time.After(600 * time.Second)
-	clsID, err = sendCreationRequest(cli, vc.Name, askCfg)
+	clsID, err = aliyunutil.SendCreationRequest(cli, vc.Name, askCfg)
 	if err != nil {
-		if !isSDKErr(err) {
+		if !aliyunutil.IsSDKErr(err) {
 			return err
 		}
 		// check SDK error code
-		if getSDKErrCode(err) == ClusterNameAlreadyExist {
+		if aliyunutil.GetSDKErrCode(err) == aliyunutil.ClusterNameAlreadyExist {
 			// clusterName already exists, query Aliyun to get the clusterID
 			// corresponding to the clusterName
 			var getClsIDErr error
-			clsID, getClsIDErr = getClusterIDByName(cli, vc.Name, askCfg.regionID)
+			clsID, getClsIDErr = aliyunutil.GetClusterIDByName(cli, vc.Name, askCfg.RegionID)
 			if getClsIDErr != nil {
 				return getClsIDErr
 			}
 			var getStErr error
-			clsSlbId, clsState, getStErr = getASKStateAndSlbID(cli, clsID, askCfg.regionID)
+			clsSlbId, clsState, getStErr = aliyunutil.GetASKStateAndSlbID(cli, clsID, askCfg.RegionID)
 			if getStErr != nil {
 				return getStErr
 			}
@@ -501,7 +139,7 @@ PollASK:
 				break PollASK
 			}
 			var getStErr error
-			clsSlbId, clsState, getStErr = getASKStateAndSlbID(cli, clsID, askCfg.regionID)
+			clsSlbId, clsState, getStErr = aliyunutil.GetASKStateAndSlbID(cli, clsID, askCfg.RegionID)
 			if getStErr != nil {
 				return getStErr
 			}
@@ -519,7 +157,7 @@ PollASK:
 	log.Info("virtualcluster root ns is created", "ns", vcNs)
 
 	// 5. get kubeconfig of the newly created ASK
-	kbCfg, err := getASKKubeConfig(cli, clsID, askCfg.regionID, askCfg.privateKbCfg)
+	kbCfg, err := aliyunutil.GetASKKubeConfig(cli, clsID, askCfg.RegionID, askCfg.PrivateKbCfg)
 	if err != nil {
 		return err
 	}
@@ -540,18 +178,18 @@ PollASK:
 	// tenancy.x-k8s.io/ask.slbID,
 	// tenancy.x-k8s.io/cluster,
 	// tenancy.x-k8s.io/admin-kubeconfig
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationSlbID, clsSlbId, log)
+	err = kubeutil.AnnotateVC(mpa, vc, aliyunutil.AnnotationSlbID, clsSlbId, log)
 	if err != nil {
 		return err
 	}
 	log.Info("slb id has been added to vc as an annotation", "vc", vc.GetName(), "id", clsSlbId)
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationClusterID, clsID, log)
+	err = kubeutil.AnnotateVC(mpa, vc, aliyunutil.AnnotationClusterID, clsID, log)
 	if err != nil {
 		return err
 	}
 	log.Info("cluster ID has been added to vc as an annotation", "vc", vc.GetName(), "cluster-id", clsID)
 	kbCfgB64 := base64.StdEncoding.EncodeToString([]byte(kbCfg))
-	err = kubeutil.AnnotateVC(mpa, vc, AnnotationKubeconfig, kbCfgB64, log)
+	err = kubeutil.AnnotateVC(mpa, vc, aliyunutil.AnnotationKubeconfig, kbCfgB64, log)
 	if err != nil {
 		return err
 	}
@@ -587,26 +225,26 @@ PollASK:
 // the ASK will be deleted
 func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
 	log.Info("deleting the ASK of the virtualcluster", "vc-name", vc.Name)
-	aliyunAKID, aliyunAKSrt, err := mpa.getAliyunAKPair()
+	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {
 		return err
 	}
-	askCfg, err := mpa.getASKConfigs()
-	if err != nil {
-		return err
-	}
-
-	cli, err := sdk.NewClientWithAccessKey(askCfg.regionID, aliyunAKID, aliyunAKSrt)
+	askCfg, err := aliyunutil.GetASKConfigs(mpa, log)
 	if err != nil {
 		return err
 	}
 
-	clusterID, err := getClusterIDByName(cli, vc.Name, askCfg.regionID)
+	cli, err := sdk.NewClientWithAccessKey(askCfg.RegionID, aliyunAKID, aliyunAKSrt)
 	if err != nil {
 		return err
 	}
 
-	err = sendDeletionRequest(cli, clusterID, askCfg.regionID)
+	clusterID, err := aliyunutil.GetClusterIDByName(cli, vc.Name, askCfg.RegionID)
+	if err != nil {
+		return err
+	}
+
+	err = aliyunutil.SendDeletionRequest(cli, clusterID, askCfg.RegionID)
 	if err != nil {
 		return err
 	}
@@ -617,10 +255,10 @@ OuterLoop:
 	for {
 		select {
 		case <-time.After(2 * time.Second):
-			_, state, err := getASKStateAndSlbID(cli, clusterID, askCfg.regionID)
+			_, state, err := aliyunutil.GetASKStateAndSlbID(cli, clusterID, askCfg.RegionID)
 			if err != nil {
-				if isSDKErr(err) {
-					if getSDKErrCode(err) == ClusterNotFound {
+				if aliyunutil.IsSDKErr(err) {
+					if aliyunutil.GetSDKErrCode(err) == aliyunutil.ClusterNotFound {
 						log.Info("corresponding ASK cluster is not found", "vc-name", vc.Name)
 						break OuterLoop
 					}

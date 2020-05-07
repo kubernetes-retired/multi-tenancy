@@ -8,6 +8,13 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        # Generally to run as non root, the GID and UID can be any number between
+        # 1 to 65535 except for root, which is 0. If PodSecurityPolicy (PSP) is
+        # enabled, adjust the GID and UID to meet the specific requirement in PSP.
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
       - name: kube-rbac-proxy
         image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.0
@@ -21,8 +28,10 @@ spec:
           name: https
       - name: manager
         args:
+        - "--webhook-server-port=9443"
         - "--metrics-addr=127.0.0.1:8080"
         - "--enable-leader-election"
         - "--leader-election-id=hnc-controller-leader-election-helper"
         - "--max-reconciles=10"
         - "--apiserver-qps-throttle=50"
+        - "--enable-internal-cert-management=true"
