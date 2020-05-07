@@ -61,7 +61,7 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 
 	// Get instance from apiserver. If the instance doesn't exist, do nothing and
 	// early exist because HCR watches HNS instances and (if applicable) has
-	// already updated the owner HC when this HNS was purged.
+	// already updated the parent HC when this HNS was purged.
 	inst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -80,19 +80,19 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 	}
 
-	// Get the owned child namespace instance. If it doesn't exist, initialize one.
-	cnsInst, err := r.getNamespace(ctx, nm)
+	// Get the subnamespace. If it doesn't exist, initialize one.
+	snsInst, err := r.getNamespace(ctx, nm)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if deleting, err := r.onDeleting(ctx, log, inst, cnsInst); deleting {
+	if deleting, err := r.onDeleting(ctx, log, inst, snsInst); deleting {
 		return ctrl.Result{}, err
 	}
 
-	// Update the state. If the owned child namespace doesn't exist, create it.
+	// Update the state. If the subnamespace doesn't exist, create it.
 	// (This is how a subnamespace is created through a CR)
-	r.updateState(log, inst, cnsInst)
+	r.updateState(log, inst, snsInst)
 	if inst.Status.State == api.Missing {
 		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
 			return ctrl.Result{}, err
@@ -100,12 +100,12 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	}
 
 	// Add finalizers on all non-forbidden HNSes to ensure it's not deleted until
-	// after the owned child namespace is deleted.
+	// after the subnamespace is deleted.
 	inst.ObjectMeta.Finalizers = []string{api.MetaGroup}
 	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 }
 
-func (r *HierarchicalNamespaceReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.HierarchicalNamespace, cnsInst *corev1.Namespace) (deleting bool, err error) {
+func (r *HierarchicalNamespaceReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) (deleting bool, err error) {
 	// Early exit and continue reconciliation if the instance is not being deleted.
 	if inst.DeletionTimestamp.IsZero() {
 		return false, nil
@@ -118,31 +118,32 @@ func (r *HierarchicalNamespaceReconciler) onDeleting(ctx context.Context, log lo
 		// We've finished process this, nothing to do.
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
-	case cnsInst.DeletionTimestamp.IsZero() && r.allowsCascadingDelete(cnm):
-		// The owned namespace is not being deleted but it allows cascadingDelete.
-		// Delete the owned namespace.
+	case snsInst.DeletionTimestamp.IsZero() && r.allowsCascadingDelete(cnm):
+		// The subnamespace is not already being deleted but it allows cascadingDelete.
+		// Delete the subnamespace.
 		log.Info("The subnamespace is not being deleted but it allows cascading deletion.")
-		return true, r.deleteNamespace(ctx, log, cnsInst)
-	case r.removeFinalizers(log, inst, cnsInst):
+		return true, r.deleteNamespace(ctx, log, snsInst)
+	case r.removeFinalizers(log, inst, snsInst):
 		log.Info("Remove the finalizers.")
 		return true, r.writeInstance(ctx, log, inst)
 	default:
-		// The owned namespace is being deleted. Do nothing in this Reconcile().
+		// The subnamespace is already being deleted. Do nothing in this Reconcile().
 		// Wait until it's purged to remove the finalizers in another Reconcile().
-		log.Info("Do nothing since the owned namespace is still being deleted (not purged yet).")
+		log.Info("Do nothing since the subnamespace is still being deleted (not purged yet).")
 		return true, nil
 	}
 }
 
-func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst *api.HierarchicalNamespace, cnsInst *corev1.Namespace) bool {
+func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) bool {
 	pnm := inst.Namespace
 	cnm := inst.Name
+	sOf := snsInst.GetAnnotations()[api.SubnamespaceOf]
 	switch {
-	case cnsInst.Name == "":
-		log.Info("The owned namespace is already purged.")
-	case cnsInst.GetAnnotations()[api.AnnotationOwner] != pnm:
-		log.Info("The subnamespace is not owned by this namespace.")
-	case cnsInst.DeletionTimestamp.IsZero() && !r.allowsCascadingDelete(cnm):
+	case snsInst.Name == "":
+		log.Info("The subnamespace is already purged.")
+	case sOf != pnm:
+		log.Info("The subnamespace believes it is the subnamespace of another namespace.", "annotation", sOf)
+	case snsInst.DeletionTimestamp.IsZero() && !r.allowsCascadingDelete(cnm):
 		log.Info("The subnamespace is not being deleted and it doesn't allow cascading deletion.")
 	default:
 		return false
@@ -152,18 +153,19 @@ func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst
 	return true
 }
 
-func (r *HierarchicalNamespaceReconciler) updateState(log logr.Logger, inst *api.HierarchicalNamespace, cnsInst *corev1.Namespace) {
+func (r *HierarchicalNamespaceReconciler) updateState(log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) {
 	nm := inst.Name
 	pnm := inst.Namespace
+	sOf := snsInst.Annotations[api.SubnamespaceOf]
 	switch {
-	case cnsInst.Name == "":
-		log.Info("The owned subnamespace does not exist", "subnamespace", nm)
+	case snsInst.Name == "":
+		log.Info("The subnamespace does not exist", "subnamespace", nm)
 		inst.Status.State = api.Missing
-	case cnsInst.Annotations[api.AnnotationOwner] != pnm:
-		log.Info("The owner annotation of the subnamespace doesn't match the owner", "annotation", cnsInst.Annotations[api.AnnotationOwner])
+	case sOf != pnm:
+		log.Info("The subnamespaceOf annotation of this namespace doesn't match its parent", "annotation", sOf)
 		inst.Status.State = api.Conflict
 	default:
-		log.Info("The subnamespace has the correct owner annotation", "annotation", cnsInst.Annotations[api.AnnotationOwner])
+		log.Info("The subnamespace has the correct subnamespaceOf annotation", "annotation", sOf)
 		inst.Status.State = api.Ok
 	}
 }
@@ -225,7 +227,7 @@ func (r *HierarchicalNamespaceReconciler) getNamespace(ctx context.Context, nm s
 func (r *HierarchicalNamespaceReconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
 	inst := &corev1.Namespace{}
 	inst.ObjectMeta.Name = nm
-	metadata.SetAnnotation(inst, api.AnnotationOwner, pnm)
+	metadata.SetAnnotation(inst, api.SubnamespaceOf, pnm)
 
 	// It's safe to use create here since if the namespace is created by someone
 	// else while this reconciler is running, returning an error will trigger a
@@ -257,16 +259,16 @@ func (r *HierarchicalNamespaceReconciler) allowsCascadingDelete(nm string) bool 
 }
 
 func (r *HierarchicalNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Maps an owned namespace to its HNS instance in the owner namespace.
+	// Maps an subnamespace to its HNS instance in the parent namespace.
 	nsMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
-			if a.Meta.GetAnnotations()[api.AnnotationOwner] == "" {
+			if a.Meta.GetAnnotations()[api.SubnamespaceOf] == "" {
 				return nil
 			}
 			return []reconcile.Request{
 				{NamespacedName: types.NamespacedName{
 					Name:      a.Meta.GetName(),
-					Namespace: a.Meta.GetAnnotations()[api.AnnotationOwner],
+					Namespace: a.Meta.GetAnnotations()[api.SubnamespaceOf],
 				}},
 			}
 		})

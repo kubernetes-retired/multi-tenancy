@@ -147,9 +147,9 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return deny(metav1.StatusReasonForbidden, "Excluded parent: "+reason)
 	}
 
-	// Prevent changing parent of an owned child
-	if ns.IsOwned {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's an owned namespace of %q", ns.Name(), newParent.Name(), curParent.Name())
+	// Prevent changing parent of a subnamespace
+	if ns.IsSub {
+		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a subnamespace of %q", ns.Name(), newParent.Name(), curParent.Name())
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
