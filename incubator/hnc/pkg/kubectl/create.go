@@ -32,15 +32,15 @@ var createCmd = &cobra.Command{
 			fmt.Println("Error: parent must be set via --namespace or -n")
 			os.Exit(1)
 		}
-		// Create the hns instance, the custom resource representing the self-serve subnamespace.
+		// Create the hns instance, the custom resource representing the subnamespace.
 		// TODO: ensure the specified child doesn't already exist and the parent is allowed
-		//  to create self-serve subnamespaces through the admission controller. See issue
+		//  to create subnamespaces through the admission controller. See issue
 		//  https://github.com/kubernetes-sigs/multi-tenancy/issues/458
 		client.createHierarchicalNamespace(parent, args[0])
 	},
 }
 
 func newCreateCmd() *cobra.Command {
-	createCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new self-serve subnamespace")
+	createCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new subnamespace")
 	return createCmd
 }

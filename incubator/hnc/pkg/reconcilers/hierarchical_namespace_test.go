@@ -49,7 +49,7 @@ var _ = Describe("HierarchicalNamespace", func() {
 		Eventually(getHNSState(ctx, fooName, barName)).Should(Equal(api.Ok))
 	})
 
-	It("should set the hns.status.state to Forbidden if the owner is not allowed to self-serve subnamespaces", func() {
+	It("should set the hns.status.state to Forbidden if the owner is not allowed to subnamespaces", func() {
 		kube_system_hns_bar := newHierarchicalNamespace(barName, "kube-system")
 		updateHierarchicalNamespace(ctx, kube_system_hns_bar)
 		Eventually(getHNSState(ctx, "kube-system", barName)).Should(Equal(api.Forbidden))

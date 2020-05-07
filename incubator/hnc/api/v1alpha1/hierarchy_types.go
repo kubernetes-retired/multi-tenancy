@@ -68,8 +68,8 @@ type HierarchyConfigurationSpec struct {
 	// Parent indicates the parent of this namespace, if any.
 	Parent string `json:"parent,omitempty"`
 
-	// AllowCascadingDelete indicates if the self-serve subnamespaces of this namespace are allowed
-	// to cascading delete.
+	// AllowCascadingDelete indicates if the subnamespaces of this namespace are allowed to cascading
+	// delete.
 	AllowCascadingDelete bool `json:"allowCascadingDelete,omitempty"`
 }
 

@@ -70,11 +70,11 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	// Report "Forbidden" state and early exit if the namespace is not allowed to
-	// self-serve namespaces but has bypassed the webhook and successfully created
-	// the hns instance. Forbidden HNSes won't have finalizers.
-	// TODO refactor/split the EX map for 1) reconciler exclusion and 2) self-serve not allowed
-	//  purposes. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/495
+	// Report "Forbidden" state and early exit if the namespace is not allowed to have subnamespaces
+	// but has bypassed the webhook and successfully created the hns instance. Forbidden HNSes won't
+	// have finalizers.
+	// TODO refactor/split the EX map for 1) reconciler exclusion and 2) subnamespaces exclusion
+	// purposes. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/495
 	if config.EX[pnm] {
 		inst.Status.State = api.Forbidden
 		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
@@ -91,7 +91,7 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	}
 
 	// Update the state. If the owned child namespace doesn't exist, create it.
-	// (This is how a self-service namespace is created through a CR)
+	// (This is how a subnamespace is created through a CR)
 	r.updateState(log, inst, cnsInst)
 	if inst.Status.State == api.Missing {
 		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
