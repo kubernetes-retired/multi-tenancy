@@ -123,9 +123,8 @@ type Condition struct {
 	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
 	//
-	// - "HNSMissing": this namespace is an owned namespace (created by reconciling an hns instance),
-	// but the hns instance is missing in its owner (referenced in its owner annotation) or the owner
-	// namespace is missing.
+	// - "HNSMissing": this namespace is a subnamespace, but the hierarchicalnamespace instance
+	// referenced in its `subnamespaceOf` annotation does not exist in the parent.
 	//
 	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated to
 	// one or more of its descendants. The condition's affect objects will include a list of the

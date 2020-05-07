@@ -23,23 +23,23 @@ var _ = Describe("HierarchicalNamespace", func() {
 		barName = createNSName("bar")
 	})
 
-	It("should create an owned namespace and update the hierarchy according to the HNS instance", func() {
+	It("should create an subnamespace and update the hierarchy according to the HNS instance", func() {
 		// Create 'bar' hns in 'foo' namespace.
 		foo_hns_bar := newHierarchicalNamespace(barName, fooName)
 		updateHierarchicalNamespace(ctx, foo_hns_bar)
 
-		// It should create the namespace 'bar' with 'foo' in the owner annotation.
+		// It should create the namespace 'bar' with 'foo' in the subnamespaceOf annotation.
 		Eventually(func() string {
-			return getNamespace(ctx, barName).GetAnnotations()[api.AnnotationOwner]
+			return getNamespace(ctx, barName).GetAnnotations()[api.SubnamespaceOf]
 		}).Should(Equal(fooName))
 
-		// It should set the owned namespace "bar" as a child of the owner "foo".
+		// It should set the subnamespace "bar" as a child of the parent "foo".
 		Eventually(func() []string {
 			fooHier := getHierarchy(ctx, fooName)
 			return fooHier.Status.Children
 		}).Should(Equal([]string{barName}))
 
-		// It should set the owner namespace "foo" as the parent of "bar".
+		// It should set the parent namespace "foo" as the parent of "bar".
 		Eventually(func() string {
 			barHier := getHierarchy(ctx, barName)
 			return barHier.Spec.Parent
@@ -49,7 +49,7 @@ var _ = Describe("HierarchicalNamespace", func() {
 		Eventually(getHNSState(ctx, fooName, barName)).Should(Equal(api.Ok))
 	})
 
-	It("should set the hns.status.state to Forbidden if the owner is not allowed to subnamespaces", func() {
+	It("should set the hns.status.state to Forbidden if the parent is not allowed to have subnamespaces", func() {
 		kube_system_hns_bar := newHierarchicalNamespace(barName, "kube-system")
 		updateHierarchicalNamespace(ctx, kube_system_hns_bar)
 		Eventually(getHNSState(ctx, "kube-system", barName)).Should(Equal(api.Forbidden))

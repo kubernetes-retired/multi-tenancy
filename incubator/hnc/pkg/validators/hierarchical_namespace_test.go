@@ -62,6 +62,6 @@ func createOwnedNamespace(f *forest.Forest, pnm, cnm string) *forest.Namespace {
 	pns := f.Get(pnm)
 	cns := createNS(f, cnm, nil)
 	cns.SetParent(pns)
-	cns.IsOwned = true
+	cns.IsSub = true
 	return cns
 }

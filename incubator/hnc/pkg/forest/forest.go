@@ -170,9 +170,9 @@ type Namespace struct {
 	// on this namespace.
 	conditions conditions
 
-	// IsOwned indicates that this namespace is being or was created solely to live as a
+	// IsSub indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.
-	IsOwned bool
+	IsSub bool
 
 	// HNSes store a list of HNS instances in the namespace.
 	HNSes []string
@@ -227,7 +227,7 @@ func (ns *Namespace) AllowsCascadingDelete() bool {
 	if ns.allowCascadingDelete == true {
 		return true
 	}
-	if !ns.IsOwned {
+	if !ns.IsSub {
 		return false
 	}
 	// If the owner is missing, it will return the default false.

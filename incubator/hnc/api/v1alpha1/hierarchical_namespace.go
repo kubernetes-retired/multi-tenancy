@@ -24,7 +24,7 @@ const (
 	HierarchicalNamespaces           = "hierarchicalnamespaces"
 	HierarchicalNamespacesKind       = "HierarchicalNamespace"
 	HierarchicalNamespacesAPIVersion = MetaGroup + "/v1alpha1"
-	AnnotationOwner                  = MetaGroup + "/ownerReference"
+	SubnamespaceOf                   = MetaGroup + "/subnamespaceOf"
 )
 
 // HNSState describes the state of a hierarchical namespace. The state could be
