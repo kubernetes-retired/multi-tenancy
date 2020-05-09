@@ -46,7 +46,7 @@ Virtualcluster passes most of the Kubernetes conformance tests. One failed test 
 `subdomain` which cannot be easily done in the virtualcluster architecture. There are other considerations
 that users should be aware of:
 
-- Virtualclsuter follows a serverless design pattern. The super master node topology is not fully exposed in
+- Virtualcluster follows a serverless design pattern. The super master node topology is not fully exposed in
 tenant master. Only the nodes that tenant Pods are running on will be shown in tenant master. As a result,
 virtualcluster does not support DaemonSet alike workloads in tenant master. In other words, the syncer controller
 rejects a newly created tenant Pod if its `nodename` has been set in the spec.
@@ -66,7 +66,7 @@ This requires both clusters to have the same CIDR.
 
 - Virtualcluster fully support tenant service account.
 
-- Virtualclsuter does not support tenant PersistentVolumes. All PVs and Storageclasses are provided by the super master.
+- Virtualcluster does not support tenant PersistentVolumes. All PVs and Storageclasses are provided by the super master.
 
 - It is recommended that tenant master and super master should use the same Kubernetes version to avoid
 incompatible API behaviors. The syncer controller and vn-agent are built using Kubernetes 1.16 APIs, hence
