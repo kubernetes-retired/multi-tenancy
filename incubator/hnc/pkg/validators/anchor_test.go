@@ -21,7 +21,7 @@ func TestHNS(t *testing.T) {
 	baz := createOwnedNamespace(f, "foo", "baz")
 	baz.UpdateAllowCascadingDelete(true)
 
-	h := &HierarchicalNamespace{Forest: f}
+	h := &Anchor{Forest: f}
 
 	tests := []struct {
 		name string
@@ -32,20 +32,20 @@ func TestHNS(t *testing.T) {
 	}{
 		{name: "ok-create", op: v1beta1.Create, pnm: "foo", cnm: "brumpf"},
 		{name: "ok-delete", op: v1beta1.Delete, pnm: "foo", cnm: "baz"},
-		{name: "create hns in excluded ns", op: v1beta1.Create, pnm: "kube-system", cnm: "brumpf", fail: true},
-		{name: "create hns with existing ns name", op: v1beta1.Create, pnm: "foo", cnm: "bar", fail: true},
-		{name: "delete hns when allowCascadingDelete is false", op: v1beta1.Delete, pnm: "foo", cnm: "bar", fail: true},
+		{name: "create anchor in excluded ns", op: v1beta1.Create, pnm: "kube-system", cnm: "brumpf", fail: true},
+		{name: "create anchor with existing ns name", op: v1beta1.Create, pnm: "foo", cnm: "bar", fail: true},
+		{name: "delete anchor when allowCascadingDelete is false", op: v1beta1.Delete, pnm: "foo", cnm: "bar", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
-			hns := &api.HierarchicalNamespace{}
-			hns.ObjectMeta.Namespace = tc.pnm
-			hns.ObjectMeta.Name = tc.cnm
-			req := &hnsRequest{
-				hns: hns,
-				op:  tc.op,
+			anchor := &api.SubnamespaceAnchor{}
+			anchor.ObjectMeta.Namespace = tc.pnm
+			anchor.ObjectMeta.Name = tc.cnm
+			req := &anchorRequest{
+				anchor: anchor,
+				op:     tc.op,
 			}
 
 			// Test

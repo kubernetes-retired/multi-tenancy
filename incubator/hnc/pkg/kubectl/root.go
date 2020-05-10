@@ -44,8 +44,8 @@ type realClient struct{}
 type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
-	createHierarchicalNamespace(nnm string, hnnm string)
-	getHierarchicalNamespacesNames(nnm string) []string
+	createAnchor(nnm string, hnnm string)
+	getAnchorNames(nnm string) []string
 	getHNCConfig() *api.HNCConfiguration
 	updateHNCConfig(*api.HNCConfiguration)
 }
@@ -129,25 +129,25 @@ func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 	return hier
 }
 
-func (cl *realClient) getHierarchicalNamespacesNames(nnm string) []string {
-	var hnsnms []string
+func (cl *realClient) getAnchorNames(nnm string) []string {
+	var anms []string
 
-	// List all the hns instance in the namespace.
+	// List all the anchors in the namespace.
 	ul := &unstructured.UnstructuredList{}
-	ul.SetKind(api.HierarchicalNamespacesKind)
-	ul.SetAPIVersion(api.HierarchicalNamespacesAPIVersion)
-	err := hncClient.Get().Resource(api.HierarchicalNamespaces).Namespace(nnm).Do().Into(ul)
+	ul.SetKind(api.AnchorKind)
+	ul.SetAPIVersion(api.AnchorAPIVersion)
+	err := hncClient.Get().Resource(api.Anchors).Namespace(nnm).Do().Into(ul)
 	if err != nil && !errors.IsNotFound(err) {
-		fmt.Printf("Error listing hierarchicalNamespaces for %s: %s\n", nnm, err)
+		fmt.Printf("Error listing subnamespace anchors for %s: %s\n", nnm, err)
 		os.Exit(1)
 	}
 
-	// Create a list of strings of the hns names.
+	// Create a list of strings of the anchor names.
 	for _, inst := range ul.Items {
-		hnsnms = append(hnsnms, inst.GetName())
+		anms = append(anms, inst.GetName())
 	}
 
-	return hnsnms
+	return anms
 }
 
 func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
@@ -164,16 +164,16 @@ func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason s
 	}
 }
 
-func (cl *realClient) createHierarchicalNamespace(nnm string, hnnm string) {
-	hns := &api.HierarchicalNamespace{}
-	hns.Name = hnnm
-	hns.Namespace = nnm
-	err := hncClient.Post().Resource(api.HierarchicalNamespaces).Namespace(nnm).Name(hnnm).Body(hns).Do().Error()
+func (cl *realClient) createAnchor(nnm string, hnnm string) {
+	anchor := &api.SubnamespaceAnchor{}
+	anchor.Name = hnnm
+	anchor.Namespace = nnm
+	err := hncClient.Post().Resource(api.Anchors).Namespace(nnm).Name(hnnm).Body(anchor).Do().Error()
 	if err != nil {
-		fmt.Printf("\nCould not create hierarchicalnamespace instance.\nReason: %s\n", err)
+		fmt.Printf("\nCould not create subnamespace anchor.\nReason: %s\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Successfully created \"%s\" hierarchicalnamespace instance in \"%s\" namespace\n", hnnm, nnm)
+	fmt.Printf("Successfully created %q subnamespace anchor in %q namespace\n", hnnm, nnm)
 }
 
 func (cl *realClient) getHNCConfig() *api.HNCConfiguration {

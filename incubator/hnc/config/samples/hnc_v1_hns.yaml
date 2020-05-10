@@ -1,5 +1,0 @@
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: HierarchicalNamespace
-metadata:
-  name: hns-sample
-spec:

@@ -198,8 +198,8 @@ Within the `reconcilers` directory, there are four reconcilers:
 
 * **HNCConfiguration reconciler:** manages the HNCConfiguration via the
   cluster-wide `config` singleton.
-* **HierarchicalNamespace reconciler:** manages the self-service namespaces via
-  the `hierarchicalnamespace` resources.
+* **Anchor reconciler:** manages the subnamespace anchors via
+  the `subnamespaceanchor` resources.
 * **HierarchyConfiguration reconciler:** manages the hierarchy and the
   namespaces via the `hierarchy` singleton per namespace.
 * **Object reconciler:** propagates (copies and deletes) the relevant objects

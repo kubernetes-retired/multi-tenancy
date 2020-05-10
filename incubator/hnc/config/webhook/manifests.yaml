@@ -11,9 +11,9 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-hnc-x-k8s-io-v1alpha1-hierarchicalnamespaces
+      path: /validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors
   failurePolicy: Fail
-  name: hierarchicalnamespaces.hnc.x-k8s.io
+  name: subnamespaceanchors.hnc.x-k8s.io
   rules:
   - apiGroups:
     - hnc.x-k8s.io
@@ -23,7 +23,7 @@ webhooks:
     - CREATE
     - DELETE
     resources:
-    - hierarchicalnamespaces
+    - subnamespaceanchors
 - clientConfig:
     caBundle: Cg==
     service:
