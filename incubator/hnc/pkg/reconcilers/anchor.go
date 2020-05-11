@@ -34,9 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// HierarchicalNamespaceReconciler reconciles HierarchicalNamespace CRs to make sure
-// all the hierarchical namespaces are properly maintained.
-type HierarchicalNamespaceReconciler struct {
+// AnchorReconciler reconciles SubnamespaceAnchor CRs to make sure all the subnamespaces are
+// properly maintained.
+type AnchorReconciler struct {
 	client.Client
 	Log logr.Logger
 
@@ -50,18 +50,18 @@ type HierarchicalNamespaceReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic. It currently
 // only handles the creation of the namespaces but no deletion or state reporting yet.
-func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("trigger", req.NamespacedName)
-	log.Info("Reconciling HNS")
+	log.Info("Reconciling anchor")
 
 	// Get names of the hierarchical namespace and the current namespace.
 	nm := req.Name
 	pnm := req.Namespace
 
-	// Get instance from apiserver. If the instance doesn't exist, do nothing and
-	// early exist because HCR watches HNS instances and (if applicable) has
-	// already updated the parent HC when this HNS was purged.
+	// Get instance from apiserver. If the instance doesn't exist, do nothing and early exist because
+	// HCR watches anchor and (if applicable) has already updated the parent HC when this anchor was
+	// purged.
 	inst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -71,8 +71,8 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 	}
 
 	// Report "Forbidden" state and early exit if the namespace is not allowed to have subnamespaces
-	// but has bypassed the webhook and successfully created the hns instance. Forbidden HNSes won't
-	// have finalizers.
+	// but has bypassed the webhook and successfully created the anchor. Forbidden anchors won't have
+	// finalizers.
 	// TODO refactor/split the EX map for 1) reconciler exclusion and 2) subnamespaces exclusion
 	// purposes. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/495
 	if config.EX[pnm] {
@@ -99,20 +99,20 @@ func (r *HierarchicalNamespaceReconciler) Reconcile(req ctrl.Request) (ctrl.Resu
 		}
 	}
 
-	// Add finalizers on all non-forbidden HNSes to ensure it's not deleted until
+	// Add finalizers on all non-forbidden anchors to ensure it's not deleted until
 	// after the subnamespace is deleted.
 	inst.ObjectMeta.Finalizers = []string{api.MetaGroup}
 	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 }
 
-func (r *HierarchicalNamespaceReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) (deleting bool, err error) {
+func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) (deleting bool, err error) {
 	// Early exit and continue reconciliation if the instance is not being deleted.
 	if inst.DeletionTimestamp.IsZero() {
 		return false, nil
 	}
 
 	cnm := inst.Name
-	log.Info("The HNS instance is being deleted.")
+	log.Info("The anchor is being deleted.")
 	switch {
 	case len(inst.ObjectMeta.Finalizers) == 0:
 		// We've finished process this, nothing to do.
@@ -134,7 +134,7 @@ func (r *HierarchicalNamespaceReconciler) onDeleting(ctx context.Context, log lo
 	}
 }
 
-func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) bool {
+func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
 	pnm := inst.Namespace
 	cnm := inst.Name
 	sOf := snsInst.GetAnnotations()[api.SubnamespaceOf]
@@ -153,7 +153,7 @@ func (r *HierarchicalNamespaceReconciler) removeFinalizers(log logr.Logger, inst
 	return true
 }
 
-func (r *HierarchicalNamespaceReconciler) updateState(log logr.Logger, inst *api.HierarchicalNamespace, snsInst *corev1.Namespace) {
+func (r *AnchorReconciler) updateState(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) {
 	nm := inst.Name
 	pnm := inst.Namespace
 	sOf := snsInst.Annotations[api.SubnamespaceOf]
@@ -170,12 +170,12 @@ func (r *HierarchicalNamespaceReconciler) updateState(log logr.Logger, inst *api
 	}
 }
 
-// It enqueues a hierarchicalNamespace instance for later reconciliation. This occurs in a goroutine
+// It enqueues a subnamespace anchor for later reconciliation. This occurs in a goroutine
 // so the caller doesn't block; since the reconciler is never garbage-collected, this is safe.
-func (r *HierarchicalNamespaceReconciler) enqueue(log logr.Logger, nm, pnm, reason string) {
+func (r *AnchorReconciler) enqueue(log logr.Logger, nm, pnm, reason string) {
 	go func() {
 		// The watch handler doesn't care about anything except the metadata.
-		inst := &api.HierarchicalNamespace{}
+		inst := &api.SubnamespaceAnchor{}
 		inst.ObjectMeta.Name = nm
 		inst.ObjectMeta.Namespace = pnm
 		log.Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm, "reason", reason)
@@ -183,16 +183,16 @@ func (r *HierarchicalNamespaceReconciler) enqueue(log logr.Logger, nm, pnm, reas
 	}()
 }
 
-func (r *HierarchicalNamespaceReconciler) getInstance(ctx context.Context, pnm, nm string) (*api.HierarchicalNamespace, error) {
+func (r *AnchorReconciler) getInstance(ctx context.Context, pnm, nm string) (*api.SubnamespaceAnchor, error) {
 	nsn := types.NamespacedName{Namespace: pnm, Name: nm}
-	inst := &api.HierarchicalNamespace{}
+	inst := &api.SubnamespaceAnchor{}
 	if err := r.Get(ctx, nsn, inst); err != nil {
 		return nil, err
 	}
 	return inst, nil
 }
 
-func (r *HierarchicalNamespaceReconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.HierarchicalNamespace) error {
+func (r *AnchorReconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
 	if inst.CreationTimestamp.IsZero() {
 		log.Info("Creating instance on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
@@ -212,7 +212,7 @@ func (r *HierarchicalNamespaceReconciler) writeInstance(ctx context.Context, log
 // getNamespace returns the namespace if it exists, or returns an invalid, blank, unnamed one if it
 // doesn't. This allows it to be trivially identified as a namespace that doesn't exist, and also
 // allows us to easily modify it if we want to create it.
-func (r *HierarchicalNamespaceReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
+func (r *AnchorReconciler) getNamespace(ctx context.Context, nm string) (*corev1.Namespace, error) {
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {
@@ -224,7 +224,7 @@ func (r *HierarchicalNamespaceReconciler) getNamespace(ctx context.Context, nm s
 	return ns, nil
 }
 
-func (r *HierarchicalNamespaceReconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
+func (r *AnchorReconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
 	inst := &corev1.Namespace{}
 	inst.ObjectMeta.Name = nm
 	metadata.SetAnnotation(inst, api.SubnamespaceOf, pnm)
@@ -241,7 +241,7 @@ func (r *HierarchicalNamespaceReconciler) writeNamespace(ctx context.Context, lo
 	return nil
 }
 
-func (r *HierarchicalNamespaceReconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
+func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
 	log.Info("Deleting namespace on apiserver")
 	if err := r.Delete(ctx, inst); err != nil {
 		log.Error(err, "while deleting on apiserver")
@@ -250,7 +250,7 @@ func (r *HierarchicalNamespaceReconciler) deleteNamespace(ctx context.Context, l
 	return nil
 }
 
-func (r *HierarchicalNamespaceReconciler) allowsCascadingDelete(nm string) bool {
+func (r *AnchorReconciler) allowsCascadingDelete(nm string) bool {
 	r.forest.Lock()
 	defer r.forest.Unlock()
 
@@ -258,8 +258,8 @@ func (r *HierarchicalNamespaceReconciler) allowsCascadingDelete(nm string) bool 
 	return ns.AllowsCascadingDelete()
 }
 
-func (r *HierarchicalNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Maps an subnamespace to its HNS instance in the parent namespace.
+func (r *AnchorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Maps an subnamespace to its anchor in the parent namespace.
 	nsMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
 			if a.Meta.GetAnnotations()[api.SubnamespaceOf] == "" {
@@ -273,7 +273,7 @@ func (r *HierarchicalNamespaceReconciler) SetupWithManager(mgr ctrl.Manager) err
 			}
 		})
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&api.HierarchicalNamespace{}).
+		For(&api.SubnamespaceAnchor{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
 		Complete(r)

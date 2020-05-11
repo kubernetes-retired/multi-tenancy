@@ -64,9 +64,9 @@ func Create(mgr ctrl.Manager, f *forest.Forest) {
 		Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
 	}})
 
-	// Create webhook for the HierarchicalNamespaces.
-	mgr.GetWebhookServer().Register(HierarchicalNamespaceServingPath, &webhook.Admission{Handler: &HierarchicalNamespace{
-		Log:    ctrl.Log.WithName("validators").WithName("HierarchicalNamespace"),
+	// Create webhook for the subnamespace anchors.
+	mgr.GetWebhookServer().Register(AnchorServingPath, &webhook.Admission{Handler: &Anchor{
+		Log:    ctrl.Log.WithName("validators").WithName("Anchor"),
 		Forest: f,
 	}})
 

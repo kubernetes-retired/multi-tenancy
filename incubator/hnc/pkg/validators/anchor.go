@@ -14,31 +14,31 @@ import (
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
-// HierarchicalNamespaceServingPath is where the validator will run. Must be kept in sync with the
+// AnchorServingPath is where the validator will run. Must be kept in sync with the
 // kubebuilder markers below.
 const (
-	HierarchicalNamespaceServingPath = "/validate-hnc-x-k8s-io-v1alpha1-hierarchicalnamespaces"
+	AnchorServingPath = "/validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors"
 )
 
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha1-hierarchicalnamespaces,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hierarchicalnamespaces,verbs=create;delete,versions=v1alpha1,name=hierarchicalnamespaces.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=subnamespaceanchors,verbs=create;delete,versions=v1alpha1,name=subnamespaceanchors.hnc.x-k8s.io
 
-type HierarchicalNamespace struct {
+type Anchor struct {
 	Log     logr.Logger
 	Forest  *forest.Forest
 	decoder *admission.Decoder
 }
 
 // req defines the aspects of the admission.Request that we care about.
-type hnsRequest struct {
-	hns *api.HierarchicalNamespace
-	op  v1beta1.Operation
+type anchorRequest struct {
+	anchor *api.SubnamespaceAnchor
+	op     v1beta1.Operation
 }
 
 // Handle implements the validation webhook.
-func (v *HierarchicalNamespace) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (v *Anchor) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := v.Log.WithValues("Namespace", req.Namespace, "Name", req.Name)
 	// Early exit since the HNC SA can do whatever it wants.
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
@@ -60,12 +60,12 @@ func (v *HierarchicalNamespace) Handle(ctx context.Context, req admission.Reques
 // handle implements the non-boilerplate logic of this validator, allowing it to be more easily unit
 // tested (ie without constructing a full admission.Request). It validates that the request is allowed
 // based on the current in-memory state of the forest.
-func (v *HierarchicalNamespace) handle(req *hnsRequest) admission.Response {
+func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
-	pnm := req.hns.Namespace
-	cnm := req.hns.Name
+	pnm := req.anchor.Namespace
+	cnm := req.anchor.Name
 	cns := v.Forest.Get(cnm)
 
 	if req.op == v1beta1.Create {
@@ -92,28 +92,28 @@ func (v *HierarchicalNamespace) handle(req *hnsRequest) admission.Response {
 
 // decodeRequest gets the information we care about into a simple struct that's easy to both a) use
 // and b) factor out in unit tests.
-func (v *HierarchicalNamespace) decodeRequest(log logr.Logger, in admission.Request) (*hnsRequest, error) {
-	hns := &api.HierarchicalNamespace{}
+func (v *Anchor) decodeRequest(log logr.Logger, in admission.Request) (*anchorRequest, error) {
+	anchor := &api.SubnamespaceAnchor{}
 	var err error
 	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
 	// which will be empty for a DELETE request.
 	if in.Operation == v1beta1.Delete {
 		log.V(1).Info("Decoding a delete request.")
-		err = v.decoder.DecodeRaw(in.OldObject, hns)
+		err = v.decoder.DecodeRaw(in.OldObject, anchor)
 	} else {
-		err = v.decoder.Decode(in, hns)
+		err = v.decoder.Decode(in, anchor)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return &hnsRequest{
-		hns: hns,
-		op:  in.Operation,
+	return &anchorRequest{
+		anchor: anchor,
+		op:     in.Operation,
 	}, nil
 }
 
-func (v *HierarchicalNamespace) InjectDecoder(d *admission.Decoder) error {
+func (v *Anchor) InjectDecoder(d *admission.Decoder) error {
 	v.decoder = d
 	return nil
 }

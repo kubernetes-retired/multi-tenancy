@@ -66,7 +66,7 @@ type HierarchyConfigReconciler struct {
 	// simply hard to tell when one ends and another begins).
 	reconcileID int32
 
-	hnsr *HierarchicalNamespaceReconciler
+	sar *AnchorReconciler
 }
 
 // +kubebuilder:rbac:groups=hnc.x-k8s.io,resources=hierarchies,verbs=get;list;watch;create;update;patch;delete
@@ -107,8 +107,8 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	if err != nil {
 		return err
 	}
-	// Get a list of HNS instance namespaces from apiserver.
-	hnsnms, err := r.getHierarchicalNamespaceNames(ctx, nm)
+	// Get a list of subnamespace anchors from apiserver.
+	anms, err := r.getAnchorNames(ctx, nm)
 	if err != nil {
 		return err
 	}
@@ -116,10 +116,10 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	origHC := inst.DeepCopy()
 	origNS := nsInst.DeepCopy()
 
-	r.updateFinalizers(ctx, log, inst, nsInst, hnsnms)
+	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst, hnsnms)
+	r.syncWithForest(log, nsInst, inst, anms)
 
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
 	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
@@ -150,14 +150,14 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 	}
 }
 
-func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, hnsnms []string) {
+func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
 	// https://github.com/kubernetes-sigs/multi-tenancy/issues/623 as we try to enforce that.
 	switch {
-	case len(hnsnms) == 0:
+	case len(anms) == 0:
 		// There are no subnamespaces in this namespace. The HC instance can be safely deleted anytime.
 		if len(inst.ObjectMeta.Finalizers) > 0 {
-			log.Info("Removing finalizers since there's no longer any HNS instance in the namespace.")
+			log.Info("Removing finalizers since there are no longer any anchors in the namespace.")
 		}
 		inst.ObjectMeta.Finalizers = nil
 	case !inst.DeletionTimestamp.IsZero() && nsInst.DeletionTimestamp.IsZero():
@@ -169,7 +169,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 		inst.ObjectMeta.Finalizers = nil
 	default:
 		if len(inst.ObjectMeta.Finalizers) == 0 {
-			log.Info("Adding finalizers since there's at least one HNS instance in the namespace.")
+			log.Info("Adding finalizers since there's at least one anchor in the namespace.")
 		}
 		inst.ObjectMeta.Finalizers = []string{api.FinalizerHasOwnedNamespace}
 	}
@@ -181,7 +181,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, hnsnms []string) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, anms []string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -195,7 +195,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	r.syncParent(log, inst, ns)
 	inst.Status.Children = ns.ChildNames()
-	r.syncHNSes(log, ns, hnsnms)
+	r.syncAnchors(log, ns, anms)
 	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
 
 	r.syncLabel(log, nsInst, ns)
@@ -204,14 +204,14 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncConditions(log, inst, ns, hadCrit)
 }
 
-// syncOwner sets the parent to the owner and updates the HNSMissing condition if the HNS instance
-// is missing in the parent namespace according to the forest.  The namespace owner annotation is
-// the source of truth of the ownership (e.g. being a subnamespace), since modifying a namespace has
-// higher privilege than what HNC users can do.
+// syncOwner sets the parent to the owner and updates the SubnamespaceAnchorMissing condition if the
+// anchor is missing in the parent namespace according to the forest. The namespace owner annotation
+// is the source of truth of the ownership (e.g. being a subnamespace), since modifying a namespace
+// has higher privilege than what HNC users can do.
 func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Clear the HNSMissing condition if this is not a subnamespace or to
+	// Clear the SubnamespaceAnchorMissing condition if this is not a subnamespace or to
 	// reset it for the updated condition later.
-	ns.ClearConditionsByCode(log, api.HNSMissing)
+	ns.ClearConditionsByCode(log, api.SubnamespaceAnchorMissing)
 	nm := ns.Name()
 	onm := nsInst.Annotations[api.SubnamespaceOf]
 	ons := r.Forest.Get(onm)
@@ -228,17 +228,17 @@ func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.Hierarc
 		inst.Spec.Parent = onm
 	}
 
-	// Look up the HNSes in the parent namespace. Set HNSMissing condition if it's
+	// Look up the Anchors in the parent namespace. Set SubnamespaceAnchorMissing condition if it's
 	// not there.
 	found := false
-	for _, hnsnm := range ons.HNSes {
-		if hnsnm == nm {
+	for _, anm := range ons.Anchors {
+		if anm == nm {
 			found = true
 			break
 		}
 	}
 	if !found {
-		ns.SetCondition(api.NewAffectedNamespace(onm), api.HNSMissing, "The HNS instance is missing in the parent namespace")
+		ns.SetCondition(api.NewAffectedNamespace(onm), api.SubnamespaceAnchorMissing, "The anchor is missing in the parent namespace")
 	}
 }
 
@@ -250,7 +250,7 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
 		if ns.IsSub {
 			r.enqueueAffected(log, "parent of the newly synced/created namespace", ns.Parent().Name())
-			r.hnsr.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
+			r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
 		}
 	}
 }
@@ -345,13 +345,13 @@ func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logge
 	ns.ClearConditionsByCode(log, api.CannotUpdate)
 }
 
-// syncHNSes updates the HNS list. If any HNS is created/deleted, it will enqueue
-// the child to update its HNSMissing condition. A modified HNS will appear
+// syncAnchors updates the anchor list. If any anchor is created/deleted, it will enqueue
+// the child to update its SubnamespaceAnchorMissing condition. A modified anchor will appear
 // twice in the change list (one in deleted, one in created), both subnamespaces
 // needs to be enqueued in this case.
-func (r *HierarchyConfigReconciler) syncHNSes(log logr.Logger, ns *forest.Namespace, hnsnms []string) {
-	for _, changedHNS := range ns.SetHNSes(hnsnms) {
-		r.enqueueAffected(log, "HNSMissing condition may have changed due to HNS instance being created/deleted", changedHNS)
+func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Namespace, anms []string) {
+	for _, changedAnchors := range ns.SetAnchors(anms) {
+		r.enqueueAffected(log, "SubnamespaceAnchorMissing condition may have changed due to anchor being created/deleted", changedAnchors)
 	}
 }
 
@@ -492,7 +492,7 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 		return false, nil
 	}
 
-	// NB: HCR can't create namespaces anymore, that's only in HNSR
+	// NB: HCR can't create namespaces, that's only in anchor reconciler
 	stats.WriteNamespace()
 	log.Info("Updating namespace on apiserver")
 	if err := r.Update(ctx, inst); err != nil {
@@ -548,28 +548,27 @@ func (r *HierarchyConfigReconciler) getNamespace(ctx context.Context, nm string)
 	return ns, nil
 }
 
-// getHierarchicalNamespaceNames returns a list of HierarchicalNamespace
-// instance names in the given namespace.
-func (r *HierarchyConfigReconciler) getHierarchicalNamespaceNames(ctx context.Context, nm string) ([]string, error) {
-	var hnsnms []string
+// getAnchorNames returns a list of anchor names in the given namespace.
+func (r *HierarchyConfigReconciler) getAnchorNames(ctx context.Context, nm string) ([]string, error) {
+	var anms []string
 
-	// List all the hns instance in the namespace.
+	// List all the anchor in the namespace.
 	ul := &unstructured.UnstructuredList{}
-	ul.SetKind(api.HierarchicalNamespacesKind)
-	ul.SetAPIVersion(api.HierarchicalNamespacesAPIVersion)
+	ul.SetKind(api.AnchorKind)
+	ul.SetAPIVersion(api.AnchorAPIVersion)
 	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
-		return hnsnms, nil
+		return anms, nil
 	}
 
-	// Create a list of strings of the hns names.
+	// Create a list of strings of the anchor names.
 	for _, inst := range ul.Items {
-		hnsnms = append(hnsnms, inst.GetName())
+		anms = append(anms, inst.GetName())
 	}
 
-	return hnsnms, nil
+	return anms, nil
 }
 
 func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
@@ -583,8 +582,8 @@ func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconc
 				}},
 			}
 		})
-	// Maps a HierarchicalNamespace (HNS) instance to the parent singleton.
-	hnsMapFn := handler.ToRequestsFunc(
+	// Maps a subnamespace anchor to the parent singleton.
+	anchorMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
 			return []reconcile.Request{
 				{NamespacedName: types.NamespacedName{
@@ -600,7 +599,7 @@ func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconc
 		For(&api.HierarchyConfiguration{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
-		Watches(&source.Kind{Type: &api.HierarchicalNamespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: hnsMapFn}).
+		Watches(&source.Kind{Type: &api.SubnamespaceAnchor{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: anchorMapFn}).
 		WithOptions(opts).
 		Complete(r)
 }

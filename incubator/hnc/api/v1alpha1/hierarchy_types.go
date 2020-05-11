@@ -38,12 +38,12 @@ const (
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code.
 const (
-	CritParentMissing Code = "CritParentMissing"
-	CritParentInvalid Code = "CritParentInvalid"
-	CritAncestor      Code = "CritAncestor"
-	HNSMissing        Code = "HNSMissing"
-	CannotPropagate   Code = "CannotPropagateObject"
-	CannotUpdate      Code = "CannotUpdateObject"
+	CritParentMissing         Code = "CritParentMissing"
+	CritParentInvalid         Code = "CritParentInvalid"
+	CritAncestor              Code = "CritAncestor"
+	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
+	CannotPropagate           Code = "CannotPropagateObject"
+	CannotUpdate              Code = "CannotUpdateObject"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -123,8 +123,8 @@ type Condition struct {
 	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
 	//
-	// - "HNSMissing": this namespace is a subnamespace, but the hierarchicalnamespace instance
-	// referenced in its `subnamespaceOf` annotation does not exist in the parent.
+	// - "SubnamespaceAnchorMissing": this namespace is a subnamespace, but the anchor referenced in
+	// its `subnamespaceOf` annotation does not exist in the parent.
 	//
 	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated to
 	// one or more of its descendants. The condition's affect objects will include a list of the

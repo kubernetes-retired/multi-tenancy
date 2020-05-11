@@ -174,8 +174,8 @@ type Namespace struct {
 	// subnamespace of the specified parent.
 	IsSub bool
 
-	// HNSes store a list of HNS instances in the namespace.
-	HNSes []string
+	// Anchors store a list of anchors in the namespace.
+	Anchors []string
 }
 
 type condition struct {
@@ -339,27 +339,27 @@ func (ns *Namespace) AncestryNames(other *Namespace) []string {
 	return append(ancestry, ns.name)
 }
 
-// SetHNSes updates the HNSes and returns a difference between the new/old list.
-func (ns *Namespace) SetHNSes(hnsnms []string) (diff []string) {
+// SetAnchors updates the anchors and returns a difference between the new/old list.
+func (ns *Namespace) SetAnchors(anchors []string) (diff []string) {
 	add := make(map[string]bool)
-	for _, nm := range hnsnms {
+	for _, nm := range anchors {
 		add[nm] = true
 	}
-	for _, nm := range ns.HNSes {
+	for _, nm := range ns.Anchors {
 		if add[nm] {
 			delete(add, nm)
 		} else {
-			// This old HNS is not in the new HNS list.
+			// This old anchor is not in the new anchor list.
 			diff = append(diff, nm)
 		}
 	}
 
 	for nm, _ := range add {
-		// This new HNS is not in the old HNS list.
+		// This new anchor is not in the old anchor list.
 		diff = append(diff, nm)
 	}
 
-	ns.HNSes = hnsnms
+	ns.Anchors = anchors
 	return
 }
 

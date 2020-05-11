@@ -94,10 +94,10 @@ spec:
                       - \"CritParentInvalid\": the specified parent is invalid (e.g.,
                       would cause a cycle) \n - \"CritAncestor\": a critical error
                       exists in an ancestor namespace, so this namespace is no longer
-                      being updated either. \n - \"HNSMissing\": this namespace is
-                      a subnamespace, but the hierarchicalnamespace instance referenced
-                      in its `subnamespaceOf` annotation does not exist in the parent.
-                      \n - \"CannotPropagateObject\": this namespace contains an object
+                      being updated either. \n - \"SubnamespaceAnchorMissing\": this
+                      namespace is a subnamespace, but the anchor referenced in its
+                      `subnamespaceOf` annotation does not exist in the parent. \n
+                      - \"CannotPropagateObject\": this namespace contains an object
                       that couldn't be propagated to one or more of its descendants.
                       The condition's affect objects will include a list of the copies
                       that couldn't be updated. \n - \"CannotUpdateObject\": this

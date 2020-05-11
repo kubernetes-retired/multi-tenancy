@@ -62,7 +62,7 @@ func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission
 func (v *Namespace) handle(req *nsRequest) admission.Response {
 	parent := req.ns.Annotations[api.SubnamespaceOf]
 	if parent != "" && req.op == v1beta1.Delete {
-		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the hierarchicalnamespace resources from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
+		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
