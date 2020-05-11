@@ -1,22 +1,22 @@
 package tenantaccess
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
+
 	"github.com/onsi/ginkgo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	imageutils "k8s.io/kubernetes/test/utils/image"
-
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
 	expectedVal = "capability may not be added"
 )
 
-var _ = framework.KubeDescribe("Tenants should unable to add linux capabilities for pods", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Tenants should unable to add linux capabilities for pods", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
@@ -62,7 +62,7 @@ var _ = framework.KubeDescribe("Tenants should unable to add linux capabilities 
 			},
 		}
 		_, err = kclient.CoreV1().Pods(tenantA.Namespace).Create(podSpec)
-		if !strings.Contains(err.Error(),expectedVal) {
+		if !strings.Contains(err.Error(), expectedVal) {
 			framework.Failf("%s must be unable to create pod with add capabilities", user)
 		}
 	})
