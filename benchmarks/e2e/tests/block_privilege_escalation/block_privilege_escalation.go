@@ -17,8 +17,7 @@ const (
 	expectedVal = "Allowing privilege escalation for containers is not allowed"
 )
 
-
-func MakeSecPod(Namespace string, AllowPrivilegeEscalation bool) (*v1.Pod) {
+func MakeSecPod(Namespace string, AllowPrivilegeEscalation bool) *v1.Pod {
 	podName := "security-context-" + string(uuid.NewUUID())
 	podSpec := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -47,7 +46,7 @@ func MakeSecPod(Namespace string, AllowPrivilegeEscalation bool) (*v1.Pod) {
 	return podSpec
 }
 
-var _ = framework.KubeDescribe("Processes in tenant containers should not be allowed to gain additional priviliges", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Processes in tenant containers should not be allowed to gain additional priviliges", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
@@ -59,15 +58,15 @@ var _ = framework.KubeDescribe("Processes in tenant containers should not be all
 
 		tenantA, err = config.GetValidTenant()
 		framework.ExpectNoError(err)
-		
+
 		user = configutil.GetContextFromKubeconfig(tenantA.Kubeconfig)
 	})
 
 	ginkgo.It("Validate tenants can not create pods/container with allowedprivilege set to true", func() {
 		ginkgo.By(fmt.Sprintf("tenant %s cannot create pod/container with with allowedprivilege set to true", user))
-		
+
 		kclient := configutil.NewKubeClientWithKubeconfig(tenantA.Kubeconfig)
-		
+
 		pod := MakeSecPod(tenantA.Namespace, true)
 		_, err = kclient.CoreV1().Pods(tenantA.Namespace).Create(pod)
 
