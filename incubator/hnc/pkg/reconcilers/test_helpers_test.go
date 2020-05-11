@@ -34,11 +34,14 @@ var GVKs = map[string]schema.GroupVersionKind{
 // clean it up properly when cleanupObjects is called.
 var createdObjects = []*unstructured.Unstructured{}
 
-func setParent(ctx context.Context, nm string, pnm string) {
-	hier := newOrGetHierarchy(ctx, nm)
-	oldPNM := hier.Spec.Parent
-	hier.Spec.Parent = pnm
-	updateHierarchy(ctx, hier)
+func setParent(ctx context.Context, nm, pnm string) {
+	var oldPNM string
+	Eventually(func() error {
+		hier := newOrGetHierarchy(ctx, nm)
+		oldPNM = hier.Spec.Parent
+		hier.Spec.Parent = pnm
+		return tryUpdateHierarchy(ctx, hier) // can fail if a reconciler updates the hierarchy
+	}).Should(Succeed())
 	if oldPNM != "" {
 		EventuallyWithOffset(1, func() []string {
 			pHier := getHierarchyWithOffset(1, ctx, oldPNM)
