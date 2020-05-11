@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
 	expectedVal = "Error from server (Forbidden)"
 )
 
-var _ = framework.KubeDescribe("test tenant permission", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Test tenant permission", func() {
 	var config *configutil.BenchmarkConfig
 	var resourceList string
 	var tenantkubeconfig configutil.TenantSpec

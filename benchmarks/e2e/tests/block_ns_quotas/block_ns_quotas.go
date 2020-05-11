@@ -6,15 +6,15 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
 	expectedVal = "no"
 )
 
-var _ = framework.KubeDescribe("test resource quotas modification permissions", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Test resource quotas modification permissions", func() {
 	var config *configutil.BenchmarkConfig
 	var err error
 	var flag = "can-i"
