@@ -34,14 +34,22 @@ func CreateServiceSpec(serviceName string, selector map[string]string) *v1.Servi
 	return Service
 }
 
+<<<<<<< HEAD
 var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Tenants should not be able to create services of type NodePort.", func() {
+=======
+var _ = framework.KubeDescribe("Tenants should not be able to create services of type NodePort.", func() {
+>>>>>>> a93cb8a48ec7e6bb5f383d9381a4d4cf4271e652
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
 	var err error
 	var deploymentName string
 	var imageName string
+<<<<<<< HEAD
 	var podLabels = map[string]string{"test": "multi"}
+=======
+	var podLabels = map[string]string {"test": "multi"}
+>>>>>>> a93cb8a48ec7e6bb5f383d9381a4d4cf4271e652
 	var serviceName string
 
 	ginkgo.BeforeEach(func() {
@@ -73,4 +81,8 @@ var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Tenants should not be able to 
 			framework.Failf("%s must be unable to create service of type NodePort", user)
 		}
 	})
+<<<<<<< HEAD
 })
+=======
+})
+>>>>>>> a93cb8a48ec7e6bb5f383d9381a4d4cf4271e652
