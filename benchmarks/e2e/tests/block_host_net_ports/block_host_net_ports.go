@@ -2,24 +2,24 @@ package block_host_net_ports
 
 import (
 	"fmt"
-	"strings"
 	"regexp"
+	"strings"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
-	"k8s.io/kubernetes/test/e2e/framework"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/kubernetes/test/e2e/framework"
 	imageutils "k8s.io/kubernetes/test/utils/image"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
 	expectedHostNetworkVal = "Host network is not allowed to be used"
-	expectedHostPortVal = "Host port is not allowed to be used"
+	expectedHostPortVal    = "Host port is not allowed to be used"
 )
 
-func MakeSecPod(Namespace string, HostNetwork bool, Ports []v1.ContainerPort) (*v1.Pod) {
+func MakeSecPod(Namespace string, HostNetwork bool, Ports []v1.ContainerPort) *v1.Pod {
 	podName := "security-context-" + string(uuid.NewUUID())
 	podSpec := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -47,7 +47,7 @@ func MakeSecPod(Namespace string, HostNetwork bool, Ports []v1.ContainerPort) (*
 	return podSpec
 }
 
-var _ = framework.KubeDescribe("Host network is not allowed to be used", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Host network is not allowed to be used", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
@@ -75,14 +75,14 @@ var _ = framework.KubeDescribe("Host network is not allowed to be used", func() 
 	})
 })
 
-var _ = framework.KubeDescribe("Host ports is not allowed to be used", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Host ports is not allowed to be used", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
 	var err error
 	var ports = []v1.ContainerPort{
 		{
-			HostPort: 8086,
+			HostPort:      8086,
 			ContainerPort: 8086,
 		},
 	}
@@ -111,7 +111,7 @@ var _ = framework.KubeDescribe("Host ports is not allowed to be used", func() {
 		}
 		// Removed digits from the error to match the expectedVal using regex
 		processedError := reg.ReplaceAllString(err.Error(), "")
-		
+
 		if !strings.Contains(processedError, expectedHostPortVal) {
 			framework.Failf("%s must be unable to create pod with defined host ports", user)
 		}
