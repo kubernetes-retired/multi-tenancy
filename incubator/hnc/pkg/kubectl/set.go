@@ -168,7 +168,7 @@ func normalizeStringArray(in []string) []string {
 func newSetCmd() *cobra.Command {
 	setCmd.Flags().BoolP("root", "r", false, "Removes the current parent namespace, making this namespace a root")
 	setCmd.Flags().StringP("parent", "p", "", "Sets the parent namespace")
-	setCmd.Flags().BoolP("allowCascadingDelete", "a", false, "Allows cascading deletion of its self-serve subnamespaces.")
-	setCmd.Flags().BoolP("forbidCascadingDelete", "f", false, "Protects cascading deletion of its self-serve subnamespaces.")
+	setCmd.Flags().BoolP("allowCascadingDelete", "a", false, "Allows cascading deletion of its subnamespaces.")
+	setCmd.Flags().BoolP("forbidCascadingDelete", "f", false, "Protects cascading deletion of its subnamespaces.")
 	return setCmd
 }

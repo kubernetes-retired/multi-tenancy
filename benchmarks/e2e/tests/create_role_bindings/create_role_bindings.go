@@ -1,21 +1,21 @@
 package create_role_bindings
 
-import(
+import (
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/onsi/ginkgo"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
-const(
+const (
 	expectedVal = "yes"
 )
 
-var _ = framework.KubeDescribe("Test tenant's role management permissions", func() {
+var _ = framework.KubeDescribe("[PL2] [PL3] Test tenant's role management permissions", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantkubeconfig configutil.TenantSpec
 	var err error
@@ -83,8 +83,8 @@ var _ = framework.KubeDescribe("Test tenant's role management permissions", func
 			framework.ExpectNoError(err)
 
 			_, errNew := framework.RunKubectl("create", "rolebinding", rolebindingName, rolenameFlag, namespaceflag, tenantkubeconfig.Namespace)
-			framework.ExpectNoError(errNew)			
-			
+			framework.ExpectNoError(errNew)
+
 		})
 	})
 })

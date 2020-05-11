@@ -42,5 +42,11 @@ go test ./e2e/tests -config <path-to-config>
 ```shell
 go test -v ./e2e/tests
 ```
+
+### To run tests according to the Profile Levels (1, 2 and 3)
+
+```shell
+go test -v ./e2e/tests -config <path-to-config> -ginkgo.focus PL<Profile Number>
+```
 <br/><br/>
 *Read Next >> [Contributing](contributing.md)*

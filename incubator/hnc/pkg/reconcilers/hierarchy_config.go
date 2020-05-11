@@ -155,8 +155,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 	// https://github.com/kubernetes-sigs/multi-tenancy/issues/623 as we try to enforce that.
 	switch {
 	case len(hnsnms) == 0:
-		// There's no owned namespaces in this namespace. The HC instance can be
-		// safely deleted anytime.
+		// There are no subnamespaces in this namespace. The HC instance can be safely deleted anytime.
 		if len(inst.ObjectMeta.Finalizers) > 0 {
 			log.Info("Removing finalizers since there's no longer any HNS instance in the namespace.")
 		}
@@ -165,7 +164,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 		// If the HC instance is being deleted but not the namespace (which means
 		// it's not a cascading delete), remove the finalizers to let it go through.
 		// This is the only case the finalizers can be removed even when the
-		// namespace has owned namespaces. (A default HC will be recreated later.)
+		// namespace has subnamespaces. (A default HC will be recreated later.)
 		log.Info("Removing finalizers to allow a single deletion of the singleton (not involved in a cascading deletion).")
 		inst.ObjectMeta.Finalizers = nil
 	default:
@@ -205,31 +204,31 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncConditions(log, inst, ns, hadCrit)
 }
 
-// syncOwner sets the parent to the owner and updates the HNSMissing condition
-// if the HNS instance is missing in the owner namespace according to the forest.
-// The namespace owner annotation is the source of truth of the ownership, since
-// modifying a namespace has higher privilege than what HNC users can do.
+// syncOwner sets the parent to the owner and updates the HNSMissing condition if the HNS instance
+// is missing in the parent namespace according to the forest.  The namespace owner annotation is
+// the source of truth of the ownership (e.g. being a subnamespace), since modifying a namespace has
+// higher privilege than what HNC users can do.
 func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Clear the HNSMissing condition if this is not an owned namespace or to
+	// Clear the HNSMissing condition if this is not a subnamespace or to
 	// reset it for the updated condition later.
 	ns.ClearConditionsByCode(log, api.HNSMissing)
 	nm := ns.Name()
-	onm := nsInst.Annotations[api.AnnotationOwner]
+	onm := nsInst.Annotations[api.SubnamespaceOf]
 	ons := r.Forest.Get(onm)
 
 	if onm == "" {
-		ns.IsOwned = false
+		ns.IsSub = false
 		return
 	}
 
-	ns.IsOwned = true
+	ns.IsSub = true
 
 	if inst.Spec.Parent != onm {
 		log.Info("The parent doesn't match the owner. Setting the owner as the parent.", "parent", inst.Spec.Parent, "owner", onm)
 		inst.Spec.Parent = onm
 	}
 
-	// Look up the HNSes in the owner namespace. Set HNSMissing condition if it's
+	// Look up the HNSes in the parent namespace. Set HNSMissing condition if it's
 	// not there.
 	found := false
 	for _, hnsnm := range ons.HNSes {
@@ -239,7 +238,7 @@ func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.Hierarc
 		}
 	}
 	if !found {
-		ns.SetCondition(api.NewAffectedNamespace(onm), api.HNSMissing, "The HNS instance is missing in the owner namespace")
+		ns.SetCondition(api.NewAffectedNamespace(onm), api.HNSMissing, "The HNS instance is missing in the parent namespace")
 	}
 }
 
@@ -249,9 +248,9 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 	if ns.SetExists() {
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.IsOwned {
-			r.enqueueAffected(log, "owner of the newly synced/created namespace", ns.Parent().Name())
-			r.hnsr.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing owned namespace is found")
+		if ns.IsSub {
+			r.enqueueAffected(log, "parent of the newly synced/created namespace", ns.Parent().Name())
+			r.hnsr.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
 		}
 	}
 }
@@ -348,7 +347,7 @@ func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logge
 
 // syncHNSes updates the HNS list. If any HNS is created/deleted, it will enqueue
 // the child to update its HNSMissing condition. A modified HNS will appear
-// twice in the change list (one in deleted, one in created), both owned namespace
+// twice in the change list (one in deleted, one in created), both subnamespaces
 // needs to be enqueued in this case.
 func (r *HierarchyConfigReconciler) syncHNSes(log logr.Logger, ns *forest.Namespace, hnsnms []string) {
 	for _, changedHNS := range ns.SetHNSes(hnsnms) {
@@ -584,7 +583,7 @@ func (r *HierarchyConfigReconciler) SetupWithManager(mgr ctrl.Manager, maxReconc
 				}},
 			}
 		})
-	// Maps a HierarchicalNamespace (HNS) instance to the owner singleton.
+	// Maps a HierarchicalNamespace (HNS) instance to the parent singleton.
 	hnsMapFn := handler.ToRequestsFunc(
 		func(a handler.MapObject) []reconcile.Request {
 			return []reconcile.Request{

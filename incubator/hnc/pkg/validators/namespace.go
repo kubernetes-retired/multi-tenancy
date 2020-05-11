@@ -60,9 +60,9 @@ func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission
 // handle implements the non-boilerplate logic of this validator, allowing it to be more easily unit
 // tested (ie without constructing a full admission.Request).
 func (v *Namespace) handle(req *nsRequest) admission.Response {
-	owner := req.ns.Annotations[api.AnnotationOwner]
-	if owner != "" && req.op == v1beta1.Delete {
-		msg := fmt.Sprintf("The namespace %s is an owned namespace. Please delete the HNS instance from the owner namespace %s instead.", req.ns.Name, owner)
+	parent := req.ns.Annotations[api.SubnamespaceOf]
+	if parent != "" && req.op == v1beta1.Delete {
+		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the hierarchicalnamespace resources from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
@@ -80,16 +80,16 @@ func (v *Namespace) checkForest(req *nsRequest) admission.Response {
 		return allow("")
 	}
 
-	// Check if the deleting namespace has owned namespaces that can't be deleted.
+	// Check if the deleting namespace has subnamespaces that can't be deleted.
 	cantDelete := []string{}
 	for _, cnm := range ns.ChildNames() {
 		cns := v.Forest.Get(cnm)
-		if cns.IsOwned && !cns.AllowsCascadingDelete() {
+		if cns.IsSub && !cns.AllowsCascadingDelete() {
 			cantDelete = append(cantDelete, cnm)
 		}
 	}
 	if len(cantDelete) != 0 {
-		msg := fmt.Sprintf("Please set allowCascadingDelete first either in the parent namespace or in all the owned children.\n Owned namespace(s) without allowCascadingDelete set: %s.", cantDelete)
+		msg := fmt.Sprintf("Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.\n  Subnamespace(s) without allowCascadingDelete set: %s.", cantDelete)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 	return allow("")

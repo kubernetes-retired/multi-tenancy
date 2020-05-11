@@ -7,15 +7,15 @@ import (
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
 const (
 	expectedVal = "Error from server (Forbidden)"
 )
 
-var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy resources", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Test tenant's permission to modify multi-tenancy resources", func() {
 	var config *configutil.BenchmarkConfig
 	var resourceList string
 	var err error
@@ -35,7 +35,7 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 		tenantkubeconfig, err := config.GetValidTenant()
 		framework.ExpectNoError(err)
 
-		resourceList, err = framework.RunKubectl("get", "all", labelFlg, config.Label , nsFlag, tenantkubeconfig.Namespace, outputFlag)
+		resourceList, err = framework.RunKubectl("get", "all", labelFlg, config.Label, nsFlag, tenantkubeconfig.Namespace, outputFlag)
 		framework.ExpectNoError(err)
 	})
 
@@ -51,10 +51,10 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 
 		ginkgo.It("annotate resources managed by the cluster administrator in tenant's namespace", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot annotate resources managed by the cluster administrator in tenant's namespace", user))
-			
+
 			resources := strings.Fields(resourceList)
 			annotate := fmt.Sprintf("test=multi")
-			
+
 			tenantkubeconfig, err := config.GetValidTenant()
 			framework.ExpectNoError(err)
 
@@ -70,7 +70,7 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 	})
 })
 
-var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy rolebindings", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Test tenant's permission to modify multi-tenancy rolebindings", func() {
 	var config *configutil.BenchmarkConfig
 	var resourceList string
 	var err error
@@ -106,10 +106,10 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 
 		ginkgo.It("annotate rolebinding in tenant's namespace", func() {
 			ginkgo.By(fmt.Sprintf("tenant %s cannot annotate rolebinding in tenant's namespace", user))
-			
+
 			resources := strings.Fields(resourceList)
 			annotate := fmt.Sprintf("test=multi")
-			
+
 			tenantkubeconfig, err := config.GetValidTenant()
 			framework.ExpectNoError(err)
 			for _, resource := range resources {
@@ -123,4 +123,3 @@ var _ = framework.KubeDescribe("test tenant's permission to modify multi-tenancy
 		})
 	})
 })
-	
