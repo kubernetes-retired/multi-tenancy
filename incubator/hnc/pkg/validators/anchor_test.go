@@ -7,21 +7,14 @@ import (
 	"k8s.io/api/admission/v1beta1"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/foresttest"
 )
 
-func TestHNS(t *testing.T) {
-	f := forest.NewForest()
-
-	// Create two namespaces foo and bar.
-	createNS(f, "foo", nil)
-	createNS(f, "bar", nil)
-
-	// Create subnamespace baz for foo with AllowCascadingDelete set to true.
-	baz := createOwnedNamespace(f, "foo", "baz")
-	baz.UpdateAllowCascadingDelete(true)
-
+func TestSubnamespaces(t *testing.T) {
+	// Two roots `a` and `b`, with `c` a subnamespace of `a`
+	f := foresttest.Create("--A")
 	h := &Anchor{Forest: f}
+	f.Get("c").UpdateAllowCascadingDelete(true)
 
 	tests := []struct {
 		name string
@@ -30,11 +23,11 @@ func TestHNS(t *testing.T) {
 		cnm  string
 		fail bool
 	}{
-		{name: "ok-create", op: v1beta1.Create, pnm: "foo", cnm: "brumpf"},
-		{name: "ok-delete", op: v1beta1.Delete, pnm: "foo", cnm: "baz"},
+		{name: "ok-create", op: v1beta1.Create, pnm: "a", cnm: "brumpf"},
+		{name: "ok-delete", op: v1beta1.Delete, pnm: "a", cnm: "c"},
 		{name: "create anchor in excluded ns", op: v1beta1.Create, pnm: "kube-system", cnm: "brumpf", fail: true},
-		{name: "create anchor with existing ns name", op: v1beta1.Create, pnm: "foo", cnm: "bar", fail: true},
-		{name: "delete anchor when allowCascadingDelete is false", op: v1beta1.Delete, pnm: "foo", cnm: "bar", fail: true},
+		{name: "create anchor with existing ns name", op: v1beta1.Create, pnm: "a", cnm: "b", fail: true},
+		{name: "delete anchor when allowCascadingDelete is false", op: v1beta1.Delete, pnm: "a", cnm: "b", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,12 +49,4 @@ func TestHNS(t *testing.T) {
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
 		})
 	}
-}
-
-func createOwnedNamespace(f *forest.Forest, pnm, cnm string) *forest.Namespace {
-	pns := f.Get(pnm)
-	cns := createNS(f, cnm, nil)
-	cns.SetParent(pns)
-	cns.IsSub = true
-	return cns
 }
