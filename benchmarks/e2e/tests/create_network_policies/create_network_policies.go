@@ -1,20 +1,20 @@
 package create_network_policies
 
-import(
+import (
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/onsi/ginkgo"
-	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 	"k8s.io/kubernetes/test/e2e/framework"
+	configutil "sigs.k8s.io/multi-tenancy/benchmarks/e2e/config"
 )
 
-const(
+const (
 	expectedVal = "yes"
 )
 
-var _ = framework.KubeDescribe("Test tenant's network-policy management permissions", func() {
+var _ = framework.KubeDescribe("[PL2] [PL3] Test tenant's network-policy management permissions", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantkubeconfig configutil.TenantSpec
 	var err error
