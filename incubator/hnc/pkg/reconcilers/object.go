@@ -239,7 +239,7 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	// what we'd _like_ to do. We still needed to sync the forest since we want to know when objects
 	// are added and removed, so we can sync them properly if the critical condition is resolved, but
 	// don't do anything else for now.
-	if r.Forest.Get(inst.GetNamespace()).HasCritCondition() {
+	if r.Forest.Get(inst.GetNamespace()).GetCritAncestor() != "" {
 		return actionNop, nil
 	}
 
@@ -397,7 +397,7 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 
 func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
 	sns := r.Forest.Get(src.GetNamespace())
-	if sns.HasCritCondition() {
+	if sns.GetCritAncestor() != "" {
 		// There's no point enqueuing anything if the source namespace has a crit condition since we'll
 		// just skip any action anyway.
 		log.Info("Source object has changed but namespace has critical condition; will not enqueue descendants")

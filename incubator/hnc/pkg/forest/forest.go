@@ -450,15 +450,16 @@ func (ns *Namespace) HasLocalCritCondition() bool {
 	return ns.HasCondition(api.AffectedObject{}, "")
 }
 
-// HasCritCondition returns if the namespace or any of its ancestors has any critical condition.
-func (ns *Namespace) HasCritCondition() bool {
+// GetCritAncestor returns the name of the first ancestor with a critical condition, or the empty
+// string if there are no such ancestors. It *can* return the name of the current namespace.
+func (ns *Namespace) GetCritAncestor() string {
 	if ns.HasLocalCritCondition() {
-		return true
+		return ns.name
 	}
 	if ns.Parent() == nil {
-		return false
+		return ""
 	}
-	return ns.Parent().HasCritCondition()
+	return ns.Parent().GetCritAncestor()
 }
 
 // HasCondition returns true if there's a condition with the given object and code. If code is the
