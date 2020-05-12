@@ -263,6 +263,8 @@ func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cac
 		return informer.ConfigMaps().Informer()
 	case *v1.Endpoints:
 		return informer.Endpoints().Informer()
+	case *v1.Event:
+		return informer.Events().Informer()
 	default:
 		return nil
 	}

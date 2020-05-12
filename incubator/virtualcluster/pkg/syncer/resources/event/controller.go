@@ -53,36 +53,61 @@ type controller struct {
 
 func Register(
 	config *config.SyncerConfiguration,
-	client v1core.EventsGetter,
+	client v1core.CoreV1Interface,
 	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
+	c, _, _, err := NewEventController(config, client, informer, nil)
+	if err != nil {
+		klog.Errorf("failed to create multi cluster event controller %v", err)
+		return
+	}
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewEventController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+
 	c := &controller{
 		client:   client,
 		informer: informer,
 	}
 
-	// Create the multi cluster pod controller
-	options := mc.Options{Reconciler: c}
-	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Event{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Event{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster event controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.multiClusterEventController = multiClusterEventController
 
 	c.nsLister = informer.Namespaces().Lister()
-	c.nsSynced = informer.Namespaces().Informer().HasSynced
-
 	c.eventLister = informer.Events().Lister()
+	c.nsSynced = informer.Namespaces().Informer().HasSynced
 	c.eventSynced = informer.Events().Informer().HasSynced
+	if options != nil && options.IsFake {
+		c.nsSynced = func() bool { return true }
+		c.eventSynced = func() bool { return true }
+	}
 
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardEventController, err := uw.NewUWController("event-upward-controller", &v1.Event{}, *uwOptions)
 	if err != nil {
 		klog.Errorf("failed to create event upward controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.upwardEventController = upwardEventController
 
@@ -108,7 +133,7 @@ func Register(
 			},
 		})
 
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterEventController, upwardEventController, nil
 }
 
 func assignPodEvent(e *v1.Event) bool {
