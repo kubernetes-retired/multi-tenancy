@@ -366,6 +366,21 @@ func TestDWEndpointsUpdate(t *testing.T) {
 		},
 	}
 
+	updatedSubset3 := []v1.EndpointSubset{
+		{
+			Addresses: []v1.EndpointAddress{
+				{
+					IP:       "1.1.1.2",
+					NodeName: pointer.StringPtr("n2"),
+					TargetRef: &v1.ObjectReference{
+						Kind: "Pod",
+						Name: "pod1",
+					},
+				},
+			},
+		},
+	}
+
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant []runtime.Object
@@ -391,17 +406,17 @@ func TestDWEndpointsUpdate(t *testing.T) {
 			},
 			ExpectedNoOperation: true,
 		},
-		//"diff in subset address": {
-		//	ExistingObjectInSuper: []runtime.Object{
-		//		applySpecToEndpoints(superEndpoints("svc", superDefaultNSName, "12345", defaultClusterKey), subset1),
-		//	},
-		//	ExistingObjectInTenant: []runtime.Object{
-		//		applySpecToEndpoints(tenantEndpoints("svc", "default", "12345"), subset3),
-		//	},
-		//	ExpectedUpdatedPObject: []runtime.Object{
-		//		applySpecToEndpoints(superEndpoints("svc", superDefaultNSName, "12345", defaultClusterKey), subset3),
-		//	},
-		//},
+		"diff in subset address": {
+			ExistingObjectInSuper: []runtime.Object{
+				applySpecToEndpoints(superEndpoints("svc", superDefaultNSName, "12345", defaultClusterKey), subset1),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applySpecToEndpoints(tenantEndpoints("svc", "default", "12345"), subset3),
+			},
+			ExpectedUpdatedPObject: []runtime.Object{
+				applySpecToEndpoints(superEndpoints("svc", superDefaultNSName, "12345", defaultClusterKey), updatedSubset3),
+			},
+		},
 		"diff in uid": {
 			ExistingObjectInSuper: []runtime.Object{
 				applySpecToEndpoints(superEndpoints("svc", superDefaultNSName, "12345", defaultClusterKey), subset1),
