@@ -305,6 +305,14 @@ func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
 	}
 }
 
+func tryUpdateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) error {
+	if h.CreationTimestamp.IsZero() {
+		return k8sClient.Create(ctx, h)
+	} else {
+		return k8sClient.Update(ctx, h)
+	}
+}
+
 func getLabel(ctx context.Context, from, label string) func() string {
 	return func() string {
 		ns := getNamespace(ctx, from)
