@@ -36,7 +36,8 @@ const (
 	FinalizerHasOwnedNamespace = MetaGroup + "/hasOwnedNamespace"
 )
 
-// Condition codes. *All* codes must also be documented in the comment to Condition.Code.
+// Condition codes. *All* codes must also be documented in the comment to Condition.Code, and must
+// also have an entry in ClearConditionCriteria, set in init() in this file.
 const (
 	CritParentMissing         Code = "CritParentMissing"
 	CritParentInvalid         Code = "CritParentInvalid"
@@ -45,6 +46,31 @@ const (
 	CannotPropagate           Code = "CannotPropagateObject"
 	CannotUpdate              Code = "CannotUpdateObject"
 )
+
+// ClearConditionCriterion describes when a condition should be automatically cleared based on
+// forest changes. See individual constants for better documentation.
+type ClearConditionCriterion int
+
+const (
+	CCCUnknown ClearConditionCriterion = iota
+
+	// CCCManual indicates that the condition should never be cleared automatically, based on the
+	// structure of the forest. Instead, the reconciler that sets the condition is responsible for
+	// clearing it as well.
+	CCCManual
+
+	// CCCAncestor indicates that the condition should always exist in the namespace's ancestors, and
+	// should be cleared if this is no longer true.
+	CCCAncestor
+
+	// CCCSubtree indicates that the condition should always exist in the namespace's subtree (that
+	// is, the namespace itself or any of its descendants), and should be cleared if this is no longer
+	// true.
+	CCCSubtree
+)
+
+// ClearConditionCriteria is initialized in init(). See ClearConditionCriterion for more details.
+var ClearConditionCriteria map[Code]ClearConditionCriterion
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -208,4 +234,24 @@ func SortAffectedObjects(objs []AffectedObject) {
 
 func init() {
 	SchemeBuilder.Register(&HierarchyConfiguration{}, &HierarchyConfigurationList{})
+	ClearConditionCriteria = map[Code]ClearConditionCriterion{
+		// All conditions on namespaces are set/cleared manually by the HCR
+		CritParentMissing:         CCCManual,
+		CritParentInvalid:         CCCManual,
+		CritAncestor:              CCCManual,
+		SubnamespaceAnchorMissing: CCCManual,
+
+		// A source object can cause the CannotPropagate condition in two ways: if it cannot be
+		// propagated *out* of its original namespace (e.g. because it has a finalizer), or if it cannot
+		// be propagated *into* a descendant namespace. In the former case, the affected object is in
+		// the source namespace; in the latter, it's in a descendant (and the descendant namespace will
+		// have a CannotUpdate condition).
+		CannotPropagate: CCCSubtree,
+
+		// A propagated object can cause the CannotUpdate object in the destination namespace if there's
+		// a reason it cannot be copied into that namespace (e.g. transient errors, HNC has insufficient
+		// privileges, etc). The affected object will always be the source object, which will always be
+		// in an ancestor namespace.
+		CannotUpdate: CCCAncestor,
+	}
 }
