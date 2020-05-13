@@ -55,20 +55,23 @@ func TestStructure(t *testing.T) {
 func TestAuthz(t *testing.T) {
 	tests := []struct {
 		name   string
-		authz  fakeAuthz
+		server fakeServer
 		forest string
 		from   string
 		to     string
-		fail   bool
+		code   int32
 	}{
-		{name: "nothing in tree", forest: "-aa", from: "b", to: "c", fail: true},                                             // a <- (b, c)
-		{name: "root in tree", forest: "-aa", from: "b", to: "c", authz: "a"},                                                // a <- (b, c)
-		{name: "parents but not root", forest: "-aab", from: "d", to: "c", authz: "bc", fail: true},                          // a <- (b <- d, c)
-		{name: "dst only across trees", forest: "--", from: "a", to: "b", authz: "b", fail: true},                            // a; b
-		{name: "cur root only across trees", forest: "--", from: "a", to: "b", authz: "a", fail: true},                       // a; b
-		{name: "dst and cur parent (but not root) across trees", forest: "-a-", from: "b", to: "c", authz: "bc", fail: true}, // a <- b; c
-		{name: "dst and cur root across trees", forest: "-a-", from: "b", to: "c", authz: "ac"},                              // a <- b; c
-		{name: "mrca in tree", forest: "-abb", from: "c", to: "d", authz: "b"},                                               // a <- b <- (c, d)
+		{name: "nothing in tree", forest: "-aa", from: "b", to: "c", code: 401},                                              // a <- (b, c)
+		{name: "root in tree", forest: "-aa", from: "b", to: "c", server: "a"},                                               // a <- (b, c)
+		{name: "parents but not root", forest: "-aab", from: "d", to: "c", server: "bc", code: 401},                          // a <- (b <- d, c)
+		{name: "dst only across trees", forest: "--", from: "a", to: "b", server: "b", code: 401},                            // a; b
+		{name: "cur root only across trees", forest: "--", from: "a", to: "b", server: "a", code: 401},                       // a; b
+		{name: "dst and cur parent (but not root) across trees", forest: "-a-", from: "b", to: "c", server: "bc", code: 401}, // a <- b; c
+		{name: "dst and cur root across trees", forest: "-a-", from: "b", to: "c", server: "ac"},                             // a <- b; c
+		{name: "mrca in tree", forest: "-abb", from: "c", to: "d", server: "b"},                                              // a <- b <- (c, d)
+		{name: "dest but unsynced parent", forest: "-", from: "z", to: "a", server: "a", code: 503},                          // a (z exists on the server)
+		{name: "dest but missing parent", forest: "-", from: "z", to: "a", server: "a:z"},                                    // a (z is missing)
+		{name: "dest but missing ancestor", forest: "z-", from: "a", to: "b", server: "ab", code: 403},                       // z <- a; b (z is missing)
 	}
 	for _, tc := range tests {
 		t.Run("permission on "+tc.name, func(t *testing.T) {
@@ -77,8 +80,12 @@ func TestAuthz(t *testing.T) {
 			f := foresttest.Create(tc.forest)
 			foo := f.Get("foo")
 			foo.SetExists()
-			foo.SetParent(f.Get(tc.from))
-			h := &Hierarchy{Forest: f, authz: tc.authz}
+			p := f.Get(tc.from)
+			foo.SetParent(p)
+			if !p.Exists() {
+				foo.SetLocalCondition(api.CritParentMissing, "missing")
+			}
+			h := &Hierarchy{Forest: f, server: tc.server}
 			l := zap.Logger(false)
 
 			// Create request
@@ -92,8 +99,7 @@ func TestAuthz(t *testing.T) {
 
 			// Report
 			logResult(t, got.AdmissionResponse.Result)
-			//reason := got.AdmissionResponse.Result.Reason
-			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+			g.Expect(got.AdmissionResponse.Result.Code).Should(Equal(tc.code))
 		})
 	}
 }
@@ -102,15 +108,38 @@ func logResult(t *testing.T, result *metav1.Status) {
 	t.Logf("Got reason %q, code %d, msg %q", result.Reason, result.Code, result.Message)
 }
 
-// fakeAuthz implements authzClient. Any namespaces that are in the slice are allowed; anything else
-// is denied.
-type fakeAuthz string
+// fakeServer implements serverClient. It's implemented as a string separated by a colon (":") with
+// the following meanings:
+// * Anything *before* the colon passes the IsAdmin check
+// * Anything *after* the colon *fails* the Exists check
+// If the colon is missing, it's assumed to come at the end of the string
+type fakeServer string
 
-func (f fakeAuthz) IsAdmin(_ context.Context, _ *authn.UserInfo, nnm string) (bool, error) {
+func (f fakeServer) IsAdmin(_ context.Context, _ *authn.UserInfo, nnm string) (bool, error) {
 	for _, n := range f {
 		if nnm == string(n) {
 			return true, nil
 		}
+		if n == ':' {
+			return false, nil
+		}
 	}
 	return false, nil
+}
+
+func (f fakeServer) Exists(_ context.Context, nnm string) (bool, error) {
+	foundColon := false
+	for _, n := range f {
+		if n == ':' {
+			foundColon = true
+			continue
+		}
+		if !foundColon {
+			continue
+		}
+		if nnm == string(n) {
+			return false, nil
+		}
+	}
+	return true, nil
 }

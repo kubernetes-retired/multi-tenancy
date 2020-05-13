@@ -357,7 +357,7 @@ func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Name
 
 func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Depth label only makes sense if there's no error condition.
-	if ns.HasCritCondition() {
+	if ns.GetCritAncestor() != "" {
 		return
 	}
 

@@ -9,7 +9,10 @@ import (
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -33,13 +36,16 @@ const (
 type Hierarchy struct {
 	Log     logr.Logger
 	Forest  *forest.Forest
-	authz   authzClient
+	server  serverClient
 	decoder *admission.Decoder
 }
 
-// authzClient represents the authz checks that should typically be performed against the apiserver,
-// but need to be stubbed out during unit testing.
-type authzClient interface {
+// serverClient represents the checks that should typically be performed against the apiserver, but
+// need to be stubbed out during unit testing.
+type serverClient interface {
+	// Exists returns true if the given namespace exists.
+	Exists(ctx context.Context, nnm string) (bool, error)
+
 	// IsAdmin takes a UserInfo and the name of a namespace, and returns true if the user is an admin
 	// of that namespace (ie, can update the hierarchical config).
 	IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm string) (bool, error)
@@ -65,11 +71,15 @@ type request struct {
 // mistakenly allowed).  False negatives can easily be retried and so are not a significant problem,
 // since (by definition) we expect the problem to be transient.
 //
-// False positives are a more serious concern, but the reconciler has been designed to assume that
-// the validator is _never_ running, and any illegal configuration that makes it into K8s will
+// False positives are a more serious concern, and fall into two categories: structural failures,
+// and authz failures. Regarding structural failures, the reconciler has been designed to assume
+// that the validator is _never_ running, and any illegal configuration that makes it into K8s will
 // simply be reported via HierarchyConfiguration.Status.Conditions. It's the admins'
 // responsibilities to monitor these conditions and ensure that, transient exceptions aside, all
-// namespaces are condition-free.
+// namespaces are condition-free. Note that even if the validator is working perfectly, it's still
+// possible to introduce structural failures, as described in the user docs.
+//
+// Authz false positives are prevented as described by the comments to `getServerChecks`.
 func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := v.Log.WithValues("ns", req.Namespace, "user", req.UserInfo.Username)
 	decoded, err := v.decodeRequest(req)
@@ -79,7 +89,11 @@ func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission
 	}
 
 	resp := v.handle(ctx, log, decoded)
-	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	if !resp.Allowed {
+		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	} else {
+		log.V(1).Info("Allowed")
+	}
 	return resp
 }
 
@@ -103,22 +117,22 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 		return allow("HNC SA")
 	}
 
-	// Do all checks that require holding the in-memory lock. Generate a list of authz checks we
+	// Do all checks that require holding the in-memory lock. Generate a list of server checks we
 	// should perform once the lock is released.
-	authzReqs, resp := v.checkForest(req.hc)
+	serverChecks, resp := v.checkForest(log, req.hc)
 	if !resp.Allowed {
 		return resp
 	}
 
-	// Ensure the user has the required permissions to make the change.
-	return v.checkAuthz(ctx, req.ui, authzReqs)
+	// Ensure that the server's in the right state to make the changes.
+	return v.checkServer(ctx, log, req.ui, serverChecks)
 }
 
 // checkForest validates that the request is allowed based on the current in-memory state of the
-// forest. If it is, it returns a list of namespaces that the user needs to be authorized to update
-// in order to be allowed to make the change; these checks are executed _after_ the in-memory lock
-// is released.
-func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, admission.Response) {
+// forest. If it is, it returns a list of checks we need to perform against the apiserver in order
+// to be allowed to make the change; these checks are executed _after_ the in-memory lock is
+// released.
+func (v *Hierarchy) checkForest(log logr.Logger, hc *api.HierarchyConfiguration) ([]serverCheck, admission.Response) {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
@@ -127,13 +141,37 @@ func (v *Hierarchy) checkForest(hc *api.HierarchyConfiguration) ([]authzReq, adm
 	curParent := ns.Parent()
 	newParent := v.Forest.Get(hc.Spec.Parent)
 
-	resp := v.checkParent(ns, curParent, newParent)
-	if !resp.Allowed {
+	// Check problems on the namespace itself
+	if resp := v.checkNS(ns); !resp.Allowed {
 		return nil, resp
 	}
 
-	// The structure looks good. Get the list of namespaces we need authz checks on.
-	return v.needAuthzOn(curParent, newParent), allow("")
+	// Check problems on the parents
+	if resp := v.checkParent(ns, curParent, newParent); !resp.Allowed {
+		return nil, resp
+	}
+
+	// The structure looks good. Get the list of namespaces we need server checks on.
+	return v.getServerChecks(log, ns, curParent, newParent), allow("")
+}
+
+// checkNS looks for problems with the current namespace that should prevent changes.
+func (v *Hierarchy) checkNS(ns *forest.Namespace) admission.Response {
+	// Wait until the namespace has been synced
+	if !ns.Exists() {
+		msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", ns.Name())
+		return deny(metav1.StatusReasonServiceUnavailable, msg)
+	}
+
+	// Deny the request if the namespace has a critical ancestor - but not if it's critical itself,
+	// since we may be trying to resolve the critical condition.
+	critAnc := ns.GetCritAncestor()
+	if critAnc != "" && critAnc != ns.Name() {
+		msg := fmt.Sprintf("The ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration.", critAnc, ns.Name())
+		return deny(metav1.StatusReasonForbidden, msg)
+	}
+
+	return allow("")
 }
 
 // checkParent validates if the parent is legal based on the current in-memory state of the forest.
@@ -170,47 +208,83 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	return allow("")
 }
 
-// authzReq represents a request for authorization
-type authzReq struct {
-	nnm    string // the namespace the user needs to be authorized to modify
-	reason string // the reason we're checking it (for logs and error messages)
+type serverCheckType int
+
+const (
+	// checkAuthz verifies that the user is an admin of this namespace
+	checkAuthz serverCheckType = iota
+	// checkMissing verifies that the namespace does *not* exist on the server
+	checkMissing
+)
+
+// serverCheck represents a check to perform against the apiserver once the forest lock is released.
+type serverCheck struct {
+	nnm       string          // the namespace the user needs to be authorized to modify
+	checkType serverCheckType // the type of check to perform
+	reason    string          // the reason we're checking it (for logs and error messages)
 }
 
-// needAuthzOn returns the namespaces that the user must be authorized to update in order to make
-// this change. It must be called while the forest lock is held.
+// getServerChecks returns the server checks we need to perform in order to verify that this change
+// is legal. It must be called while the forest lock is held, but the checks will be performed once
+// the lock has been released.
 //
-// This method is a bit verbose; I've tried to optimize readability over conciseness since it's a
-// tricky bit of code to understand.
-func (v *Hierarchy) needAuthzOn(curParent, newParent *forest.Namespace) []authzReq {
-	// Get the ancestry chain of both parents (see getExistingAncestry for details of what we actually
-	// return).
-	//
-	// TODO: if the new parent doesn't exist yet, only allow it if the user has permission to create
-	// it. https://github.com/kubernetes-sigs/multi-tenancy/issues/158.
-	curChain := v.getExistingAncestry(curParent)
-	newChain := v.getExistingAncestry(newParent)
-
-	// No (valid) current or new ancestors -> nothing to check.
-	if len(curChain) == 0 && len(newChain) == 0 {
+// The general rule is that the user must be an admin of the most recent common ancestor of the old
+// and new parent, if they're both in the same tree. If they're in *different* trees, the user must
+// be an admin of the root of the old tree, and of the new parent. See the user guide or design doc
+// for the rationale for this choice.
+//
+// While this is fairly simple in theory, missing parents make this a bit more complicated.
+//
+// If this webhook is working correctly, a namespace can never be deliberately assigned to a parent
+// that doesn't exist (in Gitops flows, this means that the client is expected to create all
+// namespaces before syncing HierarchyConfiguration objects, or at least be able to keep retrying
+// until after all namespaces have been created). Therefore, there are only three cases where an
+// ancestor might be missing:
+//
+// 1. The parent has been deleted, and the namespace is orphaned. In this case, we want to allow the
+// namespace to be reassigned to another parent (or become a root) to let admins resolve the problem.
+// 2. An ancestor has been deleted, but not the parent. This case is handled by checkNS, above.
+// 3. HNC is just starting up and the parent hasn't been synced yet, so we can't determine the tree
+// root. In these cases, we want to reject the request and ask the user to try again (e.g. HTTP 503 -
+// service unavailable).
+//
+// Since case #2 is already handled, we only need to distinguish between #1 and #3. So if the
+// current parent does not exist in the forest, we ask for a `checkMissing` server check instead of
+// the normal `checkAuthz`. If the namespace is _actually_ missing on the apiserver, as expected,
+// the check will pass, allowing the admin to fix the error; if it's present (which means we just
+// haven't synced it yet), we'll fail with a 503, asking the user to try again later.
+func (v *Hierarchy) getServerChecks(log logr.Logger, ns, curParent, newParent *forest.Namespace) []serverCheck {
+	// No need for any checks if nothing's changing.
+	if curParent == newParent {
+		// Note that this also catches the case where both are nil
 		return nil
 	}
 
-	// If only one of them exists, return that one. If they both exist, but have different roots, add
-	// both of them. Note that we've already covered the case where _neither_ exists, so if one
-	// doesn't exist, the other certainly does.
-	if len(curChain) == 0 {
-		return []authzReq{{nnm: newChain[len(newChain)-1], reason: "proposed parent"}}
-	}
-	if len(newChain) == 0 {
-		return []authzReq{{nnm: curChain[0], reason: "root ancestor of the current parent"}}
+	// If this is currently a root and we're moving into a new tree, just check the parent.
+	if curParent == nil {
+		return []serverCheck{{nnm: newParent.Name(), reason: "proposed parent", checkType: checkAuthz}}
 	}
 
-	// If they don't share any common ancestors, return them both (trying to factor out the code to
-	// create the requests actually made this function harder to read, IMO).
+	// If the current parent is missing, ask for a missing check. Note that only the *direct* parent
+	// can be missing; if a more distant ancestor was missing, `ns` would have had a critical
+	// condition in the ancestors, and would have failed checkNS.
+	if !curParent.Exists() {
+		return []serverCheck{{nnm: curParent.Name(), reason: "current missing parent", checkType: checkMissing}}
+	}
+
+	// If we're making the namespace into a root, just check the old root.
+	curChain := curParent.AncestryNames(nil)
+	if newParent == nil {
+		return []serverCheck{{nnm: curChain[0], reason: "current root ancestor", checkType: checkAuthz}}
+	}
+
+	// This namespace has both old and new parents. If they're in different trees, return the old root
+	// and new parent.
+	newChain := newParent.AncestryNames(nil)
 	if curChain[0] != newChain[0] {
-		return []authzReq{
-			{nnm: curChain[0], reason: "root ancestor of the current parent"},
-			{nnm: newChain[len(newChain)-1], reason: "proposed parent"},
+		return []serverCheck{
+			{nnm: curChain[0], reason: "current root ancestor", checkType: checkAuthz},
+			{nnm: newParent.Name(), reason: "proposed parent", checkType: checkAuthz},
 		}
 	}
 
@@ -222,57 +296,45 @@ func (v *Hierarchy) needAuthzOn(curParent, newParent *forest.Namespace) []authzR
 		}
 		mrca = curChain[i]
 	}
-	return []authzReq{{
-		nnm:    mrca,
-		reason: fmt.Sprintf("most recent common ancestor of current parent %s and proposed parent %s", curParent.Name(), newParent.Name()),
+	return []serverCheck{{
+		nnm:       mrca,
+		reason:    fmt.Sprintf("most recent common ancestor of current parent %q and proposed parent %q", curParent.Name(), newParent.Name()),
+		checkType: checkAuthz,
 	}}
 }
 
-// getExistingAncestry returns the ancestry of the given namespace, with all nonexistent namespaces
-// filtered out. We need to compare the ancestry of the two parents so we can find the most recent
-// common ancestor and do authz checks on it. However, since we can assign parents before they
-// exist, the MRCA might not actually exist yet, which means that K8s obviously can't do an authz
-// check on it yet.
-//
-// It's even trickier than you might think: the ancestry chain can actually contain gaps! For
-// example, namespace A might have a required child B which hasn't been created yet (for some
-// reason), while namespace C lists namespace B as its parent. In this case, A and C exist, but not
-// B. In this case, we should probably run the check on A, since it's admins are obviously supposed
-// to have control over C and its descendents.
-//
-// Alternatively, B and C might both exist, and A might not. In this case, we can't run the check on
-// A, so we do the best we can: we should run the check on B.
-//
-// We can solve both of these cases by simply filtering out the missing namespaces.
-func (v *Hierarchy) getExistingAncestry(ns *forest.Namespace) []string {
-	chain := ns.AncestryNames(nil) // Returns empty slice if ns is nil.
-	existing := []string{}
-	for _, anm := range chain {
-		if v.Forest.Get(anm).Exists() {
-			existing = append(existing, anm)
-		}
-	}
-	return existing
-}
-
-// checkAuthz executes the list of requested checks.
-func (v *Hierarchy) checkAuthz(ctx context.Context, ui *authnv1.UserInfo, reqs []authzReq) admission.Response {
-	if v.authz == nil {
+// checkServer executes the list of requested checks.
+func (v *Hierarchy) checkServer(ctx context.Context, log logr.Logger, ui *authnv1.UserInfo, reqs []serverCheck) admission.Response {
+	if v.server == nil {
 		return allow("") // unit test; TODO put in fake
 	}
 
 	// TODO: parallelize?
 	for _, req := range reqs {
-		allowed, err := v.authz.IsAdmin(ctx, ui, req.nnm)
+		switch req.checkType {
+		case checkMissing:
+			log.Info("Checking existance", "object", req.nnm, "reason", req.reason)
+			exists, err := v.server.Exists(ctx, req.nnm)
+			if err != nil {
+				return deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking existance for %q, the %s: %s", req.nnm, req.reason, err))
+			}
 
-		// Interpret the result
-		if err != nil {
-			return deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking authz for %s, the %s: %s", req.nnm, req.reason, err))
-		}
+			if exists {
+				msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", req.nnm)
+				return deny(metav1.StatusReasonServiceUnavailable, msg)
+			}
 
-		if !allowed {
-			return deny(metav1.StatusReasonUnauthorized, fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
-				ui.Username, req.nnm, req.reason))
+		case checkAuthz:
+			log.Info("Checking authz", "object", req.nnm, "reason", req.reason)
+			allowed, err := v.server.IsAdmin(ctx, ui, req.nnm)
+			if err != nil {
+				return deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking authz for %q, the %s: %s", req.nnm, req.reason, err))
+			}
+
+			if !allowed {
+				return deny(metav1.StatusReasonUnauthorized, fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
+					ui.Username, req.nnm, req.reason))
+			}
 		}
 	}
 
@@ -315,7 +377,7 @@ func isHNCServiceAccount(user *authnv1.UserInfo) bool {
 }
 
 func (v *Hierarchy) InjectClient(c client.Client) error {
-	v.authz = &realAuthzClient{client: c}
+	v.server = &realClient{client: c}
 	return nil
 }
 
@@ -324,13 +386,26 @@ func (v *Hierarchy) InjectDecoder(d *admission.Decoder) error {
 	return nil
 }
 
-// realAuthzClient implements authzClient, and is not use during unit tests.
-type realAuthzClient struct {
+// realClient implements serverClient, and is not use during unit tests.
+type realClient struct {
 	client client.Client
 }
 
-// IsAdmin implements authzClient
-func (r *realAuthzClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm string) (bool, error) {
+// Exists implements serverClient
+func (r *realClient) Exists(ctx context.Context, nnm string) (bool, error) {
+	nsn := types.NamespacedName{Name: nnm}
+	ns := &corev1.Namespace{}
+	if err := r.client.Get(ctx, nsn, ns); err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// IsAdmin implements serverClient
+func (r *realClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm string) (bool, error) {
 	// Convert the Extra type
 	authzExtra := map[string]authzv1.ExtraValue{}
 	for k, v := range ui.Extra {
@@ -437,6 +512,8 @@ func codeFromReason(reason metav1.StatusReason) int32 {
 		return 422
 	case metav1.StatusReasonInternalError:
 		return 500
+	case metav1.StatusReasonServiceUnavailable:
+		return 503
 	default:
 		return 500
 	}
