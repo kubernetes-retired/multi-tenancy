@@ -186,59 +186,59 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 
-	// Clear locally-set conditions in the forest so we can set them to the latest.
+	// Clear locally-set conditions in the forest; we'll re-add them if they're still relevant. But
+	// first, record whether there were any critical ones since if this changes, we'll need to notify
+	// other namespaces.
 	hadCrit := ns.HasLocalCritCondition()
-	ns.ClearLocalCondition("")
+	ns.ClearLocalConditions()
 
-	r.syncOwner(log, inst, nsInst, ns)
+	// If this is a subnamespace, make sure .spec.parent is set correctly. Then sync the parent to the
+	// forest, and finally notify any relatives (including the parent) that might have been waiting
+	// for this namespace to be synced.
+	r.syncSubnamespaceParent(log, inst, nsInst, ns)
+	r.syncParent(log, inst, ns)
 	r.markExisting(log, ns)
 
-	r.syncParent(log, inst, ns)
-	inst.Status.Children = ns.ChildNames()
+	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
 	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
 
-	r.syncLabel(log, nsInst, ns)
-
-	// Sync all conditions. This should be placed at the end after all conditions are updated.
+	// Sync the status
+	inst.Status.Children = ns.ChildNames()
 	r.syncConditions(log, inst, ns, hadCrit)
+
+	// Sync the tree labels. This should go last since it can depend on the conditions.
+	r.syncLabel(log, nsInst, ns)
 }
 
-// syncOwner sets the parent to the owner and updates the SubnamespaceAnchorMissing condition if the
-// anchor is missing in the parent namespace according to the forest. The namespace owner annotation
-// is the source of truth of the ownership (e.g. being a subnamespace), since modifying a namespace
-// has higher privilege than what HNC users can do.
-func (r *HierarchyConfigReconciler) syncOwner(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Clear the SubnamespaceAnchorMissing condition if this is not a subnamespace or to
-	// reset it for the updated condition later.
-	ns.ClearConditionsByCode(log, api.SubnamespaceAnchorMissing)
-	nm := ns.Name()
-	onm := nsInst.Annotations[api.SubnamespaceOf]
-	ons := r.Forest.Get(onm)
-
-	if onm == "" {
+// syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
+// condition if the anchor is missing in the parent namespace according to the forest. The
+// subnamespaceOf annotation is the source of truth of the ownership (e.g. being a subnamespace),
+// since modifying a namespace has higher privilege than what HNC users can do.
+func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
+	pnm := nsInst.Annotations[api.SubnamespaceOf]
+	if pnm == "" {
 		ns.IsSub = false
 		return
 	}
-
 	ns.IsSub = true
 
-	if inst.Spec.Parent != onm {
-		log.Info("The parent doesn't match the owner. Setting the owner as the parent.", "parent", inst.Spec.Parent, "owner", onm)
-		inst.Spec.Parent = onm
+	if inst.Spec.Parent != pnm {
+		log.Info("The parent doesn't match the subnamespace annotation; overwriting parent", "oldParent", inst.Spec.Parent, "parent", pnm)
+		inst.Spec.Parent = pnm
 	}
 
 	// Look up the Anchors in the parent namespace. Set SubnamespaceAnchorMissing condition if it's
 	// not there.
 	found := false
-	for _, anm := range ons.Anchors {
-		if anm == nm {
+	for _, anm := range r.Forest.Get(pnm).Anchors {
+		if anm == ns.Name() {
 			found = true
 			break
 		}
 	}
 	if !found {
-		ns.SetCondition(api.NewAffectedNamespace(onm), api.SubnamespaceAnchorMissing, "The anchor is missing in the parent namespace")
+		ns.SetLocalCondition(api.SubnamespaceAnchorMissing, "The anchor is missing in the parent namespace")
 	}
 }
 
@@ -249,7 +249,7 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 		log.Info("Reconciling new namespace")
 		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
 		if ns.IsSub {
-			r.enqueueAffected(log, "parent of the newly synced/created namespace", ns.Parent().Name())
+			r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
 			r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
 		}
 	}
@@ -287,62 +287,6 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 		r.enqueueAffected(log, "set as parent", curParent.Name())
 	}
 	r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
-
-	// Get rid of any obsolete object conditions (issue #328)
-	r.flushObsoleteObjectConditions(log, ns, oldParent)
-}
-
-// flushObsoleteObjectConditions looks for object conditions from objects that were in one of the
-// namespaces that's been removed as a descendant, and enqueues any affected namespaces.
-func (r *HierarchyConfigReconciler) flushObsoleteObjectConditions(log logr.Logger, ns, oldAns *forest.Namespace) {
-	// There should be no obsolete object conditions if the old parent is empty.
-	if oldAns == nil {
-		return
-	}
-
-	// To clear all descendants conditions introduced by ancestors, create a set of all ancestor names.
-	wasAnc := map[string]bool{}
-	for _, anc := range oldAns.AncestryNames(nil) {
-		wasAnc[anc] = true
-	}
-
-	// Remove conditions referring to its ancestors from all its descendants. Also create a set of
-	// all descendant names to clear ancestors conditions introduced by descendants later.
-	wasDesc := map[string]bool{ns.Name(): true}
-	for _, desc := range ns.DescendantNames() {
-		wasDesc[desc] = true
-		if r.Forest.Get(desc).ClearConditionsByNamespace(log, wasAnc) {
-			r.enqueueAffected(log, "cleared obsolete conditions", desc)
-		}
-	}
-
-	// Remove conditions referring to this namespace and its descendants from all old ancestors.
-	for oldAns != nil {
-		if oldAns.ClearConditionsByNamespace(log, wasDesc) {
-			r.enqueueAffected(log, "cleared obsolete conditions", oldAns.Name())
-		}
-		oldAns = oldAns.Parent()
-	}
-
-	// In addition, this namespace may have conditions caused by a propagated object from another
-	// namespace that we need to clear. For example, we may not have been able to copy a RoleBinding
-	// from a parent into this namespace because we didn't have permission, and we've put a condition
-	// on this namespace as a result. Now that the parent has changed, we'll no longer attempt to copy
-	// that object - but we'll never clear its condition, because it's not in the list of objects seen
-	// by the object reconciler's enqueueLocalObjects.
-	//
-	// As of March 2020, the only known case like this is the CannodUpdate code, set by the object
-	// reconciler. Since we're about to resync all objects in this namespace anyway - which will
-	// result in their conditions being re-added to this namespace - it's safe to blow them all away
-	// here and just let the ones that are still applicable get reapplied.
-	//
-	// In theory, I wouldn't have expected that this would be necessary. If there was an error that
-	// caused this condition to be set, we should have returned an error to controller-runtime, which
-	// would have caused the object to be re-enqueued for reconciliation. However, when I actually
-	// watched the logs carefully, this didn't appear to happen, even after 30s. I'm not sure why.
-	//
-	// TODO: this really doesn't belong here. Find a way to move it to the object reconciler.
-	ns.ClearConditionsByCode(log, api.CannotUpdate)
 }
 
 // syncAnchors updates the anchor list. If any anchor is created/deleted, it will enqueue
@@ -381,6 +325,9 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
+	// Hierarchy changes may mean that some object conditions are no longer relevant.
+	ns.ClearObsoleteConditions(log)
+
 	// Sync critical conditions after all locally-set conditions are updated.
 	r.syncCritConditions(log, ns, hadCrit)
 

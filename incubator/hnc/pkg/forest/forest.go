@@ -178,11 +178,6 @@ type Namespace struct {
 	Anchors []string
 }
 
-type condition struct {
-	code api.Code
-	msg  string
-}
-
 // Exists returns true if the namespace exists.
 func (ns *Namespace) Exists() bool {
 	return ns.exists
@@ -444,10 +439,15 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 }
 
 // HasLocalCritCondition returns if the namespace itself has any local critical conditions, ignoring
-// its ancestors. We assume that any condition set on the namespace itself is critical, which is
-// true for now.
+// its ancestors. Any code with the "Crit" prefix is a critical condition.
 func (ns *Namespace) HasLocalCritCondition() bool {
-	return ns.HasCondition(api.AffectedObject{}, "")
+	for code, _ := range ns.conditions[api.AffectedObject{}] {
+		codeNm := (string)(code)
+		if strings.HasPrefix(codeNm, "Crit") {
+			return true
+		}
+	}
+	return false
 }
 
 // GetCritAncestor returns the name of the first ancestor with a critical condition, or the empty
@@ -492,49 +492,53 @@ func (ns *Namespace) ClearCondition(obj api.AffectedObject, code api.Code) bool 
 	} else {
 		delete(ns.conditions[obj], code)
 	}
+
 	return true
 }
 
-// ClearLocalCondition clears the condition(s) on this namespace.
-func (ns *Namespace) ClearLocalCondition(code api.Code) bool {
-	return ns.ClearCondition(api.AffectedObject{}, code)
+// ClearLocalConditions clears the condition(s) on this namespace.
+func (ns *Namespace) ClearLocalConditions() bool {
+	return ns.ClearCondition(api.AffectedObject{}, "")
 }
 
-// ClearConditionsByNamespace accepts a set of namespace names, and clears any condition that
-// matches those names. It's only used to flush obsolete object conditions.
-//
-// This is a bit ugly but I'm not sure what the better answer is.
-func (ns *Namespace) ClearConditionsByNamespace(log logr.Logger, nses map[string]bool) bool {
-	if len(nses) == 0 {
-		return false
+func (ns *Namespace) ClearObsoleteConditions(log logr.Logger) {
+	// Load ancestors to check CCCAncestors
+	isAnc := map[string]bool{}
+	for _, anc := range ns.AncestryNames(nil) {
+		// The definition of CCCAncestor doesn't include the namespace itself
+		if anc != ns.name {
+			isAnc[anc] = true
+		}
 	}
-	found := false
-	for obj := range ns.conditions {
-		if nses[obj.Namespace] {
-			found = true
-			for code := range ns.conditions[obj] {
-				log.Info("Cleared conditions by namespace", "on", ns.name, "obj", obj.String(), "code", code)
+
+	// Load the subtree to check CCCSubtree, including the namespace itself.
+	isSubtree := map[string]bool{ns.name: true}
+	for _, dsc := range ns.DescendantNames() {
+		isSubtree[dsc] = true
+	}
+
+	// For each affected object, remove its condition if that object is no longer relevant.
+	for obj, codes := range ns.conditions {
+		for code, _ := range codes {
+			switch api.ClearConditionCriteria[code] {
+			case api.CCCManual:
+				// nop - cleared manually
+			case api.CCCAncestor:
+				if !isAnc[obj.Namespace] {
+					log.Info("Cleared obsolete condition from old ancestor", "obj", obj, "code", code)
+					ns.ClearCondition(obj, code)
+				}
+			case api.CCCSubtree:
+				if !isSubtree[obj.Namespace] {
+					log.Info("Cleared obsolete condition from old descendant", "obj", obj, "code", code)
+					ns.ClearCondition(obj, code)
+				}
+			default:
+				err := errors.New("no ClearConditionCriterion")
+				log.Error(err, "In clearObsoleteConditions", "code", code, "obj", obj)
 			}
-			delete(ns.conditions, obj)
 		}
 	}
-	return found
-}
-
-// ClearConditionsByCode clears all conditions of a given code from this namespace across all
-// objects. It should only be called by the code that also *sets* the condition.
-//
-// It returns true if it made any changes, false otherwise.
-func (ns *Namespace) ClearConditionsByCode(log logr.Logger, code api.Code) bool {
-	changed := false
-	for obj, _ := range ns.conditions {
-		if ns.ClearCondition(obj, code) {
-			log.Info("Cleared conditions by code", "on", ns.name, "obj", obj.String(), "code", code)
-			changed = true
-		}
-	}
-
-	return changed
 }
 
 // SetCondition sets a condition for the specified object and code, returning true if it does not
