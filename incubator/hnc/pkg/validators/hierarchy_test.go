@@ -57,41 +57,38 @@ func TestAuthz(t *testing.T) {
 		name   string
 		server fakeServer
 		forest string
-		from   string
+		nm     string
 		to     string
-		code   int32
+		code   int32 // defaults to 0 (success)
 	}{
-		{name: "nothing in tree", forest: "-aa", from: "b", to: "c", code: 401},                                              // a <- (b, c)
-		{name: "root in tree", forest: "-aa", from: "b", to: "c", server: "a"},                                               // a <- (b, c)
-		{name: "parents but not root", forest: "-aab", from: "d", to: "c", server: "bc", code: 401},                          // a <- (b <- d, c)
-		{name: "dst only across trees", forest: "--", from: "a", to: "b", server: "b", code: 401},                            // a; b
-		{name: "cur root only across trees", forest: "--", from: "a", to: "b", server: "a", code: 401},                       // a; b
-		{name: "dst and cur parent (but not root) across trees", forest: "-a-", from: "b", to: "c", server: "bc", code: 401}, // a <- b; c
-		{name: "dst and cur root across trees", forest: "-a-", from: "b", to: "c", server: "ac"},                             // a <- b; c
-		{name: "mrca in tree", forest: "-abb", from: "c", to: "d", server: "b"},                                              // a <- b <- (c, d)
-		{name: "dest but unsynced parent", forest: "-", from: "z", to: "a", server: "a", code: 503},                          // a (z exists on the server)
-		{name: "dest but missing parent", forest: "-", from: "z", to: "a", server: "a:z"},                                    // a (z is missing)
-		{name: "dest but missing ancestor", forest: "z-", from: "a", to: "b", server: "ab", code: 403},                       // z <- a; b (z is missing)
+		{name: "no permission in tree", forest: "-aab", nm: "d", to: "c", code: 401},                                 // a <- (b <- d, c)
+		{name: "permission on root in tree", forest: "-aab", nm: "d", to: "c", server: "a"},                          // a <- (b <- d, c)
+		{name: "permission on parents but not root", forest: "-aabd", nm: "e", to: "c", server: "bc", code: 401},     // a <- (b <- d <- e, c)
+		{name: "permission on dst only", forest: "--a", nm: "c", to: "b", server: "b", code: 401},                    // a <- c; b
+		{name: "permission on cur root only", forest: "--a", nm: "c", to: "b", server: "a", code: 401},               // a <- b; b
+		{name: "permission on parents, but not cur root", forest: "-a-b", nm: "d", to: "c", server: "bc", code: 401}, // a <- b <- d; c
+		{name: "permission on dst and cur root", forest: "-a-b", nm: "d", to: "c", server: "ac"},                     // a <- b <- d; c
+		{name: "permission on mrca", forest: "-abbc", nm: "e", to: "d", server: "b"},                                 // a <- b <- (c <- e, d)
+		{name: "unsynced parent", forest: "-z", nm: "b", to: "a", server: "a", code: 503},                            // a; z <- b (z hasn't been synced)
+		{name: "missing parent", forest: "-z", nm: "b", to: "a", server: "a:z"},                                      // a; z <- b (z is missing)
+		{name: "missing ancestor", forest: "z-a", nm: "c", to: "b", server: "ab", code: 403},                         // z <- a <- c; b (z hasn't been synced)
+		{name: "unsynced ancestor", forest: "z-a", nm: "c", to: "b", server: "ab:z", code: 403},                      // z <- a <- c; b (z is missing)
+		{name: "member of cycle (all permission)", forest: "cab", nm: "c", to: "", server: "abc"},                    // a,b,c in cycle
+		{name: "member of cycle (no permission)", forest: "cab", nm: "c", to: "", server: "", code: 401},             // a,b,c in cycle
+		{name: "descendant of cycle", forest: "baa", nm: "c", to: "b", server: "ab", code: 403},                      // c -> a <-> b
 	}
 	for _, tc := range tests {
-		t.Run("permission on "+tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
 			f := foresttest.Create(tc.forest)
-			foo := f.Get("foo")
-			foo.SetExists()
-			p := f.Get(tc.from)
-			foo.SetParent(p)
-			if !p.Exists() {
-				foo.SetLocalCondition(api.CritParentMissing, "missing")
-			}
 			h := &Hierarchy{Forest: f, server: tc.server}
 			l := zap.Logger(false)
 
 			// Create request
 			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.to}}
 			hc.ObjectMeta.Name = api.Singleton
-			hc.ObjectMeta.Namespace = "foo"
+			hc.ObjectMeta.Namespace = tc.nm
 			req := &request{hc: hc, ui: &authn.UserInfo{Username: "jen"}}
 
 			// Test

@@ -53,6 +53,9 @@ func Create(desc string) *forest.Forest {
 		if !pns.Exists() {
 			ns.SetLocalCondition(api.CritParentMissing, "no parent")
 		}
+		for _, cnm := range ns.CycleNames() {
+			f.Get(cnm).SetLocalCondition(api.CritCycle, "in cycle")
+		}
 	}
 
 	return f

@@ -225,18 +225,20 @@ func (ns *Namespace) AllowsCascadingDelete() bool {
 	if !ns.IsSub {
 		return false
 	}
-	// If the owner is missing, it will return the default false.
-	return ns.Parent().AllowsCascadingDelete()
+
+	// This is a subnamespace so it must have a non-nil parent. If the parent is missing, it will
+	// return the default false.
+	//
+	// Subnamespaces can never be involved in cycles, since those can only occur at the "top" of a
+	// tree and subnamespaces cannot be roots by definition. So this line can't cause a stack
+	// overflow.
+	return ns.parent.AllowsCascadingDelete()
 }
 
-// SetParent attempts to set the namespace's parent. This includes removing it from the list of
-// children of its own parent, if necessary. It may return an error if the parent is illegal, i.e.
-// if it causes a cycle. It cannot cause an error if the parent is being set to nil.
-func (ns *Namespace) SetParent(p *Namespace) error {
-	if reason := ns.CanSetParent(p); reason != "" {
-		return errors.New(reason)
-	}
-
+// SetParent modifies the namespace's parent, including updating the list of children. It may result
+// in a cycle being created; this can be prevented by calling CanSetParent before, or seeing if it
+// happened by calling CycleNames afterwards.
+func (ns *Namespace) SetParent(p *Namespace) {
 	// Remove old parent and cleans it up.
 	if ns.parent != nil {
 		delete(ns.parent.children, ns.name)
@@ -250,22 +252,33 @@ func (ns *Namespace) SetParent(p *Namespace) error {
 	if p != nil {
 		p.children[ns.name] = ns
 	}
-	return nil
 }
 
 // CanSetParent returns the empty string if the assignment is currently legal, or a non-empty string
 // indicating the reason if it cannot be done.
 func (ns *Namespace) CanSetParent(p *Namespace) string {
-	// Check for cycles
-	if p != nil {
-		// Simple case
-		if p == ns {
-			return fmt.Sprintf("%q cannot be set as its own parent", p.name)
-		}
-		if chain := p.AncestryNames(ns); chain != nil {
-			return fmt.Sprintf("cycle when making %q the parent of %q: current ancestry is %q",
-				p.name, ns.name, strings.Join(chain, " <- "))
-		}
+	if p == nil {
+		return ""
+	}
+
+	// Simple case
+	if p == ns {
+		return fmt.Sprintf("%q cannot be set as its own parent", p.name)
+	}
+
+	// Check for cycles; see if the current namespace (the proposed child) is already an ancestor of
+	// the proposed parent. Start at the end of the ancestry (e.g. at the proposed parent) and work
+	// our way up to the root.
+	ancestors := p.AncestryNames()
+	cycle := []string{}
+	found := false
+	for i := len(ancestors) - 1; !found && i >= 0; i-- {
+		cycle = append(cycle, ancestors[i])
+		found = (ancestors[i] == ns.name)
+	}
+	if found {
+		return fmt.Sprintf("cycle when making %q the parent of %q: current ancestry is %s",
+			p.name, ns.name, strings.Join(cycle, " -> "))
 	}
 
 	return ""
@@ -308,30 +321,57 @@ func (ns *Namespace) RelativesNames() []string {
 	return a
 }
 
-// AncestryNames returns a slice of strings like ["grandparent", "parent", "child"] if there is
-// a path from `other` to the current namespace (if `other` is nil, the first element of the slice
-// will be the root of the tree, *not* the empty string).
-func (ns *Namespace) AncestryNames(other *Namespace) []string {
+// AncestryNames returns all ancestors of this namespace. The namespace itself is the last element
+// of the returned slice, with the root at the beginning of the list.
+//
+// This method is cycle-safe, and can be used to detect and recover from cycles. If there's a cycle,
+// the first ancestor that's a member of the cycle we encounter is repeated at the beginning of the
+// list.
+func (ns *Namespace) AncestryNames() []string {
 	if ns == nil {
-		// Nil forest has nil ancestry
-		return nil
-	}
-	if ns == other || (ns.parent == nil && other == nil) {
-		// Either we found `other` or the root
-		return []string{ns.name}
-	}
-	if ns.parent == nil {
-		// Ancestry to `other` doesn't exist
-		return nil
-	}
-	ancestry := ns.parent.AncestryNames(other)
-	if ancestry == nil {
-		// Ancestry to `other` wasn't found
 		return nil
 	}
 
-	// Add ourselves to the ancestry
-	return append(ancestry, ns.name)
+	cycleCheck := map[string]bool{ns.name: true}
+	ancestors := []string{ns.name}
+	anc := ns.parent
+	for anc != nil {
+		ancestors = append([]string{anc.name}, ancestors...)
+		if cycleCheck[anc.name] {
+			return ancestors
+		}
+		cycleCheck[anc.name] = true
+		anc = anc.parent
+	}
+
+	return ancestors
+}
+
+// CycleNames returns nil if the namespace is not in a cycle, or a list of names in the cycle if
+// it is. All namespaces in the cycle return the same list, which is the same as calling
+// ns.AncestryNames() on the namespaces with the lexicographically smallest name.
+func (ns *Namespace) CycleNames() []string {
+	// If this namespaces is *in* a cycle, it will be the first repeated element encountered by
+	// AncestryNames(), and therefore will be both the first and the last element.
+	ancestors := ns.AncestryNames()
+	if len(ancestors) == 1 || ancestors[0] != ns.name {
+		return nil
+	}
+	ancestors = ancestors[1:] // don't need the repeated element
+
+	// Find the smallest name and where it is
+	sidx := 0
+	snm := ancestors[0]
+	for idx, nm := range ancestors {
+		if nm < snm {
+			sidx = idx
+			snm = nm
+		}
+	}
+
+	// Rotate the slice, and then duplicate the smallest element
+	ancestors = append(ancestors[sidx:], ancestors[:sidx]...)
+	return append(ancestors, snm)
 }
 
 // SetAnchors updates the anchors and returns a difference between the new/old list.
@@ -405,7 +445,7 @@ func (ns *Namespace) GetNumOriginalObjects(gvk schema.GroupVersionKind) int {
 // GetPropagatedObjects returns all original copies in the ancestors.
 func (ns *Namespace) GetPropagatedObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
 	o := []*unstructured.Unstructured{}
-	ans := ns.AncestryNames(nil)
+	ans := ns.AncestryNames()
 	for _, n := range ans {
 		// Exclude the original objects in this namespace
 		if n == ns.name {
@@ -428,6 +468,8 @@ func (ns *Namespace) GetSource(gvk schema.GroupVersionKind, name string) *unstru
 	return nil
 }
 
+// IsAncestor is *not* cycle-safe, so should only be called from namespace trees that are known not
+// to have cycles.
 func (ns *Namespace) IsAncestor(other *Namespace) bool {
 	if ns.parent == other {
 		return true
@@ -504,7 +546,7 @@ func (ns *Namespace) ClearLocalConditions() bool {
 func (ns *Namespace) ClearObsoleteConditions(log logr.Logger) {
 	// Load ancestors to check CCCAncestors
 	isAnc := map[string]bool{}
-	for _, anc := range ns.AncestryNames(nil) {
+	for _, anc := range ns.AncestryNames() {
 		// The definition of CCCAncestor doesn't include the namespace itself
 		if anc != ns.name {
 			isAnc[anc] = true
@@ -607,15 +649,35 @@ func (ns *Namespace) Conditions() []api.Condition {
 	return conds
 }
 
-// DescendantNames returns a slice of strings like ["child" ... "grandchildren" ...] of
-// names of all namespaces in its subtree. Nil is returned if the namespace has no descendant.
+// DescendantNames returns a slice of strings like ["achild", "agrandchild", "bchild", ...] of names
+// of all namespaces in its subtree, or nil if the namespace has no descendents. The names are
+// returned in alphabetical order (as defined by `sort.Strings()`), *not* depth-first,
+// breadth-first, etc.
+//
+// This method is cycle-safe. If there are cycles, each namespace is only listed once.
 func (ns *Namespace) DescendantNames() []string {
-	children := ns.ChildNames()
-	descendants := children
-	for _, child := range children {
-		childNs := ns.forest.Get(child)
-		descendantsOfChild := childNs.DescendantNames()
-		descendants = append(descendants, descendantsOfChild...)
+	ds := map[string]bool{}
+	ns.populateDescendants(ds)
+	if len(ds) == 0 {
+		return nil
 	}
-	return descendants
+	d := []string{}
+	for k, _ := range ds {
+		d = append(d, k)
+	}
+	sort.Strings(d)
+	return d
+}
+
+// populateDescendants is a cycle-safe way of finding all descendants of a namespace. If any
+// namespace turns out to be its own descendant, it's skipped on subsequent encounters.
+func (ns *Namespace) populateDescendants(d map[string]bool) {
+	for _, c := range ns.ChildNames() {
+		if d[c] {
+			continue
+		}
+		d[c] = true
+		cns := ns.forest.Get(c)
+		cns.populateDescendants(d)
+	}
 }

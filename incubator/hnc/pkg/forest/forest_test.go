@@ -1,24 +1,20 @@
 package forest
 
 import (
+	"sort"
 	"testing"
 
 	. "github.com/onsi/gomega"
 )
 
-func TestAncestryNames(t *testing.T) {
+func TestSetParentAndAncestorNames(t *testing.T) {
 	tests := []struct {
 		name  string
 		chain []string
-		to    string
-		want  []string
 	}{
-		{name: "no parent to root", chain: []string{"foo"}, want: []string{"foo"}},
-		{name: "no parent to self", chain: []string{"foo"}, to: "foo", want: []string{"foo"}},
-		{name: "two-level to root", chain: []string{"foo", "bar"}, want: []string{"foo", "bar"}},
-		{name: "two-level to top", chain: []string{"foo", "bar"}, to: "foo", want: []string{"foo", "bar"}},
-		{name: "two-level to bottom", chain: []string{"foo", "bar"}, to: "bar", want: []string{"bar"}},
-		{name: "three-level to mid", chain: []string{"foo", "bar", "baz"}, to: "bar", want: []string{"bar", "baz"}},
+		{name: "no parent", chain: []string{"foo"}},
+		{name: "two-level", chain: []string{"foo", "bar"}},
+		{name: "cycle", chain: []string{"foo", "bar", "foo"}},
 	}
 
 	for _, tc := range tests {
@@ -32,28 +28,28 @@ func TestAncestryNames(t *testing.T) {
 				last = f.Get(nm)
 				last.SetParent(parent)
 			}
-			to := f.Get(tc.to)
-			g.Expect(last.AncestryNames(to)).Should(Equal(tc.want))
+			g.Expect(last.AncestryNames()).Should(Equal(tc.chain))
 		})
 	}
 }
 
-func TestSetParent(t *testing.T) {
+func TestCycleNames(t *testing.T) {
 	tests := []struct {
-		name   string
-		chain  []string
-		child  string
-		parent string
-		fail   bool
+		name  string
+		chain []string
+		want  []string
 	}{
-		{name: "set nil parent", chain: []string{"foo"}, child: "foo"},
-		{name: "move to grandparent", chain: []string{"foo", "bar", "baz"}, child: "baz", parent: "foo"},
-		{name: "set self parent", chain: []string{"foo"}, child: "foo", parent: "foo", fail: true},
-		{name: "create cycle", chain: []string{"foo", "bar", "baz"}, child: "foo", parent: "baz", fail: true},
+		{name: "no parent", chain: []string{"foo"}},
+		{name: "two-level", chain: []string{"foo", "bar"}},
+		{name: "in cycle", chain: []string{"foo", "bar", "foo"}, want: []string{"bar", "foo", "bar"}}, // rotated so smallest name is first/last
+		{name: "below cycle", chain: []string{"foo", "bar", "foo", "baz"}},                            // baz isn't in a cycle itself
+		{name: "longer cycle ordered", chain: []string{"a", "c", "z", "a"}, want: []string{"a", "c", "z", "a"}},
+		{name: "longer cycle unordered", chain: []string{"c", "z", "a", "c"}, want: []string{"a", "c", "z", "a"}},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
 			// Create the chain
 			f := NewForest()
 			var last *Namespace
@@ -62,22 +58,7 @@ func TestSetParent(t *testing.T) {
 				last = f.Get(nm)
 				last.SetParent(parent)
 			}
-			child := f.Get(tc.child)
-			t.Logf("Old ancestry is: %v", child.AncestryNames(nil))
-			parent := f.Get(tc.parent)
-			err := child.SetParent(parent)
-			if err == nil {
-				t.Logf("New ancestry is: %v", child.AncestryNames(nil))
-				if tc.fail {
-					t.Error("got success, want failure")
-				}
-			} else {
-				if tc.fail {
-					t.Logf("Got error as expected: %v", err)
-				} else {
-					t.Errorf("Got error %q, want success", err)
-				}
-			}
+			g.Expect(last.CycleNames()).Should(Equal(tc.want))
 		})
 	}
 }
@@ -122,6 +103,7 @@ func TestDescendantNames(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		sort.Strings(tc.want)
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			root := f.Get(tc.root)

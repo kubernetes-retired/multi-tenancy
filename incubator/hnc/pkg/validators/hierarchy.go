@@ -233,7 +233,7 @@ type serverCheck struct {
 // be an admin of the root of the old tree, and of the new parent. See the user guide or design doc
 // for the rationale for this choice.
 //
-// While this is fairly simple in theory, missing parents make this a bit more complicated.
+// While this is fairly simple in theory, there are two complications: missing parents and cycles.
 //
 // If this webhook is working correctly, a namespace can never be deliberately assigned to a parent
 // that doesn't exist (in Gitops flows, this means that the client is expected to create all
@@ -253,6 +253,12 @@ type serverCheck struct {
 // the normal `checkAuthz`. If the namespace is _actually_ missing on the apiserver, as expected,
 // the check will pass, allowing the admin to fix the error; if it's present (which means we just
 // haven't synced it yet), we'll fail with a 503, asking the user to try again later.
+//
+// The other complication is cycles. We don't do anything special to handle cycles here. If there's
+// a cycle, the existing ancestor namespace we select as the "root" will be arbitrary. Hopefully the
+// admin trying to resolve the cycle has permissions on *all* the namespaces in the cycle. For the
+// new parent, perhaps we should ban moving a namespace *to* a tree with a cycle in it, but that's
+// harder to implement and seems like it's not worth the effort.
 func (v *Hierarchy) getServerChecks(log logr.Logger, ns, curParent, newParent *forest.Namespace) []serverCheck {
 	// No need for any checks if nothing's changing.
 	if curParent == newParent {
@@ -273,14 +279,14 @@ func (v *Hierarchy) getServerChecks(log logr.Logger, ns, curParent, newParent *f
 	}
 
 	// If we're making the namespace into a root, just check the old root.
-	curChain := curParent.AncestryNames(nil)
+	curChain := curParent.AncestryNames()
 	if newParent == nil {
 		return []serverCheck{{nnm: curChain[0], reason: "current root ancestor", checkType: checkAuthz}}
 	}
 
 	// This namespace has both old and new parents. If they're in different trees, return the old root
 	// and new parent.
-	newChain := newParent.AncestryNames(nil)
+	newChain := newParent.AncestryNames()
 	if curChain[0] != newChain[0] {
 		return []serverCheck{
 			{nnm: curChain[0], reason: "current root ancestor", checkType: checkAuthz},
