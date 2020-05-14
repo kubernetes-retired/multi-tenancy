@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -376,6 +377,11 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
 	// string of the resource to be synced.
 	if result, err := c.Reconciler.Reconcile(req); err != nil {
+		if c.Queue.NumRequeues(obj) >= constants.MaxReconcileRetryAttempts {
+			c.Queue.Forget(obj)
+			klog.Warningf("%s dws request is dropped due to reaching max retry limit: %+v", c.name, obj)
+			return true
+		}
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
 		return false

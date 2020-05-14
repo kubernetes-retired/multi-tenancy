@@ -123,7 +123,7 @@ func (c *UpwardController) processNextWorkItem() bool {
 	}
 
 	utilruntime.HandleError(fmt.Errorf("%s error processing %s (will retry): %v", c.name, key, err))
-	if c.Queue.NumRequeues(key) >= constants.MaxUwsRetryAttempts {
+	if c.Queue.NumRequeues(key) >= constants.MaxReconcileRetryAttempts {
 		klog.Warningf("%s uws request is dropped due to reaching max retry limit: %s", c.name, key)
 		c.Queue.Forget(obj)
 		return true
