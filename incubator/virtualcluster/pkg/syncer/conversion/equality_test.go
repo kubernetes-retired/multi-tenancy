@@ -323,6 +323,26 @@ func TestCheckContainersImageEquality(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name: "equal, container added by webhook",
+			pObj: []v1.Container{
+				{
+					Name:  "c1",
+					Image: "image1",
+				},
+				{
+					Name:  "c2",
+					Image: "image2",
+				},
+			},
+			vObj: []v1.Container{
+				{
+					Name:  "c2",
+					Image: "image2",
+				},
+			},
+			expected: nil,
+		},
+		{
 			name: "not equal",
 			pObj: []v1.Container{
 				{
@@ -339,6 +359,35 @@ func TestCheckContainersImageEquality(t *testing.T) {
 					Name:  "c1",
 					Image: "image1",
 				},
+				{
+					Name:  "c2",
+					Image: "image3",
+				},
+			},
+			expected: []v1.Container{
+				{
+					Name:  "c1",
+					Image: "image1",
+				},
+				{
+					Name:  "c2",
+					Image: "image3",
+				},
+			},
+		},
+		{
+			name: "not equal, container added by webhook",
+			pObj: []v1.Container{
+				{
+					Name:  "c1",
+					Image: "image1",
+				},
+				{
+					Name:  "c2",
+					Image: "image2",
+				},
+			},
+			vObj: []v1.Container{
 				{
 					Name:  "c2",
 					Image: "image3",
