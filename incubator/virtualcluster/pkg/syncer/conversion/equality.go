@@ -286,13 +286,17 @@ func (e vcEquality) checkPodSpecEquality(pObj, vObj *v1.PodSpec) *v1.PodSpec {
 }
 
 func (e vcEquality) checkContainersImageEquality(pObj, vObj []v1.Container) []v1.Container {
-	pNameImageMap := make(map[string]string)
-	for _, v := range pObj {
-		pNameImageMap[v.Name] = v.Image
-	}
 	vNameImageMap := make(map[string]string)
 	for _, v := range vObj {
 		vNameImageMap[v.Name] = v.Image
+	}
+
+	pNameImageMap := make(map[string]string)
+	for _, v := range pObj {
+		// we only care about those containers inherited from tenant pod.
+		if _, exists := vNameImageMap[v.Name]; exists {
+			pNameImageMap[v.Name] = v.Image
+		}
 	}
 
 	diff, equal := e.checkDWKVEquality(pNameImageMap, vNameImageMap)
@@ -302,7 +306,7 @@ func (e vcEquality) checkContainersImageEquality(pObj, vObj []v1.Container) []v1
 
 	var updated []v1.Container
 	for _, v := range pObj {
-		if diff[v.Name] == v.Image {
+		if vImage, exists := diff[v.Name]; !exists || vImage == v.Image {
 			updated = append(updated, v)
 		} else {
 			c := v.DeepCopy()

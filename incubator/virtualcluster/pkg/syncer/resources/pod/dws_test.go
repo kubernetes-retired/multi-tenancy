@@ -411,10 +411,25 @@ func TestDWPodUpdate(t *testing.T) {
 		NodeName: "i-xxx",
 	}
 
+	spec3 := &v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Image: "ngnix",
+				Name:  "c-1",
+			},
+			{
+				Image: "ngnix2",
+				Name:  "by-webhook",
+			},
+		},
+		NodeName: "i-xxx",
+	}
+
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant []runtime.Object
 		ExpectedUpdatedPods    []runtime.Object
+		ExpectedNoOperation    bool
 		ExpectedError          string
 	}{
 		"no diff": {
@@ -436,6 +451,15 @@ func TestDWPodUpdate(t *testing.T) {
 			ExpectedUpdatedPods: []runtime.Object{
 				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec2),
 			},
+		},
+		"diff in container added by webhook": {
+			ExistingObjectInSuper: []runtime.Object{
+				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec3),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
+			},
+			ExpectedNoOperation: true,
 		},
 		"diff exists but uid is wrong": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -466,6 +490,14 @@ func TestDWPodUpdate(t *testing.T) {
 				if tc.ExpectedError != "" {
 					t.Errorf("expected error msg \"%s\", but got empty", tc.ExpectedError)
 				}
+			}
+
+			if tc.ExpectedNoOperation {
+				if len(actions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v", k, actions)
+					return
+				}
+				return
 			}
 
 			if len(tc.ExpectedUpdatedPods) != len(actions) {
