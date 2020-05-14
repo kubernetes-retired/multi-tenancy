@@ -37,13 +37,16 @@ GOBIN ?= $(shell go env GOPATH)/bin
 # Get check sum value of krew archive
 KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
+# The directories to run Go command on (excludes /vendor)
+DIRS=./api/... ./cmd/... ./pkg/... ./third_party/...
+
 all: test docker-build
 
 ###################### LOCAL ARTIFACTS #########################
 
 # Run tests
 test: build
-	go test ./api/... ./cmd/... ./pkg/... ./third_party/... -coverprofile cover.out
+	go test ${DIRS} -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet manifests
@@ -100,11 +103,11 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt ./...
+	go fmt ${DIRS}
 
 # Run go vet against code
 vet:
-	go vet ./...
+	go vet ${DIRS}
 
 # Generate code
 generate: controller-gen

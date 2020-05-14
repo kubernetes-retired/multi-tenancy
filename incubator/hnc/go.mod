@@ -1,6 +1,6 @@
 module github.com/kubernetes-sigs/multi-tenancy/incubator/hnc
 
-go 1.13
+go 1.14
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
@@ -16,7 +16,6 @@ require (
 	github.com/onsi/gomega v1.9.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.5.0
-	github.com/prometheus/common v0.9.1
 	github.com/spf13/cobra v0.0.5
 	go.opencensus.io v0.22.3
 	go.uber.org/atomic v1.4.0 // indirect
