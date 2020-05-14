@@ -269,23 +269,22 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 		return
 	}
 
-	// Try to update the graph to reflect the new parent. If this fails, don't attempt to notify any
-	// other part of the hierarchy, otherwise we can get into an infinite notification loop.
-	log.Info("Updating parent", "old", oldParent.Name(), "new", curParent.Name())
-	if err := ns.SetParent(curParent); err != nil {
-		log.Info("Couldn't update parent", "reason", err, "parent", inst.Spec.Parent)
-		ns.SetLocalCondition(api.CritParentInvalid, err.Error())
-		return
-	}
+	// If this namespace *was* involved in a cycle, enqueue all elements in that cycle in the hopes
+	// we're about to break it.
+	r.enqueueAffected(log, "member of a cycle", ns.CycleNames()...)
 
-	// We now need to update the old and new parents, as well as all descendants of this namespace
-	// (since they need to update their tree labels and possibly other data).
-	if oldParent != nil {
-		r.enqueueAffected(log, "removed as parent", oldParent.Name())
-	}
-	if curParent != nil {
-		r.enqueueAffected(log, "set as parent", curParent.Name())
-	}
+	// Change the parent.
+	ns.SetParent(curParent)
+
+	// Finally, enqueue all other namespaces that could be directly affected. The old and new parents
+	// have just gained/lost a child, while the descendants need to have their tree labels updated and
+	// their objects resynced. Note that it's fine if oldParent or curParent is nil - see
+	// enqueueAffected for details.
+	//
+	// If we've just created a cycle, all the members of that cycle will be listed as the descendants,
+	// so enqueuing them will ensure that the conditions show up in all members of the cycle.
+	r.enqueueAffected(log, "removed as parent", oldParent.Name())
+	r.enqueueAffected(log, "set as parent", curParent.Name())
 	r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
 }
 
@@ -316,7 +315,7 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	}
 
 	// AncestryNames includes the namespace itself.
-	ancestors := ns.AncestryNames(nil)
+	ancestors := ns.AncestryNames()
 	for i, ancestor := range ancestors {
 		l := ancestor + labelDepthSuffix
 		dist := strconv.Itoa(len(ancestors) - i - 1)
@@ -339,10 +338,14 @@ func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.Hi
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
 // namespace are gone or critical conditions are newly found.
 func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
-	hasCrit := ns.HasLocalCritCondition()
+	// If we're in a cycle, determine that now
+	if cycle := ns.CycleNames(); cycle != nil {
+		msg := fmt.Sprintf("Namespace is a member of the cycle: %s", strings.Join(cycle, " <- "))
+		ns.SetLocalCondition(api.CritCycle, msg)
+	}
 
 	// Early exit if there's no need to enqueue relatives.
-	if hadCrit == hasCrit {
+	if hadCrit == ns.HasLocalCritCondition() {
 		return
 	}
 
@@ -355,6 +358,9 @@ func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *fore
 }
 
 func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	if ns.HasLocalCritCondition() {
+		return
+	}
 	ans := ns.Parent()
 	for ans != nil {
 		if !ans.HasLocalCritCondition() {
@@ -376,9 +382,15 @@ func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration,
 // enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
 // goroutine so the caller doesn't block; since the reconciler is never garbage-collected, this is
 // safe.
+//
+// It's fine to call this function with `foo.Name()` even if `foo` is nil; it will just be ignored.
 func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason string, affected ...string) {
 	go func() {
 		for _, nm := range affected {
+			// Ignore any nil namespaces (lets callers skip a nil check)
+			if nm == (*forest.Namespace)(nil).Name() {
+				continue
+			}
 			log.Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
 			// The watch handler doesn't care about anything except the metadata.
 			inst := &api.HierarchyConfiguration{}

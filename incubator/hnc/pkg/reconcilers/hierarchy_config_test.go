@@ -113,14 +113,14 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(false))
 	})
 
-	It("should set CritParentInvalid condition if a self-cycle is detected", func() {
+	It("should set CritCycle condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritParentInvalid)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(true))
 	})
 
-	It("should set CritParentInvalid condition if a cycle is detected", func() {
+	It("should set CritCycle condition if a cycle is detected", func() {
 		// Set up initial hierarchy
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = fooName
@@ -133,7 +133,17 @@ var _ = Describe("Hierarchy", func() {
 		fooHier := getHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritParentInvalid)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(true))
+
+		// Fix it
+		Eventually(func() error {
+			fooHier = getHierarchy(ctx, fooName)
+			fooHier.Spec.Parent = ""
+			return tryUpdateHierarchy(ctx, fooHier) // can fail if called too quickly
+		}).Should(Succeed())
+		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(false))
 	})
 
 	It("should have a tree label", func() {

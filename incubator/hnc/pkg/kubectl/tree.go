@@ -51,12 +51,16 @@ var treeCmd = &cobra.Command{
 		}
 		for _, nnm := range nsList {
 			hier := client.getHierarchy(nnm)
-			//If we're showing the default list, skip all non-root namespaces since they'll be displayed as part of another namespace's tree.
-			if defaultList && hier.Spec.Parent != "" {
+			// If we're showing the default list, skip all non-root namespaces since they'll be displayed
+			// as part of another namespace's tree. Get the text first though because that will reveal if
+			// the tree's in a cycle, in which case, even though the NS isn't a root, we'll display it
+			// anyway.
+			txt, cycle := nameAndFootnotes(hier)
+			if defaultList && (!cycle && hier.Spec.Parent != "") {
 				continue
 			}
-			fmt.Println(nameAndFootnotes(hier))
-			printSubtree("", hier)
+			fmt.Println(txt)
+			printSubtree("", hier, cycle)
 		}
 		if len(footnotes) > 0 {
 			fmt.Printf("\nConditions:\n")
@@ -68,25 +72,35 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-func printSubtree(prefix string, hier *api.HierarchyConfiguration) {
+func printSubtree(prefix string, hier *api.HierarchyConfiguration, inCycle bool) {
 	for i, cn := range hier.Status.Children {
 		ch := client.getHierarchy(cn)
-		tx := nameAndFootnotes(ch)
+		txt, cycle := nameAndFootnotes(ch)
+		if cycle && inCycle {
+			continue
+		}
 		if i < len(hier.Status.Children)-1 {
-			fmt.Printf("%s├── %s\n", prefix, tx)
-			printSubtree(prefix+"│   ", ch)
+			fmt.Printf("%s├── %s\n", prefix, txt)
+			printSubtree(prefix+"│   ", ch, cycle)
 		} else {
-			fmt.Printf("%s└── %s\n", prefix, tx)
-			printSubtree(prefix+"    ", ch)
+			fmt.Printf("%s└── %s\n", prefix, txt)
+			printSubtree(prefix+"    ", ch, cycle)
 		}
 	}
 }
 
 // nameAndFootnotes returns the text to print to describe the namespace, in the form of the
-// namespace's name along with references to any footnotes. Example: default (1)
-func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
+// namespace's name along with references to any footnotes. Example: default (1).
+//
+// The second param is true if this namespace is part of a cycle, in which case we shouldn't
+// recurse.
+func nameAndFootnotes(hier *api.HierarchyConfiguration) (string, bool) {
+	cycle := false
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
+		if cond.Code == api.CritCycle {
+			cycle = true
+		}
 		txt := (string)(cond.Code) + ": " + cond.Msg
 		if idx, ok := footnotesByMsg[txt]; ok {
 			notes = append(notes, idx)
@@ -98,14 +112,14 @@ func nameAndFootnotes(hier *api.HierarchyConfiguration) string {
 	}
 
 	if len(notes) == 0 {
-		return hier.Namespace
+		return hier.Namespace, false
 	}
 	sort.Ints(notes)
 	ns := []string{}
 	for _, n := range notes {
 		ns = append(ns, strconv.Itoa(n))
 	}
-	return fmt.Sprintf("%s (%s)", hier.Namespace, strings.Join(ns, ","))
+	return fmt.Sprintf("%s (%s)", hier.Namespace, strings.Join(ns, ",")), cycle
 }
 
 func newTreeCmd() *cobra.Command {

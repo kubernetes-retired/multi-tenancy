@@ -40,7 +40,7 @@ const (
 // also have an entry in ClearConditionCriteria, set in init() in this file.
 const (
 	CritParentMissing         Code = "CritParentMissing"
-	CritParentInvalid         Code = "CritParentInvalid"
+	CritCycle                 Code = "CritCycle"
 	CritAncestor              Code = "CritAncestor"
 	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 	CannotPropagate           Code = "CannotPropagateObject"
@@ -138,13 +138,18 @@ type Condition struct {
 	//
 	// If the validation webhooks are working properly, there should typically not be any conditions
 	// on any namespaces, although some may appear transiently when the HNC controller is restarted.
-	// These should quickly resolve themselves (<30s).
+	// These should quickly resolve themselves (<30s). However, validation webhooks are not perfect,
+	// especially if multiple users are modifying the same namespace trees quickly, so it's important
+	// to monitor for critical conditions and resolve them if they arise. See the user guide for more
+	// information.
 	//
 	// Currently, the supported values are:
 	//
-	// - "CritParentMissing": the specified parent is missing
+	// - "CritParentMissing": the specified parent is missing and the namespace is an orphan.
 	//
-	// - "CritParentInvalid": the specified parent is invalid (e.g., would cause a cycle)
+	// - "CritCycle": the namespace is a member of a cycle. For example, if namespace B says that its
+	// parent is namespace A, but namespace A says that its parent is namespace B, then A and B are in
+	// a cycle with each other and both of them will have the CritCycle condition.
 	//
 	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
@@ -152,12 +157,17 @@ type Condition struct {
 	// - "SubnamespaceAnchorMissing": this namespace is a subnamespace, but the anchor referenced in
 	// its `subnamespaceOf` annotation does not exist in the parent.
 	//
-	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated to
-	// one or more of its descendants. The condition's affect objects will include a list of the
-	// copies that couldn't be updated.
+	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated *out*
+	// of this namespace, to one or more of this namespace's descendants. If the object couldn't be
+	// propagated to *any* descendants - for example, because it has a finalizer on it (HNC can't
+	// propagate objects with finalizers), the `Affects` field will point to the object in this
+	// namespace. Otherwise, if it couldn't be propagated to *some* descendants, `Affects` will
+	// contain a list of the objects in those descendants that couldn't be created or updated.
 	//
-	// - "CannotUpdateObject": this namespace has an error when updating a propagated object from its
-	// source. The condition's affected object will point to the source object.
+	// - "CannotUpdateObject": this namespace has an object that couldn't be propagated *into* this
+	// namespace - that is, it couldn't be created in the first place, or it couldn't be updated. The
+	// `Affects` field will point to the source object, which will always be in a namespace that's an
+	// ancestor of this namespace.
 	Code Code `json:"code"`
 
 	// A human-readable description of the condition, if the `code` and `affects` fields are not
@@ -237,7 +247,7 @@ func init() {
 	ClearConditionCriteria = map[Code]ClearConditionCriterion{
 		// All conditions on namespaces are set/cleared manually by the HCR
 		CritParentMissing:         CCCManual,
-		CritParentInvalid:         CCCManual,
+		CritCycle:                 CCCManual,
 		CritAncestor:              CCCManual,
 		SubnamespaceAnchorMissing: CCCManual,
 
