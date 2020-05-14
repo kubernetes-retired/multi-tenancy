@@ -8,7 +8,6 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.0
 	github.com/google/cadvisor v0.34.0
-	github.com/markbates/inflect v1.0.4 // indirect
 	github.com/onsi/gomega v1.5.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.2
@@ -28,7 +27,6 @@ require (
 	k8s.io/kubernetes v1.16.6
 	k8s.io/utils v0.0.0-20190829053155-3a4a5477acf8
 	sigs.k8s.io/controller-runtime v0.4.0
-	sigs.k8s.io/controller-tools v0.1.1 // indirect
 )
 
 replace (
