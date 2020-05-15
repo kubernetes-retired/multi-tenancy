@@ -31,11 +31,11 @@ namespaces are, and _why_ they behave the way they do.
 Before delving too deep into _hierarchical_ namespaces, it’s worth considering
 why Kubernetes has _any_ concept of namespaces in the first place.
 
-Firstly and most obviously, namespaces are a way to organize your K8s objects,
-and prevent you from having to find unique names for every object in your
-cluster of a given Kind. While two objects of _different_ Kinds (for example, a
-Service and an Endpoint) may share the same name, no two objects of the same
-Kind may share the same name within a namespace. This makes it easy for
+Firstly and most obviously, namespaces are a way to organize your Kubernetes
+objects, and prevent you from having to find unique names for every object in
+your cluster of a given Kind. While two objects of _different_ Kinds (for
+example, a Service and an Endpoint) may share the same name, no two objects of
+the same Kind may share the same name within a namespace. This makes it easy for
 Kubernetes users to use short names, such as “frontend” or “database”, without
 colliding with other objects on the same cluster.
 
@@ -49,7 +49,7 @@ Network Policies, as well as extensions to Kubernetes, such as Istio policies.
 
 Of course, it is possible to apply policies _within_ namespaces, but this is
 often poorly supported by Kubernetes itself, can be error-prone, and could be
-confusing both to human users as well as tools in the K8s ecosystem. For
+confusing both to human users as well as tools in the Kubernetes ecosystem. For
 example, RBAC policies can target objects with individual names, but such
 policies are hard to maintain.
 
@@ -111,10 +111,10 @@ vs. realtime).
 Unlike hierarchies, labels can be used to implement these kinds of flexible
 policies, but they have drawbacks of their own:
 
-* Labels in K8s generally have no permissions; if you have the ability to edit
-  an object, you can apply whichever labels you like. This makes them unsuitable
-  for policy application unless you trust all the possible editors of the
-  relevant objects.
+* Labels in Kubernetes generally have no permissions; if you have the ability to
+  edit an object, you can apply whichever labels you like. This makes them
+  unsuitable for policy application unless you trust all the possible editors of
+  the relevant objects.
 * While labels are more flexible than hierarchies, labels are also much easier
   to get wrong. HNC helps to ensure that most namespaces have a parent and hence
   a healthy set of defaults, while labels can be harder to audit and verify.
@@ -289,9 +289,10 @@ distributed system (see “[Eventual
 Consistency](best-practices.md#consistency”)").
 
 Note that _in general_, you cannot always trust the values of labels for policy
-purposes, because anyone who can edit a K8s object can also apply whichever
-labels they like. However, HNC will overwrite any changes made to these labels,
-so other applications can trust these labels for policy application.
+purposes, because anyone who can edit a Kubernetes object can also apply
+whichever labels they like. However, HNC will overwrite any changes made to
+these labels, so other applications can trust these labels for policy
+application.
 
 <a name="admin"/>
 
