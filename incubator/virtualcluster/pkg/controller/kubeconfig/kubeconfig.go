@@ -26,7 +26,7 @@ import (
 	"strings"
 	"text/template"
 
-	vcpki "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	vcpki "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
 )
 
 const (

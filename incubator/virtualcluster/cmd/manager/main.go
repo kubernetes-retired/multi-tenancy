@@ -21,17 +21,17 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 
-	logrutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
-	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
+	logrutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
+	vcmanager "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 func main() {

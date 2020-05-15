@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-readonly VC_GO_PACKAGE=github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
+readonly VC_GO_PACKAGE=sigs.k8s.io/multi-tenancy/incubator/virtualcluster
 
 readonly VC_ALL_TARGETS=(
   cmd/manager

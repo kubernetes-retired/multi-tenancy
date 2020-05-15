@@ -60,8 +60,8 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 	"k8s.io/utils/pointer"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/testcerts"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/testcerts"
 )
 
 const (

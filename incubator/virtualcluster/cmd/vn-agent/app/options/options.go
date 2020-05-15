@@ -25,7 +25,7 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
 // Options holds the config from command line.

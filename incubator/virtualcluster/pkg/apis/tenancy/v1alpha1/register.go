@@ -14,14 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// NOTE: Boilerplate only.  Ignore this file.
-
-// Package v1alpha1 contains API Schema definitions for the tenancy v1alpha1 API group
-// +k8s:openapi-gen=true
-// +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy
-// +k8s:defaulter-gen=TypeMeta
-// +groupName=tenancy.x-k8s.io
 package v1alpha1
 
 import (
