@@ -20,8 +20,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/subcmd"
 	_ "sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vcctl/subcmd"
 )
 
 func main() {

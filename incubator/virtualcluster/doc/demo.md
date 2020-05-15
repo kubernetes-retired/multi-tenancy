@@ -4,9 +4,9 @@ This demo illustrates how to setup a virtualcluster in an existing `minikube` Ku
 
 All virtualcluster related API resources (CRD, Secret, Configmap etc.) are created in a
 tenant admin namespace. The tenant admin namespace can be created using the
-[Tenant CRD](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/pkg/apis/tenancy/v1alpha1/tenant_types.go),
+[Tenant CRD](https://sigs.k8s.io/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1/tenant_types.go),
 or created manually.
-If the Tenant CRD is desired, one can follow the [instructions](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/tenant)
+If the Tenant CRD is desired, one can follow the [instructions](https://sigs.k8s.io/multi-tenancy/tenant)
 to install it. We repeat some of the steps in this demo.
  
 ## Create tenant admin namespace

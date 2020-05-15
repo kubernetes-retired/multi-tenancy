@@ -31,10 +31,10 @@ import (
 	"k8s.io/component-base/cli/globalflag"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vn-agent/app/options"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/server"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vn-agent/app/options"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/server"
 )
 
 func NewVnAgentCommand(stopChan <-chan struct{}) *cobra.Command {

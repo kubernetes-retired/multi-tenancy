@@ -24,7 +24,7 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/component-base/logs"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vn-agent/app"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vn-agent/app"
 )
 
 func main() {

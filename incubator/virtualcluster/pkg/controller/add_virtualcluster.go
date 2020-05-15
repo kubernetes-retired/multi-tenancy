@@ -17,7 +17,7 @@ limitations under the License.
 package controller
 
 import (
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/virtualcluster"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/virtualcluster"
 )
 
 func init() {

@@ -33,9 +33,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	syncerconfig "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer"
+	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
 )
 
 func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
