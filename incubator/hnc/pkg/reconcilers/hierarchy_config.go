@@ -299,11 +299,6 @@ func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Name
 }
 
 func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Depth label only makes sense if there's no error condition.
-	if ns.GetCritAncestor() != "" {
-		return
-	}
-
 	// Pre-define label depth suffix
 	labelDepthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
 
@@ -314,12 +309,19 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 		}
 	}
 
-	// AncestryNames includes the namespace itself.
-	ancestors := ns.AncestryNames()
-	for i, ancestor := range ancestors {
-		l := ancestor + labelDepthSuffix
-		dist := strconv.Itoa(len(ancestors) - i - 1)
-		metadata.SetLabel(nsInst, l, dist)
+	// Look for all ancestors. Stop as soon as we find a namespaces that has a critical condition in
+	// the forest (note that CritAncestor is never included in the forest). This should handle orphans
+	// and cycles.
+	anc := ns
+	depth := 0
+	for anc != nil {
+		l := anc.Name() + labelDepthSuffix
+		metadata.SetLabel(nsInst, l, strconv.Itoa(depth))
+		if anc.HasLocalCritCondition() {
+			break
+		}
+		anc = anc.Parent()
+		depth++
 	}
 }
 

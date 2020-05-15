@@ -2,7 +2,6 @@ package reconcilers_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -10,6 +9,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+)
+
+const (
+	depthSuffix = ".tree." + api.MetaGroup + "/depth"
 )
 
 var _ = Describe("Hierarchy", func() {
@@ -29,10 +32,7 @@ var _ = Describe("Hierarchy", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(func() []string {
-			barHier := getHierarchy(ctx, barName)
-			return barHier.Status.Children
-		}).Should(Equal([]string{fooName}))
+		Eventually(hasChild(ctx, barName, fooName)).Should(Equal(true))
 	})
 
 	It("should set CritParentMissing condition if the parent is missing", func() {
@@ -60,10 +60,7 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
-		Eventually(func() []string {
-			brumpfHier := getHierarchy(ctx, brumpfName)
-			return brumpfHier.Status.Children
-		}).Should(Equal([]string{barName}))
+		Eventually(hasChild(ctx, brumpfName, barName)).Should(Equal(true))
 	})
 
 	It("should set CritAncestor condition if any ancestor has critical condition", func() {
@@ -103,10 +100,7 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
-		Eventually(func() []string {
-			brumpfHier := getHierarchy(ctx, brumpfName)
-			return brumpfHier.Status.Children
-		}).Should(Equal([]string{barName}))
+		Eventually(hasChild(ctx, brumpfName, barName)).Should(Equal(true))
 
 		// Ensure foo is enqueued and thus get CritAncestor condition updated after
 		// critical conditions are resolved in bar.
@@ -122,76 +116,28 @@ var _ = Describe("Hierarchy", func() {
 
 	It("should set CritCycle condition if a cycle is detected", func() {
 		// Set up initial hierarchy
-		barHier := newHierarchy(barName)
-		barHier.Spec.Parent = fooName
-		updateHierarchy(ctx, barHier)
-		Eventually(func() []string {
-			return getHierarchy(ctx, fooName).Status.Children
-		}).Should(Equal([]string{barName}))
+		setParent(ctx, barName, fooName)
+		Eventually(hasChild(ctx, fooName, barName)).Should(Equal(true))
 
 		// Break it
-		fooHier := getHierarchy(ctx, fooName)
-		fooHier.Spec.Parent = barName
-		updateHierarchy(ctx, fooHier)
+		setParent(ctx, fooName, barName)
 		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(true))
 		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(true))
 
 		// Fix it
-		Eventually(func() error {
-			fooHier = getHierarchy(ctx, fooName)
-			fooHier.Spec.Parent = ""
-			return tryUpdateHierarchy(ctx, fooHier) // can fail if called too quickly
-		}).Should(Succeed())
+		setParent(ctx, fooName, "")
 		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(false))
 		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(false))
 	})
 
 	It("should have a tree label", func() {
 		// Make bar a child of foo
-		barHier := newHierarchy(barName)
-		barHier.Spec.Parent = fooName
-		updateHierarchy(ctx, barHier)
-		// First, verify bar is a child of foo
-		Eventually(func() []string {
-			return getHierarchy(ctx, fooName).Status.Children
-		}).Should(Equal([]string{barName}))
-		// Verify that bar has a tree label related to foo
-		Eventually(func() bool {
-			barNS := getNamespace(ctx, barName)
-			_, ok := barNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
-			return ok
-		}).Should(BeTrue())
-		// Verify the label value
-		Eventually(func() string {
-			barNS := getNamespace(ctx, barName)
-			val, _ := barNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
-			return val
-		}).Should(Equal("1"))
-		// Verify that bar has a tree label related to bar itself
-		Eventually(func() bool {
-			barNS := getNamespace(ctx, barName)
-			_, ok := barNS.GetLabels()[barName+".tree."+api.MetaGroup+"/depth"]
-			return ok
-		}).Should(BeTrue())
-		// Verify the label value
-		Eventually(func() string {
-			barNS := getNamespace(ctx, barName)
-			val, _ := barNS.GetLabels()[barName+".tree."+api.MetaGroup+"/depth"]
-			return val
-		}).Should(Equal("0"))
-		// Verify that foo has a tree label related to foo itself
-		Eventually(func() bool {
-			fmt.Println(getHierarchy(ctx, fooName))
-			fooNS := getNamespace(ctx, fooName)
-			_, ok := fooNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
-			return ok
-		}).Should(BeTrue())
-		// Verify the label value
-		Eventually(func() string {
-			fooNS := getNamespace(ctx, fooName)
-			val, _ := fooNS.GetLabels()[fooName+".tree."+api.MetaGroup+"/depth"]
-			return val
-		}).Should(Equal("0"))
+		setParent(ctx, barName, fooName)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, fooName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, fooName, fooName+depthSuffix)).Should(Equal("0"))
 	})
 
 	It("should update labels when parent is changed", func() {
@@ -202,7 +148,6 @@ var _ = Describe("Hierarchy", func() {
 		// Set up initial hierarchy
 		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
 		bazHier := newHierarchy(bazName)
-		depthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
 		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
@@ -234,7 +179,6 @@ var _ = Describe("Hierarchy", func() {
 		// Set up initial hierarchy
 		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
 		bazHier := newHierarchy(bazName)
-		depthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
 		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
@@ -256,6 +200,72 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal(""))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 	})
+
+	It("should clear tree labels that are involved in a cycle, except the first one", func() {
+		// Create the initial tree:
+		// a(0) -+- b(1) -+- d(3) --- f(5)
+		//       +- c(2)  +- e(4)
+		nms := createNSes(ctx, 6)
+		setParent(ctx, nms[1], nms[0])
+		setParent(ctx, nms[2], nms[0])
+		setParent(ctx, nms[3], nms[1])
+		setParent(ctx, nms[4], nms[1])
+		setParent(ctx, nms[5], nms[3])
+
+		// Check all labels
+		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal("3"))
+
+		// Create a cycle from a(0) to d(3) and check all labels.
+		setParent(ctx, nms[0], nms[3])
+		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal(""))
+
+		// Fix the cycle and ensure that everything's restored
+		setParent(ctx, nms[0], "")
+		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal("3"))
+	})
+
 })
 
 func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {
@@ -329,4 +339,26 @@ func getLabel(ctx context.Context, from, label string) func() string {
 		val, _ := ns.GetLabels()[label]
 		return val
 	}
+}
+
+func hasChild(ctx context.Context, nm, cnm string) func() bool {
+	return func() bool {
+		children := getHierarchy(ctx, nm).Status.Children
+		for _, c := range children {
+			if c == cnm {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Namespaces are named "a-<rand>", "b-<rand>", etc
+func createNSes(ctx context.Context, num int) []string {
+	nms := []string{}
+	for i := 0; i < num; i++ {
+		nm := createNS(ctx, string('a'+i))
+		nms = append(nms, nm)
+	}
+	return nms
 }
