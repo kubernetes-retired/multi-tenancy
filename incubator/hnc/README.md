@@ -13,7 +13,8 @@ team's namespace, even if you don't have cluster-level permission to create
 namespaces, and easily apply policies like RBAC and Network Policies across all
 namespaces in your team (e.g. a set of related microservices).
 
-You can read more about hierarchical namespaces in the [HNC User Guide](http://bit.ly/38YYhE0).
+You can read more about hierarchical namespaces in the [HNC User
+Guide](docs/user-guide).
 
 The best way you can help contribute to bringing hierarchical namespaces to the
 Kubernetes ecosystem is to try out HNC and report the problems you have with
@@ -58,7 +59,7 @@ chmod +x ${PLUGIN_DIR}/kubectl-hns
 As a quick start, I'd recommend following the [HNC demo
 scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
 to get an idea of what HNC can do. For a more in-depth understanding, check out
-the [HNC User Guide](http://bit.ly/38YYhE0).
+the [HNC User Guide](docs/user-guide).
 
 ### Viewing metrics
 You should be able to view all HNC metrics in your preferred backend:
