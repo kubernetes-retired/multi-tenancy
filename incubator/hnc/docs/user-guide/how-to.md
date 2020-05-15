@@ -27,8 +27,8 @@ This document describes common tasks you might want to accomplish using HNC.
 
 ### Prepare to use hierarchical namespaces as a user
 
-It is possible to interact with hierarchical namespaces purely through K8s tools
-such as `kubectl`. However, the `kubectl-hns`
+It is possible to interact with hierarchical namespaces purely through
+Kubernetes tools such as `kubectl`. However, the `kubectl-hns`
 [plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/)
 greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin as well.
