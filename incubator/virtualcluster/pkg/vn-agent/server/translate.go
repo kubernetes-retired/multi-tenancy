@@ -94,6 +94,7 @@ func TranslatePathForSuper(req *restful.Request, tenantName string) error {
 		// eg. 	/containerLogs/{podNamespace}/{podID}/{containerName}
 		// to   /api/v1/namespaces/{tenantName}-{podNamespace}/pods/{podID}/log
 		apiserverPath = path.Join(commonPath, "log")
+		translateRawQuery(req, containerName)
 	case "exec":
 		// eg. /exec/{podNamespace}/podID/{containerName}
 		// to  /api/v1/namespaces/{tenantName}-{podNamespace}/pods/{podID}/exec

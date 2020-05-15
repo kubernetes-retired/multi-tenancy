@@ -37,7 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/httpstream"
@@ -559,14 +559,16 @@ func TestContainerLogs(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		query        string
-		podLogOption *v1.PodLogOptions
+		query         string
+		containerName string
+		podLogOption  *v1.PodLogOptions
 	}{
-		"without tail":     {"", &v1.PodLogOptions{}},
-		"with tail":        {"?tailLines=5", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
-		"with legacy tail": {"?tail=5", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
-		"with tail all":    {"?tail=all", &v1.PodLogOptions{}},
-		"with follow":      {"?follow=1", &v1.PodLogOptions{Follow: true}},
+		"without tail":        {"", "baz", &v1.PodLogOptions{}},
+		"with tail":           {"?tailLines=5", "baz", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
+		"with legacy tail":    {"?tail=5", "baz", &v1.PodLogOptions{TailLines: pointer.Int64Ptr(5)}},
+		"with tail all":       {"?tail=all", "baz", &v1.PodLogOptions{}},
+		"with follow":         {"?follow=1", "baz", &v1.PodLogOptions{Follow: true}},
+		"with container name": {"", "blah", &v1.PodLogOptions{}},
 	}
 
 	for desc, test := range tests {
@@ -576,7 +578,7 @@ func TestContainerLogs(t *testing.T) {
 			podName := "foo"
 			expectedPodNamespace := getEffectiveNamespace(testcerts.TenantName, podNamespace)
 			expectedPodName := getPodName(podName, expectedPodNamespace)
-			expectedContainerName := "baz"
+			expectedContainerName := test.containerName
 			setPodByNameFunc(fw, expectedPodNamespace, podName, expectedContainerName)
 			setGetContainerLogsFunc(fw, t, expectedPodName, expectedContainerName, test.podLogOption, output)
 
