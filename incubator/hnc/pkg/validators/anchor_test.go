@@ -6,8 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/api/admission/v1beta1"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/foresttest"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/foresttest"
 )
 
 func TestSubnamespaces(t *testing.T) {

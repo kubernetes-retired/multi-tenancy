@@ -19,10 +19,6 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/metadata"
 )
 
 // AnchorReconciler reconciles SubnamespaceAnchor CRs to make sure all the subnamespaces are

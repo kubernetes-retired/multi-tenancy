@@ -22,10 +22,6 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/metadata"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/object"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -38,8 +34,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/metadata"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/object"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/stats"
 )
 
 // syncAction is the action to take after Reconcile syncs with the in-memory forest.

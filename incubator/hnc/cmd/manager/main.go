@@ -35,11 +35,11 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/reconcilers"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/stats"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/validators"
 )
 
 var (

@@ -22,7 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 //hcUpdates struct stores name of namespaces against type of flag passed
