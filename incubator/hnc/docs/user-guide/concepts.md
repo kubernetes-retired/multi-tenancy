@@ -138,23 +138,30 @@ namespaces.
 
 <a name="basic-trees">
 
-### Parents, children, trees and forests
+### Namespaces, trees, and forests
 
-When using HNC, every namespace may have either zero or one parent. A namespace
-with no parents is known as a _root_ namespace, while all namespaces with the
-same parent are known as the _children_ of that namespace. Non-root namespaces
-may have children of their own; there is no hard limit to the number of levels
-of hierarchy.
+When using HNC, every namespace may have either zero or one **_parent_**. A
+namespace with no parents is known as a **_root_** namespace, while all
+namespaces with the same parent are known as the **_children_** of that
+namespace. Non-root namespaces may have children of their own; there is no hard
+limit to the number of levels of hierarchy. The meaning of the parent-child
+relationship is discussed further, but can basically be thought of as one of
+_ownership_ - for example, a user with RBAC permissions in a parent will
+generally have them in the child as well, since the parent owns the child.
 
-All namespaces that descend from a root namespace, along with the root itself,
-are called a _tree_. The set of all namespaces that descend from any namespace,
-along with that namespace, is called a _subtree_. Namespaces without children
-are called _leaves_. Note that a leaf namespace is technically also a subtree,
-while a namespace that is both a root and a leaf is technically also a tree. The
-set of all trees in the cluster is known as the _forest_ of namespaces.
+The terms **_ancestor_** and **_descendant_** apply pretty much as you'd expect
+(such as the parent of a parent, or the child of a child). All namespaces that
+are descendants of a root namespace, along with the root itself, are called a
+**_tree_**. The set of all namespaces that descend from _any_ namespace, along
+with that namespace, is called a **_subtree_**. Namespaces without children are
+called **_leaves_**.
+
+Note that a leaf namespace is technically also a subtree, while a namespace that
+is both a root and a leaf is technically also a tree. The set of all trees in
+the cluster is known as the **_forest_** of namespaces.
 
 HNC includes validating admission controllers that will stop you from creating
-relationship cycles, for example, two namespaces may not be each others’
+relationship **_cycles_** - for example, two namespaces may not be each others’
 parents. HNC maintains an in-memory view of all namespaces in the cluster to
 make this feasible.
 
@@ -166,18 +173,18 @@ More detailed hierarchical information for that namespace is also available via
 
 <a name="basic-subns">
 
-### Full namespaces and subnamespaces
+### Subnamespaces and full namespaces
 
 Any regular namespace in a cluster may have its parent set. That is, you may
 create a namespace via `kubectl create namespace foo`, and then set its parent
 via `kubectl hns set foo --parent bar`. However, this first step always requires
 cluster-level privileges, which may not be widely granted in your cluster.
 
-To solve this, HNC introduces the concept of _subnamespaces_, which is a
+To solve this, HNC introduces the concept of **_subnamespaces_**, which is a
 namespace that is created as a child of another namespace, and whose lifecycle
 is bound to that of its parent. Instead of having cluster-level permissions, you
 only need some narrow permissions in the parent namespace. Any namespace that
-isn’t a subnamespace is referred to as _full namespace_.
+isn’t a subnamespace is referred to as a **_full namespace_**.
 
 Subnamespaces have two significant differences relative to full namespaces:
 
@@ -202,26 +209,27 @@ You can create a subnamespace from the command line via `kubectl hns create chil
 
 ### Policy inheritance and object propagation
 
-Namespaces in HNC inherit policies from their ancestors. If you are familiar
-with object-oriented languages such as C++ or Java, this will seem quite
-natural. Similarly, in many companies, you might have policies that apply to an
-entire organization, some that apply to only one department and some that apply
-only to individual teams. Each of these levels _inherits_ all the policies from
-the level above it. This is the model that HNC follows.
+Namespaces in HNC **_inherit_** policies from their ancestors. If you are
+familiar with object-oriented languages such as C++ or Java, this will seem
+quite natural. Similarly, in many companies, you might have policies that apply
+to an entire organization, some that apply to only one department and some that
+apply only to individual teams; each of these levels inherits all the policies
+from the level above it. This is the model that HNC follows.
 
 The primary way that HNC implements this policy inheritance is simply to copy
-them. We refer to this process as propagation. For example, a Role Binding in
-parent namespace `team-a` with a name such as `team-members` will be propagated
-to all children of `team-a`; that is, all children of `team-a` will have its own
-copy of the `team-members` Role Binding. HNC ensures that these copies will
-always stay in sync with the original copy.
+them. We refer to this process as **_propagation_**. For example, a Role Binding
+in parent namespace `team-a` with a name such as `team-members` will be
+propagated to all children of `team-a`; that is, all children of `team-a` will
+have its own copy of the `team-members` Role Binding. HNC ensures that these
+copies will always stay in sync with the original copy, which is known as the
+**_source object_**. The copies are known as **_propagated objects_**.
 
 This implies that any child namespaces, such as `service-1`, are not allowed to
 have any independent Role Binding of the same name as that of any of its
 ancestors; if it does, HNC will overwrite it. We are considering adding the
-concept of _exceptions_ to HNC to allow policies in child namespaces to override
-those from parents in limited circumstances; please let us know if this would be
-useful to you.
+concept of **_exceptions_** to HNC to allow policies in child namespaces to
+override those from parents in limited circumstances; please let us know if this
+would be useful to you.
 
 By default, HNC only propagates RBAC Roles and RoleBindings. However, you can
 configure HNC to propagate any other Kind of object, including custom resources.
@@ -258,7 +266,7 @@ to delete it, HNC will simply overwrite the object anyway.
 
 <a name="basic-labels"/>
 
-### Namespace labels and non-propagated policies
+### Tree labels and non-propagated policies
 
 While the hierarchy is _defined_ in the [`HierarchicalConfiguration`](#admin-hc)
 object, it is _reflected_ on the namespaces themselves via HNC-managed labels.
@@ -271,22 +279,22 @@ following three labels applied to it:
 * `team-a.tree.hnc.x-k8s.io/depth: 1`
 * `division-x.tree.hnc.x-k8s.io/depth: 2`
 
-These labels can be used in two ways. Firstly, any policy that uses namespace
-label selectors may use them directly. For example, not only can you put a
-Network Policy in `team-a` that will apply to any namespace in that subtree but
-you can also configure that policy to allow traffic from any namespace in that
-subtree by using the operator `team-a.tree.hnc.x-k8s.io/depth exists`.
+Due to their suffixes, these are known as **_tree labels_**.
+
+Tree labels can be used in two ways. Firstly, any policy that uses namespace
+label selectors may use them directly - even if those policies are not
+themselves propagated. For example, not only can you put a Network Policy in
+`team-a` that will apply to any namespace in that subtree but you can also
+configure that policy to allow traffic from any namespace in that subtree by
+using the operator `team-a.tree.hnc.x-k8s.io/depth exists`.
 
 Secondly, other applications can use these namespaces to inspect the current
 state of the hierarchy. For example, the multitenancy working group heard a
 proposal for a hierarchical resource quota to limit resource usage within a
 subtree, not just a single namespace. Such applications could directly use the
 `.spec.parent` in the `HierarchyConfiguration`, but labels are typically easier
-to work with. More importantly, if a namespace has critical condition, HNC will
-remove the labels (as mentioned above), so any labels that are present are
-guaranteed to be correct - at least as much as anything can be correct in a
-distributed system (see “[Eventual
-Consistency](best-practices.md#consistency”)").
+to work with. For example, HNC will ensure that tree labels never express a
+cycle, so any labels that are present are guaranteed to be usable.
 
 Note that _in general_, you cannot always trust the values of labels for policy
 purposes, because anyone who can edit a Kubernetes object can also apply
@@ -330,10 +338,10 @@ describe <ns>` command.
 ### Namespaces administrators
 
 Any user (or service account) with the ability to create or update the
-hierarchical configuration of a namespace is known as an _administrator_ of that
-namespace from HNC's perspective, even if they have no other permissions within
-that namespace. There are two ways you might typically become the administrator
-of a namespace:
+hierarchical configuration of a namespace is known as an **_administrator_** of
+that namespace from HNC's perspective, even if they have no other permissions
+within that namespace. There are two ways you might typically become the
+administrator of a namespace:
 
 * You have a Cluster Role Binding that gives you the right to update configs
   across the cluster.
@@ -352,10 +360,11 @@ that privilege in that namespace or any of its descendants to others.
 However, being the admin of a namespace does not give you free reign over that
 namespace’s config. For example, if you are the admin of a child namespace but
 _not_ its parent, you may not change the parent of your namespace, as this would
-remove privileges from the admin of the parent. Similarly, even if your
-namespace is a root, you may not set its parent to any namespace of which you
-are not currently an admin, since the namespace could then inherit sensitive
-information such as Secrets.
+remove privileges from the admin of the parent (otherwise known as a
+**_superadmin_**, which in HNC's context means an admin of any ancestor
+namespace). Similarly, even if your namespace is a root, you may not set its
+parent to any namespace of which you are not currently an admin, since the
+namespace could then inherit sensitive information such as Secrets.
 
 In general, to change the parent of your namespace N from A to B, you must have
 the following privileges:
@@ -376,6 +385,10 @@ admin of B privileges to N, then ask that admin to make N a child of B.
 
 ### Conditions
 
+As mentioned above, a **_condition_** is some kind of problem affecting a
+namespace or a propagated object. Conditions are reported as part of the status
+of the `HierarchicalConfiguration` object.
+
 Every condition contains a machine-readable string, a human-readable message,
 and an optional list of objects that are affected by the condition. For example:
 
@@ -385,9 +398,9 @@ and an optional list of objects that are affected by the condition. For example:
   cannot be propagated to other namespaces. This condition is displayed in the
   source namespace.
 
-Any condition that begins with the `Crit` prefix is a critical condition, and
-indicates that there’s a serious problem with the namespace that prevents normal
-HNC operation. Namespaces with critical conditions have the following
+Any condition that begins with the `Crit` prefix is a **_critical condition_**,
+and indicates that there’s a serious problem with the namespace that prevents
+normal HNC operation. Namespaces with critical conditions have the following
 properties:
 
 * Object propagation is disabled. That is, new objects will not be copied in,
