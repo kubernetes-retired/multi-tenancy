@@ -68,7 +68,7 @@ webhooks:
       namespace: system
       path: /validate-v1-namespace
   failurePolicy: Fail
-  name: vnamespace.k8s.io
+  name: namespaces.hnc.x-k8s.io
   rules:
   - apiGroups:
     - ""
