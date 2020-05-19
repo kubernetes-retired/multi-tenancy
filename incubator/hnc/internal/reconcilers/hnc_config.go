@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -23,6 +24,10 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
+
+// hnccrSingleton stores a pointer to the cluster-wide config reconciler so anyone can
+// request that it updates itself (see UpdateHNCConfig, below).
+var hnccrSingleton *ConfigReconciler
 
 // ConfigReconciler is responsible for determining the HNC configuration from the HNCConfiguration CR,
 // as well as ensuring all objects are propagated correctly when the HNC configuration changes.
@@ -48,10 +53,10 @@ type ConfigReconciler struct {
 	// activeGVKs contains GVKs that are configured in the Spec.
 	activeGVKs gvkSet
 
-	// shouldReconcile is used by object reconcilers to signal config reconciler to reconcile.
-	// Object reconcilers will set shouldReconcile to be true when an object is successfully reconciled
-	// and the status of the `config` singleton might need to be updated.
-	shouldReconcile bool
+	// enqueueReasons maintains the list of reasons we've been asked to update ourselves. Functionally,
+	// it's just a boolean (nil or non-nil), everything else is just for logging.
+	enqueueReasons     map[string]int
+	enqueueReasonsLock sync.Mutex
 }
 
 // gvkSet keeps track of a group of unique GVKs.
@@ -437,57 +442,61 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 	inst.Status.Types = statuses
 }
 
-// enqueueSingleton enqueues the `config` singleton to trigger the reconciliation
-// of the singleton for a given reason . This occurs in a goroutine so the
-// caller doesn't block; since the reconciler is never garbage-collected,
-// this is safe.
-func (r *ConfigReconciler) enqueueSingleton(log logr.Logger, reason string) {
+// requestReconcile records that the reconciler needs to be reinvoked.
+func (r *ConfigReconciler) requestReconcile(reason string) {
+	r.enqueueReasonsLock.Lock()
+	defer r.enqueueReasonsLock.Unlock()
+
+	if r.enqueueReasons == nil {
+		r.enqueueReasons = map[string]int{}
+	}
+	r.enqueueReasons[reason]++
+}
+
+// periodicTrigger periodically checks if the `config` singleton needs to be reconciled and
+// enqueues the `config` singleton for reconciliation, if needed.
+func (r *ConfigReconciler) periodicTrigger() {
+	// run forever
+	for {
+		time.Sleep(checkPeriod)
+		r.triggerReconcileIfNeeded()
+	}
+}
+
+func (r *ConfigReconciler) triggerReconcileIfNeeded() {
+	r.enqueueReasonsLock.Lock()
+	defer r.enqueueReasonsLock.Unlock()
+
+	if r.enqueueReasons == nil {
+		return
+	}
+
+	// Log all reasons
+	for reason, count := range r.enqueueReasons {
+		r.Log.Info("Updating HNCConfig", "reason", reason, "count", count)
+	}
+
+	// Clear the flag and actually trigger the reconcile.
+	r.enqueueReasons = nil
 	go func() {
-		log.Info("Enqueuing for reconciliation", "reason", reason)
-		// The watch handler doesn't care about anything except the metadata.
 		inst := &api.HNCConfiguration{}
 		inst.ObjectMeta.Name = api.HNCConfigSingleton
 		r.Trigger <- event.GenericEvent{Meta: inst}
 	}()
 }
 
-// periodicTrigger periodically checks if the `config` singleton needs to be reconciled and
-// enqueues the `config` singleton for reconciliation, if needed.
-// Object reconcilers signal the config reconciler to reconcile when the status needs to
-// be updated. The config reconciler only reconciles periodically so that the reconciliation
-// won't be triggered too frequently.
-func (r *ConfigReconciler) periodicTrigger() {
-	// run forever
-	for {
-		time.Sleep(checkPeriod)
-		if r.shouldReconcile == false {
-			continue
-		}
-		r.enqueueSingleton(r.Log, "Syncing NumPropagatedObjects and/or NumSourceObjects in the status")
-		r.shouldReconcile = false
-	}
-}
-
-// SyncNumObjects will be called by object reconcilers to signal config
-// reconciler to reconcile when the status of the `config` object might need to be updated.
-func (r *ConfigReconciler) SyncNumObjects(log logr.Logger) {
-	log.V(1).Info("Signalling config reconciler for reconciliation.")
-	r.shouldReconcile = true
-}
-
 // SetupWithManager builds a controller with the reconciler.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Whenever a CRD is created/updated, we will send a request to reconcile the
-	// singleton again, in case the singleton has configuration for the resource.
+	// Whenever a CRD is created/updated, we will send a request to reconcile the singleton again, in
+	// case the singleton has configuration for the custom resource type.
 	crdMapFn := handler.ToRequestsFunc(
-		func(a handler.MapObject) []reconcile.Request {
-			nnm := types.NamespacedName{
+		func(_ handler.MapObject) []reconcile.Request {
+			return []reconcile.Request{{NamespacedName: types.NamespacedName{
 				Name: api.HNCConfigSingleton,
-			}
-			return []reconcile.Request{
-				{NamespacedName: nnm},
-			}
+			}}}
 		})
+
+	// Register the reconciler
 	err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
 		Watches(&source.Channel{Source: r.Trigger}, &handler.EnqueueRequestForObject{}).
@@ -497,6 +506,7 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+
 	// Create a default singleton if there is no singleton in the cluster by forcing
 	// reconciliation to start.
 	//
@@ -506,12 +516,7 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// it does not exist. As a workaround, we decide to enforce reconciliation. The
 	// cache is populated at the reconciliation stage. A default singleton will be
 	// created during the reconciliation if there is no singleton in the cluster.
-	r.enqueueSingleton(r.Log, "Enforce reconciliation to create a default"+
-		"HNCConfiguration singleton if it does not exist")
-
-	// Inform the forest about the config reconciler so that object reconcilers can
-	// signal the config reconciler to reconcile.
-	r.Forest.ObjectsStatusSyncer = r
+	r.requestReconcile("force initial reconcile")
 
 	// Periodically checks if the config reconciler needs to reconcile and trigger the
 	// reconciliation if needed, in case the status needs to be updated. This occurs
