@@ -212,13 +212,26 @@ the parent is a subnamespace itself) on its parent, and so on. For example, set
 the field on `child` if you’re only trying to delete the child, or on `parent` if
 you’re trying to delete the parent.
 
-**WARNING: this option is very dangerous, so you should only set it on the lowest
+> **WARNING: this option is very dangerous, so you should only set it on the lowest
 possible level of the hierarchy.**
 
-**WARNING: any subnamespaces of the namespace you are deleting will also be
+> **WARNING: any subnamespaces of the namespace you are deleting will also be
 deleted, and so will any subnamespaces of those namespaces, and so on. However,
 any full namespaces that are descendants of a subnamespace will not be
 deleted.**
+
+> _Note: The inheritance of `allowCascadingDelete` is actually a bit more
+> restricted than what's sketched out above: its value is only inherited through
+> ancestor _subnamespaces_, or up to the _first_ full namespace._
+>
+> _For example, if subnamespace `child` has ancestors `parent` and `grandparent`,
+> both of which are full namespaces, we will only respect the
+> `allowCascadingDelete` field on `parent`, not on `grandparent`. This is
+> because if `grandparent` is deleted, `parent` will not be affected, and
+> therefore neither will `child`._
+>
+> _This behaviour may be simplified in a future release of HNC
+> ([#730](https://github.com/kubernetes-sigs/multi-tenancy/issues/730))._
 
 To set the `allowCascadingDelete` field on a namespace using the plugin:
 
@@ -333,6 +346,11 @@ control:
   given namespace, since this allows them to use hierarchical namespaces to
   organize their objects. However, be aware that any `ResourceQuota` in the
   parent namespace will not apply to any subnamespaces.
+
+> _Note: There are various projects underway to allow resource quotas to be
+> applied to trees of namespaces. For example, see the [Dec 3 2019
+> wg-multitenancy meeting](https://www.youtube.com/watch?v=V0Zw82nOAEE). Contact
+> wg-multitenancy if you need this feature._
 
 It is important to note that just because a user _created_ a subnamespace, that
 does not make them an _administrator_ of that subnamespace. That requires

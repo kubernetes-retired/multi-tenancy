@@ -165,6 +165,15 @@ relationship **_cycles_** - for example, two namespaces may not be each othersâ€
 parents. HNC maintains an in-memory view of all namespaces in the cluster to
 make this feasible.
 
+> _Note: There are some rare corner cases that could result in a cycle being
+> formed, despite the presences of the validating admission controllers. For
+> example, two different users might make namespaces A and B parents of each
+> other at exactly the same time; the admission controller would allow this
+> (since neither is yet the parent of the other), leading to a cycle.
+> Alternatively, an admin might simply accidentally disable the admission
+> controllers. In such cases, HNC will put a critical condition on the
+> namespaces until the cycle is resolved._
+
 In the command line, you may set a namespaceâ€™s parent using the `kubectl-hns`
 plugin as follows: `kubectl hns set <child> --parent <parent>`. You can also
 view the subtree rooted at a namespace via the command `kubectl hns tree <ns>`.

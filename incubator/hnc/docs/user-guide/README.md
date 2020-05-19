@@ -11,6 +11,9 @@ This guide explains how to use hierarchical namespaces, explains some of the
 concepts behind them for a more in-depth understanding, and covers some best
 practices.
 
+**Note: for the v0.3 user guide, see
+[here](https://docs.google.com/document/d/1XVVv1ha4j1WUaszu3mmlACeWPUJXbJhA6zntxswrsco).**
+
 ## Table of contents
 
 * [How-to](how-to.md): common tasks when working with HNC
