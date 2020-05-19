@@ -1,5 +1,5 @@
 # HNC User Guide
-Authors: aludwin@google.com and other contributes from wg-multitenancy
+Authors: aludwin@google.com and other contributors from wg-multitenancy
 
 Hierarchical Namespaces are a simple extension to Kubernetes namespaces that
 makes it easy to manage groups of namespaces that share a common concept of
