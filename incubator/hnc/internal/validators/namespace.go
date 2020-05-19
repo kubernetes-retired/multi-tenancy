@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
 
 // NamespaceServingPath is where the validator will run. Must be kept in sync with the

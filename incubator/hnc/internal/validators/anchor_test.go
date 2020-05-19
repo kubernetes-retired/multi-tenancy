@@ -7,7 +7,7 @@ import (
 	"k8s.io/api/admission/v1beta1"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/foresttest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
 
 func TestSubnamespaces(t *testing.T) {

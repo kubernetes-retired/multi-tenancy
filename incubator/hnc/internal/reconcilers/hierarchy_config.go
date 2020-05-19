@@ -37,10 +37,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/metadata"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/stats"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
 )
 
 // HierarchyConfigReconciler is responsible for determining the forest structure from the Hierarchy CRs,

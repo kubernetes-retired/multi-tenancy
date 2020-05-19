@@ -17,8 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
 
 const (

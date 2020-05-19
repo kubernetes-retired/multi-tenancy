@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
 // GVKs maps a kind to its corresponding GVK.
