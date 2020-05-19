@@ -12,8 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/config"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/config"
 )
 
 // GVKs maps a kind to its corresponding GVK.

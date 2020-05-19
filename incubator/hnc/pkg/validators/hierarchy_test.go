@@ -9,8 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/foresttest"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/foresttest"
 )
 
 func TestStructure(t *testing.T) {

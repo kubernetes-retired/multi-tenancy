@@ -1,8 +1,8 @@
 package foresttest
 
 import (
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
 )
 
 // Create creates a forest with len(desc) namespaces, consecutively named a, b, etc. Each entry in

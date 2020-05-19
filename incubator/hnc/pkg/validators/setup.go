@@ -7,8 +7,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-	cert "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/third_party/open-policy-agent/gatekeeper/pkg/webhook"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	cert "sigs.k8s.io/multi-tenancy/incubator/hnc/third_party/open-policy-agent/gatekeeper/pkg/webhook"
 )
 
 const (

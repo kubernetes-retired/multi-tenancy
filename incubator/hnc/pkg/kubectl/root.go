@@ -31,7 +31,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 var k8sClient *kubernetes.Clientset

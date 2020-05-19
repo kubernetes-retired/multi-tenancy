@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -36,8 +35,9 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/reconcilers"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

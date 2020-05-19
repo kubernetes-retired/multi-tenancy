@@ -4,7 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
 // While storing the V in GVK is not strictly necessary to match what's in the HNC type configuration,
