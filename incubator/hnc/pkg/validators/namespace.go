@@ -23,7 +23,7 @@ const (
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,verbs=delete,versions=v1,name=vnamespace.k8s.io
+// +kubebuilder:webhook:path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,verbs=delete,versions=v1,name=namespaces.hnc.x-k8s.io
 
 type Namespace struct {
 	Log     logr.Logger
