@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/foresttest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
 
 func TestDeleteSubNamespace(t *testing.T) {

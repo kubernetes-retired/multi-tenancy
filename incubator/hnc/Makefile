@@ -38,7 +38,7 @@ GOBIN ?= $(shell go env GOPATH)/bin
 KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 # The directories to run Go command on (excludes /vendor)
-DIRS=./api/... ./cmd/... ./pkg/... ./third_party/...
+DIRS=./api/... ./cmd/... ./internal/... ./third_party/...
 
 all: test docker-build
 

@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/foresttest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
 
 func TestStructure(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/metadata"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
 )
 
 func TestInheritedFromLabel(t *testing.T) {

@@ -2,7 +2,7 @@ package foresttest
 
 import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
 
 // Create creates a forest with len(desc) namespaces, consecutively named a, b, etc. Each entry in
