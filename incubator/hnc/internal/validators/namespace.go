@@ -51,6 +51,10 @@ func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission
 		log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
+	if decoded == nil {
+		// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+		return allow("")
+	}
 
 	resp := v.handle(decoded)
 	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
@@ -103,6 +107,11 @@ func (v *Namespace) decodeRequest(log logr.Logger, in admission.Request) (*nsReq
 	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
 	// which will be empty for a DELETE request.
 	if in.Operation == v1beta1.Delete {
+		if in.OldObject.Raw == nil {
+			// See https://github.com/kubernetes-sigs/multi-tenancy/issues/688. OldObject can be nil in
+			// K8s 1.14 and earlier.
+			return nil, nil
+		}
 		log.V(1).Info("Decoding a delete request.")
 		err = v.decoder.DecodeRaw(in.OldObject, ns)
 	} else {

@@ -51,6 +51,10 @@ func (v *Anchor) Handle(ctx context.Context, req admission.Request) admission.Re
 		v.Log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
+	if decoded == nil {
+		// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+		return allow("")
+	}
 
 	resp := v.handle(decoded)
 	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
@@ -99,6 +103,10 @@ func (v *Anchor) decodeRequest(log logr.Logger, in admission.Request) (*anchorRe
 	// which will be empty for a DELETE request.
 	if in.Operation == v1beta1.Delete {
 		log.V(1).Info("Decoding a delete request.")
+		if in.OldObject.Raw == nil {
+			// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+			return nil, nil
+		}
 		err = v.decoder.DecodeRaw(in.OldObject, anchor)
 	} else {
 		err = v.decoder.Decode(in, anchor)
