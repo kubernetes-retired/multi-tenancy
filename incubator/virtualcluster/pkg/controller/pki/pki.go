@@ -51,7 +51,7 @@ type ClusterCAGroup struct {
 }
 
 // NewAPIServerCertAndKey creates crt and key for apiserver using ca.
-func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.Virtualcluster, apiserverDomain string, apiserverIPs ...string) (*CrtKeyPair, error) {
+func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.VirtualCluster, apiserverDomain string, apiserverIPs ...string) (*CrtKeyPair, error) {
 	clusterDomain := defaultClusterDomain
 	if vc.Spec.ClusterDomain != "" {
 		clusterDomain = vc.Spec.ClusterDomain

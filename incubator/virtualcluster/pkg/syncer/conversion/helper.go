@@ -44,7 +44,7 @@ var masterServices = sets.NewString("kubernetes")
 
 // ToClusterKey makes a unique key which is used to create the root namespace in super master for a virtual cluster.
 // To avoid name conflict, the key uses the format <namespace>-<hash>-<name>
-func ToClusterKey(vc *v1alpha1.Virtualcluster) string {
+func ToClusterKey(vc *v1alpha1.VirtualCluster) string {
 	digest := sha256.Sum256([]byte(vc.GetUID()))
 	return vc.GetNamespace() + "-" + hex.EncodeToString(digest[0:])[0:6] + "-" + vc.GetName()
 }

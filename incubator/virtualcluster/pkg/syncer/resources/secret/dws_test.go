@@ -100,14 +100,14 @@ func tenantSecret(name, namespace, uid string, secretType v1.SecretType) *v1.Sec
 }
 
 func TestDWSecretCreation(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -248,14 +248,14 @@ func TestDWSecretCreation(t *testing.T) {
 }
 
 func TestDWSecretDeletion(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -340,14 +340,14 @@ func TestDWSecretDeletion(t *testing.T) {
 }
 
 func TestDWServiceAccountSecretDeletion(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -439,14 +439,14 @@ func applyDataToSecret(secret *v1.Secret, data string) *v1.Secret {
 }
 
 func TestDWSecretUpdate(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}

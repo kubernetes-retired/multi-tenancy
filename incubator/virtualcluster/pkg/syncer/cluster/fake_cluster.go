@@ -31,14 +31,14 @@ import (
 
 type fakeCluster struct {
 	key           string
-	vc            *v1alpha1.Virtualcluster
+	vc            *v1alpha1.VirtualCluster
 	fakeClientset clientset.Interface
 	fakeClient    client.Client
 }
 
 var _ mccontroller.ClusterInterface = &fakeCluster{}
 
-func NewFakeTenantCluster(vc *v1alpha1.Virtualcluster, fakeClientSet clientset.Interface, fakeClient client.Client) (*fakeCluster, error) {
+func NewFakeTenantCluster(vc *v1alpha1.VirtualCluster, fakeClientSet clientset.Interface, fakeClient client.Client) (*fakeCluster, error) {
 	cluster := &fakeCluster{
 		key:           conversion.ToClusterKey(vc),
 		vc:            vc,
@@ -57,7 +57,7 @@ func (c *fakeCluster) GetOwnerInfo() (string, string, string) {
 	return c.vc.Name, c.vc.Namespace, string(c.vc.UID)
 }
 
-func (c *fakeCluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
+func (c *fakeCluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
 	spec := c.vc.Spec.DeepCopy()
 	prefixesSet := sets.NewString(spec.OpaqueMetaPrefixes...)
 	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {

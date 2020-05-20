@@ -73,9 +73,9 @@ func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, 
 	}, nil
 }
 
-// CreateVirtualCluster creates a new ASK on aliyun for given Virtualcluster
-func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
-	log.Info("setting up control plane for the Virtualcluster", "Virtualcluster", vc.Name)
+// CreateVirtualCluster creates a new ASK on aliyun for given VirtualCluster
+func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
+	log.Info("setting up control plane for the VirtualCluster", "VirtualCluster", vc.Name)
 	// 1. load aliyun accessKeyID/accessKeySecret from secret
 	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {
@@ -149,7 +149,7 @@ PollASK:
 		}
 	}
 
-	// 4. create the root namesapce of the Virtualcluster
+	// 4. create the root namesapce of the VirtualCluster
 	vcNs, err := kubeutil.CreateRootNS(mpa, vc)
 	if err != nil {
 		return err
@@ -220,10 +220,10 @@ PollASK:
 	return nil
 }
 
-// DeleteVirtualCluster deletes the ASK cluster corresponding to the given Virtualcluster
+// DeleteVirtualCluster deletes the ASK cluster corresponding to the given VirtualCluster
 // NOTE DeleteVirtualCluster only sends the deletion request to Aliyun and do not promise
 // the ASK will be deleted
-func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
+func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
 	log.Info("deleting the ASK of the virtualcluster", "vc-name", vc.Name)
 	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {

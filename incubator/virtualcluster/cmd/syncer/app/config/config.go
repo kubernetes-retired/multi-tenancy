@@ -38,7 +38,7 @@ type Config struct {
 	SecretClient corev1.SecretsGetter
 	// virtual cluster CR client
 	VirtualClusterClient   vcclient.Interface
-	VirtualClusterInformer vcinformers.VirtualclusterInformer
+	VirtualClusterInformer vcinformers.VirtualClusterInformer
 
 	// the super master client
 	SuperMasterClient          clientset.Interface

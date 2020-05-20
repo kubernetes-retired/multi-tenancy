@@ -1,4 +1,4 @@
-# Virtualcluster Demo
+# VirtualCluster Demo
 
 This demo illustrates how to setup a virtualcluster in an existing `minikube` Kubernetes cluster.
 

@@ -62,7 +62,7 @@ type Cluster struct {
 	RestConfig *rest.Config
 
 	// vcLister points to the super master virtual cluster informer cache.
-	vclister vclisters.VirtualclusterLister
+	vclister vclisters.VirtualClusterLister
 
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
@@ -103,7 +103,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualClusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -138,8 +138,8 @@ func (c *Cluster) GetOwnerInfo() (string, string, string) {
 }
 
 // GetSpec returns the virtual cluster spec.
-func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
-	vc, err := c.vclister.Virtualclusters(c.vcNamespace).Get(c.vcName)
+func (c *Cluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
+	vc, err := c.vclister.VirtualClusters(c.vcNamespace).Get(c.vcName)
 	if err != nil {
 		return nil, err
 	}

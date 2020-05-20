@@ -21,8 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// VirtualclusterSpec defines the desired state of Virtualcluster
-type VirtualclusterSpec struct {
+// VirtualClusterSpec defines the desired state of VirtualCluster
+type VirtualClusterSpec struct {
 	// ClusterDomain is the domain name of the virtual cluster
 	// e.g. a pod dns will be
 	// {some-pod}.{some-namespace}.svc.{ClusterDomain}
@@ -48,13 +48,13 @@ type VirtualclusterSpec struct {
 	// +optional
 	OpaqueMetaPrefixes []string `json:"opaqueMetaPrefixes,omitempty"`
 
-	// Service CIDRs used by Virtualcluster
+	// Service CIDRs used by VirtualCluster
 	// +optional
 	ServiceCidr string `json:"serviceCidr,omitempty"`
 }
 
-// VirtualclusterStatus defines the observed state of Virtualcluster
-type VirtualclusterStatus struct {
+// VirtualClusterStatus defines the observed state of VirtualCluster
+type VirtualClusterStatus struct {
 	// cluster phase of the virtual cluster
 	Phase ClusterPhase `json:"phase"`
 
@@ -71,9 +71,6 @@ type VirtualclusterStatus struct {
 
 	// Cluster Conditions
 	Conditions []ClusterCondition `json:"conditions,omitempty"`
-
-	// Version publish history
-	ClusterVersionHistory []ClusterVersionHistory `json:"versionHistory,omitempty"`
 }
 
 type ClusterPhase string
@@ -114,25 +111,25 @@ type ClusterCondition struct {
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Virtualcluster is the Schema for the virtualclusters API
+// VirtualCluster is the Schema for the virtualclusters API
 // +k8s:openapi-gen=true
-type Virtualcluster struct {
+type VirtualCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   VirtualclusterSpec   `json:"spec,omitempty"`
-	Status VirtualclusterStatus `json:"status,omitempty"`
+	Spec   VirtualClusterSpec   `json:"spec,omitempty"`
+	Status VirtualClusterStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// VirtualclusterList contains a list of Virtualcluster
-type VirtualclusterList struct {
+// VirtualClusterList contains a list of VirtualCluster
+type VirtualClusterList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Virtualcluster `json:"items"`
+	Items           []VirtualCluster `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Virtualcluster{}, &VirtualclusterList{})
+	SchemeBuilder.Register(&VirtualCluster{}, &VirtualClusterList{})
 }

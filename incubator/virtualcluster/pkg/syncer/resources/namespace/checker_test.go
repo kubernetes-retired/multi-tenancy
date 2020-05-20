@@ -49,9 +49,9 @@ func superGCCandidate(name, uid, clusterKey, vcName, vcNamespace, vcUID, root st
 }
 
 func TestNamespacePatrol(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Virtualcluster",
+			Kind:       "VirtualCluster",
 			APIVersion: "tenancy/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -59,8 +59,8 @@ func TestNamespacePatrol(t *testing.T) {
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}

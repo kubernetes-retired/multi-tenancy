@@ -56,7 +56,7 @@ func (r *fakeUWReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 
 func RunUpwardSync(
 	newControllerFunc controllerNew,
-	testTenant *v1alpha1.Virtualcluster,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueKey string,

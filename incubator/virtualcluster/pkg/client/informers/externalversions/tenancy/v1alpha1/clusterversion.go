@@ -30,59 +30,58 @@ import (
 	v1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 )
 
-// VirtualClusterInformer provides access to a shared informer and lister for
-// VirtualClusters.
-type VirtualClusterInformer interface {
+// ClusterVersionInformer provides access to a shared informer and lister for
+// ClusterVersions.
+type ClusterVersionInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.VirtualClusterLister
+	Lister() v1alpha1.ClusterVersionLister
 }
 
-type virtualClusterInformer struct {
+type clusterVersionInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	namespace        string
 }
 
-// NewVirtualClusterInformer constructs a new informer for VirtualCluster type.
+// NewClusterVersionInformer constructs a new informer for ClusterVersion type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewVirtualClusterInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredVirtualClusterInformer(client, namespace, resyncPeriod, indexers, nil)
+func NewClusterVersionInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+	return NewFilteredClusterVersionInformer(client, resyncPeriod, indexers, nil)
 }
 
-// NewFilteredVirtualClusterInformer constructs a new informer for VirtualCluster type.
+// NewFilteredClusterVersionInformer constructs a new informer for ClusterVersion type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewFilteredVirtualClusterInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+func NewFilteredClusterVersionInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TenancyV1alpha1().VirtualClusters(namespace).List(options)
+				return client.TenancyV1alpha1().ClusterVersions().List(options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TenancyV1alpha1().VirtualClusters(namespace).Watch(options)
+				return client.TenancyV1alpha1().ClusterVersions().Watch(options)
 			},
 		},
-		&tenancyv1alpha1.VirtualCluster{},
+		&tenancyv1alpha1.ClusterVersion{},
 		resyncPeriod,
 		indexers,
 	)
 }
 
-func (f *virtualClusterInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredVirtualClusterInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+func (f *clusterVersionInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredClusterVersionInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *virtualClusterInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&tenancyv1alpha1.VirtualCluster{}, f.defaultInformer)
+func (f *clusterVersionInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&tenancyv1alpha1.ClusterVersion{}, f.defaultInformer)
 }
 
-func (f *virtualClusterInformer) Lister() v1alpha1.VirtualClusterLister {
-	return v1alpha1.NewVirtualClusterLister(f.Informer().GetIndexer())
+func (f *clusterVersionInformer) Lister() v1alpha1.ClusterVersionLister {
+	return v1alpha1.NewClusterVersionLister(f.Informer().GetIndexer())
 }
