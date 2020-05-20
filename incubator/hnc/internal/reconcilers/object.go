@@ -389,7 +389,7 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 
 	// Signal the config reconciler for reconciliation because it is possible that a source object is
 	// added to the apiserver.
-	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+	hnccrSingleton.requestReconcile("possible new source object")
 
 	// Enqueue all the descendant copies
 	r.enqueueDescendants(ctx, log, src)
@@ -622,7 +622,7 @@ func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.
 
 	// Signal the config reconciler for reconciliation because it is possible that the source object is
 	// deleted on the apiserver.
-	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+	hnccrSingleton.requestReconcile("possible deleted source object")
 
 	r.enqueueDescendants(ctx, log, inst)
 }
@@ -672,8 +672,10 @@ func (r *ObjectReconciler) recordPropagatedObject(log logr.Logger, namespace, na
 		Namespace: namespace,
 		Name:      name,
 	}
-	r.propagatedObjects[nnm] = true
-	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+	if !r.propagatedObjects[nnm] {
+		r.propagatedObjects[nnm] = true
+		hnccrSingleton.requestReconcile("newly propagated object")
+	}
 }
 
 // recordRemovedObject records the fact that this (possibly) previously propagated object no longer
@@ -686,8 +688,10 @@ func (r *ObjectReconciler) recordRemovedObject(log logr.Logger, namespace, name 
 		Namespace: namespace,
 		Name:      name,
 	}
-	delete(r.propagatedObjects, nnm)
-	r.Forest.ObjectsStatusSyncer.SyncNumObjects(log)
+	if r.propagatedObjects[nnm] {
+		delete(r.propagatedObjects, nnm)
+		hnccrSingleton.requestReconcile("newly unpropagated object")
+	}
 }
 
 func hasFinalizers(inst *unstructured.Unstructured) bool {

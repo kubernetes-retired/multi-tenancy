@@ -27,7 +27,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 		return fmt.Errorf("cannot create anchor reconciler: %s", err.Error())
 	}
 
-	// Create the HierarchyConfigReconciler with HNSReconciler enabled.
+	// Create the HierarchyConfigReconciler with a pointer to the Anchor reconciler.
 	hcr := &HierarchyConfigReconciler{
 		Client:   mgr.GetClient(),
 		Log:      ctrl.Log.WithName("reconcilers").WithName("Hierarchy"),
@@ -40,7 +40,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	}
 
 	// Create the ConfigReconciler.
-	cr := &ConfigReconciler{
+	hnccrSingleton = &ConfigReconciler{
 		Client:                 mgr.GetClient(),
 		Log:                    ctrl.Log.WithName("reconcilers").WithName("HNCConfiguration"),
 		Manager:                mgr,
@@ -48,7 +48,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 		Trigger:                make(chan event.GenericEvent),
 		HierarchyConfigUpdates: hcChan,
 	}
-	if err := cr.SetupWithManager(mgr); err != nil {
+	if err := hnccrSingleton.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Config reconciler: %s", err.Error())
 	}
 

@@ -66,6 +66,7 @@ type HierarchyConfigReconciler struct {
 	// simply hard to tell when one ends and another begins).
 	reconcileID int32
 
+	// sar is the Subnamespace Anchor Reconciler
 	sar *AnchorReconciler
 }
 

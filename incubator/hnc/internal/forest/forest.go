@@ -30,10 +30,6 @@ type Forest struct {
 	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
 	// In that way, we don't need to put the list in the forest.
 	types []TypeSyncer
-
-	// ObjectsStatusSyncer is the ConfigReconciler that an object reconciler can call if the status of the HNCConfiguration
-	// object needs to be updated.
-	ObjectsStatusSyncer NumObjectsSyncer
 }
 
 type namedNamespaces map[string]*Namespace
@@ -52,12 +48,6 @@ type TypeSyncer interface {
 	GetMode() api.SynchronizationMode
 	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
 	GetNumPropagatedObjects() int
-}
-
-// NumObjectsSyncer syncs the number of propagated and source objects. ConfigReconciler implements the
-// interface so that it can be called by an ObjectReconciler if the number of propagated or source objects is changed.
-type NumObjectsSyncer interface {
-	SyncNumObjects(logr.Logger)
 }
 
 func NewForest() *Forest {
