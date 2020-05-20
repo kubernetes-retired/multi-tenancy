@@ -396,10 +396,12 @@ admin of B privileges to N, then ask that admin to make N a child of B.
 
 As mentioned above, a **_condition_** is some kind of problem affecting a
 namespace or a propagated object. Conditions are reported as part of the status
-of the `HierarchicalConfiguration` object.
+of the `HierarchicalConfiguration` object in each namespace, are summarized
+across the entire cluster in the status of the `HNCConfiguration` object, and
+are exposed via the `hnc/namespace_conditions` metric.
 
-Every condition contains a machine-readable string, a human-readable message,
-and an optional list of objects that are affected by the condition. For example:
+Every condition contains a machine-readable code, a human-readable message, and
+an optional list of objects that are affected by the condition. For example:
 
 * The `CritCycle` condition is used if you somehow bypass the validating webhook
   and create a cycle.

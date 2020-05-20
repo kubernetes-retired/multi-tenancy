@@ -336,6 +336,7 @@ func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.Hi
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
 	inst.Status.Conditions = ns.Conditions()
 	setCritAncestorCondition(log, inst, ns)
+	hnccrSingleton.requestReconcile("namespace reconciled")
 }
 
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the

@@ -94,6 +94,30 @@ spec:
                 - code
                 type: object
               type: array
+            namespaceConditions:
+              description: NamespaceConditions is a map of namespace condition codes
+                to the namespaces affected by those codes. If HNC is operating normally,
+                no conditions will be present; if there are any conditions beginning
+                with the "Crit" (critical) prefix, this means that HNC cannot function
+                in the affected namespaces. The HierarchyConfiguration object in each
+                of the affected namespaces will have more information. To learn more
+                about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
+              items:
+                properties:
+                  code:
+                    description: Code is a namespace condition code
+                    type: string
+                  namespaces:
+                    description: Namespaces is the list of namespaces affected by
+                      this code
+                    items:
+                      type: string
+                    type: array
+                required:
+                - code
+                - namespaces
+                type: object
+              type: array
             types:
               description: Types indicates the observed synchronization states of
                 kinds, if any.
