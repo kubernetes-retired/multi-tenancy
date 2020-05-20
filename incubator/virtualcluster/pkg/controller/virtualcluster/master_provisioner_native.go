@@ -58,7 +58,7 @@ func NewMasterProvisionerNative(mgr manager.Manager) (*MasterProvisionerNative, 
 }
 
 // CreateVirtualCluster sets up the control plane for vc on meta k8s
-func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
+func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
 	cvs := &tenancyv1alpha1.ClusterVersionList{}
 	err := mpn.List(context.TODO(), cvs, client.InNamespace(""))
 	if err != nil {
@@ -148,7 +148,7 @@ func completmentCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.Statefu
 
 // deployComponent deploys master component in namespace vcName based on the given StatefulSet
 // and Service Bundle ssBdl
-func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.Virtualcluster, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
+func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.VirtualCluster, ssBdl *tenancyv1alpha1.StatefulSetSvcBundle) error {
 	log.Info("deploying StatefulSet for master component", "component", ssBdl.Name)
 
 	ns := conversion.ToClusterKey(vc)
@@ -240,7 +240,7 @@ func (mpn *MasterProvisionerNative) createPKISecrets(caGroup *vcpki.ClusterCAGro
 
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
 // virtual clusters, and store them as secrets in the meta cluster
-func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster, cv *tenancyv1alpha1.ClusterVersion) error {
+func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster, cv *tenancyv1alpha1.ClusterVersion) error {
 	ns := conversion.ToClusterKey(vc)
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
@@ -313,7 +313,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.Virtualcluster
 	return nil
 }
 
-func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
+func (mpn *MasterProvisionerNative) DeleteVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
 	return nil
 }
 

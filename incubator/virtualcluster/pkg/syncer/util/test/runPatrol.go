@@ -61,7 +61,7 @@ type controllerStateModifier func(manager.ResourceSyncer)
 
 func RunPatrolWithVCClient(
 	newControllerFunc controllerWithVCClientNew,
-	testTenant *v1alpha1.Virtualcluster,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	existingObjectInVCClient []runtime.Object,
@@ -94,10 +94,10 @@ func RunPatrolWithVCClient(
 	if existingObjectInVCClient != nil {
 		vcClient = fakevcclient.NewSimpleClientset(existingObjectInVCClient...)
 	}
-	vcInformer := vcinformerFactory.NewSharedInformerFactory(vcClient, 0).Tenancy().V1alpha1().Virtualclusters()
+	vcInformer := vcinformerFactory.NewSharedInformerFactory(vcClient, 0).Tenancy().V1alpha1().VirtualClusters()
 	// Add obj to vc informer cache
 	for _, each := range existingObjectInVCClient {
-		_, ok := each.(*v1alpha1.Virtualcluster)
+		_, ok := each.(*v1alpha1.VirtualCluster)
 		if !ok {
 			return nil, nil, fmt.Errorf("only vc object can be added to vc informer cache: %v", each)
 		}
@@ -206,7 +206,7 @@ func RunPatrolWithVCClient(
 
 func RunPatrol(
 	newControllerFunc controllerNew,
-	testTenant *v1alpha1.Virtualcluster,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	waitDWS bool,

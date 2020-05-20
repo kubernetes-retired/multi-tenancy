@@ -68,11 +68,11 @@ func (r *fakeReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 
 type controllerNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
-type controllerWithVCClientNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, vcclient.Interface, vcinformers.VirtualclusterInformer, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+type controllerWithVCClientNew func(*config.SyncerConfiguration, corev1.CoreV1Interface, coreinformers.Interface, vcclient.Interface, vcinformers.VirtualClusterInformer, *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
 func RunDownwardSyncWithVCClient(
 	newControllerFunc controllerWithVCClientNew,
-	testTenant *v1alpha1.Virtualcluster,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueObject runtime.Object,
@@ -100,7 +100,7 @@ func RunDownwardSyncWithVCClient(
 
 	// setup fake vc client
 	vcClient := fakevcclient.NewSimpleClientset()
-	vcInformer := vcinformerFactory.NewSharedInformerFactory(vcClient, 0).Tenancy().V1alpha1().Virtualclusters()
+	vcInformer := vcinformerFactory.NewSharedInformerFactory(vcClient, 0).Tenancy().V1alpha1().VirtualClusters()
 
 	// setup fake controller
 	syncErr := make(chan error)
@@ -159,7 +159,7 @@ type FakeClientSetMutator func(tenantClientset, superClientset *fake.Clientset)
 
 func RunDownwardSync(
 	newControllerFunc controllerNew,
-	testTenant *v1alpha1.Virtualcluster,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueObject runtime.Object,

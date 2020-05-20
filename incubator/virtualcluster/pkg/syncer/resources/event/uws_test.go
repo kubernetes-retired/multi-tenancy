@@ -81,13 +81,13 @@ func tenantPod(name, namespace, uid string) *v1.Pod {
 }
 
 func TestUWEvent(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Status: v1alpha1.VirtualclusterStatus{
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}

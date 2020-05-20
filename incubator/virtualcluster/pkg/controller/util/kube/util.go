@@ -95,7 +95,7 @@ func WaitStatefulSetReady(cli client.Client, namespace, name string, timeOutSec,
 }
 
 // CreateRootNS creates the root namespace for the vc
-func CreateRootNS(cli client.Client, vc *tenancyv1alpha1.Virtualcluster) (string, error) {
+func CreateRootNS(cli client.Client, vc *tenancyv1alpha1.VirtualCluster) (string, error) {
 	nsName := conversion.ToClusterKey(vc)
 	err := cli.Create(context.TODO(), &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -114,8 +114,8 @@ func CreateRootNS(cli client.Client, vc *tenancyv1alpha1.Virtualcluster) (string
 	return nsName, err
 }
 
-// AnnotateVC add the annotation('key'='val') to the Virtualcluster 'vc'
-func AnnotateVC(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, key, val string, log logr.Logger) error {
+// AnnotateVC add the annotation('key'='val') to the VirtualCluster 'vc'
+func AnnotateVC(cli client.Client, vc *tenancyv1alpha1.VirtualCluster, key, val string, log logr.Logger) error {
 	annPatch := client.ConstantPatch(types.MergePatchType,
 		[]byte(fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, key, val)))
 	if err := RetryPatchVCOnConflict(context.TODO(), cli, vc, annPatch, log); err != nil {
@@ -125,9 +125,9 @@ func AnnotateVC(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, key, val 
 	return nil
 }
 
-// RetryPatchVCOnConflict tries to patch the Virtualcluster 'vc'. It will retry
+// RetryPatchVCOnConflict tries to patch the VirtualCluster 'vc'. It will retry
 // to patch the 'vc' if there are conflicts caused by other code
-func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.Virtualcluster, patch client.Patch, log logr.Logger, opts ...client.PatchOption) error {
+func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.VirtualCluster, patch client.Patch, log logr.Logger, opts ...client.PatchOption) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		patchErr := cli.Patch(ctx, vc, patch, opts...)
 		if err := cli.Get(ctx, types.NamespacedName{
@@ -140,9 +140,9 @@ func RetryPatchVCOnConflict(ctx context.Context, cli client.Client, vc *tenancyv
 	})
 }
 
-// RetryUpdateVCStatusOnConflict tries to update the Virtualcluster 'vc' status. It will retry
+// RetryUpdateVCStatusOnConflict tries to update the VirtualCluster 'vc' status. It will retry
 // to update the 'vc' if there are conflicts caused by other code
-func RetryUpdateVCStatusOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.Virtualcluster, log logr.Logger) error {
+func RetryUpdateVCStatusOnConflict(ctx context.Context, cli client.Client, vc *tenancyv1alpha1.VirtualCluster, log logr.Logger) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		vcStatus := vc.Status
 		updateErr := cli.Update(ctx, vc)
@@ -160,7 +160,7 @@ func RetryUpdateVCStatusOnConflict(ctx context.Context, cli client.Client, vc *t
 }
 
 // SetVCStatus set the virtualcluster 'vc' status, and append the new status to conditions list
-func SetVCStatus(vc *tenancyv1alpha1.Virtualcluster, phase tenancyv1alpha1.ClusterPhase, message, reason string) {
+func SetVCStatus(vc *tenancyv1alpha1.VirtualCluster, phase tenancyv1alpha1.ClusterPhase, message, reason string) {
 	vc.Status.Phase = phase
 	vc.Status.Message = message
 	vc.Status.Reason = reason

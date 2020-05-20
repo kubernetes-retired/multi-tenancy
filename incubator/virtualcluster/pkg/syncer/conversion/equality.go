@@ -32,10 +32,10 @@ import (
 
 type vcEquality struct {
 	config *config.SyncerConfiguration
-	vcSpec *v1alpha1.VirtualclusterSpec
+	vcSpec *v1alpha1.VirtualClusterSpec
 }
 
-func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualclusterSpec) *vcEquality {
+func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualClusterSpec) *vcEquality {
 	return &vcEquality{config: syncerConfig, vcSpec: spec}
 }
 

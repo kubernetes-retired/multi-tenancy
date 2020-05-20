@@ -8,7 +8,7 @@ metadata:
 spec:
   group: tenancy.x-k8s.io
   names:
-    kind: Virtualcluster
+    kind: VirtualCluster
     plural: virtualclusters
     shortNames:
     - vc
@@ -68,57 +68,6 @@ spec:
               type: string
             reason:
               type: string
-            versionHistory:
-              items:
-                properties:
-                  ClusterVersionName:
-                    type: string
-                  clusterVersion:
-                    properties:
-                      apiVersion:
-                        type: string
-                      kind:
-                        type: string
-                      metadata:
-                        type: object
-                      spec:
-                        properties:
-                          apiServer:
-                            properties:
-                              metadata:
-                                type: object
-                              service:
-                                type: object
-                              statefulset:
-                                type: object
-                            type: object
-                          controllerManager:
-                            properties:
-                              metadata:
-                                type: object
-                              service:
-                                type: object
-                              statefulset:
-                                type: object
-                            type: object
-                          etcd:
-                            properties:
-                              metadata:
-                                type: object
-                              service:
-                                type: object
-                              statefulset:
-                                type: object
-                            type: object
-                        type: object
-                      status:
-                        type: object
-                    type: object
-                required:
-                - ClusterVersionName
-                - clusterVersion
-                type: object
-              type: array
           required:
           - phase
           - message

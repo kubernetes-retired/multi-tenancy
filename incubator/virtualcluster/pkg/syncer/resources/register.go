@@ -42,7 +42,7 @@ func Register(config *config.SyncerConfiguration,
 	client clientset.Interface,
 	informerFactory informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
-	vcInformer vcinformers.VirtualclusterInformer,
+	vcInformer vcinformers.VirtualClusterInformer,
 	controllerManager *manager.ControllerManager) {
 	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), vcClient, vcInformer, controllerManager)
 	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)

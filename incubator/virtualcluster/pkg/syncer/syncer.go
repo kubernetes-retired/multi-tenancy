@@ -58,7 +58,7 @@ type Syncer struct {
 	secretClient      v1core.SecretsGetter
 	controllerManager *manager.ControllerManager
 	// lister that can list virtual clusters from a shared cache
-	lister vclisters.VirtualclusterLister
+	lister vclisters.VirtualClusterLister
 	// returns true when the namespace cache is ready
 	virtualClusterSynced cache.InformerSynced
 	// virtual cluster that have been queued up for processing by workers
@@ -79,7 +79,7 @@ func New(
 	config *config.SyncerConfiguration,
 	secretClient v1core.SecretsGetter,
 	virtualClusterClient vcclient.Interface,
-	virtualClusterInformer vcinformers.VirtualclusterInformer,
+	virtualClusterInformer vcinformers.VirtualClusterInformer,
 	superMasterClient clientset.Interface,
 	superMasterInformers informers.SharedInformerFactory,
 ) *Syncer {
@@ -95,8 +95,8 @@ func New(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: syncer.enqueueVirtualCluster,
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				newVC := newObj.(*v1alpha1.Virtualcluster)
-				oldVC := oldObj.(*v1alpha1.Virtualcluster)
+				newVC := newObj.(*v1alpha1.VirtualCluster)
+				oldVC := oldObj.(*v1alpha1.VirtualCluster)
 				if newVC.ResourceVersion == oldVC.ResourceVersion {
 					return
 				}
@@ -119,7 +119,7 @@ func New(
 
 // enqueue deleted and running object.
 func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
-	vc, ok := obj.(*v1alpha1.Virtualcluster)
+	vc, ok := obj.(*v1alpha1.VirtualCluster)
 
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -127,7 +127,7 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %+v", obj))
 			return
 		}
-		vc, ok = tombstone.Obj.(*v1alpha1.Virtualcluster)
+		vc, ok = tombstone.Obj.(*v1alpha1.VirtualCluster)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a vc %+v", obj))
 			return
@@ -218,7 +218,7 @@ func (s *Syncer) syncVirtualCluster(key string) error {
 		return nil
 	}
 
-	vc, err := s.lister.Virtualclusters(namespace).Get(name)
+	vc, err := s.lister.VirtualClusters(namespace).Get(name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return err
@@ -253,7 +253,7 @@ func (s *Syncer) removeCluster(key string) {
 }
 
 // addCluster registers and start an informer cache for the given VirtualCluster
-func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
+func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 	klog.Infof("Add cluster %s", key)
 
 	s.mu.Lock()
@@ -304,7 +304,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.Virtualcluster) error {
 	return nil
 }
 
-func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.Virtualcluster) {
+func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluster) {
 	go func() {
 		err := cluster.Start()
 		klog.Infof("cluster %s shutdown: %v", cluster.GetClusterName(), err)

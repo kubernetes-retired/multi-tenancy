@@ -185,12 +185,12 @@ func Test_mutateContainerSecret(t *testing.T) {
 func TestToClusterKey(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
-		vc          *v1alpha1.Virtualcluster
+		vc          *v1alpha1.VirtualCluster
 		expectedKey string
 	}{
 		{
 			name: "normal vc",
-			vc: &v1alpha1.Virtualcluster{
+			vc: &v1alpha1.VirtualCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "name",
 					Namespace: "ns",

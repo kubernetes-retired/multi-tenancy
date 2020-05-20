@@ -40,7 +40,7 @@ import (
 
 var log = logf.Log.WithName("virtualcluster-controller")
 
-// Add creates a new Virtualcluster Controller and adds it to the Manager with
+// Add creates a new VirtualCluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
 func Add(mgr *vcmanager.VirtualclusterManager, masterProvisioner string) error {
@@ -88,9 +88,9 @@ func add(mgr *vcmanager.VirtualclusterManager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to Virtualcluster
+	// Watch for changes to VirtualCluster
 	err = c.Watch(&source.Kind{
-		Type: &tenancyv1alpha1.Virtualcluster{}},
+		Type: &tenancyv1alpha1.VirtualCluster{}},
 		&handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
@@ -101,15 +101,15 @@ func add(mgr *vcmanager.VirtualclusterManager, r reconcile.Reconciler) error {
 
 var _ reconcile.Reconciler = &ReconcileVirtualcluster{}
 
-// ReconcileVirtualcluster reconciles a Virtualcluster object
+// ReconcileVirtualcluster reconciles a VirtualCluster object
 type ReconcileVirtualcluster struct {
 	client.Client
 	scheme *runtime.Scheme
 	mp     MasterProvisioner
 }
 
-// Reconcile reads that state of the cluster for a Virtualcluster object and makes changes based on the state read
-// and what is in the Virtualcluster.Spec
+// Reconcile reads that state of the cluster for a VirtualCluster object and makes changes based on the state read
+// and what is in the VirtualCluster.Spec
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
@@ -123,8 +123,8 @@ type ReconcileVirtualcluster struct {
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get
 func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRslt reconcile.Result, err error) {
-	log.Info("reconciling Virtualcluster...")
-	vc := &tenancyv1alpha1.Virtualcluster{}
+	log.Info("reconciling VirtualCluster...")
+	vc := &tenancyv1alpha1.VirtualCluster{}
 	err = r.Get(context.TODO(), request.NamespacedName, vc)
 	if err != nil {
 		// set NotFound error as nil
@@ -142,13 +142,13 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 			if err = kubeutil.RetryUpdateVCStatusOnConflict(context.TODO(), r, vc, log); err != nil {
 				return
 			}
-			log.Info("a finalizer has been registered for the Virtualcluster CRD", "finalizer", vcFinalizerName)
+			log.Info("a finalizer has been registered for the VirtualCluster CRD", "finalizer", vcFinalizerName)
 		}
 	} else {
-		// The Virtualcluster is being deleted
+		// The VirtualCluster is being deleted
 		if strutil.ContainString(vc.ObjectMeta.Finalizers, vcFinalizerName) {
 			// delete the control plane
-			log.Info("Virtualcluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
+			log.Info("VirtualCluster is being deleted, finalizer will be activated", "vc-name", vc.Name, "finalizer", vcFinalizerName)
 			// block if fail to delete VC
 			if err = r.mp.DeleteVirtualCluster(vc); err != nil {
 				log.Error(err, "fail to delete virtualcluster", "vc-name", vc.Name)
@@ -161,13 +161,13 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		return
 	}
 
-	// reconcile Virtualcluster (vc) based on vc status
+	// reconcile VirtualCluster (vc) based on vc status
 	// NOTE: vc status is required by other components (e.g. syncer need to
 	// know the vc status in order to setup connection to the tenant master)
 	switch vc.Status.Phase {
 	case "":
 		// set vc status as ClusterPending if no status is set
-		log.Info("will create a Virtualcluster", "vc", vc.Name)
+		log.Info("will create a VirtualCluster", "vc", vc.Name)
 		// will retry three times
 		kubeutil.SetVCStatus(vc, tenancyv1alpha1.ClusterPending,
 			"retry: 3", "ClusterCreating")
@@ -175,7 +175,7 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		return
 	case tenancyv1alpha1.ClusterPending:
 		// create new virtualcluster when vc is pending
-		log.Info("Virtualcluster is pending", "vc", vc.Name)
+		log.Info("VirtualCluster is pending", "vc", vc.Name)
 		retryTimes, _ := strconv.Atoi(strings.TrimSpace(strings.Split(vc.Status.Message, ":")[1]))
 		if retryTimes > 0 {
 			err = r.mp.CreateVirtualCluster(vc)
@@ -196,7 +196,7 @@ func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRsl
 		err = kubeutil.RetryUpdateVCStatusOnConflict(context.TODO(), r, vc, log)
 		return
 	case tenancyv1alpha1.ClusterRunning:
-		log.Info("Virtualcluster is running", "vc", vc.GetName())
+		log.Info("VirtualCluster is running", "vc", vc.GetName())
 		return
 	case tenancyv1alpha1.ClusterError:
 		log.Info("fail to create virtualcluster", "vc", vc.GetName())

@@ -21,7 +21,7 @@ import (
 )
 
 type MasterProvisioner interface {
-	CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error
-	DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error
+	CreateVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error
+	DeleteVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error
 	GetMasterProvisioner() string
 }

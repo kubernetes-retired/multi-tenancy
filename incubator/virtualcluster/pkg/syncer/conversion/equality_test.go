@@ -31,7 +31,7 @@ func TestCheckDWKVEquality(t *testing.T) {
 	syncerConfig := &config.SyncerConfiguration{
 		DefaultOpaqueMetaDomains: []string{"kubernetes.io"},
 	}
-	spec := v1alpha1.VirtualclusterSpec{
+	spec := v1alpha1.VirtualClusterSpec{
 		TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
 		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
 	}
@@ -185,7 +185,7 @@ func TestCheckDWKVEquality(t *testing.T) {
 }
 
 func TestCheckUWKVEquality(t *testing.T) {
-	spec := v1alpha1.VirtualclusterSpec{
+	spec := v1alpha1.VirtualClusterSpec{
 		TransparentMetaPrefixes: []string{"tp.x-k8s.io", "tp1.x-k8s.io"},
 		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
 	}

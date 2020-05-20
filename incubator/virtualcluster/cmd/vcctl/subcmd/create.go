@@ -83,8 +83,8 @@ func Create(yamlPath, vcKbCfg string) error {
 	}
 
 	switch o := obj.(type) {
-	case *tenancyv1alpha1.Virtualcluster:
-		log.Printf("creating Virtualcluster %s", o.Name)
+	case *tenancyv1alpha1.VirtualCluster:
+		log.Printf("creating VirtualCluster %s", o.Name)
 		err = createVirtualcluster(cli, o, vcKbCfg)
 		if err != nil {
 			return err
@@ -96,7 +96,7 @@ func Create(yamlPath, vcKbCfg string) error {
 			return err
 		}
 	default:
-		return errors.New("unknown object kind. please use a ClusterVersion or Virtualcluster yaml")
+		return errors.New("unknown object kind. please use a ClusterVersion or VirtualCluster yaml")
 	}
 
 	return nil
@@ -134,7 +134,7 @@ func retryIfNotFound(retry, retryPeriod int, f func() error) error {
 
 // createVirtualcluster creates a virtual cluster based on the file yamlPath and
 // generates the kubeconfig file for accessing the virtual cluster
-func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, vcKbCfg string) error {
+func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.VirtualCluster, vcKbCfg string) error {
 	cv := &tenancyv1alpha1.ClusterVersion{}
 	if err := cli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "default",

@@ -43,7 +43,7 @@ type controller struct {
 	nsSynced cache.InformerSynced
 	// super master virtual cluster lister
 	vcClient vcclient.Interface
-	vcLister vclisters.VirtualclusterLister
+	vcLister vclisters.VirtualClusterLister
 	vcSynced cache.InformerSynced
 	// Connect to all tenant master namespace informers
 	multiClusterNamespaceController *mc.MultiClusterController
@@ -56,7 +56,7 @@ func Register(
 	namespaceClient v1core.CoreV1Interface,
 	informer coreinformers.Interface,
 	vcClient vcclient.Interface,
-	vcInformer vcinformers.VirtualclusterInformer,
+	vcInformer vcinformers.VirtualClusterInformer,
 	controllerManager *manager.ControllerManager,
 ) {
 	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, vcClient, vcInformer, nil)
@@ -71,7 +71,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	namespaceClient v1core.CoreV1Interface,
 	informer coreinformers.Interface,
 	vcClient vcclient.Interface,
-	vcInformer vcinformers.VirtualclusterInformer,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		namespaceClient: namespaceClient,
