@@ -60,6 +60,7 @@ func RunUpwardSync(
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueKey string,
+	controllerStateModifyFunc controllerStateModifier,
 ) (actions []core.Action, reconcileError error, err error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
@@ -103,6 +104,11 @@ func RunUpwardSync(
 		return nil, nil, fmt.Errorf("error creating uws controller: %v", err)
 	}
 	fakeRc.SetResourceSyncer(resourceSyncer)
+
+	// Update controller internal state
+	if controllerStateModifyFunc != nil {
+		controllerStateModifyFunc(resourceSyncer)
+	}
 
 	// register tenant cluster to controller.
 	resourceSyncer.AddCluster(tenantCluster)

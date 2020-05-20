@@ -224,7 +224,7 @@ func TestUWPodUpdate(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return
@@ -332,7 +332,7 @@ func TestUWPodDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return
