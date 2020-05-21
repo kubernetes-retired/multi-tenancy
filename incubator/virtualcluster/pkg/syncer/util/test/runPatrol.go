@@ -154,7 +154,7 @@ func RunPatrol(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer.Core().V1(), each)
+		informer := getObjectInformer(superInformer, each)
 		informer.GetStore().Add(each)
 	}
 	go resourceSyncer.StartDWS(stopCh)

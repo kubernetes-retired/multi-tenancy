@@ -114,7 +114,7 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 	}
 	c.storageClassPatroller = storageClassPatroller
 
-	informer.Storage().V1().StorageClasses().Informer().AddEventHandler(
+	c.informer.StorageClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {

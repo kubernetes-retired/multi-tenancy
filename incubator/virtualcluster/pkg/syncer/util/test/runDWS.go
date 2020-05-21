@@ -21,9 +21,9 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	storageV1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	cache "k8s.io/client-go/tools/cache"
@@ -135,7 +135,7 @@ func RunDownwardSync(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer.Core().V1(), each)
+		informer := getObjectInformer(superInformer, each)
 		informer.GetStore().Add(each)
 	}
 
@@ -154,30 +154,32 @@ func RunDownwardSync(
 	return superClient.Actions(), reconcileError, nil
 }
 
-func getObjectInformer(informer coreinformers.Interface, obj runtime.Object) cache.SharedIndexInformer {
+func getObjectInformer(informer informers.SharedInformerFactory, obj runtime.Object) cache.SharedIndexInformer {
 	switch obj.(type) {
 	case *v1.Namespace:
-		return informer.Namespaces().Informer()
+		return informer.Core().V1().Namespaces().Informer()
 	case *v1.Service:
-		return informer.Services().Informer()
+		return informer.Core().V1().Services().Informer()
 	case *v1.Pod:
-		return informer.Pods().Informer()
+		return informer.Core().V1().Pods().Informer()
 	case *v1.ServiceAccount:
-		return informer.ServiceAccounts().Informer()
+		return informer.Core().V1().ServiceAccounts().Informer()
 	case *v1.Secret:
-		return informer.Secrets().Informer()
+		return informer.Core().V1().Secrets().Informer()
 	case *v1.Node:
-		return informer.Nodes().Informer()
+		return informer.Core().V1().Nodes().Informer()
 	case *v1.PersistentVolume:
-		return informer.PersistentVolumes().Informer()
+		return informer.Core().V1().PersistentVolumes().Informer()
 	case *v1.PersistentVolumeClaim:
-		return informer.PersistentVolumeClaims().Informer()
+		return informer.Core().V1().PersistentVolumeClaims().Informer()
 	case *v1.ConfigMap:
-		return informer.ConfigMaps().Informer()
+		return informer.Core().V1().ConfigMaps().Informer()
 	case *v1.Endpoints:
-		return informer.Endpoints().Informer()
+		return informer.Core().V1().Endpoints().Informer()
 	case *v1.Event:
-		return informer.Events().Informer()
+		return informer.Core().V1().Events().Informer()
+	case *storageV1.StorageClass:
+		return informer.Storage().V1().StorageClasses().Informer()
 	default:
 		return nil
 	}
