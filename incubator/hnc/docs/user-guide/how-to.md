@@ -508,6 +508,9 @@ HNC makes the following metrics available, and can be monitored via Stackdriver
 (next section) or Prometheus (experimental - see
 [#433](https://github.com/kubernetes-sigs/multi-tenancy/issues/433)).
 
+Our [best practices guide](best-practices.md#health) can help you use these
+metrics to ensure that HNC stays healthy.
+
 |Metric                                                |Description   |
 |:---------------------------------------------------- |:-------------|
 | `hnc/namespace_conditions`                           | The number of namespaces affected by [conditions](concepts.md#admin-conditions), tagged by the condition code and whether or not the conditions are critical or not |

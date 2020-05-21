@@ -3,8 +3,71 @@ _Part of the [HNC User Guide](README.md)_
 
 ## Table of contents
 
+* [Keeping HNC healthy](#health)
 * [Gitops integration](#gitops)
 * [Eventual consistency and small changes](#consistency)
+* [Getting help](#help)
+
+<a name="health"/>
+
+## Keeping HNC healthy
+
+HNC is installed with very powerful RBAC permissions, and you may rely on it to
+enforece your most critical policies. Therefore, it is important to be able to
+verify that HNC is running correctly.
+
+### Ensure HNC is running
+
+HNC runs in the `hnc-system` directory by default, as part of the Kubernetes
+deployment `hnc-controller-manager`. You should set up monitoring and alerting
+to let you know if HNC ever stops running, starts crash-looping, etc.
+
+Potential problems you may encounter include:
+* By default, HNC is configured to use up to 100Mi of RAM and 0.1 CPU. This
+  should be more than adequate in most cases, but if you observe OOM errors, you
+  may want to manually update the manifests or the pod template to increase
+  these limits.
+* HNC is compatible with reasonable Pod Security Policies (PSPs) - for example,
+  it runs as a non-root user without any elevated privileges. If PSPs are
+  enabled on your cluster, ensure that the HNC service account
+  (`hnc-system/default`) is authorized to use the appropriate policy.
+
+### Logging, monitoring and alerting
+
+HNC provides detailed structured logs on stdout. Please use any logging solution
+to access them (e.g. Stackdriver Logging on GKE).
+
+HNC provides multiple [metrics](how-to.md#admin-metrics) that can be monitored
+by Stackdriver or (experimentally) Prometheus out of the box. The most important
+of these is `hnc/namespace_conditions`, which lists the number of namespaces
+with [conditions](concepts.md#admin-conditions). Typically, this number should
+be zero, except for brief periods when HNC starts up or when there are rapid
+changes being made to the hierarchy.
+
+This metric is tagged both according to the condition code (eg strings such as
+`CannotPropagate` or `CritCycle`), as well as whether or not the code is a
+critical condition. A good default alerting policy is probably to raise an alert
+if there are any conditions that persist for more than about 60s.
+
+### Investigating namespace conditions
+
+The `HNCConfiguration` object with the name `config` is a cluster-wide
+singleton, use primarily to configure HNC. However, its
+`.status.namespaceConditions` field also gives a summary of all conditions
+across the cluster, along with every namespace affected by that condition. You
+can view this object via:
+
+```bash
+kubectl get hncconfiguration config -oyaml
+```
+
+Each namespace will contain more information about its own conditions. For
+example, to view detailed information about the conditions in namespace `foo`,
+use the following command:
+
+```bash
+kubectl hns describe foo
+```
 
 <a name="gitops"/>
 
@@ -86,3 +149,15 @@ When making small changes, ensure that you check for conditions on the affected
 namespaces before proceeding to make further changes; `kubectl hns tree <ns>`
 will show a summary of all conditions within a subtree.
 
+<a name="help"/>
+
+## Getting help
+
+When all else fails, talk to a human:
+
+- [Talk to us on Slack](https://kubernetes.slack.com/messages/wg-multitenancy)
+- [Ping our mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+
+No guarantees, of course, but we'll do our best to help you out!
+
+Thanks for using HNC.
