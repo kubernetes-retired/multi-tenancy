@@ -14,10 +14,11 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Delete a subnamespace](#use-subns-delete)
   * [Organize full namespaces into a hierarchy](#use-full)
 * [Administer HNC](#admin)
-  * [Install HNC on a cluster](#admin-install)
+  * [Install or upgrade HNC on a cluster](#admin-install)
+  * [Uninstall HNC from a cluster](#admin-uninstall)
   * [Administer who has access to HNC properties](#admin-access)
   * [Modify the object types propagated by HNC](#admin-types)
-
+  * [Gather metrics](#admin-metrics)
 
 <a name="use"/>
 
@@ -319,9 +320,86 @@ admins of that namespace will lose access to `ns-bar` once it becomes a root.
 
 <a name="admin-install"/>
 
-### Install HNC on a cluster
+### Install or upgrade HNC on a cluster
 
-Please follow the directions in the [README](../../README.md).
+We recommend installing HNC onto clusters running Kubernetes v1.15 or later.
+Earlier versions of Kubernetes are missing some admission controller features
+that leave us unable to validate certain dangerous operations such as deleting
+namespaces (see [#680](https://github.com/kubernetes-sigs/multi-tenancy/issues/680)).
+
+There is no need to uninstall HNC before upgrading it unless specified in the
+release notes for that version.
+
+#### Install prerequisites
+
+If you are using HNC v0.3 or earlier, you must install Jetstack's cert-manager
+prior to installing HNC. This is not needed for HNC v0.4 or later.
+
+
+```bash
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+```
+
+Wait for the cert-manager deployments to all become healthy. This can take a few
+minutes.
+
+#### Install an official image
+
+The most recent official image is v0.3.0.
+
+```bash
+# Set the desired release:
+HNC_VERSION=v0.3.0
+
+kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+```
+
+#### Download the kubectl plugin (Linux only)
+
+The `kubectl-hns` plugin makes most HNC use and administration much easier; we
+strongly recommend installing it.
+
+```bash
+PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
+chmod +x ${PLUGIN_DIR}/kubectl-hns
+```
+
+#### Install from source
+
+These instructions assume you are installing on GKE and have a GCR repo. If
+you'd like to contribute instructions for other clouds, please do so!
+
+```bash
+# The GCP project of the GCR repo:
+export PROJECT_ID=my-gcp-project
+
+# A tag for the image you want to build (default is 'latest')
+export HNC_IMG_TAG=test-img
+
+# Build and deploy. Note: you need kubebuilder.io installed for this. This will
+# also build the kubectl-hns plugin and install it at ${GOPATH}/bin/kubectl-hns;
+# please ensure this path is in your PATH env var in order to use it.
+make deploy
+```
+
+
+<a name="admin-uninstall"/>
+
+### Uninstall HNC from a cluster
+
+**WARNING:** this will also delete all the hierarchical relationships between
+your namespaces. Reinstalling HNC will _not_ recreate these relationships. There
+is no need to uninstall HNC before upgrading it unless specified in the release
+notes for that version.
+
+```bash
+rm ${PLUGIN_DIR}/kubectl-hns
+kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+
+# Don't need to delete the cert manager if you plan to reinstall it later.
+kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+```
 
 <a name="admin-access"/>
 
@@ -420,4 +498,87 @@ spec:
     - apiVersion: v1   <<<
       kind: Secret     <<< This should be added
       mode: propagate  <<<
+```
+
+<a name="admin-metrics"/>
+
+### Gather metrics
+
+HNC makes the following metrics available, and can be monitored via Stackdriver
+(next section) or Prometheus (experimental - see
+[#433](https://github.com/kubernetes-sigs/multi-tenancy/issues/433)).
+
+|Metric                                                |Description   |
+|:---------------------------------------------------- |:-------------|
+| `hnc/namespace_conditions`                           | The number of namespaces affected by [conditions](concepts.md#admin-conditions), tagged by the condition code and whether or not the conditions are critical or not |
+| `hnc/reconcilers/hierconfig/total`                   | The total number of HierarchyConfiguration (HC) reconciliations happened |
+| `hnc/reconcilers/hierconfig/concurrent_peak`         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
+| `hnc/reconcilers/hierconfig/hierconfig_writes_total` | The number of HC writes happened during HC reconciliations |
+| `hnc/reconcilers/hierconfig/namespace_writes_total`  | The number of namespace writes happened during HC reconciliations |
+| `hnc/reconcilers/object/total`                       | The total number of object reconciliations happened |
+| `hnc/reconcilers/object/concurrent_peak`             | The peak concurrent object reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
+
+#### Use Stackdriver on GKE
+
+To view HNC Metrics in Stackdriver, you will need a GKE cluster with HNC
+installed and a method to access Cloud APIs, specifically Stackdriver monitoring
+APIs, from GKE. We recommend using [Workload
+Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+to minimize the permissions required to log metrics.  Once it's set up, you can
+view the metrics in Stackdriver  [Metrics
+Explorer](https://cloud.google.com/monitoring/charts/metrics-explorer) by
+searching the metrics keywords (e.g. `namespace_conditions`).
+
+In order to monitor metrics via Stackdriver:
+1. Enable Workload Identity (WI) on either a
+   [new](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#enable_workload_identity_on_a_new_cluster)
+   or
+   [existing](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#enable_workload_identity_on_an_existing_cluster)
+   cluster.
+2. Install HNC as described [above](#admin-install).
+3. [Create a Google service account (GSA)](https://cloud.google.com/docs/authentication/production#creating_a_service_account):
+    ```bash
+    gcloud iam service-accounts create [GSA_NAME]
+    ```
+4. Grant “[Monitoring Metric Writer](https://cloud.google.com/monitoring/access-control#mon_roles_desc)”
+role to the GSA:
+    ```bash
+    gcloud projects add-iam-policy-binding [PROJECT_ID] --member \
+      "serviceAccount:[GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com" \
+      --role "roles/monitoring.metricWriter"
+    ```
+5. Create an [Cloud IAM policy binding](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/add-iam-policy-binding)
+between `hnc-system/default` KSA and the newly created GSA:
+     ```
+     gcloud iam service-accounts add-iam-policy-binding \
+       --role roles/iam.workloadIdentityUser \
+       --member "serviceAccount:[PROJECT_ID].svc.id.goog[hnc-system/default]" \
+       [GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com
+   ```
+6. Add the `iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID]` annotation to
+the KSA, using the email address of the Google service account:
+     ```
+     kubectl annotate serviceaccount \
+       --namespace hnc-system \
+       default \
+       iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com
+   ```
+
+If everything is working properly, you should start to see metrics in the
+Stackdriver metrics explorer from HNC. Otherwise, you can inspect the service
+account configuration by creating a Pod with the Kubernetes service account that
+runs the `cloud-sdk` container image, and connecting to it with an interactive
+session:
+
+```
+kubectl run --rm -it \
+  --generator=run-pod/v1 \
+  --image google/cloud-sdk:slim \
+  --serviceaccount default \
+  --namespace hnc-system \
+  workload-identity-test
+
+# Inside the new pod:
+
+gcloud auth list
 ```
