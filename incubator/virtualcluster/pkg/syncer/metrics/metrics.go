@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	_ "k8s.io/kubernetes/pkg/util/workqueue/prometheus"
 )
 
 const (

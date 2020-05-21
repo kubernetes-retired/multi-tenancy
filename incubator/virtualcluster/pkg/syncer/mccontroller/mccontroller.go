@@ -117,7 +117,7 @@ func NewMCController(name string, objectType runtime.Object, options Options) (*
 	}
 
 	if c.Queue == nil {
-		c.Queue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+		c.Queue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
 	}
 
 	return c, nil
