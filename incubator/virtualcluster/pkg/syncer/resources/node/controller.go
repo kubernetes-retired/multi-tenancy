@@ -61,7 +61,8 @@ func NewNodeController(config *config.SyncerConfiguration,
 	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		nodeClient: client.CoreV1(),
+		nodeNameToCluster: make(map[string]map[string]struct{}),
+		nodeClient:        client.CoreV1(),
 	}
 
 	var mcOptions *mc.Options
