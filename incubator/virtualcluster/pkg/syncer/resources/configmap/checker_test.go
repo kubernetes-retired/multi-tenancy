@@ -106,7 +106,7 @@ func TestConfigMapPatrol(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			tenantActions, superActions, err := util.RunPatrol(NewConfigMapController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.WaitDWS, tc.WaitUWS, nil)
+			tenantActions, superActions, err := util.RunPatrol(NewConfigMapController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, nil, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
 				return

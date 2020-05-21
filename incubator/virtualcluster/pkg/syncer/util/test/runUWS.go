@@ -55,7 +55,7 @@ func (r *fakeUWReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 }
 
 func RunUpwardSync(
-	newControllerFunc controllerNew,
+	newControllerFunc manager.ResourceSyncerNew,
 	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
@@ -96,8 +96,10 @@ func RunUpwardSync(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
-		superClient.CoreV1(),
-		superInformer.Core().V1(),
+		superClient,
+		superInformer,
+		nil,
+		nil,
 		rsOptions,
 	)
 	if err != nil {
