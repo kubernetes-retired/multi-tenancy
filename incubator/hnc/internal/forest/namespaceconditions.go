@@ -159,7 +159,7 @@ func (ns *Namespace) Conditions() []api.Condition {
 	for cm, objs := range byCM {
 		// If the only affected object is unnamed (e.g., it refers to the current namespace), omit it.
 		c := api.Condition{Code: cm.code, Msg: cm.msg}
-		if len(objs) > 0 || objs[0].Name != "" {
+		if len(objs) > 0 && objs[0].Name != "" {
 			api.SortAffectedObjects(objs)
 			c.Affects = objs
 		}
