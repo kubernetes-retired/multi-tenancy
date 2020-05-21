@@ -19,6 +19,12 @@ package manager
 import (
 	"sync"
 
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
+
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
@@ -59,6 +65,12 @@ func (m *ControllerManager) AddResourceSyncer(s ResourceSyncer) {
 	m.resourceSyncers[s] = struct{}{}
 	listener.AddListener(s)
 }
+
+type ResourceSyncerNew func(*config.SyncerConfiguration,
+	clientset.Interface,
+	informers.SharedInformerFactory,
+	vcclient.Interface,
+	vcinformers.VirtualClusterInformer, *ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
 // Start gets all the unique caches of the controllers it manages, starts them,
 // then starts the controllers as soon as their respective caches are synced.

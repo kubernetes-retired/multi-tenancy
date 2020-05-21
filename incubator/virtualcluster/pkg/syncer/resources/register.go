@@ -19,9 +19,9 @@ package resources
 import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/configmap"
@@ -38,22 +38,39 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
 )
 
+// AddToManagerFuncs is a list of functions to add all Controllers to the Manager
+var AddToManagerFuncs []manager.ResourceSyncerNew
+
+func init() {
+	AddToManagerFuncs = []manager.ResourceSyncerNew{
+		configmap.NewConfigMapController,
+		endpoints.NewEndpointsController,
+		event.NewEventController,
+		namespace.NewNamespaceController,
+		node.NewNodeController,
+		persistentvolume.NewPVController,
+		persistentvolumeclaim.NewPVCController,
+		pod.NewPodController,
+		secret.NewSecretController,
+		service.NewServiceController,
+		serviceaccount.NewServiceAccountController,
+		storageclass.NewStorageClassController,
+	}
+}
+
 func Register(config *config.SyncerConfiguration,
 	client clientset.Interface,
 	informerFactory informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	controllerManager *manager.ControllerManager) {
-	namespace.Register(config, client.CoreV1(), informerFactory.Core().V1(), vcClient, vcInformer, controllerManager)
-	pod.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	secret.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	serviceaccount.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	node.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	service.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	endpoints.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	event.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	storageclass.Register(config, client.StorageV1(), informerFactory.Storage().V1(), controllerManager)
-	persistentvolumeclaim.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	persistentvolume.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
+	controllerManager *manager.ControllerManager) error {
+	for _, f := range AddToManagerFuncs {
+		if c, _, _, err := f(config, client, informerFactory, vcClient, vcInformer, nil); err != nil {
+			return err
+		} else {
+			controllerManager.AddResourceSyncer(c)
+		}
+	}
+
+	return nil
 }

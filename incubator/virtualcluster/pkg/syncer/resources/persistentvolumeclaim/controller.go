@@ -17,13 +17,18 @@ limitations under the License.
 package persistentvolumeclaim
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -45,28 +50,15 @@ type controller struct {
 	persistentVolumeClaimPatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewPVCController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster PVC controller %v", err)
-		return
-	}
-
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewPVCController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:    config,
-		pvcClient: client,
+		pvcClient: client.CoreV1(),
 	}
 
 	var mcOptions *mc.Options
@@ -78,15 +70,14 @@ func NewPVCController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterPersistentVolumeClaimController, err := mc.NewMCController("tenant-masters-pvc-controller", &v1.PersistentVolumeClaim{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster PersistentVolumeClaim controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create persistentVolumeClaim mc controller: %v", err)
 	}
 	c.multiClusterPersistentVolumeClaimController = multiClusterPersistentVolumeClaimController
-	c.pvcLister = informer.PersistentVolumeClaims().Lister()
+	c.pvcLister = informer.Core().V1().PersistentVolumeClaims().Lister()
 	if options != nil && options.IsFake {
 		c.pvcSynced = func() bool { return true }
 	} else {
-		c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+		c.pvcSynced = informer.Core().V1().PersistentVolumeClaims().Informer().HasSynced
 	}
 
 	var patrolOptions *pa.Options
@@ -97,8 +88,7 @@ func NewPVCController(config *config.SyncerConfiguration,
 	}
 	persistentVolumeClaimPatroller, err := pa.NewPatroller("pvc-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create persistentVolumeClaim patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create persistentVolumeClaim patroller: %v", err)
 	}
 	c.persistentVolumeClaimPatroller = persistentVolumeClaimPatroller
 

@@ -21,12 +21,16 @@ import (
 
 	v1 "k8s.io/api/storage/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 	storageinformers "k8s.io/client-go/informers/storage/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	v1storage "k8s.io/client-go/kubernetes/typed/storage/v1"
 	listersv1 "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -53,47 +57,64 @@ type controller struct {
 	storageClassPatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1storage.StorageClassesGetter,
-	informer storageinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
+func NewStorageClassController(config *config.SyncerConfiguration,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:   config,
-		client:   client,
-		informer: informer,
+		client:   client.StorageV1(),
+		informer: informer.Storage().V1(),
 	}
 
-	options := mc.Options{Reconciler: c}
-	multiClusterStorageClassController, err := mc.NewMCController("tenant-masters-storageclass-controller", &v1.StorageClass{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterStorageClassController, err := mc.NewMCController("tenant-masters-storageclass-controller", &v1.StorageClass{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster event controller %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("failed to create storageClass mc controller: %v", err)
 	}
 	c.multiClusterStorageClassController = multiClusterStorageClassController
 
-	c.storageclassLister = informer.StorageClasses().Lister()
-	c.storageclassSynced = informer.StorageClasses().Informer().HasSynced
+	c.storageclassLister = informer.Storage().V1().StorageClasses().Lister()
+	if options != nil && options.IsFake {
+		c.storageclassSynced = func() bool { return true }
+	} else {
+		c.storageclassSynced = informer.Storage().V1().StorageClasses().Informer().HasSynced
+	}
 
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardStorageClassController, err := uw.NewUWController("storageclass-upward-controller", &v1.StorageClass{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create storageclass upward controller %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("failed to create storageclass upward controller: %v", err)
 	}
 	c.upwardStorageClassController = upwardStorageClassController
 
-	patrolOptions := &pa.Options{Reconciler: c}
+	var patrolOptions *pa.Options
+	if options == nil || options.PatrolOptions == nil {
+		patrolOptions = &pa.Options{Reconciler: c}
+	} else {
+		patrolOptions = options.PatrolOptions
+	}
 	storageClassPatroller, err := pa.NewPatroller("storageClass-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create storageClass patroller %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("failed to create storageClass patroller: %v", err)
 	}
 	c.storageClassPatroller = storageClassPatroller
 
-	informer.StorageClasses().Informer().AddEventHandler(
+	informer.Storage().V1().StorageClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
@@ -122,8 +143,7 @@ func Register(
 				DeleteFunc: c.enqueueStorageClass,
 			},
 		})
-
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterStorageClassController, upwardStorageClassController, nil
 }
 
 func publicStorageClass(e *v1.StorageClass) bool {

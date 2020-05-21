@@ -17,13 +17,18 @@ limitations under the License.
 package endpoints
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -45,28 +50,15 @@ type controller struct {
 	endPointsPatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewEndpointsController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster endpoints controller %v", err)
-		return
-	}
-
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewEndpointsController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:         config,
-		endpointClient: client,
+		endpointClient: client.CoreV1(),
 	}
 
 	var mcOptions *mc.Options
@@ -78,14 +70,14 @@ func NewEndpointsController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterEndpointsController, err := mc.NewMCController("tenant-masters-endpoints-controller", &v1.Endpoints{}, *mcOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create endpoints mc controller: %v", err)
 	}
 	c.multiClusterEndpointsController = multiClusterEndpointsController
-	c.endpointsLister = informer.Endpoints().Lister()
+	c.endpointsLister = informer.Core().V1().Endpoints().Lister()
 	if options != nil && options.IsFake {
 		c.endpointsSynced = func() bool { return true }
 	} else {
-		c.endpointsSynced = informer.Endpoints().Informer().HasSynced
+		c.endpointsSynced = informer.Core().V1().Endpoints().Informer().HasSynced
 	}
 
 	var patrolOptions *pa.Options
@@ -96,8 +88,7 @@ func NewEndpointsController(config *config.SyncerConfiguration,
 	}
 	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create endpoints patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create endpoints patroller: %v", err)
 	}
 	c.endPointsPatroller = endPointsPatroller
 
