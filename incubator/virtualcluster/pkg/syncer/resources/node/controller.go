@@ -17,16 +17,20 @@ limitations under the License.
 package node
 
 import (
+	"fmt"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -50,27 +54,14 @@ type controller struct {
 	upwardNodeController *uw.UpwardController
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewNodeController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster node controller %v", err)
-		return
-	}
-
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewNodeController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		nodeClient: client,
+		nodeClient: client.CoreV1(),
 	}
 
 	var mcOptions *mc.Options
@@ -82,14 +73,14 @@ func NewNodeController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, *mcOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create node mc controller: %v", err)
 	}
 	c.multiClusterNodeController = multiClusterNodeController
-	c.nodeLister = informer.Nodes().Lister()
+	c.nodeLister = informer.Core().V1().Nodes().Lister()
 	if options != nil && options.IsFake {
 		c.nodeSynced = func() bool { return true }
 	} else {
-		c.nodeSynced = informer.Nodes().Informer().HasSynced
+		c.nodeSynced = informer.Core().V1().Nodes().Informer().HasSynced
 	}
 
 	var uwOptions *uw.Options
@@ -101,12 +92,11 @@ func NewNodeController(config *config.SyncerConfiguration,
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
 	upwardNodeController, err := uw.NewUWController("node-upward-controller", &v1.Node{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create node upward controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create node upward controller: %v", err)
 	}
 	c.upwardNodeController = upwardNodeController
 
-	informer.Nodes().Informer().AddEventHandler(
+	informer.Core().V1().Nodes().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.enqueueNode,
 			UpdateFunc: func(oldObj, newObj interface{}) {

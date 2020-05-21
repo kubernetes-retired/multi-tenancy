@@ -21,12 +21,15 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -51,27 +54,15 @@ type controller struct {
 	servicePatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	serviceClient v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewServiceController(config, serviceClient, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster service controller %v", err)
-		return
-	}
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewServiceController(config *config.SyncerConfiguration,
-	serviceClient v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:        config,
-		serviceClient: serviceClient,
+		serviceClient: client.CoreV1(),
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -82,15 +73,15 @@ func NewServiceController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, *mcOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create service mc controller: %v", err)
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
-	c.serviceLister = informer.Services().Lister()
+	c.serviceLister = informer.Core().V1().Services().Lister()
 	if options != nil && options.IsFake {
 		c.serviceSynced = func() bool { return true }
 	} else {
-		c.serviceSynced = informer.Services().Informer().HasSynced
+		c.serviceSynced = informer.Core().V1().Services().Informer().HasSynced
 	}
 
 	var uwOptions *uw.Options
@@ -102,8 +93,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardServiceController, err := uw.NewUWController("service-upward-controller", &v1.Service{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create service upward controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create service upward controller: %v", err)
 	}
 	c.upwardServiceController = upwardServiceController
 
@@ -115,12 +105,11 @@ func NewServiceController(config *config.SyncerConfiguration,
 	}
 	servicePatroller, err := pa.NewPatroller("service-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create service patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create service patroller: %v", err)
 	}
 	c.servicePatroller = servicePatroller
 
-	informer.Services().Informer().AddEventHandler(
+	informer.Core().V1().Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {

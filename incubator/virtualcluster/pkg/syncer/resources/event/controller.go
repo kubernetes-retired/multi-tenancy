@@ -21,12 +21,16 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -51,28 +55,16 @@ type controller struct {
 	upwardEventController *uw.UpwardController
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewEventController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster event controller %v", err)
-		return
-	}
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewEventController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 
 	c := &controller{
-		client:   client,
-		informer: informer,
+		client:   client.CoreV1(),
+		informer: informer.Core().V1(),
 	}
 
 	var mcOptions *mc.Options
@@ -84,14 +76,14 @@ func NewEventController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Event{}, *mcOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create event mc controller: %v", err)
 	}
 	c.multiClusterEventController = multiClusterEventController
 
-	c.nsLister = informer.Namespaces().Lister()
-	c.eventLister = informer.Events().Lister()
-	c.nsSynced = informer.Namespaces().Informer().HasSynced
-	c.eventSynced = informer.Events().Informer().HasSynced
+	c.nsLister = c.informer.Namespaces().Lister()
+	c.eventLister = c.informer.Events().Lister()
+	c.nsSynced = c.informer.Namespaces().Informer().HasSynced
+	c.eventSynced = c.informer.Events().Informer().HasSynced
 	if options != nil && options.IsFake {
 		c.nsSynced = func() bool { return true }
 		c.eventSynced = func() bool { return true }
@@ -106,12 +98,11 @@ func NewEventController(config *config.SyncerConfiguration,
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardEventController, err := uw.NewUWController("event-upward-controller", &v1.Event{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create event upward controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create event upward controller: %v", err)
 	}
 	c.upwardEventController = upwardEventController
 
-	informer.Events().Informer().AddEventHandler(
+	informer.Core().V1().Events().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {

@@ -21,12 +21,16 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -54,28 +58,16 @@ type controller struct {
 	persistentVolumePatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewPVController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster PV controller %v", err)
-		return
-	}
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewPVController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:   config,
-		client:   client,
-		informer: informer,
+		client:   client.CoreV1(),
+		informer: informer.Core().V1(),
 	}
 
 	var mcOptions *mc.Options
@@ -86,19 +78,18 @@ func NewPVController(config *config.SyncerConfiguration,
 	}
 	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster PersistentVolume controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume mc controller: %v", err)
 	}
 	c.multiClusterPersistentVolumeController = multiClusterPersistentVolumeController
-	c.pvLister = informer.PersistentVolumes().Lister()
-	c.pvcLister = informer.PersistentVolumeClaims().Lister()
+	c.pvLister = c.informer.PersistentVolumes().Lister()
+	c.pvcLister = c.informer.PersistentVolumeClaims().Lister()
 
 	if options != nil && options.IsFake {
 		c.pvSynced = func() bool { return true }
 		c.pvcSynced = func() bool { return true }
 	} else {
-		c.pvSynced = informer.PersistentVolumes().Informer().HasSynced
-		c.pvcSynced = informer.PersistentVolumeClaims().Informer().HasSynced
+		c.pvSynced = c.informer.PersistentVolumes().Informer().HasSynced
+		c.pvcSynced = c.informer.PersistentVolumeClaims().Informer().HasSynced
 	}
 
 	var uwOptions *uw.Options
@@ -110,8 +101,7 @@ func NewPVController(config *config.SyncerConfiguration,
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	upwardPersistentVolumeController, err := uw.NewUWController("pv-upward-controller", &v1.PersistentVolume{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create pv upward controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume upward controller: %v", err)
 	}
 	c.upwardPersistentVolumeController = upwardPersistentVolumeController
 
@@ -123,12 +113,11 @@ func NewPVController(config *config.SyncerConfiguration,
 	}
 	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create persistentVolume patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume patroller: %v", err)
 	}
 	c.persistentVolumePatroller = persistentVolumePatroller
 
-	informer.PersistentVolumes().Informer().AddEventHandler(
+	c.informer.PersistentVolumes().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {

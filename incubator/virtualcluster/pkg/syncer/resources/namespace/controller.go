@@ -17,8 +17,11 @@ limitations under the License.
 package namespace
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -51,30 +54,14 @@ type controller struct {
 	namespacePatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	namespaceClient v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	vcClient vcclient.Interface,
-	vcInformer vcinformers.VirtualClusterInformer,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewNamespaceController(config, namespaceClient, informer, vcClient, vcInformer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster namespace controller %v", err)
-		return
-	}
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewNamespaceController(config *config.SyncerConfiguration,
-	namespaceClient v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		namespaceClient: namespaceClient,
+		namespaceClient: client.CoreV1(),
 		vcClient:        vcClient,
 	}
 	var mcOptions *mc.Options
@@ -86,16 +73,16 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *mcOptions)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create namespace mc controller: %v", err)
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
-	c.nsLister = informer.Namespaces().Lister()
+	c.nsLister = informer.Core().V1().Namespaces().Lister()
 	c.vcLister = vcInformer.Lister()
 	if options != nil && options.IsFake {
 		c.nsSynced = func() bool { return true }
 		c.vcSynced = func() bool { return true }
 	} else {
-		c.nsSynced = informer.Namespaces().Informer().HasSynced
+		c.nsSynced = informer.Core().V1().Namespaces().Informer().HasSynced
 		c.vcSynced = vcInformer.Informer().HasSynced
 	}
 
@@ -107,8 +94,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	}
 	namespacePatroller, err := pa.NewPatroller("namespace-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create namespace patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create namespace patroller: %v", err)
 	}
 	c.namespacePatroller = namespacePatroller
 

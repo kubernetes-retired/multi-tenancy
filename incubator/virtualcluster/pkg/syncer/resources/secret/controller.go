@@ -17,14 +17,18 @@ limitations under the License.
 package secret
 
 import (
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-
 	"k8s.io/klog"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
@@ -46,27 +50,14 @@ type controller struct {
 	secretPatroller *pa.Patroller
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
-	controllerManager *manager.ControllerManager,
-) {
-	c, _, _, err := NewSecretController(config, client, informer, nil)
-	if err != nil {
-		klog.Errorf("failed to create multi cluster Secret controller %v", err)
-		return
-	}
-
-	controllerManager.AddResourceSyncer(c)
-}
-
 func NewSecretController(config *config.SyncerConfiguration,
-	client v1core.CoreV1Interface,
-	informer coreinformers.Interface,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
 	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
-		secretClient: client,
+		secretClient: client.CoreV1(),
 	}
 
 	var mcOptions *mc.Options
@@ -78,16 +69,15 @@ func NewSecretController(config *config.SyncerConfiguration,
 	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
 	multiClusterSecretController, err := mc.NewMCController("tenant-masters-secret-controller", &v1.Secret{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster secret controller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create secret mc controller: %v", err)
 	}
 	c.multiClusterSecretController = multiClusterSecretController
 
-	c.secretLister = informer.Secrets().Lister()
+	c.secretLister = informer.Core().V1().Secrets().Lister()
 	if options != nil && options.IsFake {
 		c.secretSynced = func() bool { return true }
 	} else {
-		c.secretSynced = informer.Secrets().Informer().HasSynced
+		c.secretSynced = informer.Core().V1().Secrets().Informer().HasSynced
 	}
 
 	var patrolOptions *pa.Options
@@ -98,8 +88,7 @@ func NewSecretController(config *config.SyncerConfiguration,
 	}
 	secretPatroller, err := pa.NewPatroller("secret-patroller", *patrolOptions)
 	if err != nil {
-		klog.Errorf("failed to create secret patroller %v", err)
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("failed to create secret patroller: %v", err)
 	}
 	c.secretPatroller = secretPatroller
 
