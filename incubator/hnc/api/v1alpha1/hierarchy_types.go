@@ -36,16 +36,28 @@ const (
 	FinalizerHasOwnedNamespace = MetaGroup + "/hasOwnedNamespace"
 )
 
-// Condition codes. *All* codes must also be documented in the comment to Condition.Code, and must
-// also have an entry in ClearConditionCriteria, set in init() in this file.
+// Condition codes. *All* codes must also be documented in the comment to Condition.Code, be
+// inserted into AllCodes, and must have an entry in ClearConditionCriteria, set in init() in this
+// file.
+//
+// Please keep this list in alphabetic order.
 const (
-	CritParentMissing         Code = "CritParentMissing"
-	CritCycle                 Code = "CritCycle"
-	CritAncestor              Code = "CritAncestor"
-	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 	CannotPropagate           Code = "CannotPropagateObject"
 	CannotUpdate              Code = "CannotUpdateObject"
+	CritAncestor              Code = "CritAncestor"
+	CritCycle                 Code = "CritCycle"
+	CritParentMissing         Code = "CritParentMissing"
+	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 )
+
+var AllCodes = []Code{
+	CannotPropagate,
+	CannotUpdate,
+	CritAncestor,
+	CritCycle,
+	CritParentMissing,
+	SubnamespaceAnchorMissing,
+}
 
 // ClearConditionCriterion describes when a condition should be automatically cleared based on
 // forest changes. See individual constants for better documentation.

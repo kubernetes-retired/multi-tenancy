@@ -23,6 +23,7 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
 )
 
 // hnccrSingleton stores a pointer to the cluster-wide config reconciler so anyone can
@@ -90,6 +91,9 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Set the status for each type.
 	r.setTypeStatuses(inst)
+
+	// Load all conditions
+	r.loadNamespaceConditions(inst)
 
 	// Write back to the apiserver.
 	if err := r.writeSingleton(ctx, inst); err != nil {
@@ -442,8 +446,48 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 	inst.Status.Types = statuses
 }
 
+// loadNamespaceConditions collects every condition on every namespace in the forest. With an
+// absolute maximum of ~10k namespaces (typically much lower), very few of which should have
+// conditions, this should be very fast.
+func (r *ConfigReconciler) loadNamespaceConditions(inst *api.HNCConfiguration) {
+	r.Forest.Lock()
+	defer r.Forest.Unlock()
+
+	conds := map[string][]string{}
+	for _, nsnm := range r.Forest.GetNamespaceNames() {
+		for _, cond := range r.Forest.Get(nsnm).Conditions() {
+			code := (string)(cond.Code)
+			conds[code] = append(conds[code], nsnm)
+		}
+	}
+
+	status := []api.CodeAndAffectedNamespaces{}
+	for _, code := range api.AllCodes {
+		nsnms := conds[(string)(code)]
+		stats.RecordNamespaceCondition((string)(code), len(nsnms))
+		if len(nsnms) == 0 {
+			continue
+		}
+		sort.Strings(nsnms)
+		status = append(status, api.CodeAndAffectedNamespaces{
+			Code:       (api.Code)(code),
+			Namespaces: nsnms,
+		})
+	}
+
+	if len(status) > 0 {
+		inst.Status.NamespaceConditions = status
+	} else {
+		inst.Status.NamespaceConditions = nil
+	}
+}
+
 // requestReconcile records that the reconciler needs to be reinvoked.
 func (r *ConfigReconciler) requestReconcile(reason string) {
+	if r == nil { // for unit testing
+		return
+	}
+
 	r.enqueueReasonsLock.Lock()
 	defer r.enqueueReasonsLock.Unlock()
 

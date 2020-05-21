@@ -2,6 +2,7 @@ package stats
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,11 +31,19 @@ var (
 	objectReconcileTotal          = ocstats.Int64("object_reconcile_total", "The total number of object reconciliations happened", "reconciliations")
 	objectReconcileConcurrent     = ocstats.Int64("object_reconcile_concurrent_peak", "The peak concurrent object reconciliations happened in the last reporting period", "reconciliations")
 	objectWritesTotal             = ocstats.Int64("object_writes_total", "The number of object writes happened during object reconciliations", "writes")
+	namespaceConditions           = ocstats.Int64("namespace_conditions", "The number of namespaces with conditions", "conditions")
 )
 
 // Create Tags. Tags are used to group and filter collected metrics later on.
 // Create a GroupKind Tag for metrics of object reconcilers for different GroupKind.
 var KeyGroupKind, _ = tag.NewKey("GroupKind")
+
+// KeyNamespaceCondition indicates the condition that a namespace is affected by.
+var KeyNamespaceCondition, _ = tag.NewKey("NamespaceCondition")
+
+// KeyNamespaceCritical is "yes" if the namespace is affected by a critical condition, and "no" if
+// it's affected by a noncritical condition.
+var KeyNamespaceCritical, _ = tag.NewKey("NamespaceCritical")
 
 // Create Views. Views are the coupling of an Aggregation applied to a Measure and
 // optionally Tags. Views are the connection to Metric exporters.
@@ -90,6 +99,14 @@ var (
 		Aggregation: ocview.LastValue(),
 		TagKeys:     []tag.Key{KeyGroupKind},
 	}
+
+	namespaceConditionsView = &ocview.View{
+		Name:        "hnc/namespace_conditions",
+		Measure:     namespaceConditions,
+		Description: "The number of namespaces with conditions",
+		Aggregation: ocview.LastValue(),
+		TagKeys:     []tag.Key{KeyNamespaceCondition, KeyNamespaceCritical},
+	}
 )
 
 // periodicPeak contains periodic peaks for concurrent reconciliations.
@@ -115,6 +132,7 @@ func startRecordingMetrics() {
 		objectReconcileTotalView,
 		objectReconcileConcurrentView,
 		objectWritesView,
+		namespaceConditionsView,
 	); err != nil {
 		log.Error(err, "Failed to register the views")
 	}
@@ -136,6 +154,16 @@ func recordObjectMetric(m counter, ms *ocstats.Int64Measure, gk schema.GroupKind
 		ctx, _ = tag.New(ctx, tag.Insert(KeyGroupKind, gk.String()))
 	}
 	ocstats.Record(ctx, ms.M(int64(m)))
+}
+
+func RecordNamespaceCondition(code string, num int) {
+	crit := "no"
+	if strings.HasPrefix(code, "Crit") {
+		crit = "yes"
+	}
+	ctx, _ := tag.New(context.Background(), tag.Insert(KeyNamespaceCritical, crit))
+	ctx, _ = tag.New(ctx, tag.Insert(KeyNamespaceCondition, code))
+	ocstats.Record(ctx, namespaceConditions.M(int64(num)))
 }
 
 func recordPeakConcurrentReconciles() {
