@@ -49,7 +49,7 @@ func Register(config *config.SyncerConfiguration,
 	configmap.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	secret.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	serviceaccount.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
-	node.Register(config, client.CoreV1(), informerFactory.Core().V1().Nodes(), controllerManager)
+	node.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	service.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	endpoints.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)
 	event.Register(config, client.CoreV1(), informerFactory.Core().V1(), controllerManager)

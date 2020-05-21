@@ -88,7 +88,14 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 
 	vNodeObj, err := c.multiClusterNodeController.Get(clusterName, "", node.Name)
 	if err != nil {
-		klog.Errorf("could not find node %s/%s: %v", clusterName, node.Name, err)
+		if errors.IsNotFound(err) {
+			klog.Errorf("could not find node %s/%s: %v", clusterName, node.Name, err)
+			c.Lock()
+			if _, exists := c.nodeNameToCluster[node.Name]; exists {
+				delete(c.nodeNameToCluster[node.Name], clusterName)
+			}
+			c.Unlock()
+		}
 		return
 	}
 

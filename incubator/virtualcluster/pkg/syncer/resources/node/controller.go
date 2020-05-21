@@ -52,37 +52,61 @@ type controller struct {
 
 func Register(
 	config *config.SyncerConfiguration,
-	client v1core.NodesGetter,
-	nodeInformer coreinformers.NodeInformer,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
 	controllerManager *manager.ControllerManager,
 ) {
-	c := &controller{
-		nodeNameToCluster: make(map[string]map[string]struct{}),
-		nodeClient:        client,
-	}
-
-	// Create the multi cluster node controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, options)
+	c, _, _, err := NewNodeController(config, client, informer, nil)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster pod controller %v", err)
+		klog.Errorf("failed to create multi cluster node controller %v", err)
 		return
 	}
+
+	controllerManager.AddResourceSyncer(c)
+}
+
+func NewNodeController(config *config.SyncerConfiguration,
+	client v1core.CoreV1Interface,
+	informer coreinformers.Interface,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	c := &controller{
+		nodeClient: client,
+	}
+
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, *mcOptions)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	c.multiClusterNodeController = multiClusterNodeController
+	c.nodeLister = informer.Nodes().Lister()
+	if options != nil && options.IsFake {
+		c.nodeSynced = func() bool { return true }
+	} else {
+		c.nodeSynced = informer.Nodes().Informer().HasSynced
+	}
 
-	c.nodeLister = nodeInformer.Lister()
-	c.nodeSynced = nodeInformer.Informer().HasSynced
-
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
 	upwardNodeController, err := uw.NewUWController("node-upward-controller", &v1.Node{}, *uwOptions)
 	if err != nil {
 		klog.Errorf("failed to create node upward controller %v", err)
-		return
+		return nil, nil, nil, err
 	}
 	c.upwardNodeController = upwardNodeController
 
-	nodeInformer.Informer().AddEventHandler(
+	informer.Nodes().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.enqueueNode,
 			UpdateFunc: func(oldObj, newObj interface{}) {
@@ -98,8 +122,7 @@ func Register(
 			DeleteFunc: c.enqueueNode,
 		},
 	)
-
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterNodeController, upwardNodeController, nil
 }
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {

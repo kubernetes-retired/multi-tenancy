@@ -149,7 +149,7 @@ func TestUWPVUpdate(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPVController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPVController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return
@@ -259,7 +259,7 @@ func TestUWPVCreation(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPVController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPVController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return
