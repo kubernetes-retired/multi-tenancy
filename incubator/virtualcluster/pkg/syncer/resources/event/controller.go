@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -53,6 +54,8 @@ type controller struct {
 	multiClusterEventController *mc.MultiClusterController
 	// UWcontroller
 	upwardEventController *uw.UpwardController
+
+	acceptedEventObj map[string]runtime.Object
 }
 
 func NewEventController(config *config.SyncerConfiguration,
@@ -65,6 +68,10 @@ func NewEventController(config *config.SyncerConfiguration,
 	c := &controller{
 		client:   client.CoreV1(),
 		informer: informer.Core().V1(),
+		acceptedEventObj: map[string]runtime.Object{
+			"Pod":     &v1.Pod{},
+			"Service": &v1.Service{},
+		},
 	}
 
 	var mcOptions *mc.Options
@@ -107,10 +114,10 @@ func NewEventController(config *config.SyncerConfiguration,
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
 				case *v1.Event:
-					return assignPodEvent(t)
+					return c.assignAcceptedEvent(t)
 				case cache.DeletedFinalStateUnknown:
 					if e, ok := t.Obj.(*v1.Event); ok {
-						return assignPodEvent(e)
+						return c.assignAcceptedEvent(e)
 					}
 					utilruntime.HandleError(fmt.Errorf("unable to convert object %v to *v1.Event", obj))
 					return false
@@ -127,8 +134,9 @@ func NewEventController(config *config.SyncerConfiguration,
 	return c, multiClusterEventController, upwardEventController, nil
 }
 
-func assignPodEvent(e *v1.Event) bool {
-	return e.InvolvedObject.Kind == "Pod"
+func (c *controller) assignAcceptedEvent(e *v1.Event) bool {
+	_, accepted := c.acceptedEventObj[e.InvolvedObject.Kind]
+	return accepted
 }
 
 func (c *controller) enqueueEvent(obj interface{}) {
