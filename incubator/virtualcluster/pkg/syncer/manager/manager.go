@@ -52,12 +52,12 @@ func New() *ControllerManager {
 // ResourceSyncer is the interface used by ControllerManager to manage multiple resource syncers.
 type ResourceSyncer interface {
 	listener.ClusterChangeListener
+	reconciler.DWReconciler
+	reconciler.UWReconciler
+	reconciler.PatrolReconciler
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
 	StartPatrol(stopCh <-chan struct{}) error
-	Reconcile(request reconciler.Request) (reconciler.Result, error)
-	BackPopulate(string) error
-	PatrollerDo()
 }
 
 // AddController adds a resource syncer to the ControllerManager.
