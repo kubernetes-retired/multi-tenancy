@@ -60,7 +60,7 @@ func (c *controller) BackPopulate(key string) error {
 		return fmt.Errorf("could not find ns %s in controller cache: %v", pNamespace, err)
 	}
 	if clusterName == "" || tenantNS == "" {
-		klog.Infof("drop event %s/%s which is not belongs to any tenant", pNamespace, pName)
+		klog.V(4).Infof("drop event %s/%s which is not belongs to any tenant", pNamespace, pName)
 		return nil
 	}
 
