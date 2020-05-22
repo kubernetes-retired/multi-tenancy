@@ -138,7 +138,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 			return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 		}
 		event := createNotSupportEvent(vPod)
-		vEvent := conversion.BuildVirtualPodEvent(clusterName, event, vPod)
+		vEvent := conversion.BuildVirtualEvent(clusterName, event, vPod)
 		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(vEvent)
 		return err
 	}

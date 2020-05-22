@@ -162,12 +162,12 @@ func ResetMetadata(obj metav1.Object) {
 	obj.SetClusterName("")
 }
 
-func BuildVirtualPodEvent(cluster string, pEvent *v1.Event, vPod *v1.Pod) *v1.Event {
+func BuildVirtualEvent(cluster string, pEvent *v1.Event, vObj metav1.Object) *v1.Event {
 	vEvent := pEvent.DeepCopy()
 	ResetMetadata(vEvent)
-	vEvent.SetNamespace(vPod.Namespace)
-	vEvent.InvolvedObject.Namespace = vPod.Namespace
-	vEvent.InvolvedObject.UID = vPod.UID
+	vEvent.SetNamespace(vObj.GetNamespace())
+	vEvent.InvolvedObject.Namespace = vObj.GetNamespace()
+	vEvent.InvolvedObject.UID = vObj.GetUID()
 	vEvent.InvolvedObject.ResourceVersion = ""
 
 	vEvent.Message = strings.ReplaceAll(vEvent.Message, cluster+"-", "")
