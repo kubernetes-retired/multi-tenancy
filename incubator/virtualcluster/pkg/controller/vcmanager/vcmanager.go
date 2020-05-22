@@ -5,17 +5,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-type VirtualclusterManager struct {
+type VirtualClusterManager struct {
 	manager.Manager
 	MaxConcurrentReconciles int
 }
 
-func NewVirtualClusterManager(config *rest.Config, options manager.Options, maxConcur int) (*VirtualclusterManager, error) {
+func NewVirtualClusterManager(config *rest.Config, options manager.Options, maxConcur int) (*VirtualClusterManager, error) {
 	mgr, err := manager.New(config, options)
 	if err != nil {
 		return nil, err
 	}
-	return &VirtualclusterManager{
+	return &VirtualClusterManager{
 		Manager:                 mgr,
 		MaxConcurrentReconciles: maxConcur,
 	}, nil

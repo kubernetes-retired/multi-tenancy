@@ -25,14 +25,14 @@ import (
 type ControllerName int
 
 const (
-	VirtualclusterController ControllerName = iota
+	VirtualClusterController ControllerName = iota
 	ClusterversionController
 )
 
 func (cn ControllerName) String() string {
 	switch cn {
-	case VirtualclusterController:
-		return "VirtualclusterController"
+	case VirtualClusterController:
+		return "VirtualClusterController"
 	case ClusterversionController:
 		return "ClusterversionController"
 	default:
@@ -41,16 +41,16 @@ func (cn ControllerName) String() string {
 }
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
-var AddToManagerFuncs = make(map[ControllerName]func(*vcmanager.VirtualclusterManager, string) error)
+var AddToManagerFuncs = make(map[ControllerName]func(*vcmanager.VirtualClusterManager, string) error)
 
 // AddToManager adds all Controllers to the Manager
-func AddToManager(m *vcmanager.VirtualclusterManager, masterProvisioner string) error {
+func AddToManager(m *vcmanager.VirtualClusterManager, masterProvisioner string) error {
 	// add controller based the type of the masterProvisioner
 	switch masterProvisioner {
 	case "native":
-		f, exist := AddToManagerFuncs[VirtualclusterController]
+		f, exist := AddToManagerFuncs[VirtualClusterController]
 		if !exist {
-			return fmt.Errorf("%s not found", VirtualclusterController)
+			return fmt.Errorf("%s not found", VirtualClusterController)
 		}
 		if err := f(m, masterProvisioner); err != nil {
 			return err
@@ -64,9 +64,9 @@ func AddToManager(m *vcmanager.VirtualclusterManager, masterProvisioner string) 
 			return err
 		}
 	case "aliyun":
-		f, exist := AddToManagerFuncs[VirtualclusterController]
+		f, exist := AddToManagerFuncs[VirtualClusterController]
 		if !exist {
-			return fmt.Errorf("%s not found", VirtualclusterController)
+			return fmt.Errorf("%s not found", VirtualClusterController)
 		}
 		if err := f(m, masterProvisioner); err != nil {
 			return err
