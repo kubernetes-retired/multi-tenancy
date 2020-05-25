@@ -43,7 +43,7 @@ var log = logf.Log.WithName("virtualcluster-controller")
 // Add creates a new VirtualCluster Controller and adds it to the Manager with
 // default RBAC. The Manager will set fields on the Controller and Start it
 // when the Manager is Started.
-func Add(mgr *vcmanager.VirtualclusterManager, masterProvisioner string) error {
+func Add(mgr *vcmanager.VirtualClusterManager, masterProvisioner string) error {
 	rcl, err := newReconciler(mgr, masterProvisioner)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func newReconciler(mgr manager.Manager, masterProv string) (reconcile.Reconciler
 		}
 	}
 
-	return &ReconcileVirtualcluster{
+	return &ReconcileVirtualCluster{
 		Client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		mp:     mp,
@@ -78,7 +78,7 @@ func newReconciler(mgr manager.Manager, masterProv string) (reconcile.Reconciler
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr *vcmanager.VirtualclusterManager, r reconcile.Reconciler) error {
+func add(mgr *vcmanager.VirtualClusterManager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("virtualcluster-controller",
 		mgr, controller.Options{
@@ -99,10 +99,10 @@ func add(mgr *vcmanager.VirtualclusterManager, r reconcile.Reconciler) error {
 	return nil
 }
 
-var _ reconcile.Reconciler = &ReconcileVirtualcluster{}
+var _ reconcile.Reconciler = &ReconcileVirtualCluster{}
 
-// ReconcileVirtualcluster reconciles a VirtualCluster object
-type ReconcileVirtualcluster struct {
+// ReconcileVirtualCluster reconciles a VirtualCluster object
+type ReconcileVirtualCluster struct {
 	client.Client
 	scheme *runtime.Scheme
 	mp     MasterProvisioner
@@ -122,7 +122,7 @@ type ReconcileVirtualcluster struct {
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=virtualclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions,verbs=get;list;watch
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=clusterversions/status,verbs=get
-func (r *ReconcileVirtualcluster) Reconcile(request reconcile.Request) (rncilRslt reconcile.Result, err error) {
+func (r *ReconcileVirtualCluster) Reconcile(request reconcile.Request) (rncilRslt reconcile.Result, err error) {
 	log.Info("reconciling VirtualCluster...")
 	vc := &tenancyv1alpha1.VirtualCluster{}
 	err = r.Get(context.TODO(), request.NamespacedName, vc)
