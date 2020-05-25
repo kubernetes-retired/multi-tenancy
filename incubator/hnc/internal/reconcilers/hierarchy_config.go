@@ -117,6 +117,8 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	origHC := inst.DeepCopy()
 	origNS := nsInst.DeepCopy()
 
+	// We will put finalizers on namespaces (the Hierarchy singleton actually)
+	// if there are anchors no matter the namespace is internal or external.
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
@@ -193,6 +195,9 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearLocalConditions()
 
+	// Set external tree labels in the forest if this is an external namespace.
+	r.syncExternalNamespace(log, nsInst, ns)
+
 	// If this is a subnamespace, make sure .spec.parent is set correctly. Then sync the parent to the
 	// forest, and finally notify any relatives (including the parent) that might have been waiting
 	// for this namespace to be synced.
@@ -212,11 +217,49 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncLabel(log, nsInst, ns)
 }
 
+// syncExternalNamespace sets external tree labels to the namespace in the forest
+// if the namespace is an external namespace not managed by HNC.
+func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
+	manager := nsInst.Annotations[api.AnnotationManagedBy]
+	if manager == "" || manager == api.MetaGroup {
+		// If the internal namespace is just converted from an external namespace,
+		// enqueue the descendants to remove the propagated external tree labels.
+		if ns.IsExternal() {
+			r.enqueueAffected(log, "subtree root converts from external to internal", ns.DescendantNames()...)
+		}
+		ns.ExternalTreeLabels = nil
+		return
+	}
+
+	// If the external namespace is just converted from an internal namespace,
+	// enqueue the descendants to propagate the external tree labels.
+	if !ns.IsExternal() {
+		r.enqueueAffected(log, "subtree root converts from internal to external", ns.DescendantNames()...)
+	}
+
+	// Get tree labels and set them in the forest. If there's no tree labels on the
+	// namespace, set only one tree label of itself.
+	etls := make(map[string]int)
+	for tl, d := range nsInst.Labels {
+		enm := strings.TrimSuffix(tl, api.LabelTreeDepthSuffix)
+		if enm != tl {
+			etls[enm], _ = strconv.Atoi(d)
+		}
+	}
+	etls[ns.Name()] = 0
+	ns.ExternalTreeLabels = etls
+}
+
 // syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
 // condition if the anchor is missing in the parent namespace according to the forest. The
 // subnamespaceOf annotation is the source of truth of the ownership (e.g. being a subnamespace),
 // since modifying a namespace has higher privilege than what HNC users can do.
 func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
+	if ns.IsExternal() {
+		ns.IsSub = false
+		return
+	}
+
 	pnm := nsInst.Annotations[api.SubnamespaceOf]
 	if pnm == "" {
 		ns.IsSub = false
@@ -257,6 +300,11 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 }
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	if ns.IsExternal() {
+		ns.SetParent(nil)
+		return
+	}
+
 	// Sync this namespace with its current parent.
 	curParent := r.Forest.Get(inst.Spec.Parent)
 	if curParent != nil && !curParent.Exists() {
@@ -286,7 +334,7 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 	// so enqueuing them will ensure that the conditions show up in all members of the cycle.
 	r.enqueueAffected(log, "removed as parent", oldParent.Name())
 	r.enqueueAffected(log, "set as parent", curParent.Name())
-	r.enqueueAffected(log, "subtree parent has changed", ns.DescendantNames()...)
+	r.enqueueAffected(log, "subtree root has changed", ns.DescendantNames()...)
 }
 
 // syncAnchors updates the anchor list. If any anchor is created/deleted, it will enqueue
@@ -300,12 +348,14 @@ func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Name
 }
 
 func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	// Pre-define label depth suffix
-	labelDepthSuffix := fmt.Sprintf(".tree.%s/depth", api.MetaGroup)
+	if ns.IsExternal() {
+		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
+		return
+	}
 
 	// Remove all existing depth labels.
 	for k := range nsInst.Labels {
-		if strings.HasSuffix(k, labelDepthSuffix) {
+		if strings.HasSuffix(k, api.LabelTreeDepthSuffix) {
 			delete(nsInst.Labels, k)
 		}
 	}
@@ -316,11 +366,23 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	anc := ns
 	depth := 0
 	for anc != nil {
-		l := anc.Name() + labelDepthSuffix
+		l := anc.Name() + api.LabelTreeDepthSuffix
 		metadata.SetLabel(nsInst, l, strconv.Itoa(depth))
 		if anc.HasLocalCritCondition() {
 			break
 		}
+
+		// If the root is an external namespace, add all its external tree labels too.
+		// Note it's impossible to have an external namespace as a non-root, which is
+		// enforced by both admission controllers and the reconciler here.
+		if anc.IsExternal() {
+			for k, v := range anc.ExternalTreeLabels {
+				l = k + api.LabelTreeDepthSuffix
+				metadata.SetLabel(nsInst, l, strconv.Itoa(depth+v))
+			}
+			break
+		}
+
 		anc = anc.Parent()
 		depth++
 	}
