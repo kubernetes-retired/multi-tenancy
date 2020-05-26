@@ -23,7 +23,7 @@ const (
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,verbs=delete,versions=v1,name=namespaces.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,verbs=delete;create;update,versions=v1,name=namespaces.hnc.x-k8s.io
 
 type Namespace struct {
 	Log     logr.Logger
@@ -79,7 +79,28 @@ func (v *Namespace) checkForest(req *nsRequest) admission.Response {
 
 	ns := v.Forest.Get(req.ns.Name)
 
-	// Early exit to allow non-delete requests or if the namespace allows cascading deletion.
+	// Allow all create namespace requests except if the namespace name already exists in
+	// the external hierarchy (the apiserver already denies existing namespace names).
+	if req.op == v1beta1.Create {
+		for _, nm := range v.Forest.GetNamespaceNames() {
+			if _, ok := v.Forest.Get(nm).ExternalTreeLabels[req.ns.Name]; ok {
+				msg := fmt.Sprintf("The namespace name %q is reserved by the external hierarchy manager %q.", req.ns.Name, v.Forest.Get(nm).Manager)
+				return deny(metav1.StatusReasonAlreadyExists, msg)
+			}
+		}
+	}
+
+	// Allow all update namespace requests except if the namespace has a parent and wants
+	// to add "hnc.x-k8s.io/managedBy" annotation other than "hnc.x-k8s.io".
+	if req.op == v1beta1.Update && req.ns.Annotations[api.AnnotationManagedBy] != "" {
+		if req.ns.Annotations[api.AnnotationManagedBy] != api.MetaGroup && ns.Parent() != nil {
+			msg := fmt.Sprintf("Namespace %q is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
+				"To manage this namespace with %q, first make it a root in HNC.", ns.Name(), ns.Parent().Name(), req.ns.Annotations[api.AnnotationManagedBy])
+			return deny(metav1.StatusReasonForbidden, msg)
+		}
+	}
+
+	// Early exit to allow other non-delete requests or if the namespace allows cascading deletion.
 	if req.op != v1beta1.Delete || ns.AllowsCascadingDelete() {
 		return allow("")
 	}

@@ -220,13 +220,14 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 // syncExternalNamespace sets external tree labels to the namespace in the forest
 // if the namespace is an external namespace not managed by HNC.
 func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	manager := nsInst.Annotations[api.AnnotationManagedBy]
-	if manager == "" || manager == api.MetaGroup {
+	ns.Manager = nsInst.Annotations[api.AnnotationManagedBy]
+	if ns.Manager == "" || ns.Manager == api.MetaGroup {
 		// If the internal namespace is just converted from an external namespace,
 		// enqueue the descendants to remove the propagated external tree labels.
 		if ns.IsExternal() {
 			r.enqueueAffected(log, "subtree root converts from external to internal", ns.DescendantNames()...)
 		}
+		ns.Manager = api.MetaGroup
 		ns.ExternalTreeLabels = nil
 		return
 	}

@@ -76,6 +76,8 @@ webhooks:
     - v1
     operations:
     - DELETE
+    - CREATE
+    - UPDATE
     resources:
     - namespaces
 - clientConfig:
