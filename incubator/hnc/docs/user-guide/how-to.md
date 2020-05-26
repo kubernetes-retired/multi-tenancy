@@ -16,6 +16,7 @@ This document describes common tasks you might want to accomplish using HNC.
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
+  * [Backing up and restoring HNC data](#admin-backup-restore)
   * [Administer who has access to HNC properties](#admin-access)
   * [Modify the object types propagated by HNC](#admin-types)
   * [Gather metrics](#admin-metrics)
@@ -388,18 +389,69 @@ make deploy
 
 ### Uninstall HNC from a cluster
 
-**WARNING:** this will also delete all the hierarchical relationships between
-your namespaces. Reinstalling HNC will _not_ recreate these relationships. There
-is no need to uninstall HNC before upgrading it unless specified in the release
-notes for that version.
+To temporarily disable HNC, simply delete its deployment and webhooks:
 
 ```bash
-rm ${PLUGIN_DIR}/kubectl-hns
-kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
-
-# Don't need to delete the cert manager if you plan to reinstall it later.
-kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+kubectl -n hnc-system delete deployment hnc-controller-manager
+kubectl delete validatingwebhookconfiguration.admissionregistration.k8s.io hnc-validating-webhook-configuration
 ```
+
+You may also completely delete HNC, including its CRDs and namespaces. However,
+**this is a destructive process that results in data loss.** In particular, you
+will lose any cluster-wide configuration in your `HNCConfig` object, as well as
+any hierarchical relationships between different namespaces, _excluding_
+subnamespaces (subnamespace relationships are saved as annotations on the
+namespaces themselves, and so can be recreated when HNC is reinstalled).
+
+To avoid data loss, consider [backing up](#admin-backup-restore) your HNC
+objects so they can later be restored.
+
+To completely delete HNC, including all non-subnamespace hierarchical
+relationships and configuration settings:
+
+```bash
+kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+```
+
+<a name="admin-backup-restore"/>
+
+### Backing up and restoring HNC data
+
+If you need to [completely uninstall HNC](#admin-uninstall), but don't want to
+lose all your hierarchical data (other than your subnamespaces), you can backup
+the data before uninstalling HNC, and restore it afterwards. However, be warned
+-- this is a fairly manual and not entirely bulletproof process. As an
+alternative, you may wish to consider using an external source of truth ([such
+as Git](best-practices.md#gitops)) to store your cluster-wide configuration and
+any full namespace hierarchical relationships.
+
+To backup your data, export HNC's custom resources as follows:
+
+```bash
+# Save any nonstandard configuration:
+kubectl get hncconfiguration config -oyaml > hncconfig.yaml
+
+# Save any explicit hierarchies (not needed if you only have subnamespaces):
+kubectl get hierarchyconfigurations -A -oyaml > structure.yaml
+```
+
+After HNC is reinstalled, it will recreate the `HierarchicalConfiguration`
+objects in every namespace, and may automatically create these objects even in
+some full namespaces as well (for example, in the parents of subnamespaces). In
+order for your backed-up objects to be restored properly, edit `structure.yaml`
+to delete the `.metadata.uid` and `metadata.resourceVersion` fields from each
+object **prior** to applying the file.  It may also be convenient to delete the
+`.metadata.selfLink` field, which is alphabetically between the other two
+fields; this is safe.
+
+Once you are ready, first reapply the cluster-wide configuration via `kubectl
+apply -f hncconfig.yaml`, and then the structural relationships via `kubectl
+apply -f structure.yaml`.
+
+Finally, resolve any `SubnamespaceAnchorMissing` conditions. Type `kubectl hns
+tree -A` to identify all subnamespaces affected, by this condition, and then
+recreate recreate the anchors manually by typing `kubectl hns create <subns> -n
+<parent>`.
 
 <a name="admin-access"/>
 

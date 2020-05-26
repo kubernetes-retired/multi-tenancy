@@ -75,20 +75,30 @@ kubectl hns describe foo
 
 Since HNC is controlled by regular Kubernetes objects, you can check your YAML
 files into source control and apply them to your cluster(s) via `kubectl apply
--f`. However, HNC does impose two restrictions on the order in which changes can
-be applied:
+-f`. You generally will only want to do this for your cluster-wide configuration
+(the `HNCConfiguration` object) and your full namespace configurations (the
+`HierarchyConfiguration` objects in each namespace), and not your subnamespaces
+(the `SubnamespaceAnchor` objects) since subnamespaces are mainly for
+unprivileged users, not Gitops flows.
+
+When applying your `HierarchyConfiguration` objects, HNC imposes two
+restrictions on the order in which changes can be applied:
 
 1. A namespace must exist before it can be referenced as the parent of another
-   namespace. However, the would-be parent’s `HierarchicalConfiguration` does
-   _not_ need to exist.
+   namespace.
 1. You may not create any cycles between namespaces. For example, assume that
    Namespace A is the parent of B, and you wish to reverse this relationship so
    that B becomes the parent of A. If A’s config is applied before B’s, this
    will result in a cycle.
 
-In both cases, HNC’s validating admission controllers will reject the change.
-However, in many cases, simply re-running the `apply` operation will resolve the
-issue:
+If either condition is violated, HNC’s validating admission controllers will
+reject the change. However, in Gitops flows, it is possible to transiently
+violate both conditions. For example, a namespace may not be fully created
+before it is referenced as a parent, or you might change the parents of multiple
+namespaces simultaneously, resulting in a transient cycle between them.
+
+Fortunately, in most cases, simply re-running the `apply` operation will resolve
+any issues:
 
 1. If all namespaces are created during the first application, the second
    application will successfully allow them to be referenced as parents.
