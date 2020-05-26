@@ -79,6 +79,11 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 		}
 
 		if cns.Exists() {
+			// Forbid this, unless it's to allow an anchor to be created for an existing subnamespace
+			// that's just missing its anchor.
+			if cns.Parent().Name() == pnm && cns.IsSub {
+				return allow("")
+			}
 			msg := fmt.Sprintf("The requested namespace %s already exists. Please use a different name.", cnm)
 			return deny(metav1.StatusReasonConflict, msg)
 		}
