@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/rbac/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
@@ -508,19 +508,19 @@ func removeHNCConfigTypeWithMode(ctx context.Context, apiVersion, kind string, m
 }
 
 func createCronTabCRD(ctx context.Context) {
-	crontab := v1beta1.CustomResourceDefinition{
+	crontab := apiextensions.CustomResourceDefinition{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomResourceDefinition",
 			APIVersion: "apiextensions.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "crontabs.stable.example.com",
 		},
-		Spec: v1beta1.CustomResourceDefinitionSpec{
+		Spec: apiextensions.CustomResourceDefinitionSpec{
 			Group: "stable.example.com",
-			Versions: []v1beta1.CustomResourceDefinitionVersion{
+			Versions: []apiextensions.CustomResourceDefinitionVersion{
 				{Name: "v1", Served: true, Storage: true},
 			},
-			Names: v1beta1.CustomResourceDefinitionNames{
+			Names: apiextensions.CustomResourceDefinitionNames{
 				Singular: "crontab",
 				Plural:   "crontabs",
 				Kind:     "CronTab",

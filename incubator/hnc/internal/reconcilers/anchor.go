@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -112,20 +113,27 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		return false, nil
 	}
 
+	deletingCRD, err := r.isDeletingCRD(ctx)
+	if err != nil {
+		log.Info("Couldn't determine if CRD is being deleted")
+		return false, err
+	}
+
 	cnm := inst.Name
-	log.Info("The anchor is being deleted.")
+	log.Info("The anchor is being deleted", "deletingCRD", deletingCRD)
 	switch {
 	case len(inst.ObjectMeta.Finalizers) == 0:
-		// We've finished process this, nothing to do.
+		// We've finished processing this, nothing to do.
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
-	case snsInst.DeletionTimestamp.IsZero() && r.allowsCascadingDelete(cnm):
+	case !deletingCRD && snsInst.DeletionTimestamp.IsZero() && r.allowsCascadingDelete(cnm):
 		// The subnamespace is not already being deleted but it allows cascadingDelete.
-		// Delete the subnamespace.
+		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
+		// namespaces alone.
 		log.Info("The subnamespace is not being deleted but it allows cascading deletion.")
 		return true, r.deleteNamespace(ctx, log, snsInst)
 	case r.removeFinalizers(log, inst, snsInst):
-		log.Info("Remove the finalizers.")
+		// We've determined that this anchor is ready to be deleted.
 		return true, r.writeInstance(ctx, log, inst)
 	default:
 		// The subnamespace is already being deleted. Do nothing in this Reconcile().
@@ -135,17 +143,37 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 	}
 }
 
+// isDeletingCRD returns true if the Anchor CRD is being deleted. This can happen if HNC is being
+// uninstalled. In such cases, we shouldn't perform a cascading deletion.
+func (r *AnchorReconciler) isDeletingCRD(ctx context.Context) (bool, error) {
+	crd := &apiextensions.CustomResourceDefinition{}
+	nsn := types.NamespacedName{Name: api.Anchors + "." + api.MetaGroup}
+	if err := r.Get(ctx, nsn, crd); err != nil {
+		// Either the CRD wasn't found, in which case, HNC can't operate propertly; hopefully, the admin
+		// is uninstalling HNC, and the HNC pod is also about to be shut down. Otherwise, there was some
+		// transient error and we should just retry.
+		return false, err
+	}
+
+	return !crd.DeletionTimestamp.IsZero(), nil
+}
+
 func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
 	pnm := inst.Namespace
-	cnm := inst.Name
 	sOf := snsInst.GetAnnotations()[api.SubnamespaceOf]
+
+	// This switch statement has an explicit case for all conditions when we *can* delete the
+	// finalizers. The default behaviour is that we *cannot* delete the finalizers yet.
 	switch {
 	case snsInst.Name == "":
-		log.Info("The subnamespace is already purged.")
+		log.Info("The subnamespace is already purged; allowing the anchor to be deleted")
 	case sOf != pnm:
-		log.Info("The subnamespace believes it is the subnamespace of another namespace.", "annotation", sOf)
-	case snsInst.DeletionTimestamp.IsZero() && !r.allowsCascadingDelete(cnm):
-		log.Info("The subnamespace is not being deleted and it doesn't allow cascading deletion.")
+		log.Info("The subnamespace believes it is the subnamespace of another namespace; allowing the anchor to be deleted", "annotation", sOf)
+	case snsInst.DeletionTimestamp.IsZero():
+		// onDeleting has decided not to try to delete this namespace. Either cascading deletion isn't
+		// allowed (and the user has bypassed the webhook), or the CRD has been deleted and we don't
+		// want to invoke cascading deletion. Just allow the anchor to be deleted.
+		log.Info("We've decided not to delete the subnamespace; allowing the anchor to be deleted")
 	default:
 		return false
 	}
