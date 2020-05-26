@@ -11,8 +11,8 @@ import (
 )
 
 func TestSubnamespaces(t *testing.T) {
-	// Two roots `a` and `b`, with `c` a subnamespace of `a`
-	f := foresttest.Create("--A")
+	// Two roots `a` and `b`, with `c` a subnamespace of `a`, and `d` a regular child of `b`
+	f := foresttest.Create("--Ab")
 	h := &Anchor{Forest: f}
 	f.Get("c").UpdateAllowCascadingDelete(true)
 
@@ -27,6 +27,8 @@ func TestSubnamespaces(t *testing.T) {
 		{name: "ok-delete", op: v1beta1.Delete, pnm: "a", cnm: "c"},
 		{name: "create anchor in excluded ns", op: v1beta1.Create, pnm: "kube-system", cnm: "brumpf", fail: true},
 		{name: "create anchor with existing ns name", op: v1beta1.Create, pnm: "a", cnm: "b", fail: true},
+		{name: "create anchor for existing non-subns child", op: v1beta1.Create, pnm: "b", cnm: "d", fail: true},
+		{name: "create anchor for existing subns", op: v1beta1.Create, pnm: "a", cnm: "c"},
 		{name: "delete anchor when allowCascadingDelete is false", op: v1beta1.Delete, pnm: "a", cnm: "b", fail: true},
 	}
 	for _, tc := range tests {
