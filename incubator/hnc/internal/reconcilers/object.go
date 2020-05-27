@@ -51,6 +51,8 @@ const (
 	actionRemove  syncAction = "remove"
 	actionWrite   syncAction = "write"
 	actionNop     syncAction = "no-op"
+
+	unknownSourceNamespace = "<unknown-source-namespace>"
 )
 
 // namespacedNameSet is used to keep track of existing propagated objects of
@@ -239,7 +241,8 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	// what we'd _like_ to do. We still needed to sync the forest since we want to know when objects
 	// are added and removed, so we can sync them properly if the critical condition is resolved, but
 	// don't do anything else for now.
-	if r.Forest.Get(inst.GetNamespace()).GetCritAncestor() != "" {
+	if ca := r.Forest.Get(inst.GetNamespace()).GetCritAncestor(); ca != "" {
+		log.Info("Suppressing action due to critical condition", "critAncestor", ca, "action", action)
 		return actionNop, nil
 	}
 
@@ -286,8 +289,10 @@ func (r *ObjectReconciler) syncMissingObject(ctx context.Context, log logr.Logge
 	// deleted twice.
 	// 2. This is a propagated object. We haven't actually created it yet, but its source exists in
 	// the forest so we need to make a copy.
-	// 3. This *was* a propagated object that we've deleted, and we're getting a notification about
+	// 3a. This *was* a propagated object that we've deleted, and we're getting a notification about
 	// it.
+	// 3b. This *should have been* a propagated object, but due to some error we were never able to
+	// create it.
 	//
 	// In all cases, we're going to give it the api.LabelInherited from label with a dummy value, so
 	// that syncObject() treats it as though it's a propagated object. This works well in all three
@@ -299,7 +304,7 @@ func (r *ObjectReconciler) syncMissingObject(ctx context.Context, log logr.Logge
 	// the tree and call write(), which will set the correct value for LabelInheritedFrom.
 	// 3. If this *was* a propagated object that's been deleted, then we'll see there's no source
 	// (like in case #1) and ignore it.
-	metadata.SetLabel(inst, api.LabelInheritedFrom, "source-namespace-placeholder")
+	metadata.SetLabel(inst, api.LabelInheritedFrom, unknownSourceNamespace)
 
 	// Continue the regular syncing process
 	return actionUnknown
@@ -392,28 +397,29 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 	hnccrSingleton.requestReconcile("possible new source object")
 
 	// Enqueue all the descendant copies
-	r.enqueueDescendants(ctx, log, src)
+	r.enqueueDescendants(ctx, log, src, "new or modified source object")
 }
 
-func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
 	sns := r.Forest.Get(src.GetNamespace())
-	if sns.GetCritAncestor() != "" {
+	if ca := sns.GetCritAncestor(); ca != "" {
 		// There's no point enqueuing anything if the source namespace has a crit condition since we'll
 		// just skip any action anyway.
-		log.Info("Source object has changed but namespace has critical condition; will not enqueue descendants")
+		log.Info("Will not enqueue descendants due to crit ancestor", "critAncestor", ca, "oldReason", reason)
 		return
 	}
+	log.Info("Enqueuing descendant objects", "reason", reason)
 	for _, ns := range sns.DescendantNames() {
 		dc := object.Canonical(src)
 		dc.SetNamespace(ns)
-		log.V(1).Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", "The source changed")
+		log.V(1).Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", reason)
 		r.Affected <- event.GenericEvent{Meta: dc}
 	}
 }
 
-func (r *ObjectReconciler) enqueueNamespace(log logr.Logger, nnm, reason string) {
+func (r *ObjectReconciler) enqueueHC(log logr.Logger, nnm, reason string) {
 	go func() {
-		log.Info("Enqueuing for reconciliation", "affected", nnm, "reason", reason)
+		log.Info("Enqueuing HierarchyConfiguration for reconciliation", "ns", nnm, "reason", reason)
 		// The handler only cares about the metadata
 		inst := &api.HierarchyConfiguration{}
 		inst.ObjectMeta.Name = api.Singleton
@@ -497,6 +503,7 @@ func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, in
 
 	// Remove the propagated object from the map because we are confident that the object was successfully deleted
 	// on the apiserver.
+	log.Info("Deleted")
 	r.recordRemovedObject(log, inst.GetNamespace(), inst.GetName())
 	return nil
 }
@@ -513,8 +520,10 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	var err error = nil
 	stats.WriteObject(inst.GroupVersionKind())
 	if exist {
+		log.Info("Updating")
 		err = r.Update(ctx, inst)
 	} else {
+		log.Info("Creating")
 		err = r.Create(ctx, inst)
 	}
 	if err != nil {
@@ -546,7 +555,7 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 	case hasFinalizers(inst):
 		// Propagated objects can never have finalizers
 		if ns.SetCondition(ao, api.CannotPropagate, "Objects with finalizers cannot be propagated") {
-			r.enqueueNamespace(log, ns.Name(), "Set CannotPropagate since it has finalizers")
+			r.enqueueHC(log, ns.Name(), "Set CannotPropagate since it has finalizers")
 		}
 
 	case err != nil:
@@ -554,7 +563,7 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 		// never take actions on a source object, so only propagated objects could possibly get an error.
 		msg := fmt.Sprintf("Could not %s: %s", act, err.Error())
 		if ns.SetCondition(sao, api.CannotUpdate, msg) {
-			r.enqueueNamespace(log, ns.Name(), "Set CannotUpdate due to error")
+			r.enqueueHC(log, ns.Name(), "Set CannotUpdate due to error")
 		}
 
 		// Also set a condition on the source if one exists.
@@ -562,7 +571,7 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 			srcNS := r.Forest.Get(srcInst.GetNamespace())
 			if ns.IsAncestor(srcNS) {
 				if srcNS.SetCondition(ao, api.CannotPropagate, msg) {
-					r.enqueueNamespace(log, srcNS.Name(), "Set CannotPropagate on source namespace due to error updating")
+					r.enqueueHC(log, srcNS.Name(), "Set CannotPropagate on source namespace due to error updating")
 				}
 			} else {
 				// Because we released the lock for a bit, there's a chance that srcInst is no longer a parent
@@ -577,13 +586,18 @@ func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstruc
 		// ancestors (technically, srcNS is the only feasible ancestor, but because we don't hold the
 		// lock, it's safer to just do everything).
 		if hasPropagatedLabel(inst) {
-			if ns.ClearCondition(sao, "") {
-				r.enqueueNamespace(log, ns.Name(), "Removed condition")
+			cleared := clearConditionsForUnknownSources(log, ns, sao)
+			if !cleared {
+				// If there were no unknown sources, try the known one
+				cleared = ns.ClearCondition(sao, "")
+			}
+			if cleared {
+				r.enqueueHC(log, ns.Name(), "Removed condition on destination namespace")
 			}
 		}
 		for ns != nil {
 			if ns.ClearCondition(ao, "") {
-				r.enqueueNamespace(log, ns.Name(), "Removed condition")
+				r.enqueueHC(log, ns.Name(), "Removed condition on source namespace")
 			}
 			ns = ns.Parent()
 		}
@@ -599,6 +613,59 @@ func hasPropagatedLabel(inst *unstructured.Unstructured) bool {
 	}
 	_, po := labels[api.LabelInheritedFrom]
 	return po
+}
+
+// clearConditionsForUnknownSources cleans up conditions that indicated that we couldn't propagate an
+// object, after the source object is deleted.
+//
+// This function is used when we're reconciling an object that doesn't actually exist, and that we
+// think wasn't a source. In such cases, the earlier parts of this reconciler sets the inheritedFrom
+// label to `unknownSourceNamespace`; if we had found a source, this label would have been updated,
+// but it wasn't. So if this function doesn't early-exit, we know this either was a source namespace
+// that got deleted (and then reconciled multiple times), or else it was supposed to be a propagated
+// object that never actually got created, and whose source has now been deleted (if the source was
+// present, the label would have been set).
+//
+// In this first case, this function will do nothing - any conditions associated with a source
+// object will be cleared when the source was first deleted. But in the second case, the _reason_
+// that this propagated object was never actually created is very likely because some error
+// prevented it from being created, which means there's very likely a condition on the namespace.
+//
+// Unfortunately, namespaces use the source object as the key to handle conditions, and we don't
+// know the source! So we can't just say ns.ClearCondition(sourceObject, "") as we usually would.
+// Instead, we need to look through all relevant conditions on the namespace and clear anything that
+// *might* have been caused by this object failing to be propagated.
+//
+// Is this really safe? Yes: HNC enforces that all objects with a given name and GVK are the same
+// across namespaces, so any condition on this namespace with the same GVK and name *must* be
+// talking about this copy of the object in this namespace. Since this object doesn't *and
+// shouldn't* exist, any condition on its namespace are now invalid, and can be safely removed.
+//
+// Is this method fast enough? In theory. ns.GetConditions() looks slow, but in a typical case, most
+// namespaces will so few conditions that looking through them in memory will take negligible time.
+// Also, it's very rare that we'll reconcile a completely missing object in the first place, so this
+// method should be caleld very rarely.
+func clearConditionsForUnknownSources(log logr.Logger, ns *forest.Namespace, sao api.AffectedObject) bool {
+	// Early-exit if the source is known
+	if sao.Namespace != unknownSourceNamespace {
+		return false
+	}
+
+	cleared := false
+	for _, cond := range ns.Conditions() {
+		for _, ao := range cond.Affects {
+			aoCmp := ao
+			aoCmp.Namespace = unknownSourceNamespace // to make comparison easier
+			if aoCmp != sao {
+				continue
+			}
+
+			log.Info("Object didn't exist but found possibly matching condition", "condition", cond)
+			ns.ClearCondition(ao, "")
+			cleared = true
+		}
+	}
+	return cleared
 }
 
 // forestHasSource returns true if the original object is found in the forest.
@@ -624,7 +691,7 @@ func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.
 	// deleted on the apiserver.
 	hnccrSingleton.requestReconcile("possible deleted source object")
 
-	r.enqueueDescendants(ctx, log, inst)
+	r.enqueueDescendants(ctx, log, inst, "possibly deleted source object")
 }
 
 // shouldPropagateSource returns true if the object should be propagated by the HNC. The following
