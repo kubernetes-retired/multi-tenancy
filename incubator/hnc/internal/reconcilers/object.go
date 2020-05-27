@@ -89,7 +89,11 @@ type ObjectReconciler struct {
 	propagatedObjects namespacedNameSet
 }
 
-// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete
+// HNC doesn't actually need all these permissions, but we *do* need to have them to be able to
+// propagate RoleBindings for them. These match the permissions required by the builtin `admin`
+// role, as seen in hack/test-issue-772.sh.
+//
+// +kubebuilder:rbac:groups=*,resources=*,verbs=get;list;watch;create;update;patch;delete;deletecollection;impersonate
 
 // SyncNamespace can be called manually by the HierarchyConfigReconciler when the hierarchy changes.
 // It enqueues all the current objects in the namespace and local copies of the original objects
