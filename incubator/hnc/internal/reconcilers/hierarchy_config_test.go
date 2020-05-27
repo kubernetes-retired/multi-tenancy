@@ -11,10 +11,6 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 )
 
-const (
-	depthSuffix = ".tree." + api.MetaGroup + "/depth"
-)
-
 var _ = Describe("Hierarchy", func() {
 	ctx := context.Background()
 
@@ -135,9 +131,105 @@ var _ = Describe("Hierarchy", func() {
 		setParent(ctx, barName, fooName)
 
 		// Verify all the labels
-		Eventually(getLabel(ctx, barName, fooName+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, barName, barName+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, fooName, fooName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, barName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, fooName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+	})
+
+	It("should propagate external tree labels", func() {
+		// Create an external namespace baz
+		l := map[string]string{
+			"ext2" + api.LabelTreeDepthSuffix: "2",
+			"ext1" + api.LabelTreeDepthSuffix: "1",
+		}
+		a := map[string]string{api.AnnotationManagedBy: "others"}
+		bazName := createNSWithLabelAnnotation(ctx, "baz", l, a)
+
+		// Make bar a child of baz
+		setParent(ctx, barName, bazName)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("3"))
+		Eventually(getLabel(ctx, barName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		// Even if baz doesn't have the tree label of itself with depth 0 when created,
+		// the tree label of itself is added automatically.
+		Eventually(getLabel(ctx, barName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+
+		Eventually(getLabel(ctx, bazName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, bazName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+	})
+
+	It("should propagate external tree labels if the internal namespace is converted to external", func() {
+		// Make bar a child of foo
+		setParent(ctx, barName, fooName)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, fooName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+
+		// Convert foo from an internal namespace to an external namespace by adding
+		// the "managedBy: others" annotation.
+		ns := getNamespace(ctx, fooName)
+		ns.SetAnnotations(map[string]string{api.AnnotationManagedBy: "others"})
+		l := map[string]string{
+			"ext2" + api.LabelTreeDepthSuffix: "2",
+			"ext1" + api.LabelTreeDepthSuffix: "1",
+		}
+		ns.SetLabels(l)
+		updateNamespace(ctx, ns)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("3"))
+		Eventually(getLabel(ctx, barName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		// Even if foo doesn't have the tree label of itself with depth 0 when created,
+		// the tree label of itself is added automatically.
+		Eventually(getLabel(ctx, barName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, fooName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, fooName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, fooName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+	})
+
+	It("should remove external tree labels if the external namespace is converted to internal", func() {
+		// Create an external namespace baz
+		l := map[string]string{
+			"ext2" + api.LabelTreeDepthSuffix: "2",
+			"ext1" + api.LabelTreeDepthSuffix: "1",
+		}
+		a := map[string]string{api.AnnotationManagedBy: "others"}
+		bazName := createNSWithLabelAnnotation(ctx, "baz", l, a)
+
+		// Make bar a child of baz
+		setParent(ctx, barName, bazName)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("3"))
+		Eventually(getLabel(ctx, barName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		// Even if baz doesn't have the tree label of itself with depth 0 when created,
+		// the tree label of itself is added automatically.
+		Eventually(getLabel(ctx, barName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, bazName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+
+		// Convert baz from an external namespace to an internal namespace by removing
+		// the "managedBy: others" annotation.
+		ns := getNamespace(ctx, bazName)
+		ns.SetAnnotations(map[string]string{})
+		updateNamespace(ctx, ns)
+
+		// Verify all the labels
+		Eventually(getLabel(ctx, barName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, barName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, barName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, barName, barName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, "ext2"+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, "ext1"+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
 	})
 
 	It("should update labels when parent is changed", func() {
@@ -148,7 +240,7 @@ var _ = Describe("Hierarchy", func() {
 		// Set up initial hierarchy
 		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
 		bazHier := newHierarchy(bazName)
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
 		// Make baz as a child of bar
@@ -156,8 +248,8 @@ var _ = Describe("Hierarchy", func() {
 		updateHierarchy(ctx, bazHier)
 
 		// Verify all labels on baz after set bar as parent
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
 		// Change parent to foo
@@ -165,9 +257,9 @@ var _ = Describe("Hierarchy", func() {
 		updateHierarchy(ctx, bazHier)
 
 		// Verify all labels on baz after change parent to foo
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, bazName, fooName+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, barName+api.LabelTreeDepthSuffix)).Should(Equal(""))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 	})
 
@@ -179,7 +271,7 @@ var _ = Describe("Hierarchy", func() {
 		// Set up initial hierarchy
 		bazName := createNSWithLabel(ctx, "baz", map[string]string{keyName: valueName})
 		bazHier := newHierarchy(bazName)
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
 		// Make baz as a child of bar
@@ -187,8 +279,8 @@ var _ = Describe("Hierarchy", func() {
 		updateHierarchy(ctx, bazHier)
 
 		// Verify all labels on baz after set bar as parent
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+api.LabelTreeDepthSuffix)).Should(Equal("1"))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 
 		// Remove parent from baz
@@ -196,8 +288,8 @@ var _ = Describe("Hierarchy", func() {
 		updateHierarchy(ctx, bazHier)
 
 		// Verify all labels on baz after parent removed
-		Eventually(getLabel(ctx, bazName, bazName+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, bazName, barName+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, bazName, barName+api.LabelTreeDepthSuffix)).Should(Equal(""))
 		Eventually(getLabel(ctx, bazName, keyName)).Should(Equal(valueName))
 	})
 
@@ -213,57 +305,57 @@ var _ = Describe("Hierarchy", func() {
 		setParent(ctx, nms[5], nms[3])
 
 		// Check all labels
-		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal("3"))
+		Eventually(getLabel(ctx, nms[0], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[2], nms[2]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[4], nms[4]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[5]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("3"))
 
 		// Create a cycle from a(0) to d(3) and check all labels.
 		setParent(ctx, nms[0], nms[3])
-		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal(""))
-		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal(""))
-		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal(""))
-		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal(""))
-		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal(""))
-		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[0], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[2], nms[2]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[3], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[4], nms[4]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[5], nms[5]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal(""))
+		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal(""))
 
 		// Fix the cycle and ensure that everything's restored
 		setParent(ctx, nms[0], "")
-		Eventually(getLabel(ctx, nms[0], nms[0]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[1]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[1], nms[0]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[2], nms[2]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[2], nms[0]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[3], nms[3]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[3], nms[1]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[3], nms[0]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[4], nms[4]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[4], nms[1]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[4], nms[0]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[5], nms[5]+depthSuffix)).Should(Equal("0"))
-		Eventually(getLabel(ctx, nms[5], nms[3]+depthSuffix)).Should(Equal("1"))
-		Eventually(getLabel(ctx, nms[5], nms[1]+depthSuffix)).Should(Equal("2"))
-		Eventually(getLabel(ctx, nms[5], nms[0]+depthSuffix)).Should(Equal("3"))
+		Eventually(getLabel(ctx, nms[0], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[1], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[2], nms[2]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[2], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[3], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[3], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[4], nms[4]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[4], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[4], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[5]+api.LabelTreeDepthSuffix)).Should(Equal("0"))
+		Eventually(getLabel(ctx, nms[5], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
+		Eventually(getLabel(ctx, nms[5], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
+		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("3"))
 	})
 
 })
@@ -361,4 +453,8 @@ func createNSes(ctx context.Context, num int) []string {
 		nms = append(nms, nm)
 	}
 	return nms
+}
+
+func updateNamespace(ctx context.Context, ns *corev1.Namespace) {
+	ExpectWithOffset(1, k8sClient.Update(ctx, ns)).Should(Succeed())
 }

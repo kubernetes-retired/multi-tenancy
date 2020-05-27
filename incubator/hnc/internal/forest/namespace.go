@@ -41,6 +41,12 @@ type Namespace struct {
 
 	// Anchors store a list of anchors in the namespace.
 	Anchors []string
+
+	// ExternalTreeLabels stores external tree labels if this namespace is an external namespace.
+	// It will be empty if the namespace is not external. External namespace will at least have one
+	// tree label of itself. The key is the tree label without ".tree.hnc.x-k8s.io/depth" suffix.
+	// The value is the depth.
+	ExternalTreeLabels map[string]int
 }
 
 // Name returns the name of the namespace, of "<none>" if the namespace is nil.
@@ -135,4 +141,9 @@ func (ns *Namespace) SetAnchors(anchors []string) (diff []string) {
 
 	ns.Anchors = anchors
 	return
+}
+
+// IsExternal returns true if the namespace is not managed by HNC.
+func (ns *Namespace) IsExternal() bool {
+	return len(ns.ExternalTreeLabels) > 0
 }

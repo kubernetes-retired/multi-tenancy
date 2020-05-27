@@ -104,6 +104,20 @@ func createNSWithLabel(ctx context.Context, prefix string, label map[string]stri
 	return nm
 }
 
+// createNSWithLabelAnnotation has similar function to createNS with label and annotation
+// as additional parameters.
+func createNSWithLabelAnnotation(ctx context.Context, prefix string, l map[string]string, a map[string]string) string {
+	nm := createNSName(prefix)
+
+	// Create the namespace
+	ns := &corev1.Namespace{}
+	ns.SetLabels(l)
+	ns.SetAnnotations(a)
+	ns.Name = nm
+	Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+	return nm
+}
+
 func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 	if c.CreationTimestamp.IsZero() {
 		return k8sClient.Create(ctx, c)
