@@ -193,6 +193,15 @@ type Condition struct {
 	Affects []AffectedObject `json:"affects,omitempty"`
 }
 
+func (c Condition) String() string {
+	affects := fmt.Sprint(c.Affects)
+	msg := c.Msg
+	if len(msg) > 100 {
+		msg = msg[:100] + "..."
+	}
+	return fmt.Sprintf("%s: %s (affects %s)", c.Code, msg, affects)
+}
+
 // AffectedObject defines uniquely identifiable objects.
 type AffectedObject struct {
 	Group     string `json:"group,omitempty"`
@@ -230,8 +239,8 @@ func (a AffectedObject) String() string {
 	}
 
 	// No namespace -> it *is* a namespace
-	if a.Namespace != "" {
-		return a.Namespace
+	if a.Namespace == "" {
+		return a.Name
 	}
 
 	// Generic object (note that Group may be empty for core objects, don't worry about it)
