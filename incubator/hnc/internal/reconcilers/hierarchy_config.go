@@ -17,6 +17,7 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -25,7 +26,8 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -93,9 +95,10 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 }
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
+	// Load the namespace and make a copy
 	nsInst, err := r.getNamespace(ctx, nm)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// The namespace doesn't exist or is purged. Update the forest and exit.
 			// (There must be no HC instance and we cannot create one.)
 			r.onMissingNamespace(log, nm)
@@ -103,22 +106,22 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 		}
 		return err
 	}
+	origNS := nsInst.DeepCopy()
+
 	// Get singleton from apiserver. If it doesn't exist, initialize one.
 	inst, err := r.getSingleton(ctx, nm)
 	if err != nil {
 		return err
 	}
+	origHC := inst.DeepCopy()
+
 	// Get a list of subnamespace anchors from apiserver.
 	anms, err := r.getAnchorNames(ctx, nm)
 	if err != nil {
 		return err
 	}
 
-	origHC := inst.DeepCopy()
-	origNS := nsInst.DeepCopy()
-
-	// We will put finalizers on namespaces (the Hierarchy singleton actually)
-	// if there are anchors no matter the namespace is internal or external.
+	// Update whether the HC is deletable.
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
@@ -153,6 +156,10 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 	}
 }
 
+// updateFinalizers ensures that the HC can't be deleted if there are any subnamespace anchors in
+// the namespace (with some exceptions). The main reason is that the HC stores the
+// .spec.allowCascadingDelete field, so if we allowed this object to be deleted before all
+// descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
 func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
 	// https://github.com/kubernetes-sigs/multi-tenancy/issues/623 as we try to enforce that.
@@ -549,13 +556,30 @@ func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string)
 	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	inst := &api.HierarchyConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 
 		// It doesn't exist - initialize it to a sane initial value.
 		inst.ObjectMeta.Name = api.Singleton
 		inst.ObjectMeta.Namespace = nm
+	}
+
+	// If the HC is either being deleted, or it doesn't exist, this may be because HNC is being
+	// uninstalled and the HierarchyConfiguration CRD is being/has been deleted. If so, simply start
+	// returning errors - do _not_ attempt to sync the rest of the forest. This will ensure that the
+	// object reconciler won't start deleting objects, both because existing namespaces won't suddenly
+	// look like roots, or if HNC is restarted, because the namespace will never be set as Exists()
+	// and therefore will be left alone.
+	if inst.CreationTimestamp.IsZero() || !inst.DeletionTimestamp.IsZero() {
+		crd := &apiextensions.CustomResourceDefinition{}
+		nsn := types.NamespacedName{Name: api.HierarchyConfigurations + "." + api.MetaGroup}
+		if err := r.Get(ctx, nsn, crd); err != nil {
+			return nil, err
+		}
+		if !crd.DeletionTimestamp.IsZero() {
+			return nil, errors.New("HierarchyConfiguration CRD is being deleted, cannot load")
+		}
 	}
 
 	return inst, nil
@@ -582,7 +606,7 @@ func (r *HierarchyConfigReconciler) getAnchorNames(ctx context.Context, nm strin
 	ul.SetKind(api.AnchorKind)
 	ul.SetAPIVersion(api.AnchorAPIVersion)
 	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 		return anms, nil
