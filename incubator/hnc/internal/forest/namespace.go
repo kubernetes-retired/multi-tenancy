@@ -42,6 +42,10 @@ type Namespace struct {
 	// Anchors store a list of anchors in the namespace.
 	Anchors []string
 
+	// Manager stores the manager of the namespace. The default value
+	// "hnc.x-k8s.io" means it's managed by HNC.
+	Manager string
+
 	// ExternalTreeLabels stores external tree labels if this namespace is an external namespace.
 	// It will be empty if the namespace is not external. External namespace will at least have one
 	// tree label of itself. The key is the tree label without ".tree.hnc.x-k8s.io/depth" suffix.

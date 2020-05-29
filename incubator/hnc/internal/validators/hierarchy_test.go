@@ -52,6 +52,50 @@ func TestStructure(t *testing.T) {
 	}
 }
 
+func TestChangeParentOnManagedBy(t *testing.T) {
+	f := foresttest.Create("-a-c") // a <- b; c <- d
+	h := &Hierarchy{Forest: f}
+	l := zap.Logger(false)
+
+	// Make c and d external namespaces
+	f.Get("c").ExternalTreeLabels = map[string]int{"c" + api.LabelTreeDepthSuffix: 0}
+	f.Get("d").ExternalTreeLabels = map[string]int{"d" + api.LabelTreeDepthSuffix: 0}
+
+	// These cases test changing parent for internal or external namespaces, described
+	// in the table at https://bit.ly/hnc-external-hierarchy#heading=h.z9mkbslfq41g
+	// with other cases covered in the namespace_test.go.
+	tests := []struct {
+		name string
+		nnm  string
+		pnm  string
+		fail bool
+	}{
+		{name: "ok: change internal namespace parent from none to existing", nnm: "a", pnm: "c"},
+		{name: "ok: change internal namespace existing parent", nnm: "b", pnm: "c"},
+		{name: "ok: change internal namespace parent from existing to none", nnm: "b", pnm: ""},
+		{name: "not ok: change external namespace parent from none to existing", nnm: "c", pnm: "a", fail: true},
+		{name: "not ok: change external namespace existing parent", nnm: "d", pnm: "a", fail: true},
+		{name: "ok: change external namespace parent from existing to none", nnm: "d", pnm: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewGomegaWithT(t)
+			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
+			hc.ObjectMeta.Name = api.Singleton
+			hc.ObjectMeta.Namespace = tc.nnm
+			req := &request{hc: hc}
+
+			// Test
+			got := h.handle(context.Background(), l, req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+}
+
 func TestAuthz(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -176,6 +176,11 @@ func (v *Hierarchy) checkNS(ns *forest.Namespace) admission.Response {
 
 // checkParent validates if the parent is legal based on the current in-memory state of the forest.
 func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
+	if ns.IsExternal() && newParent != nil {
+		msg := fmt.Sprintf("Namespace %q is managed by %q, not HNC, so it cannot have a parent in HNC.", ns.Name(), ns.Manager)
+		return deny(metav1.StatusReasonForbidden, msg)
+	}
+
 	if curParent == newParent {
 		return allow("parent unchanged")
 	}

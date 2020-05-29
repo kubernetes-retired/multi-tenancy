@@ -81,9 +81,103 @@ func TestDeleteOwnerNamespace(t *testing.T) {
 		// Report - Should allow deleting the parent namespace with allowCascadingDelete set on it.
 		logResult(t, got.AdmissionResponse.Result)
 		g.Expect(got.AdmissionResponse.Allowed).Should(BeTrue())
-
 	})
+}
 
+func TestCreateNamespace(t *testing.T) {
+	// nm is the name of the namespace to be created, which already exists in external hierarchy.
+	nm := "exhier"
+
+	// Create a single external namespace "a" with "exhier" in the external hierarchy.
+	f := foresttest.Create("-")
+	vns := &Namespace{Forest: f}
+	a := f.Get("a")
+	a.ExternalTreeLabels = map[string]int{
+		nm:       1,
+		a.Name(): 0,
+	}
+
+	// Requested namespace uses "exhier" as name.
+	ns := &corev1.Namespace{}
+	ns.Name = nm
+
+	t.Run("Create namespace with an already existing name in external hierarchy", func(t *testing.T) {
+		g := NewGomegaWithT(t)
+		req := &nsRequest{
+			ns: ns,
+			op: v1beta1.Create,
+		}
+
+		// Test
+		got := vns.handle(req)
+
+		// Report
+		logResult(t, got.AdmissionResponse.Result)
+		g.Expect(got.AdmissionResponse.Allowed).Should(BeFalse())
+	})
+}
+
+func TestUpdateNamespaceManagedBy(t *testing.T) {
+	f := foresttest.Create("-a-c") // a <- b; c <- d
+	vns := &Namespace{Forest: f}
+
+	aInst := &corev1.Namespace{}
+	aInst.Name = "a"
+	bInst := &corev1.Namespace{}
+	bInst.Name = "b"
+
+	// Add 'hnc.x-k8s.io/managedBy: other' annotation on c.
+	cInst := &corev1.Namespace{}
+	cInst.Name = "c"
+	cInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
+
+	// ** Please note this will make d in an *illegal* state. **
+	// Add 'hnc.x-k8s.io/managedBy: other' annotation on d.
+	dInst := &corev1.Namespace{}
+	dInst.Name = "d"
+	dInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
+
+	// These cases test converting namespaces between internal and external, described
+	// in the table at https://bit.ly/hnc-external-hierarchy#heading=h.z9mkbslfq41g
+	// with other cases covered in the hierarchy_test.go.
+	tests := []struct {
+		name      string
+		nsInst    *corev1.Namespace
+		managedBy string
+		fail      bool
+	}{
+		{name: "ok: default (no annotation)", nsInst: aInst, managedBy: ""},
+		{name: "ok: explicitly managed by HNC", nsInst: aInst, managedBy: "hnc.x-k8s.io"},
+		{name: "ok: convert a root internal namespace to external", nsInst: aInst, managedBy: "other"},
+		{name: "not ok: convert a non-root internal namespace to external", nsInst: bInst, managedBy: "other", fail: true},
+		{name: "ok: convert an external namespace to internal by changing annotation value", nsInst: cInst, managedBy: "hnc.x-k8s.io"},
+		{name: "ok: convert an external namespace to internal by removing annotation", nsInst: cInst, managedBy: ""},
+		{name: "ok: resolve illegal state by changing annotation value", nsInst: dInst, managedBy: "hnc.x-k8s.io"},
+		{name: "ok: resolve illegal state by removing annotation", nsInst: dInst, managedBy: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
+			tnsInst := tc.nsInst
+			if tc.managedBy == "" {
+				tnsInst.SetAnnotations(map[string]string{})
+			} else {
+				tnsInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: tc.managedBy})
+			}
+
+			req := &nsRequest{
+				ns: tc.nsInst,
+				op: v1beta1.Update,
+			}
+
+			// Test
+			got := vns.handle(req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
 }
 
 func setSubAnnotation(ns *corev1.Namespace) {
