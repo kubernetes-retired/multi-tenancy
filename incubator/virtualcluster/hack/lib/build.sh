@@ -39,6 +39,21 @@ binaries_from_targets() {
   done
 }
 
+version() {
+  # GIT_COMMIT is used for daemon GitCommit in go build.
+  GIT_COMMIT=$(git rev-parse HEAD)
+
+  # BUILD_DATE is used for daemon BuildTime in go build.
+  BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+  GIT_VERSION="v1.0.0"
+
+  VERSION_PKG=sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version
+  echo "-X ${VERSION_PKG}.gitVersion=${GIT_VERSION}"
+  echo "-X ${VERSION_PKG}.gitCommit=${GIT_COMMIT}"
+  echo "-X ${VERSION_PKG}.buildDate=${BUILD_DATE}"
+}
+
 # Build binaries targets specified
 #
 # Input:
@@ -46,7 +61,7 @@ binaries_from_targets() {
 #     are built.
 build_binaries() {
   local goflags goldflags gcflags
-  goldflags="${GOLDFLAGS=-s -w}"
+  goldflags="${GOLDFLAGS:-} -s -w $(version)"
   gcflags="${GOGCFLAGS:-}"
   goflags=${GOFLAGS:-}
 
