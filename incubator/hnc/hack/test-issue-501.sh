@@ -11,8 +11,10 @@ kubectl create ns parent
 sleep 1
 
 echo "${bold}----Creating the 1st branch of subnamespaces----${normal}"
-echo "Creating subnamespace 'sub1' for 'parent'"
-kubectl hns create sub1 -n parent
+echo "Creating subnamespace 'sub1' for 'parent' without the anchor in the 'parent' namespace"
+kubectl create ns sub1
+kubectl hns set sub1 --parent parent
+kubectl annotate ns sub1 hnc.x-k8s.io/subnamespaceOf=parent
 sleep 1
 echo "Creating subnamespace 'sub1-sub1' for 'sub1'"
 kubectl hns create sub1-sub1 -n sub1
@@ -39,16 +41,13 @@ echo "${bold}Here's the outcome of the tree hierarhy:${normal}"
 kubectl hns tree parent
 
 echo "----------------------------------------------------"
-echo "${bold}Test-1:${normal} If the subnamespace doesn't allow cascadingDelete and the HNS is missing in the owner namespace, it should have 'HNS_MISSING' condition while its descendants shoudn't have any conditions."
-echo "${bold}Operation:${normal} delete 'sub1' subns in 'parent' - kubectl delete subns sub1 -n parent"
-kubectl delete subns sub1 -n parent
-sleep 1
-echo "${bold}Expected:${normal} 'sub1' namespace is not deleted and should have 'HNS_MISSING' condition; no other conditions."
+echo "${bold}Test-1:${normal} If the subnamespace doesn't allow cascadingDelete and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
+echo "${bold}Expected:${normal} 'sub1' namespace is not deleted and should have 'SubnamespaceAnchorMissing' condition; no other conditions."
 echo "${bold}Result:${normal}"
 kubectl hns tree parent
 
 echo "----------------------------------------------------"
-echo "${bold}Test-2:${normal} If the HNS is not missing, it should unset the 'HNS_MISSING' condition in the subnamespace."
+echo "${bold}Test-2:${normal} If the anchor is readded, it should unset the 'SubnamespaceAnchorMissing' condition in the subnamespace."
 echo "${bold}Operation:${normal} recreate the 'sub1' subns in 'parent' - kubectl hns create sub1 -n parent"
 kubectl hns create sub1 -n parent
 sleep 1
@@ -57,7 +56,7 @@ echo "${bold}Result:${normal}"
 kubectl hns tree parent
 
 echo "----------------------------------------------------"
-echo "${bold}Test-3:${normal} If the subnamespace allows cascadingDelete and the HNS is deleted, it should cascading delete all immediate subnamespaces."
+echo "${bold}Test-3:${normal} If the subnamespace allows cascadingDelete and the anchor is deleted, it should cascading delete all immediate subnamespaces."
 echo "${bold}Operation:${normal} 1) allow cascadingDelete in 'ochid1' - kubectl hns set sub1 --allowCascadingDelete=true"
 kubectl hns set sub1 --allowCascadingDelete=true
 echo "2) delete 'sub1' subns in 'parent' - kubectl delete subns sub1 -n parent"
@@ -69,7 +68,7 @@ echo "${bold}Result:${normal}"
 kubectl hns tree parent
 
 echo "----------------------------------------------------"
-echo "${bold}Test-4:${normal} If the owner namespace allows cascadingDelete and it's deleted, all its subnamespaces should be cascading deleted."
+echo "${bold}Test-4:${normal} If the parent namespace allows cascadingDelete and it's deleted, all its subnamespaces should be cascading deleted."
 echo "${bold}Operation:${normal} 1) allow cascadingDelete in 'parent' - kubectl hns set parent --allowCascadingDelete=true"
 kubectl hns set parent --allowCascadingDelete=true
 echo "2) delete 'parent' namespace - kubectl delete ns parent"
