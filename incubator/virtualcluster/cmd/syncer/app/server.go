@@ -24,18 +24,17 @@ import (
 	_ "net/http/pprof"
 	"os"
 
+	"github.com/spf13/cobra"
 	"k8s.io/apiserver/pkg/util/term"
 	"k8s.io/client-go/tools/leaderelection"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
-
 	"k8s.io/klog"
-
-	"github.com/spf13/cobra"
 
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
 func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
@@ -51,6 +50,7 @@ keep tenant requests are synchronized to super master by creating corresponding
 custom resources on behalf of the tenant users in super master, following the
 resource isolation policy specified in Tenant CRD.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			verflag.PrintAndExitIfRequested()
 			c, err := s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -66,6 +66,7 @@ resource isolation policy specified in Tenant CRD.`,
 
 	fs := cmd.Flags()
 	namedFlagSets := s.Flags()
+	verflag.AddFlags(namedFlagSets.FlagSet("global"))
 	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
 
 	for _, f := range namedFlagSets.FlagSets {
