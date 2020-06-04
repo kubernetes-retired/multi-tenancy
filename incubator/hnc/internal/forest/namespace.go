@@ -104,22 +104,17 @@ func (ns *Namespace) UpdateAllowCascadingDelete(acd bool) {
 	ns.allowCascadingDelete = acd
 }
 
-// AllowsCascadingDelete returns if the namespace's or any of the owner ancestors'
+// AllowsCascadingDelete returns true if the namespace's or any of the ancestors'
 // allowCascadingDelete field is set to true.
 func (ns *Namespace) AllowsCascadingDelete() bool {
 	if ns.allowCascadingDelete == true {
 		return true
 	}
-	if !ns.IsSub {
+	if ns.parent == nil || ns.CycleNames() != nil {
 		return false
 	}
 
-	// This is a subnamespace so it must have a non-nil parent. If the parent is missing, it will
-	// return the default false.
-	//
-	// Subnamespaces can never be involved in cycles, since those can only occur at the "top" of a
-	// tree and subnamespaces cannot be roots by definition. So this line can't cause a stack
-	// overflow.
+	// This namespace is neither a root nor in a cycle, so this line can't cause a stack overflow.
 	return ns.parent.AllowsCascadingDelete()
 }
 
