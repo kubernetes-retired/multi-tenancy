@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -26,13 +27,7 @@ const (
 // Note: the validating webhook FAILS OPEN. This means that if the webhook goes down, all further
 // changes to the objects are allowed.
 //
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=secrets,verbs=create;update,versions=v1,name=secrets.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rols,verbs=create;update,versions=v1,name=roles.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="rbac.authorization.k8s.io",resources=rolebindings,verbs=create;update,versions=v1,name=rolebindings.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="networking.k8s.io",resources=networkpolicies,verbs=create;update,versions=v1,name=networkpolicies.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=resourcequotas,verbs=create;update,versions=v1,name=resourcesquotas.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=limitranges,verbs=create;update,versions=v1,name=limitranges.objects.hnc.x-k8s.io
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="",resources=configmaps,verbs=create;update,versions=v1,name=configmaps.objects.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="*",resources="*",verbs=create;update,versions="*",name=objects.hnc.x-k8s.io
 
 type Object struct {
 	Log     logr.Logger
@@ -43,6 +38,12 @@ type Object struct {
 
 func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := o.Log.WithValues("nm", req.Name, "nnm", req.Namespace)
+	// Allow changes to the types that are not in propagate mode. This is to dynamically enable/disable
+	// object webhooks based on the types configured in hncconfig. Since the current admission rules only
+	// apply to propagated objects, we can disable object webhooks on all other non-propagate-mode types.
+	if !o.isPropagateType(req.Kind) {
+		return allow("Non-propagate-mode types")
+	}
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
 		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
@@ -67,6 +68,14 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	resp := o.handle(ctx, log, inst, oldInst)
 	log.V(1).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
+}
+
+func (o *Object) isPropagateType(gvk metav1.GroupVersionKind) bool {
+	o.Forest.Lock()
+	defer o.Forest.Unlock()
+
+	ts := o.Forest.GetTypeSyncerFromGroupKind(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind})
+	return ts != nil && ts.GetMode() == api.Propagate
 }
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more

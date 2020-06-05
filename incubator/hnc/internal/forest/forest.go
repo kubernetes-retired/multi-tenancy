@@ -112,6 +112,17 @@ func (f *Forest) GetTypeSyncer(gvk schema.GroupVersionKind) TypeSyncer {
 	return nil
 }
 
+// GetTypeSyncerFromGroupKind returns the reconciler for the given GK or nil if
+// the reconciler does not exist.
+func (f *Forest) GetTypeSyncerFromGroupKind(gk schema.GroupKind) TypeSyncer {
+	for _, t := range f.types {
+		if t.GetGVK().GroupKind() == gk {
+			return t
+		}
+	}
+	return nil
+}
+
 // GetTypeSyncers returns the types list.
 // Retuns a copy here so that the caller does not need to hold the mutex while accessing the returned value and can modify the
 // returned value without fear of corrupting the original types list.

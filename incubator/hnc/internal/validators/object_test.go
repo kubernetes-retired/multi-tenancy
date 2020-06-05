@@ -5,13 +5,68 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 )
+
+// TestType only tests the types from the admission requests. There is no object in the
+// admission requests for all the test cases. The requests are supposed to fail with
+// "BadRequest" since the object cannot be decoded. However, with early exit for
+// non-propagate-mode types, they should return "allow" before the object gets decoded.
+func TestType(t *testing.T) {
+	or := &reconcilers.ObjectReconciler{
+		GVK:  schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+		Mode: api.Propagate,
+	}
+	f := forest.NewForest()
+	f.AddTypeSyncer(or)
+	l := zap.Logger(false)
+	o := &Object{Forest: f, Log: l}
+
+	tests := []struct {
+		name    string
+		version string
+		kind    string
+		deny    bool
+	}{{
+		name:    "Deny request with GroupVersionKind in the propagate mode",
+		version: "v1",
+		kind:    "Secret",
+		deny:    true,
+	}, {
+		name:    "Deny request with GroupKind in the propagate mode even if the Version is different",
+		version: "v1beta1",
+		kind:    "Secret",
+		deny:    true,
+	}, {
+		name: "Always allow request with GroupKind not in propagate mode",
+		kind: "Configmap",
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewGomegaWithT(t)
+			req := admission.Request{AdmissionRequest: admissionv1beta1.AdmissionRequest{Kind: metav1.GroupVersionKind{Group: "", Version: tc.version, Kind: tc.kind}}}
+			// Test
+			got := o.Handle(context.Background(), req)
+			// Report
+			reason := got.AdmissionResponse.Result.Reason
+			code := got.AdmissionResponse.Result.Code
+			t.Logf("Got reason %q, code %d", reason, code)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.deny))
+		})
+	}
+}
 
 func TestInheritedFromLabel(t *testing.T) {
 	f := forest.NewForest()
@@ -78,7 +133,6 @@ func TestInheritedFromLabel(t *testing.T) {
 }
 
 func TestUserChanges(t *testing.T) {
-
 	f := forest.NewForest()
 	o := &Object{Forest: f}
 	l := zap.Logger(false)
