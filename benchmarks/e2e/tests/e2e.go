@@ -21,6 +21,7 @@ import (
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_privileged_containers"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/configure_ns_object_quotas"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/create_network_policies"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/create_role_bindings"
 )
 
