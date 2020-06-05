@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcmanager "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 )
 
 var c client.Client
@@ -40,7 +40,7 @@ const timeout = time.Second * 5
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	instance := &tenancyv1alpha1.Virtualcluster{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
+	instance := &tenancyv1alpha1.VirtualCluster{ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"}}
 
 	// Setup the Manager and Controller.  Wrap the Controller Reconcile function so it writes each request to a
 	// channel when it is finished.
@@ -61,7 +61,7 @@ func TestReconcile(t *testing.T) {
 		mgrStopped.Wait()
 	}()
 
-	// Create the Virtualcluster object and expect the Reconcile and Deployment to be created
+	// Create the VirtualCluster object and expect the Reconcile and Deployment to be created
 	err = c.Create(context.TODO(), instance)
 	// The instance object may not be a valid object because it might be missing some required fields.
 	// Please modify the instance object by adding required fields and then remove the following if statement.

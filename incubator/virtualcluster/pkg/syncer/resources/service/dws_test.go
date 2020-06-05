@@ -26,11 +26,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 func tenantService(name, namespace, uid string) *v1.Service {
@@ -62,14 +62,14 @@ func superService(name, namespace, uid, clusterKey string) *v1.Service {
 }
 
 func TestDWServiceCreation(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -152,14 +152,14 @@ func TestDWServiceCreation(t *testing.T) {
 }
 
 func TestDWServiceDeletion(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -241,14 +241,14 @@ func applySpecToService(svc *v1.Service, spec *v1.ServiceSpec) *v1.Service {
 }
 
 func TestDWServiceUpdate(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}

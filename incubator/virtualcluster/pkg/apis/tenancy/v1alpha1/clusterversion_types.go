@@ -74,12 +74,6 @@ type ClusterVersionList struct {
 	Items           []ClusterVersion `json:"items"`
 }
 
-// ClusterVersionHistory contains ClusterVersions used by associated Virtualcluster
-type ClusterVersionHistory struct {
-	ClusterVersionName string         `json:"ClusterVersionName"`
-	ClusterVersion     ClusterVersion `json:"clusterVersion"`
-}
-
 func init() {
 	SchemeBuilder.Register(&ClusterVersion{}, &ClusterVersionList{})
 }

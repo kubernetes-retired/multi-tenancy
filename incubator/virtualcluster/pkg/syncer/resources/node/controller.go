@@ -17,21 +17,25 @@ limitations under the License.
 package node
 
 import (
+	"fmt"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
-	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type controller struct {
@@ -50,39 +54,50 @@ type controller struct {
 	upwardNodeController *uw.UpwardController
 }
 
-func Register(
-	config *config.SyncerConfiguration,
-	client v1core.NodesGetter,
-	nodeInformer coreinformers.NodeInformer,
-	controllerManager *manager.ControllerManager,
-) {
+func NewNodeController(config *config.SyncerConfiguration,
+	client clientset.Interface,
+	informer informers.SharedInformerFactory,
+	vcClient vcclient.Interface,
+	vcInformer vcinformers.VirtualClusterInformer,
+	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		nodeNameToCluster: make(map[string]map[string]struct{}),
-		nodeClient:        client,
+		nodeClient:        client.CoreV1(),
 	}
 
-	// Create the multi cluster node controller
-	options := mc.Options{Reconciler: c, MaxConcurrentReconciles: constants.DwsControllerWorkerLow}
-	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, options)
+	var mcOptions *mc.Options
+	if options == nil || options.MCOptions == nil {
+		mcOptions = &mc.Options{Reconciler: c}
+	} else {
+		mcOptions = options.MCOptions
+	}
+	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, *mcOptions)
 	if err != nil {
-		klog.Errorf("failed to create multi cluster pod controller %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("failed to create node mc controller: %v", err)
 	}
 	c.multiClusterNodeController = multiClusterNodeController
+	c.nodeLister = informer.Core().V1().Nodes().Lister()
+	if options != nil && options.IsFake {
+		c.nodeSynced = func() bool { return true }
+	} else {
+		c.nodeSynced = informer.Core().V1().Nodes().Informer().HasSynced
+	}
 
-	c.nodeLister = nodeInformer.Lister()
-	c.nodeSynced = nodeInformer.Informer().HasSynced
-
-	uwOptions := &uw.Options{Reconciler: c}
+	var uwOptions *uw.Options
+	if options == nil || options.UWOptions == nil {
+		uwOptions = &uw.Options{Reconciler: c}
+	} else {
+		uwOptions = options.UWOptions
+	}
 	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
 	upwardNodeController, err := uw.NewUWController("node-upward-controller", &v1.Node{}, *uwOptions)
 	if err != nil {
-		klog.Errorf("failed to create node upward controller %v", err)
-		return
+		return nil, nil, nil, fmt.Errorf("failed to create node upward controller: %v", err)
 	}
 	c.upwardNodeController = upwardNodeController
 
-	nodeInformer.Informer().AddEventHandler(
+	informer.Core().V1().Nodes().Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.enqueueNode,
 			UpdateFunc: func(oldObj, newObj interface{}) {
@@ -98,8 +113,7 @@ func Register(
 			DeleteFunc: c.enqueueNode,
 		},
 	)
-
-	controllerManager.AddResourceSyncer(c)
+	return c, multiClusterNodeController, upwardNodeController, nil
 }
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {

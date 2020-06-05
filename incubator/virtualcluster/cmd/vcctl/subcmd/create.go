@@ -33,11 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
-	vcctlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
-	netutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	vcctlutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	kubeutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
+	netutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -83,9 +83,9 @@ func Create(yamlPath, vcKbCfg string) error {
 	}
 
 	switch o := obj.(type) {
-	case *tenancyv1alpha1.Virtualcluster:
-		log.Printf("creating Virtualcluster %s", o.Name)
-		err = createVirtualcluster(cli, o, vcKbCfg)
+	case *tenancyv1alpha1.VirtualCluster:
+		log.Printf("creating VirtualCluster %s", o.Name)
+		err = createVirtualCluster(cli, o, vcKbCfg)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func Create(yamlPath, vcKbCfg string) error {
 			return err
 		}
 	default:
-		return errors.New("unknown object kind. please use a ClusterVersion or Virtualcluster yaml")
+		return errors.New("unknown object kind. please use a ClusterVersion or VirtualCluster yaml")
 	}
 
 	return nil
@@ -132,9 +132,9 @@ func retryIfNotFound(retry, retryPeriod int, f func() error) error {
 	return nil
 }
 
-// createVirtualcluster creates a virtual cluster based on the file yamlPath and
+// createVirtualCluster creates a virtual cluster based on the file yamlPath and
 // generates the kubeconfig file for accessing the virtual cluster
-func createVirtualcluster(cli client.Client, vc *tenancyv1alpha1.Virtualcluster, vcKbCfg string) error {
+func createVirtualCluster(cli client.Client, vc *tenancyv1alpha1.VirtualCluster, vcKbCfg string) error {
 	cv := &tenancyv1alpha1.ClusterVersion{}
 	if err := cli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "default",

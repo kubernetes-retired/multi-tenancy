@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -28,10 +28,10 @@ import (
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -138,7 +138,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 			return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 		}
 		event := createNotSupportEvent(vPod)
-		vEvent := conversion.BuildVirtualPodEvent(clusterName, event, vPod)
+		vEvent := conversion.BuildVirtualEvent(clusterName, event, vPod)
 		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(vEvent)
 		return err
 	}

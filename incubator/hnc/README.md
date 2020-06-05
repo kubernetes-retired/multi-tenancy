@@ -13,7 +13,8 @@ team's namespace, even if you don't have cluster-level permission to create
 namespaces, and easily apply policies like RBAC and Network Policies across all
 namespaces in your team (e.g. a set of related microservices).
 
-You can read more about hierarchical namespaces in the [HNC User Guide](http://bit.ly/38YYhE0).
+You can read more about hierarchical namespaces in the [HNC User
+Guide](docs/user-guide).
 
 The best way you can help contribute to bringing hierarchical namespaces to the
 Kubernetes ecosystem is to try out HNC and report the problems you have with
@@ -30,62 +31,12 @@ Lead developer: @adrianludwin (aludwin@google.com).
 
 ## Using HNC
 
-### Installing or upgrading HNC
-```bash
-# Set the desired release:
-HNC_VERSION=v0.3.0
-
-# The instructions below are all for HNC v0.3.x. For v0.2.x, please use Git
-# history to view an earlier version of this README.
-
-# Install prerequisites on your cluster
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
-
-# WAIT for the cert-manager deployments to all become healthy. This can take a
-# few minutes.
-
-# Install HNC on your cluster. If this fails due to the cert-manager webhook not
-# being ready yet, wait for the webhook to become ready, then re-run it.
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
-
-# Download kubectl plugin (Linux only) - will move to Krew soon
-PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
-chmod +x ${PLUGIN_DIR}/kubectl-hns
-```
-
 ### Getting started and learning more
-As a quick start, I'd recommend following the [HNC demo
-scripts](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
-to get an idea of what HNC can do. For a more in-depth understanding, check out
-the [HNC User Guide](http://bit.ly/38YYhE0).
 
-### Viewing metrics
-You should be able to view all HNC metrics in your preferred backend:
-* [Stackdriver on GKE](doc/metrics/stackdriver-gke.md)
-* Prometheus (see [#433](https://github.com/kubernetes-sigs/multi-tenancy/issues/433))
-
-|Metric                                              |Description   |
-|:-------------------------------------------------- |:-------------|
-| hnc/reconcilers/hierconfig/total                   | The total number of HierarchyConfiguration (HC) reconciliations happened |
-| hnc/reconcilers/hierconfig/concurrent_peak         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
-| hnc/reconcilers/hierconfig/hierconfig_writes_total | The number of HC writes happened during HC reconciliations |
-| hnc/reconcilers/hierconfig/namespace_writes_total  | The number of namespace writes happened during HC reconciliations |
-| hnc/reconcilers/object/total                       | The total number of object reconciliations happened |
-| hnc/reconcilers/object/concurrent_peak             | The peak concurrent object reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
-
-### Uninstalling HNC
-**WARNING:** this will also delete all the hierarchical relationships between
-your namespaces. Reinstalling HNC will _not_ recreate these relationships. There
-is no need to uninstall HNC before upgrading it.
-
-```bash
-rm ${PLUGIN_DIR}/kubectl-hns
-kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
-
-# Don't need to delete the cert manager if you plan to reinstall it later.
-kubectl delete -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
-```
+Firstly, install HNC as described in the [user
+guide](docs/user-guide/how-to.md#admin-install). Then, try out the [HNC
+demos](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
+to get an idea of what HNC can do.
 
 ## Issues and project management
 

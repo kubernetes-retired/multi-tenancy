@@ -34,18 +34,32 @@ const (
 	MetaGroup                  = "hnc.x-k8s.io"
 	LabelInheritedFrom         = MetaGroup + "/inheritedFrom"
 	FinalizerHasOwnedNamespace = MetaGroup + "/hasOwnedNamespace"
+	LabelTreeDepthSuffix       = ".tree." + MetaGroup + "/depth"
+	AnnotationManagedBy        = MetaGroup + "/managedBy"
 )
 
-// Condition codes. *All* codes must also be documented in the comment to Condition.Code, and must
-// also have an entry in ClearConditionCriteria, set in init() in this file.
+// Condition codes. *All* codes must also be documented in the comment to Condition.Code, be
+// inserted into AllCodes, and must have an entry in ClearConditionCriteria, set in init() in this
+// file.
+//
+// Please keep this list in alphabetic order.
 const (
-	CritParentMissing         Code = "CritParentMissing"
-	CritCycle                 Code = "CritCycle"
-	CritAncestor              Code = "CritAncestor"
-	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 	CannotPropagate           Code = "CannotPropagateObject"
 	CannotUpdate              Code = "CannotUpdateObject"
+	CritAncestor              Code = "CritAncestor"
+	CritCycle                 Code = "CritCycle"
+	CritParentMissing         Code = "CritParentMissing"
+	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 )
+
+var AllCodes = []Code{
+	CannotPropagate,
+	CannotUpdate,
+	CritAncestor,
+	CritCycle,
+	CritParentMissing,
+	SubnamespaceAnchorMissing,
+}
 
 // ClearConditionCriterion describes when a condition should be automatically cleared based on
 // forest changes. See individual constants for better documentation.
@@ -179,6 +193,15 @@ type Condition struct {
 	Affects []AffectedObject `json:"affects,omitempty"`
 }
 
+func (c Condition) String() string {
+	affects := fmt.Sprint(c.Affects)
+	msg := c.Msg
+	if len(msg) > 100 {
+		msg = msg[:100] + "..."
+	}
+	return fmt.Sprintf("%s: %s (affects %s)", c.Code, msg, affects)
+}
+
 // AffectedObject defines uniquely identifiable objects.
 type AffectedObject struct {
 	Group     string `json:"group,omitempty"`
@@ -216,8 +239,8 @@ func (a AffectedObject) String() string {
 	}
 
 	// No namespace -> it *is* a namespace
-	if a.Namespace != "" {
-		return a.Namespace
+	if a.Namespace == "" {
+		return a.Name
 	}
 
 	// Generic object (note that Group may be empty for core objects, don't worry about it)

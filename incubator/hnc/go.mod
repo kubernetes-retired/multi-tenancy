@@ -1,4 +1,4 @@
-module github.com/kubernetes-sigs/multi-tenancy/incubator/hnc
+module sigs.k8s.io/multi-tenancy/incubator/hnc
 
 go 1.14
 

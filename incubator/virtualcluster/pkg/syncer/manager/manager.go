@@ -19,11 +19,17 @@ package manager
 import (
 	"sync"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
-	mc "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
-	pa "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
+
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/listener"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 // ControllerManager manages number of resource syncers. It starts their caches, waits for those to sync,
@@ -46,12 +52,12 @@ func New() *ControllerManager {
 // ResourceSyncer is the interface used by ControllerManager to manage multiple resource syncers.
 type ResourceSyncer interface {
 	listener.ClusterChangeListener
+	reconciler.DWReconciler
+	reconciler.UWReconciler
+	reconciler.PatrolReconciler
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
 	StartPatrol(stopCh <-chan struct{}) error
-	Reconcile(request reconciler.Request) (reconciler.Result, error)
-	BackPopulate(string) error
-	PatrollerDo()
 }
 
 // AddController adds a resource syncer to the ControllerManager.
@@ -59,6 +65,12 @@ func (m *ControllerManager) AddResourceSyncer(s ResourceSyncer) {
 	m.resourceSyncers[s] = struct{}{}
 	listener.AddListener(s)
 }
+
+type ResourceSyncerNew func(*config.SyncerConfiguration,
+	clientset.Interface,
+	informers.SharedInformerFactory,
+	vcclient.Interface,
+	vcinformers.VirtualClusterInformer, *ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
 // Start gets all the unique caches of the controllers it manages, starts them,
 // then starts the controllers as soon as their respective caches are synced.

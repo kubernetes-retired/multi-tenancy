@@ -1,5 +1,5 @@
 apiVersion: tenancy.x-k8s.io/v1alpha1
-kind: Virtualcluster
+kind: VirtualCluster
 metadata: 
   labels:
     controller-tools.k8s.io: "1.0"

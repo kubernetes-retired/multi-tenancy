@@ -35,16 +35,16 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	api "github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/api/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/forest"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/reconcilers"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/stats"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/validators"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/validators"
 )
 
 var (
 	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	setupLog = zap.New().WithName("setup")
 )
 
 var (
@@ -61,6 +61,8 @@ var (
 )
 
 func init() {
+	setupLog.Info("Starting main.go:init()")
+	defer setupLog.Info("Finished main.go:init()")
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = api.AddToScheme(scheme)
@@ -70,6 +72,7 @@ func init() {
 }
 
 func main() {
+	setupLog.Info("Parsing flags")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
@@ -90,30 +93,34 @@ func main() {
 	// Exporters use Application Default Credentials to authenticate.
 	// See https://developers.google.com/identity/protocols/application-default-credentials
 	// for more details.
-	exporter, err := stackdriver.NewExporter(stackdriver.Options{
+	setupLog.Info("Creating OpenCensus->Stackdriver exporter")
+	sd, err := stackdriver.NewExporter(stackdriver.Options{
 		// Stackdriver’s minimum stats reporting period must be >= 60 seconds.
 		// https://opencensus.io/exporters/supported-exporters/go/stackdriver/
 		ReportingInterval: stats.ReportingInterval,
 	})
+	if err == nil {
+		// Flush must be called before main() exits to ensure metrics are recorded.
+		defer sd.Flush()
+		err = sd.StartMetricsExporter()
+		if err == nil {
+			defer sd.StopMetricsExporter()
+		}
+	}
 	if err != nil {
 		setupLog.Error(err, "cannot create Stackdriver exporter")
-		os.Exit(1)
 	}
-	// Flush must be called before main() exits to ensure metrics are recorded.
-	defer exporter.Flush()
 
-	if err := exporter.StartMetricsExporter(); err != nil {
-		setupLog.Error(err, "cannot start StackDriver metric exporter")
-		os.Exit(1)
-	}
-	defer exporter.StopMetricsExporter()
-
+	setupLog.Info("Creating Prometheus exporter")
 	prom.DefaultRegisterer = prom.DefaultRegisterer.(*prom.Registry)
 	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: prom.DefaultRegisterer.(*prom.Registry)})
+	if err != nil {
+		setupLog.Error(err, "Cannot create Prometheus exporter")
+	}
 	view.RegisterExporter(promExporter)
 
+	setupLog.Info("Configuring controller-manager")
 	ctrl.SetLogger(zap.Logger(debugLogs))
-
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = float32(qps)
 	// By default, Burst is about 2x QPS, but since HNC's "bursts" can last for ~minutes
@@ -124,7 +131,6 @@ func main() {
 	// TODO: Better understand the behaviour of Burst, and consider making it equal to QPS if
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
-
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
@@ -138,6 +144,7 @@ func main() {
 	}
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
+	setupLog.Info("Starting certificate generation")
 	setupFinished, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert)
 	if err != nil {
 		setupLog.Error(err, "unable to set up cert rotation")
@@ -146,7 +153,7 @@ func main() {
 
 	go startControllers(mgr, setupFinished)
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
@@ -154,6 +161,7 @@ func main() {
 }
 
 func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
+	setupLog.Info("Waiting for certificate generation to complete")
 	// Block until the setup finishes.
 	<-setupFinished
 
@@ -174,4 +182,6 @@ func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
 		validators.Create(mgr, f)
 	}
+
+	setupLog.Info("All controllers started; setup complete")
 }

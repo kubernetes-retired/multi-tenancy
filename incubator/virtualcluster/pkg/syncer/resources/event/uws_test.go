@@ -27,11 +27,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 func superNamespace(name, clusterKey, tenantNamespace string) *v1.Namespace {
@@ -80,38 +80,39 @@ func tenantPod(name, namespace, uid string) *v1.Pod {
 	}
 }
 
+func tenantService(name, namespace, uid string) *v1.Service {
+	return &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			UID:       types.UID(uid),
+		},
+	}
+}
+
+func makeObjectReference(kind, namespace, name, uid string) v1.ObjectReference {
+	return v1.ObjectReference{
+		Kind:      kind,
+		Namespace: namespace,
+		Name:      name,
+		UID:       types.UID(uid),
+	}
+}
+
 func TestUWEvent(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Status: v1alpha1.VirtualclusterStatus{
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
-
-	tenantPodReference := v1.ObjectReference{
-		Kind:      "Pod",
-		Namespace: "default",
-		Name:      "pod",
-		UID:       types.UID("12345"),
-	}
-	superPodReference := v1.ObjectReference{
-		Kind:      "Pod",
-		Namespace: defaultClusterKey,
-		Name:      "pod",
-		UID:       types.UID("23456"),
-	}
-	OtherResourceReference := v1.ObjectReference{
-		Kind:      "ConfigMap",
-		Namespace: "default",
-		Name:      "cm",
-	}
 
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
@@ -127,14 +128,14 @@ func TestUWEvent(t *testing.T) {
 		},
 		"pEvent not related to tenant and ns not found(actually impossible)": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, superPodReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Pod", superDefaultNSName, "pod", "23456")),
 			},
 			EnqueuedKey:         superDefaultNSName + "/event",
 			ExpectedNoOperation: true,
 		},
 		"pEvent not related to tenant": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, superPodReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Pod", superDefaultNSName, "pod", "23456")),
 				superNamespace(superDefaultNSName, "", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
@@ -145,15 +146,15 @@ func TestUWEvent(t *testing.T) {
 		},
 		"pEvent exists but vPod doesn't exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, superPodReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Pod", superDefaultNSName, "pod", "23456")),
 				superNamespace(superDefaultNSName, defaultClusterKey, "default"),
 			},
 			EnqueuedKey:         superDefaultNSName + "/event",
 			ExpectedNoOperation: true,
 		},
-		"pEvent exists but not a pod event": {
+		"pEvent exists but not an accepted event": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, OtherResourceReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("ConfigMap", superDefaultNSName, "cm", "23456")),
 				superNamespace(superDefaultNSName, defaultClusterKey, "default"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
@@ -162,9 +163,9 @@ func TestUWEvent(t *testing.T) {
 			EnqueuedKey:         superDefaultNSName + "/event",
 			ExpectedNoOperation: true,
 		},
-		"pEvent exists but vEvent doesn't exists": {
+		"pEvent exists but vEvent doesn't exists, type pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, superPodReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Pod", superDefaultNSName, "pod", "23456")),
 				superNamespace(superDefaultNSName, defaultClusterKey, "default"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
@@ -172,17 +173,30 @@ func TestUWEvent(t *testing.T) {
 			},
 			EnqueuedKey: superDefaultNSName + "/event",
 			ExpectedCreatedObject: []runtime.Object{
-				fakeEvent("event", "default", tenantPodReference),
+				fakeEvent("event", "default", makeObjectReference("Pod", "default", "pod", "12345")),
+			},
+		},
+		"pEvent exists but vEvent doesn't exists, type service": {
+			ExistingObjectInSuper: []runtime.Object{
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Service", superDefaultNSName, "svc", "23456")),
+				superNamespace(superDefaultNSName, defaultClusterKey, "default"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantService("svc", "default", "12345"),
+			},
+			EnqueuedKey: superDefaultNSName + "/event",
+			ExpectedCreatedObject: []runtime.Object{
+				fakeEvent("event", "default", makeObjectReference("Service", "default", "svc", "12345")),
 			},
 		},
 		"pEvent exists and vEvent exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				fakeEvent("event", superDefaultNSName, superPodReference),
+				fakeEvent("event", superDefaultNSName, makeObjectReference("Pod", superDefaultNSName, "pod", "23456")),
 				superNamespace(superDefaultNSName, defaultClusterKey, "default"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod", "default", "12345"),
-				fakeEvent("event", "default", tenantPodReference),
+				fakeEvent("event", "default", makeObjectReference("Pod", "default", "pod", "12345")),
 			},
 			EnqueuedKey:         superDefaultNSName + "/event",
 			ExpectedNoOperation: true,
@@ -191,7 +205,7 @@ func TestUWEvent(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewEventController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewEventController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnqueuedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return

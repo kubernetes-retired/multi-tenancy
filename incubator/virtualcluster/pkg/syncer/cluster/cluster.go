@@ -34,16 +34,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	vclisters "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vclisters "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
 
 // Each Cluster object represents a tenant master in Virtual Cluster architecture.
 //
 // Cluster implements the ClusterInterface used by MultiClusterController in
-// github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller/mccontroller.go.
+// sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller/mccontroller.go.
 //
 // It stores a Kubernetes client, cache, and other cluster-scoped dependencies.
 // The dependencies are lazily created in getters and cached for reuse.
@@ -62,7 +62,7 @@ type Cluster struct {
 	RestConfig *rest.Config
 
 	// vcLister points to the super master virtual cluster informer cache.
-	vclister vclisters.VirtualclusterLister
+	vclister vclisters.VirtualClusterLister
 
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
@@ -103,7 +103,7 @@ type CacheOptions struct {
 var _ mccontroller.ClusterInterface = &Cluster{}
 
 // New creates a new Cluster.
-func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualclusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualClusterLister, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -138,8 +138,8 @@ func (c *Cluster) GetOwnerInfo() (string, string, string) {
 }
 
 // GetSpec returns the virtual cluster spec.
-func (c *Cluster) GetSpec() (*v1alpha1.VirtualclusterSpec, error) {
-	vc, err := c.vclister.Virtualclusters(c.vcNamespace).Get(c.vcName)
+func (c *Cluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
+	vc, err := c.vclister.VirtualClusters(c.vcNamespace).Get(c.vcName)
 	if err != nil {
 		return nil, err
 	}

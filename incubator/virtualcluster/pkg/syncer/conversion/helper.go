@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,8 +32,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 const (
@@ -44,7 +44,7 @@ var masterServices = sets.NewString("kubernetes")
 
 // ToClusterKey makes a unique key which is used to create the root namespace in super master for a virtual cluster.
 // To avoid name conflict, the key uses the format <namespace>-<hash>-<name>
-func ToClusterKey(vc *v1alpha1.Virtualcluster) string {
+func ToClusterKey(vc *v1alpha1.VirtualCluster) string {
 	digest := sha256.Sum256([]byte(vc.GetUID()))
 	return vc.GetNamespace() + "-" + hex.EncodeToString(digest[0:])[0:6] + "-" + vc.GetName()
 }
@@ -162,12 +162,12 @@ func ResetMetadata(obj metav1.Object) {
 	obj.SetClusterName("")
 }
 
-func BuildVirtualPodEvent(cluster string, pEvent *v1.Event, vPod *v1.Pod) *v1.Event {
+func BuildVirtualEvent(cluster string, pEvent *v1.Event, vObj metav1.Object) *v1.Event {
 	vEvent := pEvent.DeepCopy()
 	ResetMetadata(vEvent)
-	vEvent.SetNamespace(vPod.Namespace)
-	vEvent.InvolvedObject.Namespace = vPod.Namespace
-	vEvent.InvolvedObject.UID = vPod.UID
+	vEvent.SetNamespace(vObj.GetNamespace())
+	vEvent.InvolvedObject.Namespace = vObj.GetNamespace()
+	vEvent.InvolvedObject.UID = vObj.GetUID()
 	vEvent.InvolvedObject.ResourceVersion = ""
 
 	vEvent.Message = strings.ReplaceAll(vEvent.Message, cluster+"-", "")

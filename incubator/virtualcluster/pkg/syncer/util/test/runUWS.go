@@ -26,11 +26,11 @@ import (
 	core "k8s.io/client-go/testing"
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
-	uw "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 )
 
 type fakeUWReconciler struct {
@@ -55,11 +55,12 @@ func (r *fakeUWReconciler) SetResourceSyncer(c manager.ResourceSyncer) {
 }
 
 func RunUpwardSync(
-	newControllerFunc controllerNew,
-	testTenant *v1alpha1.Virtualcluster,
+	newControllerFunc manager.ResourceSyncerNew,
+	testTenant *v1alpha1.VirtualCluster,
 	existingObjectInSuper []runtime.Object,
 	existingObjectInTenant []runtime.Object,
 	enqueueKey string,
+	controllerStateModifyFunc controllerStateModifier,
 ) (actions []core.Action, reconcileError error, err error) {
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
@@ -95,14 +96,21 @@ func RunUpwardSync(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
-		superClient.CoreV1(),
-		superInformer.Core().V1(),
+		superClient,
+		superInformer,
+		nil,
+		nil,
 		rsOptions,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating uws controller: %v", err)
 	}
 	fakeRc.SetResourceSyncer(resourceSyncer)
+
+	// Update controller internal state
+	if controllerStateModifyFunc != nil {
+		controllerStateModifyFunc(resourceSyncer)
+	}
 
 	// register tenant cluster to controller.
 	resourceSyncer.AddCluster(tenantCluster)
@@ -114,7 +122,7 @@ func RunUpwardSync(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer.Core().V1(), each)
+		informer := getObjectInformer(superInformer, each)
 		informer.GetStore().Add(each)
 	}
 

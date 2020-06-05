@@ -21,17 +21,19 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 
-	logrutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
-	vcmanager "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
+	logrutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
+	vcmanager "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
 func main() {
@@ -42,6 +44,7 @@ func main() {
 		leaderElection          bool
 		leaderElectionCmName    string
 		maxConcurrentReconciles int
+		versionOpt              bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
 	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
@@ -49,8 +52,16 @@ func main() {
 	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
 	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 10, "The max number reconcilers of virtualcluster controller")
 	flag.StringVar(&logFile, "log-file", "", "The path of the logfile, if not set, only log to the stderr")
+	flag.BoolVar(&versionOpt, "version", false, "Print the version information")
 
 	flag.Parse()
+
+	// print version information
+	if versionOpt {
+		fmt.Printf("VirtualCluster %s\n", verflag.GetVersion(version.Get()))
+		os.Exit(0)
+	}
+
 	loggr, err := logrutil.NewLoggerToFile(logFile)
 	if err != nil {
 		panic(fmt.Sprintf("fail to initialize logr: %s", err))

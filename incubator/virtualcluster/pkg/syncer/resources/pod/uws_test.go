@@ -28,11 +28,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 func tenantAssignedPod(name, namespace, uid, nodename string) *v1.Pod {
@@ -112,16 +112,16 @@ func applyStatusToPod(pod *v1.Pod, status *v1.PodStatus) *v1.Pod {
 
 func TestUWPodUpdate(t *testing.T) {
 	opaqueMetaPrefix := "foo.bar.super"
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{
+		Spec: v1alpha1.VirtualClusterSpec{
 			TransparentMetaPrefixes: []string{opaqueMetaPrefix},
 		},
-		Status: v1alpha1.VirtualclusterStatus{
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -224,7 +224,7 @@ func TestUWPodUpdate(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return
@@ -266,14 +266,14 @@ func TestUWPodUpdate(t *testing.T) {
 }
 
 func TestUWPodDeletion(t *testing.T) {
-	testTenant := &v1alpha1.Virtualcluster{
+	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "tenant-1",
 			UID:       "7374a172-c35d-45b1-9c8e-bf5c5b614937",
 		},
-		Spec: v1alpha1.VirtualclusterSpec{},
-		Status: v1alpha1.VirtualclusterStatus{
+		Spec: v1alpha1.VirtualClusterSpec{},
+		Status: v1alpha1.VirtualClusterStatus{
 			Phase: v1alpha1.ClusterRunning,
 		},
 	}
@@ -332,7 +332,7 @@ func TestUWPodDeletion(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey)
+			actions, reconcileErr, err := util.RunUpwardSync(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.EnquedKey, nil)
 			if err != nil {
 				t.Errorf("%s: error running upward sync: %v", k, err)
 				return

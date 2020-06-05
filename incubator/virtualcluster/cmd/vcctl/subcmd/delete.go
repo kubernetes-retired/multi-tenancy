@@ -22,11 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	vcctlutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcctlutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
-// Delete deletes the Virtualcluster vcName
+// Delete deletes the VirtualCluster vcName
 func Delete(yaml string) error {
 	kbCfg, err := config.GetConfig()
 	if err != nil {
@@ -48,7 +48,7 @@ func Delete(yaml string) error {
 		return err
 	}
 
-	vc, ok := ro.(*tenancyv1alpha1.Virtualcluster)
+	vc, ok := ro.(*tenancyv1alpha1.VirtualCluster)
 	if !ok {
 		return errors.New("please specify a virtualcluster yaml")
 	}

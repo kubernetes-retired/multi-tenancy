@@ -20,6 +20,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
 const (
@@ -61,9 +63,6 @@ const (
 	// DwsControllerWorkersLow is the quantity of the worker routine for a resource that generates low number of dws requests.
 	DwsControllerWorkerLow = 3
 
-	// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
-	ResourceSyncerUserAgent = "resource-syncer"
-
 	TenantDNSServerNS          = "kube-system"
 	TenantDNSServerServiceName = "kube-dns"
 
@@ -94,3 +93,6 @@ const (
 )
 
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground
+
+// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
+var ResourceSyncerUserAgent = "resource-syncer/" + version.BriefVersion()

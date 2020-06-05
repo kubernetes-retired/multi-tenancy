@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
 // StartUWS starts the upward syncer
@@ -88,7 +88,14 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 
 	vNodeObj, err := c.multiClusterNodeController.Get(clusterName, "", node.Name)
 	if err != nil {
-		klog.Errorf("could not find node %s/%s: %v", clusterName, node.Name, err)
+		if errors.IsNotFound(err) {
+			klog.Errorf("could not find node %s/%s: %v", clusterName, node.Name, err)
+			c.Lock()
+			if _, exists := c.nodeNameToCluster[node.Name]; exists {
+				delete(c.nodeNameToCluster[node.Name], clusterName)
+			}
+			c.Unlock()
+		}
 		return
 	}
 

@@ -26,16 +26,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 )
 
 type vcEquality struct {
 	config *config.SyncerConfiguration
-	vcSpec *v1alpha1.VirtualclusterSpec
+	vcSpec *v1alpha1.VirtualClusterSpec
 }
 
-func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualclusterSpec) *vcEquality {
+func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualClusterSpec) *vcEquality {
 	return &vcEquality{config: syncerConfig, vcSpec: spec}
 }
 

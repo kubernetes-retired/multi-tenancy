@@ -59,7 +59,13 @@ create_docker_image() {
     IFS=$oldifs
 
     local binary_name="$1"
-    local base_image="$2"
+    local base_image=$2
+    local image_user=""
+    BASE_IMAGE=${BASE_IMAGE:-debian}
+    if [ "$BASE_IMAGE" == "distroless" ]; then
+      base_image="gcr.io/distroless/static:nonroot"
+      image_user="USER nonroot:nonroot"
+    fi
     local docker_build_path="${binary_dir}/${binary_name}.dockerbuild"
     local docker_file_path="${docker_build_path}/Dockerfile"
     local binary_file_path="${binary_dir}/${binary_name}"
@@ -73,6 +79,7 @@ create_docker_image() {
       cat <<EOF > "${docker_file_path}"
 FROM ${base_image}
 COPY ${binary_name} /usr/local/bin/${binary_name}
+${image_user}
 EOF
       "${DOCKER[@]}" build -q -t "${docker_image_tag}" "${docker_build_path}" >/dev/null
     ) &

@@ -11,7 +11,7 @@ COPY third_party/ third_party/
 # Copy the go source
 COPY api/ api/
 COPY cmd/ cmd/
-COPY pkg/ pkg/
+COPY internal/ internal/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager ./cmd/manager/main.go

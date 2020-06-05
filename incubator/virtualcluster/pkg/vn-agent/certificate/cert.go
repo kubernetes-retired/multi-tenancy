@@ -25,7 +25,7 @@ import (
 	"k8s.io/client-go/util/keyutil"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
 // InitializeTLS checks for a configured TLSCertFile and TLSPrivateKeyFile: if unspecified a new self-signed

@@ -30,8 +30,6 @@ spec:
         args:
         - "--webhook-server-port=9443"
         - "--metrics-addr=127.0.0.1:8080"
-        - "--enable-leader-election"
-        - "--leader-election-id=hnc-controller-leader-election-helper"
         - "--max-reconciles=10"
         - "--apiserver-qps-throttle=50"
         - "--enable-internal-cert-management=true"

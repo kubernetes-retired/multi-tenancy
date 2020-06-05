@@ -17,11 +17,11 @@ limitations under the License.
 package virtualcluster
 
 import (
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 )
 
 type MasterProvisioner interface {
-	CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error
-	DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error
+	CreateVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error
+	DeleteVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error
 	GetMasterProvisioner() string
 }

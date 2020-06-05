@@ -28,9 +28,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
@@ -50,11 +50,11 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 	if vcName == "" || vcNamespace == "" {
 		return false
 	}
-	vc, err := c.vcLister.Virtualclusters(vcNamespace).Get(vcName)
+	vc, err := c.vcLister.VirtualClusters(vcNamespace).Get(vcName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// vc does not exist, double check against the apiserver
-			if _, apiservererr := c.vcClient.TenancyV1alpha1().Virtualclusters(vcNamespace).Get(vcName, metav1.GetOptions{}); apiservererr != nil {
+			if _, apiservererr := c.vcClient.TenancyV1alpha1().VirtualClusters(vcNamespace).Get(vcName, metav1.GetOptions{}); apiservererr != nil {
 				if errors.IsNotFound(apiservererr) {
 					// vc does not exist in apiserver as well
 					return true
@@ -64,7 +64,7 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 	} else {
 		// vc exists, check the uid
 		if ns.Annotations[constants.LabelVCUID] != string(vc.UID) {
-			if v, err := c.vcClient.TenancyV1alpha1().Virtualclusters(vcNamespace).Get(vcName, metav1.GetOptions{}); err == nil {
+			if v, err := c.vcClient.TenancyV1alpha1().VirtualClusters(vcNamespace).Get(vcName, metav1.GetOptions{}); err == nil {
 				if ns.Annotations[constants.LabelVCUID] != string(v.UID) {
 					// uid is indeed different
 					return true

@@ -28,8 +28,8 @@ import (
 	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 const (
@@ -51,7 +51,7 @@ type ClusterCAGroup struct {
 }
 
 // NewAPIServerCertAndKey creates crt and key for apiserver using ca.
-func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.Virtualcluster, apiserverDomain string, apiserverIPs ...string) (*CrtKeyPair, error) {
+func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.VirtualCluster, apiserverDomain string, apiserverIPs ...string) (*CrtKeyPair, error) {
 	clusterDomain := defaultClusterDomain
 	if vc.Spec.ClusterDomain != "" {
 		clusterDomain = vc.Spec.ClusterDomain

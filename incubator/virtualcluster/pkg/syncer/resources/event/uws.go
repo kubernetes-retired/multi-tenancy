@@ -19,13 +19,13 @@ package event
 import (
 	"fmt"
 
-	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
 // StartUWS starts the upward syncer
@@ -60,7 +60,7 @@ func (c *controller) BackPopulate(key string) error {
 		return fmt.Errorf("could not find ns %s in controller cache: %v", pNamespace, err)
 	}
 	if clusterName == "" || tenantNS == "" {
-		klog.Infof("drop event %s/%s which is not belongs to any tenant", pNamespace, pName)
+		klog.V(4).Infof("drop event %s/%s which is not belongs to any tenant", pNamespace, pName)
 		return nil
 	}
 
@@ -69,7 +69,13 @@ func (c *controller) BackPopulate(key string) error {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	vPodObj, err := c.multiClusterEventController.GetByObjectType(clusterName, tenantNS, pEvent.InvolvedObject.Name, &v1.Pod{})
+	vInvolvedObjectType, accepted := c.acceptedEventObj[pEvent.InvolvedObject.Kind]
+	if !accepted {
+		klog.Warningf("unexpected event %+v in uws", pEvent)
+		return nil
+	}
+
+	vInvolvedObject, err := c.multiClusterEventController.GetByObjectType(clusterName, tenantNS, pEvent.InvolvedObject.Name, vInvolvedObjectType)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("back populate event: failed to find pod %s/%s in cluster %s", tenantNS, pEvent.InvolvedObject.Name, clusterName)
@@ -77,8 +83,8 @@ func (c *controller) BackPopulate(key string) error {
 		}
 		return err
 	}
-	vPod := vPodObj.(*v1.Pod)
-	vEvent := conversion.BuildVirtualPodEvent(clusterName, pEvent, vPod)
+
+	vEvent := conversion.BuildVirtualEvent(clusterName, pEvent, vInvolvedObject.(metav1.Object))
 	_, err = c.multiClusterEventController.Get(clusterName, tenantNS, vEvent.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {

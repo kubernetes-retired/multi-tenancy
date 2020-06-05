@@ -16,7 +16,7 @@ limitations under the License.
 package main
 
 import (
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/hnc/pkg/kubectl"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/kubectl"
 )
 
 func main() {

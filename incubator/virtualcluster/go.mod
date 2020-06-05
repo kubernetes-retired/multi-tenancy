@@ -1,4 +1,4 @@
-module github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster
+module sigs.k8s.io/multi-tenancy/incubator/virtualcluster
 
 go 1.12
 
@@ -21,6 +21,7 @@ require (
 	k8s.io/apimachinery v0.16.6
 	k8s.io/apiserver v0.16.6
 	k8s.io/client-go v0.16.6
+	k8s.io/code-generator v0.16.6
 	k8s.io/component-base v0.16.6
 	k8s.io/cri-api v0.0.0
 	k8s.io/klog v1.0.0

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,11 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
-	aliyunutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/aliyun"
-	kubeutil "github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/secret"
+	aliyunutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/aliyun"
+	kubeutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 type MasterProvisionerAliyun struct {
@@ -73,9 +73,9 @@ func NewMasterProvisionerAliyun(mgr manager.Manager) (*MasterProvisionerAliyun, 
 	}, nil
 }
 
-// CreateVirtualCluster creates a new ASK on aliyun for given Virtualcluster
-func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
-	log.Info("setting up control plane for the Virtualcluster", "Virtualcluster", vc.Name)
+// CreateVirtualCluster creates a new ASK on aliyun for given VirtualCluster
+func (mpa *MasterProvisionerAliyun) CreateVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
+	log.Info("setting up control plane for the VirtualCluster", "VirtualCluster", vc.Name)
 	// 1. load aliyun accessKeyID/accessKeySecret from secret
 	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {
@@ -149,7 +149,7 @@ PollASK:
 		}
 	}
 
-	// 4. create the root namesapce of the Virtualcluster
+	// 4. create the root namesapce of the VirtualCluster
 	vcNs, err := kubeutil.CreateRootNS(mpa, vc)
 	if err != nil {
 		return err
@@ -220,10 +220,10 @@ PollASK:
 	return nil
 }
 
-// DeleteVirtualCluster deletes the ASK cluster corresponding to the given Virtualcluster
+// DeleteVirtualCluster deletes the ASK cluster corresponding to the given VirtualCluster
 // NOTE DeleteVirtualCluster only sends the deletion request to Aliyun and do not promise
 // the ASK will be deleted
-func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.Virtualcluster) error {
+func (mpa *MasterProvisionerAliyun) DeleteVirtualCluster(vc *tenancyv1alpha1.VirtualCluster) error {
 	log.Info("deleting the ASK of the virtualcluster", "vc-name", vc.Name)
 	aliyunAKID, aliyunAKSrt, err := aliyunutil.GetAliyunAKPair(mpa, log)
 	if err != nil {

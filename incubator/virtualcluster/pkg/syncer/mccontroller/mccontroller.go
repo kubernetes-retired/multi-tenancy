@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,10 +34,10 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
-	"github.com/kubernetes-sigs/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 // MultiClusterController implements the multicluster controller pattern.
@@ -84,7 +84,7 @@ type Cache interface {
 type ClusterInterface interface {
 	GetClusterName() string
 	GetOwnerInfo() (string, string, string)
-	GetSpec() (*v1alpha1.VirtualclusterSpec, error)
+	GetSpec() (*v1alpha1.VirtualClusterSpec, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
@@ -117,7 +117,7 @@ func NewMCController(name string, objectType runtime.Object, options Options) (*
 	}
 
 	if c.Queue == nil {
-		c.Queue = workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+		c.Queue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
 	}
 
 	return c, nil
@@ -259,7 +259,7 @@ func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset
 	return cluster.GetClientSet()
 }
 
-// GetClusterDomain returns the cluster's domain name specified in VirtualclusterSpec
+// GetClusterDomain returns the cluster's domain name specified in VirtualClusterSpec
 func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
@@ -272,7 +272,7 @@ func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, e
 	return spec.ClusterDomain, nil
 }
 
-func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.VirtualclusterSpec, error) {
+func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.VirtualClusterSpec, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, fmt.Errorf("could not find cluster %s", clusterName)
