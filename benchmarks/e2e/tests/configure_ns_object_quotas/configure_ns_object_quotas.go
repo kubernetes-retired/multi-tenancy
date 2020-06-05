@@ -14,7 +14,7 @@ const (
 	expectedVal = "Error from server (Forbidden)"
 )
 
-var _ = framework.KubeDescribe("A tenant namespace must have object resource quotas", func() {
+var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] A tenant namespace must have object resource quotas", func() {
 	var config *configutil.BenchmarkConfig
 	var tenantA configutil.TenantSpec
 	var user string
