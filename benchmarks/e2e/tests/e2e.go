@@ -24,6 +24,7 @@ import (
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/configure_ns_quotas"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/create_network_policies"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/create_role_bindings"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/default_deny_net_conn"
 )
 
 // RunE2ETests runs the multi-tenancy benchmark tests
