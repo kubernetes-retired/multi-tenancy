@@ -10,6 +10,7 @@ import (
 
 	// test sources
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_add_capabilities"
+	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_bind_mounts"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_cluster_resources"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_host_ipc"
 	_ "sigs.k8s.io/multi-tenancy/benchmarks/e2e/tests/block_host_pid"
