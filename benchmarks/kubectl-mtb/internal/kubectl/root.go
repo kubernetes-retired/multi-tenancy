@@ -24,12 +24,11 @@ import (
 )
 
 var k8sClient *kubernetes.Clientset
-var kubecfgFlags *genericclioptions.ConfigFlags
 var rootCmd *cobra.Command
 
 func init() {
 
-	kubecfgFlags = genericclioptions.NewConfigFlags(false)
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{

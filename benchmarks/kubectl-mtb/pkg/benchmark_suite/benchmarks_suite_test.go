@@ -27,7 +27,8 @@ func TestAddBenchmark(t *testing.T) {
 	for _, b := range benchmarkArray {
 		bs.AddBenchmark(b)
 	}
-	if len(bs.Benchmarks) != len(benchmarkArray) {
+
+	if !reflect.DeepEqual(benchmarkArray, bs.Benchmarks) {
 		t.Errorf("Error in adding benchmark to benchmark suite.")
 	}
 }
