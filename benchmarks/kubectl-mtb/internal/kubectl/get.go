@@ -15,15 +15,19 @@ limitations under the License.
 package kubectl
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
+
+var resource = ""
 
 var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "List the Multi-Tenancy Benchmarks",
 
 	Run: func(cmd *cobra.Command, args []string) {
-
+		fmt.Println(len(benchmarks))
 	},
 }
 

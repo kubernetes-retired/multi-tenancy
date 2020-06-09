@@ -11,13 +11,17 @@ var benchmarkArray = []*benchmark.Benchmark{
 	&benchmark.Benchmark{
 		ID:           "MTB-1",
 		ProfileLevel: 1,
+		Category:     "control plane Isolation",
 	},
 	&benchmark.Benchmark{
 		ID:           "MTB-2",
 		ProfileLevel: 2,
+		Category:     "host ISOLATION",
 	},
 	&benchmark.Benchmark{
-		ID: "MTB-3",
+		ID:           "MTB-3",
+		Category:     "host ProTecTion",
+		ProfileLevel: 3,
 	},
 }
 
@@ -45,29 +49,52 @@ func TestGetTotalBenchmarks(t *testing.T) {
 
 func TestGetBenchmarksOfProfileLevel(t *testing.T) {
 	tests := []struct {
-		benchmarks   []benchmark.Benchmark
+		benchmarks   []*benchmark.Benchmark
 		profileLevel int
 	}{
 		{
-			benchmarks: []benchmark.Benchmark{
-				benchmark.Benchmark{
+			benchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
 					ID:           "MTB-1",
 					ProfileLevel: 1,
+					Category:     "control plane Isolation",
 				},
 			},
 			profileLevel: 1,
 		},
 		{
-			benchmarks: []benchmark.Benchmark{
-				benchmark.Benchmark{
+			benchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-1",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
 					ID:           "MTB-2",
 					ProfileLevel: 2,
+					Category:     "host ISOLATION",
 				},
 			},
 			profileLevel: 2,
 		},
 		{
-			benchmarks:   []benchmark.Benchmark{},
+			benchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-1",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-2",
+					ProfileLevel: 2,
+					Category:     "host ISOLATION",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-3",
+					Category:     "host ProTecTion",
+					ProfileLevel: 3,
+				},
+			},
 			profileLevel: 3,
 		},
 	}

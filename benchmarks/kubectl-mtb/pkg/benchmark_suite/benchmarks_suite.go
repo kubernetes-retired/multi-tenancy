@@ -22,11 +22,11 @@ func (bs *BenchmarkSuite) AddBenchmark(benchmark *benchmark.Benchmark) {
 }
 
 // GetBenchmarksOfProfileLevel return slice of Benchmarks of Profile level given in input
-func (bs *BenchmarkSuite) GetBenchmarksOfProfileLevel(pl int) []benchmark.Benchmark {
-	benchmarksArray := []benchmark.Benchmark{}
+func (bs *BenchmarkSuite) GetBenchmarksOfProfileLevel(pl int) []*benchmark.Benchmark {
+	benchmarksArray := []*benchmark.Benchmark{}
 	for _, b := range bs.Benchmarks {
-		if b.ProfileLevel == pl {
-			benchmarksArray = append(benchmarksArray, *b)
+		if b.ProfileLevel <= pl {
+			benchmarksArray = append(benchmarksArray, b)
 		}
 	}
 	return benchmarksArray
