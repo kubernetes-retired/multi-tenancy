@@ -22,10 +22,11 @@ either HNC itself or its documentation (see below). Or, if it's working well for
 you, let us know on the \#wg-multitenancy channel on Slack, or join a
 wg-multitenancy meeting. We'd love to hear from you!
 
-With that said, please be cautious - HNC is alpha software. There are no
-guarantees of compatibility or feature support until further notice. HNC also
-requires very high privileges on your cluster and you should not install it on
-clusters with sensitive configurations that you can't afford to lose.
+With that said, please be cautious - HNC is alpha software. While we will not
+break any _existing_ API without incrementing the API version, there may be bugs
+or missing features. HNC also requires very high privileges on your cluster and
+you should be cautious about installing it on clusters with configurations that
+you cannot afford to lose (e.g. that are not stored in a Git repository).
 
 Lead developer: @adrianludwin (aludwin@google.com).
 
@@ -33,10 +34,15 @@ Lead developer: @adrianludwin (aludwin@google.com).
 
 ### Getting started and learning more
 
-Firstly, install HNC as described in the [user
-guide](docs/user-guide/how-to.md#admin-install). Then, try out the [HNC
+The [latest version of HNC is
+v0.4.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.4.0).
+To install HNC on your cluster, and the `kubectl-hns` plugin on your
+workstation, follow the instructions on that page.
+
+Once HNC is installed, you can try out the [HNC
 demos](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
-to get an idea of what HNC can do.
+to get an idea of what HNC can do. Or, feel free to dive right inot the [user
+guide](docs/user-guide) instead.
 
 ## Issues and project management
 
@@ -50,8 +56,10 @@ milestones are defined:
   contains enough functionality to be suitable for non-production workloads.
 * [v0.3 - COMPLETE APR 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
   type configuration and better self-service namespace UX.
-* [v0.4 - IN PROGRESS](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
-  incremental improvements based on feedback.
+* [v0.4 - COMPLETE JUN 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
+  stabilize the API and add productionization features.
+* [v0.5 - IN PROGRESS](https://github.com/kubernetes-sigs/multi-tenancy/milestone/13):
+  feature simplification and improved testing and stability.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 

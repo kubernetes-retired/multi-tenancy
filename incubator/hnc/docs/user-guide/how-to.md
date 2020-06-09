@@ -35,22 +35,20 @@ Kubernetes tools such as `kubectl`. However, the `kubectl-hns`
 greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin as well.
 
-To install the plugin, follow the directions below (Linux only):
+To install the plugin (Linux-only), first switch to a directory on your `PATH`
+(e.g. `~/bin`), then run the following commands:
 
 ```
 # Select the HNC version that matches the version installed on your cluster.
 # Ask your cluster administrator if you're not sure. The latest version is
 # shown below.
-HNC_VERSION=0.3.0
-
-# Decide where to install the plugin. It just needs to be on your PATH.
-PLUGIN_DIR=<any directory on your PATH>
+HNC_VERSION=0.4.0
 
 # Download the plugin
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
 
 # Make the plugin executable.
-chmod +x ${PLUGIN_DIR}/kubectl-hns
+chmod +x ./kubectl-hns
 
 # Ensure the plugin is working
 kubectl hns
@@ -331,26 +329,13 @@ namespaces (see [#680](https://github.com/kubernetes-sigs/multi-tenancy/issues/6
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
-#### Install prerequisites
+#### Install an official release
 
-If you are using HNC v0.3 or earlier, you must install Jetstack's cert-manager
-prior to installing HNC. This is not needed for HNC v0.4 or later.
-
-
-```bash
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
-```
-
-Wait for the cert-manager deployments to all become healthy. This can take a few
-minutes.
-
-#### Install an official image
-
-The most recent official image is v0.3.0.
+The most recent official release is v0.4.0.
 
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.3.0
+HNC_VERSION=v0.4.0
 
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
@@ -358,12 +343,12 @@ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/downl
 #### Download the kubectl plugin (Linux only)
 
 The `kubectl-hns` plugin makes most HNC use and administration much easier; we
-strongly recommend installing it.
+strongly recommend installing it. Run the following commands from any directory
+on your `PATH`.
 
 ```bash
-PLUGIN_DIR=<directory where you keep your plugins - just has to be on your PATH>
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ${PLUGIN_DIR}/kubectl-hns
-chmod +x ${PLUGIN_DIR}/kubectl-hns
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
+chmod +x ./kubectl-hns
 ```
 
 #### Install from source
@@ -383,7 +368,6 @@ export HNC_IMG_TAG=test-img
 # please ensure this path is in your PATH env var in order to use it.
 make deploy
 ```
-
 
 <a name="admin-uninstall"/>
 
