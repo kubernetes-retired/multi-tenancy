@@ -17,9 +17,9 @@ package kubectl
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
@@ -32,7 +32,7 @@ var maxProfileLevel = 3
 var benchmarks []*benchmark.Benchmark
 
 // singular-plural
-var benchmarkResourceNames = []string{"benchmark", "benchmarks"}
+var supportedResourceNames = sets.NewString("benchmarks", "benchmark")
 
 func init() {
 
@@ -86,23 +86,11 @@ func Execute() {
 
 func validateResource(args []string) {
 	if len(args) == 0 {
-		fmt.Println("Error: Please specify any resource to get.")
+		fmt.Println("Error: Please specify any resource")
 		os.Exit(1)
 	}
-	// Check the resourceName
-	resourceName := args[0]
-	for _, nm := range benchmarkResourceNames {
-		if strings.EqualFold(nm, resourceName) {
-			resource = nm
-			break
-		}
-	}
-
-	switch resource {
-	case "benchmark":
-	case "benchmarks":
-	default:
-		fmt.Println("Error: Please specify any valid resource to get.")
+	if !supportedResourceNames.Has(args[0]) {
+		fmt.Println("Error: Please specify any valid resource.")
 		os.Exit(1)
 	}
 }

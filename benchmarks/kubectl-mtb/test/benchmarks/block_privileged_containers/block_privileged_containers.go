@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gobuffalo/packr/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
@@ -33,5 +34,18 @@ var bpcBenchmark = &benchmark.Benchmark{
 
 // NewBenchmark returns the pointer of the benchmark
 func NewBenchmark() *benchmark.Benchmark {
+	box := packr.New("Config", ".")
+
+	// Get the []byte representation of a file, or an error if it doesn't exist:
+	config, err := box.Find("config.yaml")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = bpcBenchmark.ReadConfig(config)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 	return bpcBenchmark
 }

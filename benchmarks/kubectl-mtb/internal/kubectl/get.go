@@ -16,19 +16,53 @@ package kubectl
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"k8s.io/cli-runtime/pkg/printers"
 )
-
-var resource = ""
 
 var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "List the Multi-Tenancy Benchmarks",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(len(benchmarks))
+		if len(benchmarks) == 0 {
+			fmt.Println("No Benchmarks to get.")
+			os.Exit(1)
+		}
+		printBenchmarks()
 	},
+}
+
+func printBenchmarks() {
+
+	w := printers.GetNewTabWriter(os.Stdout)
+	defer w.Flush()
+
+	if err := printContextHeaders(w); err != nil {
+		fmt.Println(err.Error())
+	}
+
+	for _, b := range benchmarks {
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t\n",
+			b.ID,
+			b.Title,
+			b.Category,
+			b.BenchmarkType,
+			b.ProfileLevel); err != nil {
+			fmt.Println(err.Error())
+		}
+	}
+}
+
+func printContextHeaders(out io.Writer) error {
+	columnNames := []string{"ID", "NAME", "CATEGORY", "TYPE", "PROFILE LEVEL"}
+
+	_, err := fmt.Fprintf(out, "%s\n", strings.Join(columnNames, "\t"))
+	return err
 }
 
 func newGetCmd() *cobra.Command {
