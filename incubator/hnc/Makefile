@@ -176,6 +176,16 @@ kind-reset: kind-reboot
 kind-deploy:
 	CONFIG=kind $(MAKE) deploy
 
+###################### E2E TEST #########################
+
+.PHONY: e2e-test
+e2e-test: deploy
+	go test ./e2e/...
+
+.PHONY: local-e2e-test
+local-e2e-test: kind-deploy
+	go test ./e2e/...
+
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
 #
