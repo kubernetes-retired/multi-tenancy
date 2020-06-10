@@ -15,10 +15,13 @@ limitations under the License.
 package kubectl
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 )
 
 var (
@@ -32,6 +35,7 @@ var testCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		validateFlags(cmd)
+		runTests()
 	},
 }
 
@@ -48,6 +52,43 @@ func validateFlags(cmd *cobra.Command) {
 		color.Red("Error: tenant namespace must be set via --namespace or -n")
 		os.Exit(1)
 	}
+}
+
+func runTests() {
+
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// create the K8s clientset
+	k8sClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	impersonateServiceAccount := "system:serviceaccount:" + tenantNamespace + ":" + tenant
+	tenantConfig := config
+	tenantConfig.Impersonate.UserName = impersonateServiceAccount
+
+	// create the tenant clientset
+	tenantClient, err := kubernetes.NewForConfig(tenantConfig)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	for _, b := range benchmarks {
+		_, err := b.Run(tenantNamespace, k8sClient, tenantClient)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
 }
 
 func newTestCmd() *cobra.Command {

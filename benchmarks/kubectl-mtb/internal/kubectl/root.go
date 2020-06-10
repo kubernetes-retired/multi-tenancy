@@ -20,13 +20,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
-var k8sClient *kubernetes.Clientset
 var rootCmd *cobra.Command
 var maxProfileLevel = 3
 var benchmarks []*benchmark.Benchmark
@@ -36,24 +33,11 @@ var supportedResourceNames = sets.NewString("benchmarks", "benchmark")
 
 func init() {
 
-	kubecfgFlags := genericclioptions.NewConfigFlags(false)
-
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
 		Use:   "kubectl-mtb",
 		Short: "Multi-Tenancy Benchmarking",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
-			config, err := kubecfgFlags.ToRESTConfig()
-			if err != nil {
-				return err
-			}
-
-			// create the K8s clientset
-			k8sClient, err = kubernetes.NewForConfig(config)
-			if err != nil {
-				return err
-			}
 
 			validateResource(args)
 

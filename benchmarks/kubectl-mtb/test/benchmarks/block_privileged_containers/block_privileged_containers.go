@@ -27,7 +27,7 @@ var bpcBenchmark = &benchmark.Benchmark{
 		if err == nil {
 			return false, fmt.Errorf("Tenant must be unable to create pod that sets privileged to true")
 		}
-
+		fmt.Println(err.Error())
 		return true, nil
 	},
 }
