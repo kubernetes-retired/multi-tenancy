@@ -14,7 +14,7 @@ var benchmarkSuite = &suite.BenchmarkSuite{
 func NewBenchmarkSuite() *suite.BenchmarkSuite {
 
 	// Add Benchmarks
-	benchmarkSuite.AddBenchmark(blockprivilegedcontainers.NewBenchmark())
+	benchmarkSuite.Add(blockprivilegedcontainers.NewBenchmark())
 
 	return benchmarkSuite
 }

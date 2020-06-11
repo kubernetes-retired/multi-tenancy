@@ -26,11 +26,11 @@ import (
 
 var getCmd = &cobra.Command{
 	Use:   "get",
-	Short: "List the Multi-Tenancy Benchmarks",
+	Short: "Display one or many benchmarks.",
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(benchmarks) == 0 {
-			fmt.Println("No Benchmarks to get.")
+			fmt.Println("No benchmarks found.")
 			os.Exit(1)
 		}
 		printBenchmarks()

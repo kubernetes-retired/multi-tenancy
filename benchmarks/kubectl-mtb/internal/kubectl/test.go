@@ -71,9 +71,8 @@ func runTests() {
 		os.Exit(1)
 	}
 
-	impersonateServiceAccount := "system:serviceaccount:" + tenantNamespace + ":" + tenant
 	tenantConfig := config
-	tenantConfig.Impersonate.UserName = impersonateServiceAccount
+	tenantConfig.Impersonate.UserName = tenant
 
 	// create the tenant clientset
 	tenantClient, err := kubernetes.NewForConfig(tenantConfig)

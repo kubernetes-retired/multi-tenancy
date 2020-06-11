@@ -29,7 +29,7 @@ func TestAddBenchmark(t *testing.T) {
 	bs := &BenchmarkSuite{Title: "MTB", Version: "1.0.0"}
 
 	for _, b := range benchmarkArray {
-		bs.AddBenchmark(b)
+		bs.Add(b)
 	}
 
 	if !reflect.DeepEqual(benchmarkArray, bs.Benchmarks) {
@@ -40,9 +40,9 @@ func TestAddBenchmark(t *testing.T) {
 func TestGetTotalBenchmarks(t *testing.T) {
 	bs := &BenchmarkSuite{Title: "MTB", Version: "1.0.0"}
 	for _, b := range benchmarkArray {
-		bs.AddBenchmark(b)
+		bs.Add(b)
 	}
-	if bs.GetTotalBenchmarks() != len(benchmarkArray) {
+	if bs.Totals() != len(benchmarkArray) {
 		t.Errorf("Error in adding benchmark to benchmark suite.")
 	}
 }
@@ -101,10 +101,10 @@ func TestGetBenchmarksOfProfileLevel(t *testing.T) {
 
 	bs := &BenchmarkSuite{Title: "MTB", Version: "1.0.0"}
 	for _, b := range benchmarkArray {
-		bs.AddBenchmark(b)
+		bs.Add(b)
 	}
 	for _, item := range tests {
-		filteredBenchmarks := bs.GetBenchmarksOfProfileLevel(item.profileLevel)
+		filteredBenchmarks := bs.ProfileLevel(item.profileLevel)
 		if !reflect.DeepEqual(item.benchmarks, filteredBenchmarks) {
 			t.Errorf("Error in filtering the benchmarks according to Profile Level of %d.", item.profileLevel)
 		}

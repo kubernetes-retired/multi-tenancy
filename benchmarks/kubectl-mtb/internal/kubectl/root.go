@@ -36,7 +36,7 @@ func init() {
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
 		Use:   "kubectl-mtb",
-		Short: "Multi-Tenancy Benchmarking",
+		Short: "Multi-Tenancy Benchmarks",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 			validateResource(args)
@@ -45,7 +45,7 @@ func init() {
 			bs := test.NewBenchmarkSuite()
 
 			profileLevel, _ := cmd.Flags().GetInt("profile-level")
-			benchmarks = bs.GetBenchmarksOfProfileLevel(profileLevel)
+			benchmarks = bs.ProfileLevel(profileLevel)
 
 			return nil
 		},
