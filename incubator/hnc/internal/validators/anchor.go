@@ -90,8 +90,8 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	}
 
 	if req.op == v1beta1.Delete {
-		if cns.Exists() && !cns.AllowsCascadingDelete() {
-			msg := fmt.Sprintf("The subnamespace %s doesn't allow cascading deletion. Please set allowCascadingDelete flag first.", cnm)
+		if cns.Exists() && cns.ChildNames() != nil && !cns.AllowsCascadingDelete() {
+			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDelete flag or make it a leaf first.", cnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 	}

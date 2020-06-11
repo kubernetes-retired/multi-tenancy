@@ -178,3 +178,18 @@ func (ns *Namespace) populateDescendants(d map[string]bool) {
 		cns.populateDescendants(d)
 	}
 }
+
+// FullDescendantNames returns a sorted list of descendant namespaces that are full namespaces.
+func (ns *Namespace) FullDescendantNames() []string {
+	fd := []string{}
+	for _, dnm := range ns.DescendantNames() {
+		if !ns.forest.Get(dnm).IsSub {
+			fd = append(fd, dnm)
+		}
+	}
+	if len(fd) == 0 {
+		return nil
+	}
+	sort.Strings(fd)
+	return fd
+}

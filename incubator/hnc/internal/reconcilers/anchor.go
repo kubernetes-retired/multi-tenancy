@@ -126,11 +126,11 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		// We've finished processing this, nothing to do.
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
-	case !deletingCRD && snsInst.DeletionTimestamp.IsZero() && r.allowsCascadingDelete(cnm):
-		// The subnamespace is not already being deleted but it allows cascadingDelete.
+	case r.shouldDeleteSubns(cnm, snsInst, deletingCRD):
+		// The subnamespace is not already being deleted but it allows cascadingDelete or it's a leaf.
 		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
 		// namespaces alone.
-		log.Info("The subnamespace is not being deleted but it allows cascading deletion.")
+		log.Info("The subnamespace is not being deleted but it allows cascading deletion or it's a leaf.")
 		return true, r.deleteNamespace(ctx, log, snsInst)
 	case r.removeFinalizers(log, inst, snsInst):
 		// We've determined that this anchor is ready to be deleted.
@@ -156,6 +156,29 @@ func (r *AnchorReconciler) isDeletingCRD(ctx context.Context) (bool, error) {
 	}
 
 	return !crd.DeletionTimestamp.IsZero(), nil
+}
+
+// shouldDeleteSubns returns true if the namespace still exists and it is a leaf
+// subnamespace or it allows cascading delete unless the CRD is being deleted.
+func (r *AnchorReconciler) shouldDeleteSubns(nm string, inst *corev1.Namespace, deletingCRD bool) bool {
+	r.forest.Lock()
+	defer r.forest.Unlock()
+
+	// If the CRD is being deleted, we want to leave the subnamespace alone.
+	if deletingCRD {
+		return false
+	}
+
+	// If the subnamespace is already being deleted, or has already been deleted,
+	// then there's no need to delete it again.
+	ns := r.forest.Get(nm)
+	if !inst.DeletionTimestamp.IsZero() || !ns.Exists() {
+		return false
+	}
+
+	// The subnamespace exists and isn't being deleted. We should delete it if it
+	// doesn't have any children itself, or if cascading deletion is enabled.
+	return ns.ChildNames() == nil || ns.AllowsCascadingDelete()
 }
 
 func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
@@ -277,14 +300,6 @@ func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger,
 		return err
 	}
 	return nil
-}
-
-func (r *AnchorReconciler) allowsCascadingDelete(nm string) bool {
-	r.forest.Lock()
-	defer r.forest.Unlock()
-
-	ns := r.forest.Get(nm)
-	return ns.AllowsCascadingDelete()
 }
 
 func (r *AnchorReconciler) SetupWithManager(mgr ctrl.Manager) error {
