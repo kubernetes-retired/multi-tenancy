@@ -114,10 +114,10 @@ func NewServiceController(config *config.SyncerConfiguration,
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
 				case *v1.Service:
-					return isLoadBalancerService(t)
+					return isBackPopulateService(t)
 				case cache.DeletedFinalStateUnknown:
 					if e, ok := t.Obj.(*v1.Service); ok {
-						return isLoadBalancerService(e)
+						return isBackPopulateService(e)
 					}
 					utilruntime.HandleError(fmt.Errorf("unable to convert object %v to *v1.Service", obj))
 					return false
@@ -141,8 +141,8 @@ func NewServiceController(config *config.SyncerConfiguration,
 	return c, multiClusterServiceController, upwardServiceController, nil
 }
 
-func isLoadBalancerService(svc *v1.Service) bool {
-	return svc.Spec.Type == v1.ServiceTypeLoadBalancer
+func isBackPopulateService(svc *v1.Service) bool {
+	return svc.Spec.Type == v1.ServiceTypeLoadBalancer || svc.Spec.Type == v1.ServiceTypeClusterIP
 }
 
 func (c *controller) enqueueService(obj interface{}) {
