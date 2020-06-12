@@ -149,6 +149,10 @@ func (c *Cluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
 	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {
 		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
 	}
+	prefixesSet = sets.NewString(spec.TransparentMetaPrefixes...)
+	if !prefixesSet.Has(constants.DefaultTransparentMetaPrefix) {
+		spec.TransparentMetaPrefixes = append(spec.TransparentMetaPrefixes, constants.DefaultTransparentMetaPrefix)
+	}
 
 	return spec, nil
 }

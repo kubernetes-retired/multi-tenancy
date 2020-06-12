@@ -22,6 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
@@ -54,6 +55,20 @@ func (c *controller) BackPopulate(key string) error {
 		return err
 	}
 
+	// Make sure the super cluster IP is added to the annotation so that it can be back populated to the tenant object
+	if pService.Spec.ClusterIP != "" && pService.Annotations[constants.LabelSuperClusterIP] != pService.Spec.ClusterIP {
+		if pService.Annotations == nil {
+			pService.Annotations = make(map[string]string)
+		}
+		pService.Annotations[constants.LabelSuperClusterIP] = pService.Spec.ClusterIP
+		_, err = c.serviceClient.Services(pNamespace).Update(pService)
+		if err != nil {
+			return err
+		}
+		// wait for the next reconcile for the rest of backpopulate work.
+		return nil
+	}
+
 	clusterName, vNamespace := conversion.GetVirtualOwner(pService)
 	if clusterName == "" || vNamespace == "" {
 		klog.Infof("drop service %s/%s which is not belongs to any tenant", pNamespace, pName)
@@ -77,8 +92,30 @@ func (c *controller) BackPopulate(key string) error {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
+	spec, err := c.multiClusterServiceController.GetSpec(clusterName)
+	if err != nil {
+		return err
+	}
+
+	var newService *v1.Service
+	updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pService.ObjectMeta, &vService.ObjectMeta)
+	if updatedMeta != nil {
+		newService = vService.DeepCopy()
+		newService.ObjectMeta = *updatedMeta
+		if _, err = tenantClient.CoreV1().Services(vService.Namespace).Update(newService); err != nil {
+			return fmt.Errorf("failed to back populate service %s/%s meta update for cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+		}
+	}
+
 	if !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
-		newService := vService.DeepCopy()
+		if newService == nil {
+			newService = vService.DeepCopy()
+		} else {
+			// vService has been updated, let us fetch the lastest version.
+			if newService, err = tenantClient.CoreV1().Services(vService.Namespace).Get(vService.Name, metav1.GetOptions{}); err != nil {
+				return fmt.Errorf("failed to retrieve vService %s/%s from cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
+			}
+		}
 		newService.Status = pService.Status
 		if _, err = tenantClient.CoreV1().Services(vService.Namespace).UpdateStatus(newService); err != nil {
 			return fmt.Errorf("failed to back populate service %s/%s status update for cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)

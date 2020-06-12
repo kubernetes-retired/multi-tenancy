@@ -35,7 +35,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 )
 
-var numMissMatchedServices uint64
+var numSpecMissMatchedServices uint64
+var numStatusMissMatchedServices uint64
+var numUWMetaMissMatchedServices uint64
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
@@ -55,7 +57,9 @@ func (c *controller) PatrollerDo() {
 	}
 	defer metrics.RecordCheckerScanDuration("service", time.Now())
 	wg := sync.WaitGroup{}
-	numMissMatchedServices = 0
+	numSpecMissMatchedServices = 0
+	numStatusMissMatchedServices = 0
+	numUWMetaMissMatchedServices = 0
 
 	for _, clusterName := range clusterNames {
 		wg.Add(1)
@@ -88,7 +92,6 @@ func (c *controller) PatrollerDo() {
 				shouldDelete = true
 				klog.Warningf("Found pService %s/%s delegated UID is different from tenant object.", pService.Namespace, pService.Name)
 			}
-
 		}
 		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pService.UID))
@@ -100,7 +103,9 @@ func (c *controller) PatrollerDo() {
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedServices").Set(float64(numMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedServices").Set(float64(numStatusMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedServices").Set(float64(numUWMetaMissMatchedServices))
 }
 
 func (c *controller) checkServicesOfTenantCluster(clusterName string) {
@@ -140,17 +145,30 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		}
 		updatedService := conversion.Equality(c.config, spec).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
-			atomic.AddUint64(&numMissMatchedServices, 1)
+			atomic.AddUint64(&numSpecMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
 			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
 			}
-			continue
 		}
-		if isLoadBalancerService(pService) && !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
-			c.enqueueService(pService)
+		if isBackPopulateService(pService) {
+			enqueue := false
+			updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pService.ObjectMeta, &svcList.Items[i].ObjectMeta)
+			if updatedMeta != nil {
+				atomic.AddUint64(&numUWMetaMissMatchedServices, 1)
+				enqueue = true
+				klog.Warningf("UWObjectMeta of vService %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
+			}
+			if !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
+				enqueue = true
+				atomic.AddUint64(&numStatusMissMatchedServices, 1)
+				klog.Warningf("Status of vService %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
+			}
+			if enqueue {
+				c.enqueueService(pService)
+			}
 		}
 	}
 }

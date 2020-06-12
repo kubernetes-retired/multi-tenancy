@@ -77,7 +77,11 @@ const (
 	// According to controller workqueue default rate limiter algorithm, retry 16 times takes around 180 seconds.
 	MaxReconcileRetryAttempts = 16
 
-	DefaultOpaqueMetaPrefix = "tenancy.x-k8s.io"
+	DefaultOpaqueMetaPrefix      = "tenancy.x-k8s.io"
+	DefaultTransparentMetaPrefix = "transparency.tenancy.x-k8s.io"
+
+	// LabelSuperClusterIP is used to inform the tenant service about the cluster IP used in super master.
+	LabelSuperClusterIP = "transparency.tenancy.x-k8s.io/clusterIP"
 
 	// Override the client-go default 5 qps and 10 burst, which are too samll for syncer.
 	DefaultSyncerClientQPS   = 1000
