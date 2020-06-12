@@ -21,8 +21,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/record"
 
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -51,8 +51,8 @@ type Config struct {
 	Kubeconfig *restclient.Config
 
 	// the event sink
-	Recorder    events.EventRecorder
-	Broadcaster events.EventBroadcaster
+	Recorder    record.EventRecorder
+	Broadcaster record.EventBroadcaster
 
 	// LeaderElection is optional.
 	LeaderElection *leaderelection.LeaderElectionConfig

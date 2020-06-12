@@ -33,6 +33,7 @@ const (
 	CheckerRemedyKey         = "checker_remedy_count"
 	CheckerScanDurationKey   = "checker_scan_duaration_seconds"
 	UWSOperationDurationKey  = "uws_operations_duration_seconds"
+	ClusterHealthKey         = "virtual_cluster_health"
 )
 
 var (
@@ -95,6 +96,14 @@ var (
 		},
 		[]string{"uws_resource"},
 	)
+	ClusterHealthStats = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      ClusterHealthKey,
+			Help:      "Last checker scan status for virtual clusters.",
+		},
+		[]string{"status"},
+	)
 )
 
 var registerMetrics sync.Once
@@ -109,6 +118,7 @@ func Register() {
 		prometheus.MustRegister(CheckerRemedyStats)
 		prometheus.MustRegister(CheckerScanDuration)
 		prometheus.MustRegister(UWSOperationDuration)
+		prometheus.MustRegister(ClusterHealthStats)
 	})
 }
 
