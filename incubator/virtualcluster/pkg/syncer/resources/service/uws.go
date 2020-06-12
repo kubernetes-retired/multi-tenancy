@@ -56,7 +56,7 @@ func (c *controller) BackPopulate(key string) error {
 	}
 
 	// Make sure the super cluster IP is added to the annotation so that it can be back populated to the tenant object
-	if pService.Spec.ClusterIP != "" && (pService.Annotations == nil || pService.Annotations[constants.LabelSuperClusterIP] != pService.Spec.ClusterIP) {
+	if pService.Spec.ClusterIP != "" && pService.Annotations[constants.LabelSuperClusterIP] != pService.Spec.ClusterIP {
 		if pService.Annotations == nil {
 			pService.Annotations = make(map[string]string)
 		}
