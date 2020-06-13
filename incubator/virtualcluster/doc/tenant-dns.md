@@ -42,7 +42,7 @@ index 295715e2..155944e8 100644
                 Namespace:    svc.GetNamespace(),
                 Index:        ServiceKey(svc.GetName(), svc.GetNamespace()),
 -               ClusterIP:    svc.Spec.ClusterIP,
-+               ClusterIP:    svc.Annotations["transparency.tenancy.x-k8s.io/clusterIP"],
++               ClusterIP:    func(sCIP string) string { if sCIP == "" { return svc.Spec.ClusterIP } else { return sCIP } } (svc.Annotations["transparency.tenancy.x-k8s.io/clusterIP"]),
                 Type:         svc.Spec.Type,
                 ExternalName: svc.Spec.ExternalName,
 
@@ -60,7 +60,7 @@ git checkout tags/v1.6.8
 the syncer has populated the super master cluster IP in the tenant master service annotation using
 the key `transparency.tenancy.x-k8s.io/clusterIP`.
 ```
-sed -i'' -e 's/svc.Spec.ClusterIP/svc.Annotations["transparency.tenancy.x-k8s.io\/clusterIP"]/g' plugin/kubernetes/object/service.go
+sed -i'' -e 's/svc.Spec.ClusterIP/func(sCIP string) string { if sCIP == "" { return svc.Spec.ClusterIP } else { return sCIP } } (svc.Annotations["transparency.tenancy.x-k8s.io\/clusterIP"])/g' plugin/kubernetes/object/service.go
 ```
 
 3. Compile and build the new image.
@@ -69,8 +69,9 @@ make -f Makefile.release DOCKER=virtualcluster LINUX_ARCH=amd64 release
 make -f Makefile.release DOCKER=virtualcluster LINUX_ARCH=amd64 docker
 ```
 
-Now the customized `coredns` image is ready. We have also prepared a few images for different `coredns`
-versions in the virtualcluster docker hub repo.
+Now the customized `coredns` image is ready, which works on both upstream Kubernetes and
+virtualcluster assuming the annotation key is not abused. We have also prepared a few customized
+images for different `coredns` versions in the virtualcluster docker hub repo.
 
 ## Installation
 
