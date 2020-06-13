@@ -70,6 +70,32 @@ data:
         loadbalance
     }
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-dns
+  namespace: kube-system
+  annotations:
+    prometheus.io/port: "9153"
+    prometheus.io/scrape: "true"
+  labels:
+    k8s-app: kube-dns
+    kubernetes.io/cluster-service: "true"
+    kubernetes.io/name: "CoreDNS"
+spec:
+  selector:
+    k8s-app: kube-dns
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+  - name: metrics
+    port: 9153
+    protocol: TCP
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -159,6 +185,7 @@ spec:
         env:
         - name: KUBERNETES_SERVICE_HOST
           value: kubernetes
+      dnsPolicy: Default
       volumes:
         - name: config-volume
           configMap:
@@ -166,30 +193,3 @@ spec:
             items:
             - key: Corefile
               path: Corefile
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kube-dns
-  namespace: kube-system
-  annotations:
-    prometheus.io/port: "9153"
-    prometheus.io/scrape: "true"
-  labels:
-    k8s-app: kube-dns
-    kubernetes.io/cluster-service: "true"
-    kubernetes.io/name: "CoreDNS"
-spec:
-  selector:
-    k8s-app: kube-dns
-  ports:
-  - name: dns
-    port: 53
-    protocol: UDP
-  - name: dns-tcp
-    port: 53
-    protocol: TCP
-  - name: metrics
-    port: 9153
-    protocol: TCP
-
