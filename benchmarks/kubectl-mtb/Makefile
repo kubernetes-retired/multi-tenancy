@@ -20,3 +20,7 @@ clean:
 # Install kubectl plugin
 kubectl: build
 	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
+
+generate:
+	@go generate ./...
+	@echo "[OK] Files added to embed box!"
