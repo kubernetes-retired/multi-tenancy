@@ -60,9 +60,7 @@ hence the default grace period is too small.
 The DNS service should be created in `kube-system` namespace using name `kube-dns`. The syncer controller can then
 recognize the DNS service cluster IP in super master and inject it into Pod spec `dnsConfig`.
 
-- Since coredns is installed in tenant master, the service cluster IPs have to be identical in tenant
-master and super master respectively so that coredns can provide correct cluster IP translation for service cname.
-This requires both clusters to have the same CIDR.
+- VirtualCluster supports tenant DNS service using a customized coredns build. See this [document](./doc/tenant-dns.md) for details.
 
 - VirtualCluster fully support tenant service account.
 

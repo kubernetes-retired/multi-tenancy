@@ -277,8 +277,6 @@ func mutateDNSConfig(p *podMutateCtx, vPod *v1.Pod, clusterDomain, nameServer st
 		// Fallback to DNSDefault for pod on hostnetwork.
 		fallthrough
 	case v1.DNSDefault:
-		// FIXME(zhuangqh): allow host dns or not.
-		p.pPod.Spec.DNSPolicy = v1.DNSNone
 		return
 	}
 }
