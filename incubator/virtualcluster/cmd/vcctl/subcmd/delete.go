@@ -24,6 +24,9 @@ import (
 
 	vcctlutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vcctl/util"
 	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+
+	// Import all Auth Providers
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 // Delete deletes the VirtualCluster vcName
