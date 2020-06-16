@@ -39,8 +39,8 @@ import (
 	netutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	// Import all Auth Providers
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 const (
