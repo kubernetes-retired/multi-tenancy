@@ -30,7 +30,7 @@ spec:
             subdomain: etcd
             containers:
             - name: etcd
-              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/etcd-v3.4.0
+              image: virtualcluster/etcd-v3.4.0
               imagePullPolicy: Always
               command: 
               - etcd
@@ -132,7 +132,7 @@ spec:
             subdomain: apiserver-svc
             containers:
             - name: apiserver
-              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/apiserver-v1.15.4
+              image: virtualcluster/apiserver-v1.16.2
               imagePullPolicy: Always
               command:
               - kube-apiserver
@@ -242,7 +242,7 @@ spec:
           spec:
             containers:
             - name: controller-manager
-              image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/controller-manager-v1.15.4
+              image: virtualcluster/controller-manager-v1.16.2
               imagePullPolicy: Always
               command:
               - kube-controller-manager
