@@ -252,6 +252,14 @@ rules:
     - watch
 - apiGroups:
     - ""
+    - storage.k8s.io
+  resources:
+    - events
+  verbs:
+    - create
+    - patch
+- apiGroups:
+    - ""
   resources:
     - namespaces/status
     - pods/status

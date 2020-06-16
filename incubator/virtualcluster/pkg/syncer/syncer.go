@@ -21,17 +21,21 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
@@ -54,8 +58,14 @@ const (
 	KubeconfigAdmin = "admin-kubeconfig"
 )
 
+var (
+	numHealthCluster   uint64
+	numUnHealthCluster uint64
+)
+
 type Syncer struct {
 	secretClient      v1core.SecretsGetter
+	recorder          record.EventRecorder
 	controllerManager *manager.ControllerManager
 	// lister that can list virtual clusters from a shared cache
 	lister vclisters.VirtualClusterLister
@@ -82,9 +92,11 @@ func New(
 	virtualClusterInformer vcinformers.VirtualClusterInformer,
 	superMasterClient clientset.Interface,
 	superMasterInformers informers.SharedInformerFactory,
+	recorder record.EventRecorder,
 ) *Syncer {
 	syncer := &Syncer{
 		secretClient: secretClient,
+		recorder:     recorder,
 		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
 		workers:      constants.UwsControllerWorkerLow,
 		clusterSet:   make(map[string]mc.ClusterInterface),
@@ -153,6 +165,7 @@ func (s *Syncer) Run(stopChan <-chan struct{}) {
 			klog.V(1).Infof("controller manager exit: %v", err)
 		}
 	}()
+	go wait.Until(s.healthPatrol, 1*time.Minute, stopChan)
 	go func() {
 		defer utilruntime.HandleCrash()
 		defer s.queue.ShutDown()
@@ -311,6 +324,13 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluste
 	}()
 
 	if !cluster.WaitForCacheSync() {
+		s.recorder.Eventf(&v1.ObjectReference{
+			Kind:      "VirtualCluster",
+			Namespace: vc.Namespace,
+			Name:      vc.Name,
+			UID:       vc.UID,
+		}, v1.EventTypeWarning, "ClusterUnHealth", "VirtualCluster %v unhealth: failed to sync cache", cluster.GetClusterName())
+
 		klog.Warningf("failed to sync cache for cluster %s, retry", cluster.GetClusterName())
 		key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(vc)
 		s.removeCluster(key)
@@ -318,4 +338,58 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluste
 		return
 	}
 	cluster.SetSynced()
+}
+
+func (s *Syncer) healthPatrol() {
+	defer metrics.RecordCheckerScanDuration("tenant-master", time.Now())
+	var clusters []mc.ClusterInterface
+	s.mu.Lock()
+	for _, c := range s.clusterSet {
+		clusters = append(clusters, c)
+	}
+	s.mu.Unlock()
+
+	numUnHealthCluster = 0
+	numHealthCluster = 0
+
+	if len(clusters) != 0 {
+		wg := sync.WaitGroup{}
+		for _, c := range clusters {
+			wg.Add(1)
+			go func(cluster mc.ClusterInterface) {
+				defer wg.Done()
+				s.checkTenantClusterHealth(cluster)
+			}(c)
+		}
+		wg.Wait()
+	}
+
+	metrics.ClusterHealthStats.WithLabelValues("health").Set(float64(numHealthCluster))
+	metrics.ClusterHealthStats.WithLabelValues("unhealth").Set(float64(numUnHealthCluster))
+}
+
+// checkTenantClusterHealth checks if we can connect to tenant apiserver.
+func (s *Syncer) checkTenantClusterHealth(cluster mc.ClusterInterface) {
+	cs, err := cluster.GetClientSet()
+	if err != nil {
+		klog.Warningf("[checkClusterHealth] fails to get cluster %v clientset: %v", cluster.GetClusterName(), err)
+		return
+	}
+
+	_, discoveryErr := cs.Discovery().ServerVersion()
+	if discoveryErr == nil {
+		atomic.AddUint64(&numHealthCluster, 1)
+		return
+	}
+
+	atomic.AddUint64(&numUnHealthCluster, 1)
+
+	ns, name, uid := cluster.GetOwnerInfo()
+
+	s.recorder.Eventf(&v1.ObjectReference{
+		Kind:      "VirtualCluster",
+		Namespace: ns,
+		Name:      name,
+		UID:       types.UID(uid),
+	}, v1.EventTypeWarning, "ClusterUnHealth", "VirtualCluster %v unhealth: %v", cluster.GetClusterName(), discoveryErr.Error())
 }

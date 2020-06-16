@@ -26,6 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apiserver/pkg/util/term"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/leaderelection"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/cli/globalflag"
@@ -93,11 +94,12 @@ func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
 		cc.SuperMasterClient,
-		cc.SuperMasterInformerFactory)
+		cc.SuperMasterInformerFactory,
+		cc.Recorder)
 
 	// Prepare the event broadcaster.
 	if cc.Broadcaster != nil && cc.SuperMasterClient != nil {
-		cc.Broadcaster.StartRecordingToSink(stopCh)
+		cc.Broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: cc.SuperMasterClient.CoreV1().Events("")})
 	}
 
 	// Start all informers.

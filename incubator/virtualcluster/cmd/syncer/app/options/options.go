@@ -33,7 +33,6 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
@@ -145,8 +144,8 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	}
 
 	// Prepare event clients.
-	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: superMasterClient.EventsV1beta1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(clientgokubescheme.Scheme, constants.ResourceSyncerUserAgent)
+	eventBroadcaster := record.NewBroadcaster()
+	recorder := eventBroadcaster.NewRecorder(clientgokubescheme.Scheme, corev1.EventSource{Component: constants.ResourceSyncerUserAgent})
 	leaderElectionBroadcaster := record.NewBroadcaster()
 	leaderElectionRecorder := leaderElectionBroadcaster.NewRecorder(clientgokubescheme.Scheme, corev1.EventSource{Component: constants.ResourceSyncerUserAgent})
 
