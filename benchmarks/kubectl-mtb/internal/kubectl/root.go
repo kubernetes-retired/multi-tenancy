@@ -15,8 +15,8 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -39,6 +39,8 @@ func init() {
 		Use:   "kubectl-mtb",
 		Short: "Multi-Tenancy Benchmarks",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			aKey := "akey"
+			aVal := "aval"
 
 			cmdutil.CheckErr(validateResource(args))
 
@@ -62,11 +64,20 @@ func init() {
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
+
+func executeCommandWithContext(ctx context.Context) {
+
+	rootCmd.ExecuteContext(ctx)
+
+}
+
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// if err := rootCmd.Execute(); err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+	ctx := context.TODO()
+	executeCommandWithContext(ctx)
 }
 
 func validateResource(args []string) error {

@@ -832,10 +832,12 @@ sigs.k8s.io/multi-tenancy v0.0.0-20200607201346-3633ff41448e h1:1u575YSWQQQufKAK
 sigs.k8s.io/multi-tenancy v0.0.0-20200612051355-6ee641b87ce2 h1:12V7hmYaOoLBS3NUEmKndre1m+PvLmkUYhPzNIkNces=
 sigs.k8s.io/multi-tenancy v0.0.0-20200617052239-783dee1aefb2 h1:Cbn3XwZrvcxyXuyF/cyEBHlg30yYYFt33tMKvYXnwGw=
 sigs.k8s.io/multi-tenancy v0.0.0-20200618054605-39c2af4efca5 h1:nlnBKUquBXlGrnUvLkHMHmQK8/4HeTIqirvFmw4A4kk=
+sigs.k8s.io/multi-tenancy v0.0.0-20200618062405-12d166267ac8 h1:HHEZ57huOt1cUZ/+5uIgsfINSIeX5y366zqpENsZCOo=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200607201346-3633ff41448e h1:CTTFS6dKpTW8pawEBOPQnm6V4gAAg7ekpbMq1SFUfnE=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200612051355-6ee641b87ce2 h1:P7SA1mttP11dROKDYQO1X4jpUXNwXVvlNji82xw/RAU=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200617052239-783dee1aefb2 h1:cNGAPYQkdpqLc/pBbi1z0obWpblGW3OMwV3T5m3r/iM=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200618054605-39c2af4efca5 h1:k5eKZbsTOnhAJB6BRSQ0IBL9ZWl77V5u3EKm1yvAOlc=
+sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200618062405-12d166267ac8 h1:qfHv6Yb4+VjFOv6gYkYDd6MtrvGqN3S2C9VlCH/jha8=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0-20200116222232-67a7b8c61874/go.mod h1:PlARxl6Hbt/+BC80dRLi1qAmnMqwqDg62YvvVkZjemw=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0 h1:dOmIZBMfhcHS09XZkMyUgkq5trg3/jRyJYFZUiaOp8E=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0/go.mod h1:PlARxl6Hbt/+BC80dRLi1qAmnMqwqDg62YvvVkZjemw=
