@@ -21,7 +21,15 @@ func Exists(path string) (bool, error) {
 func GetDirectory(path string, delimiter string) string {
 
 	dir := strings.Split(path, delimiter)
-	testDir := dir[len(dir)-1]
+	dir = dir[0 : len(dir)-1]
+	dirPath := strings.Join(dir[:], "/")
 
-	return testDir
+	return dirPath
+}
+
+func CheckError(err error) {
+	if err != nil {
+		fmt.Println("Fatal error ", err.Error())
+		os.Exit(1)
+	}
 }

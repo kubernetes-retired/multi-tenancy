@@ -24,3 +24,7 @@ kubectl: build
 generate:
 	@go generate ./...
 	@echo "[OK] Files added to embed box!"
+
+.PHONY: readme
+readme: 
+	go run docs/main.go
