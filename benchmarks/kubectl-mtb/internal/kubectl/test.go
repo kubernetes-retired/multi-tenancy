@@ -77,7 +77,12 @@ func runTests() error {
 	}
 
 	for _, b := range benchmarks {
+		_, err := b.PreRun(tenantNamespace, k8sClient, tenantClient)
+		if err != nil {
+			b.PreExit = 1
+		}
 		_, err := b.Run(tenantNamespace, k8sClient, tenantClient)
+
 		if err != nil {
 			return err
 		}

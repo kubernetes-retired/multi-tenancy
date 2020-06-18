@@ -12,6 +12,10 @@ import (
 )
 
 var bpcBenchmark = &benchmark.Benchmark{
+
+	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) (bool, error) {
+		return false, error
+	},
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) (bool, error) {
 
 		// IsPrivileged set to true so that pod creation would fail
