@@ -16,10 +16,8 @@ type Benchmark struct {
 	Description   string `yaml:"description"`
 	Remediation   string `yaml:"remediation"`
 	ProfileLevel  int    `yaml:"profileLevel"`
-	PreRun        func(string, *kubernetes.Clientset, *kubernetes.Clientset) (bool, error)
-	Run           func(string, *kubernetes.Clientset, *kubernetes.Clientset) (bool, error)
-	PreExit       int
-	Exit          int
+	PreRun        func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
+	Run           func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
 }
 
 // ReadConfig reads the yaml representation of struct from []file
