@@ -28,5 +28,6 @@ func (b *Benchmark) ReadConfig(file []byte) error {
 	if b == nil {
 		return errors.New("Please fill in a valid/non-empty yaml file")
 	}
+
 	return nil
 }
