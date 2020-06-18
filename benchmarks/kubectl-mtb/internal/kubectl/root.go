@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
@@ -39,7 +40,7 @@ func init() {
 		Short: "Multi-Tenancy Benchmarks",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
-			validateResource(args)
+			cmdutil.CheckErr(validateResource(args))
 
 			// Initiate new suite instance
 			bs := test.NewBenchmarkSuite()
@@ -68,13 +69,12 @@ func Execute() {
 	}
 }
 
-func validateResource(args []string) {
+func validateResource(args []string) error {
 	if len(args) == 0 {
-		fmt.Println("Error: Please specify any resource")
-		os.Exit(1)
+		return fmt.Errorf("Please specify any resource")
 	}
 	if !supportedResourceNames.Has(args[0]) {
-		fmt.Println("Error: Please specify any valid resource.")
-		os.Exit(1)
+		return fmt.Errorf("Please specify any valid resource")
 	}
+	return nil
 }

@@ -16,12 +16,11 @@ package kubectl
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 var (
@@ -34,41 +33,38 @@ var testCmd = &cobra.Command{
 	Short: "Run the Multi-Tenancy Benchmarks",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		validateFlags(cmd)
-		runTests()
+		cmdutil.CheckErr(validateFlags(cmd))
+		cmdutil.CheckErr(runTests())
 	},
 }
 
 // Validation of the flag inputs
-func validateFlags(cmd *cobra.Command) {
+func validateFlags(cmd *cobra.Command) error {
 	tenant, _ = cmd.Flags().GetString("tenant-admin")
 	if tenant == "" {
-		color.Red("Error: tenant-admin must be set via --tenant-admin or -t")
-		os.Exit(1)
+		return fmt.Errorf("tenant-admin must be set via --tenant-admin or -t")
 	}
 
 	tenantNamespace, _ = cmd.Flags().GetString("namespace")
 	if tenantNamespace == "" {
-		color.Red("Error: tenant namespace must be set via --namespace or -n")
-		os.Exit(1)
+		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
 	}
+	return nil
 }
 
-func runTests() {
+func runTests() error {
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 	config, err := kubecfgFlags.ToRESTConfig()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	// create the K8s clientset
 	k8sClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	tenantConfig := config
@@ -77,17 +73,16 @@ func runTests() {
 	// create the tenant clientset
 	tenantClient, err := kubernetes.NewForConfig(tenantConfig)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	for _, b := range benchmarks {
 		_, err := b.Run(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 	}
-
+	return nil
 }
 
 func newTestCmd() *cobra.Command {

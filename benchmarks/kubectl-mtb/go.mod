@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
-	github.com/fatih/color v1.9.0
 	github.com/gobuffalo/packr/v2 v2.5.1
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/phoenixking25/kubectl-mtb v0.0.0-20200607051717-90ca51647eb6 // indirect
@@ -18,6 +17,7 @@ require (
 	k8s.io/apimachinery v0.18.3
 	k8s.io/cli-runtime v0.18.3
 	k8s.io/client-go v0.18.3
+	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.18.3
 	k8s.io/utils v0.0.0-20200603063816-c1c6865ac451 // indirect
 )

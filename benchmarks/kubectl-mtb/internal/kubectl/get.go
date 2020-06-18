@@ -21,7 +21,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/cli-runtime/pkg/printers"
+	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 var getCmd = &cobra.Command{
@@ -29,21 +31,23 @@ var getCmd = &cobra.Command{
 	Short: "Display one or many benchmarks.",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(benchmarks) == 0 {
-			fmt.Println("No benchmarks found.")
-			os.Exit(1)
-		}
-		printBenchmarks()
+		cmdutil.CheckErr(printBenchmarks())
 	},
 }
 
-func printBenchmarks() {
+func printBenchmarks() error {
+
+	errs := []error{}
+
+	if len(benchmarks) == 0 {
+		return fmt.Errorf("No benchmarks found")
+	}
 
 	w := printers.GetNewTabWriter(os.Stdout)
 	defer w.Flush()
 
 	if err := printContextHeaders(w); err != nil {
-		fmt.Println(err.Error())
+		return err
 	}
 
 	for _, b := range benchmarks {
@@ -53,9 +57,14 @@ func printBenchmarks() {
 			b.Category,
 			b.BenchmarkType,
 			b.ProfileLevel); err != nil {
-			fmt.Println(err.Error())
+			errs = append(errs, err)
 		}
 	}
+
+	if len(errs) > 0 {
+		return errors.NewAggregate(errs)
+	}
+	return nil
 }
 
 func printContextHeaders(out io.Writer) error {
