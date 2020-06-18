@@ -24,3 +24,20 @@ kubectl: build
 generate:
 	@go generate ./...
 	@echo "[OK] Files added to embed box!"
+
+###################### KIND ACTIONS #########################
+
+# Creates a local kind cluster, destroying the old one if necessary.
+kind:
+	@echo "Warning: the 'kind' command must be in your path for this to work"
+	-kind delete cluster
+	kind create cluster
+
+###################### MULTI-TENANTS ACTIONS #########################
+
+# Creates tenants in cluster, using the https://github.com/kubernetes-sigs/multi-tenancy/blob/master/tenant/README.md#getting-started
+# hard coded to create 2 tenants
+# tenants: tenant-0-cr, tenant-1-cr
+# tenantadmin namespaces: tenant0admin, tenant1admin
+tenant:
+	./hack/multitenant.sh 2
