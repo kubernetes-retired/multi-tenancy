@@ -69,6 +69,7 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 		{name: "set in ancestor that is not the first full namespace", acd: "a", pnm: "c", cnm: "d"},
 		{name: "unset in leaf", pnm: "d", cnm: "e"},
 		{name: "unset in non-leaf", pnm: "c", cnm: "d", fail: true},
+		{name: "unset in non-leaf but bad anchor", pnm: "b", cnm: "d"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
