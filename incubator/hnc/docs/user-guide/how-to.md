@@ -42,7 +42,7 @@ To install the plugin (Linux-only), first switch to a directory on your `PATH`
 # Select the HNC version that matches the version installed on your cluster.
 # Ask your cluster administrator if you're not sure. The latest version is
 # shown below.
-HNC_VERSION=0.4.0
+HNC_VERSION=v0.4.0
 
 # Download the plugin
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
