@@ -6,7 +6,9 @@ require (
 	github.com/creasty/defaults v1.3.0
 	github.com/gobuffalo/packr/v2 v2.5.1
 	github.com/golang/protobuf v1.4.2 // indirect
+	github.com/kr/fs v0.1.0
 	github.com/phoenixking25/kubectl-mtb v0.0.0-20200607051717-90ca51647eb6 // indirect
+	github.com/russross/blackfriday/v2 v2.0.1
 	github.com/spf13/cobra v1.0.0
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9 // indirect
 	golang.org/x/net v0.0.0-20200602114024-627f9648deb9 // indirect
