@@ -9,6 +9,6 @@ Makefile is used to automate the things at the local level.
 
 ### Make commands
 
-- **make kubectl** : To build the project and copy the binary file to the PATH.
+- **make kubectl-mtb** : To build the project and copy the binary file to the PATH.
 - **make generate** : To convert benchmarks config yaml files into static assets.
 - **make readme** : To generate each benchmark README files from their respective config yaml files to serve as a docs for benchmark.

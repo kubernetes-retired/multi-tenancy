@@ -12,7 +12,7 @@ limitations under the License.
 
 package main
 
-import "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/kubectl"
+import "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/kubectl-mtb"
 
 func main() {
 	kubectl.Execute()
