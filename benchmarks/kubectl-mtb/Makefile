@@ -18,12 +18,17 @@ clean:
 	rm -f ${GOPATH}/bin/kubectl-mtb
 
 # Install kubectl plugin
-kubectl: build
+kubectl: generate readme build
 	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
 
+# Add-benchmark
+add-benchmark:
+	go run tpl/*.go
+
+# Convert config yaml as static assets 
+# Generate benchmarks import file
 generate:
 	@go generate ./...
-	@echo "[OK] Files added to embed box!"
 
 .PHONY: readme
 readme: 
