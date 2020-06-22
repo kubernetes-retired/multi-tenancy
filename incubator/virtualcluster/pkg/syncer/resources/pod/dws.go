@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,17 +65,19 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	var operation string
 	if vExists && !pExists {
 		operation = "pod_add"
-		defer recordOperation(operation, time.Now())
+		defer recordOperationDuration(operation, time.Now())
 		vPod := vPodObj.(*v1.Pod)
 		err := c.reconcilePodCreate(request.ClusterName, targetNamespace, request.UID, vPod)
+		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
 		}
 	} else if !vExists && pExists {
 		operation = "pod_delete"
-		defer recordOperation(operation, time.Now())
+		defer recordOperationDuration(operation, time.Now())
 		err := c.reconcilePodRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pPod)
+		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
@@ -84,9 +87,10 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		}
 	} else if vExists && pExists {
 		operation = "pod_update"
-		defer recordOperation(operation, time.Now())
+		defer recordOperationDuration(operation, time.Now())
 		vPod := vPodObj.(*v1.Pod)
 		err := c.reconcilePodUpdate(request.ClusterName, targetNamespace, request.UID, pPod, vPod)
+		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
@@ -293,13 +297,14 @@ func (c *controller) reconcilePodRemove(clusterName, targetNamespace, requestUID
 	return err
 }
 
-func recordOperation(operation string, start time.Time) {
-	metrics.PodOperations.WithLabelValues(operation).Inc()
+func recordOperationDuration(operation string, start time.Time) {
 	metrics.PodOperationsDuration.WithLabelValues(operation).Observe(metrics.SinceInSeconds(start))
 }
 
-func recordError(operation string, err error) {
+func recordOperationStatus(operation string, err error) {
 	if err != nil {
-		metrics.PodOperationsErrors.WithLabelValues(operation).Inc()
+		metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeError}).Inc()
+		return
 	}
+	metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeOK}).Inc()
 }

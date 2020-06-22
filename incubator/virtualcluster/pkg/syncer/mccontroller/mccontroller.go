@@ -24,6 +24,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,6 +38,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -52,6 +54,9 @@ type MultiClusterController struct {
 
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
+
+	// objectKind is the kind of target object this controller watched.
+	objectKind string
 
 	// clusters is the internal cluster set this controller watches.
 	clusters map[string]ClusterInterface
@@ -101,9 +106,15 @@ func NewMCController(name string, objectType runtime.Object, options Options) (*
 		return nil, fmt.Errorf("must specify Name for Controller")
 	}
 
+	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
+	if err != nil || len(kinds) == 0 {
+		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+	}
+
 	c := &MultiClusterController{
 		name:       name,
 		objectType: objectType,
+		objectKind: kinds[0].Kind,
 		clusters:   make(map[string]ClusterInterface),
 		Options:    options,
 	}
@@ -374,14 +385,18 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		return true
 	}
 
+	defer metrics.RecordDWSOperationDuration(c.objectKind, req.ClusterName, time.Now())
+
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
 	// string of the resource to be synced.
 	if result, err := c.Reconciler.Reconcile(req); err != nil {
 		if c.Queue.NumRequeues(obj) >= constants.MaxReconcileRetryAttempts {
+			metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeExceedMaxRetryAttempts)
 			c.Queue.Forget(obj)
 			klog.Warningf("%s dws request is dropped due to reaching max retry limit: %+v", c.name, obj)
 			return true
 		}
+		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeError)
 		c.Queue.AddRateLimited(req)
 		klog.Error(err)
 		return false
@@ -392,6 +407,8 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		c.Queue.AddRateLimited(req)
 		return true
 	}
+
+	metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeOK)
 
 	// Finally, if no error occurs we Forget this item so it does not
 	// get queued again until another change happens.

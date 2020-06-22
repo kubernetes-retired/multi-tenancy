@@ -28,10 +28,12 @@ const (
 	ResourceSyncerSubsystem  = "syncer"
 	PodOperationsKey         = "pod_operations_total"
 	PodOperationsDurationKey = "pod_operations_duration_seconds"
-	PodOperationsErrorsKey   = "pod_operations_errors_total"
 	CheckerMissMatchKey      = "checker_missmatch_count"
 	CheckerRemedyKey         = "checker_remedy_count"
 	CheckerScanDurationKey   = "checker_scan_duaration_seconds"
+	DWSOperationCounterKey   = "dws_operations_total"
+	DWSOperationDurationKey  = "dws_operations_duration_seconds"
+	UWSOperationCounterKey   = "uws_operations_total"
 	UWSOperationDurationKey  = "uws_operations_duration_seconds"
 	ClusterHealthKey         = "virtual_cluster_health"
 )
@@ -43,7 +45,7 @@ var (
 			Name:      PodOperationsKey,
 			Help:      "Cumulative number of pod operations by operation type.",
 		},
-		[]string{"operation_type"},
+		[]string{"operation_type", "code"},
 	)
 	PodOperationsDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -51,14 +53,6 @@ var (
 			Name:      PodOperationsDurationKey,
 			Help:      "Duration in seconds of pod operations. Broken down by operation type.",
 			Buckets:   prometheus.DefBuckets,
-		},
-		[]string{"operation_type"},
-	)
-	PodOperationsErrors = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Subsystem: ResourceSyncerSubsystem,
-			Name:      PodOperationsErrorsKey,
-			Help:      "Cumulative number of pod operation errors by operation type.",
 		},
 		[]string{"operation_type"},
 	)
@@ -87,6 +81,21 @@ var (
 		},
 		[]string{"checker_target"},
 	)
+	DWSOperationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      DWSOperationDurationKey,
+			Help:      "Duration in seconds of each resource dws operation time.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"resource", "cluster"})
+	DWSOperationCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      DWSOperationCounterKey,
+			Help:      "Cumulative number of downward resource operations.",
+		},
+		[]string{"resource", "cluster", "code"})
 	UWSOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: ResourceSyncerSubsystem,
@@ -94,8 +103,15 @@ var (
 			Help:      "Duration in seconds of resource uws operation time.",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"uws_resource"},
+		[]string{"resource"},
 	)
+	UWSOperationCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: ResourceSyncerSubsystem,
+			Name:      UWSOperationCounterKey,
+			Help:      "Cumulative number of upward resource operations.",
+		},
+		[]string{"resource", "code"})
 	ClusterHealthStats = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Subsystem: ResourceSyncerSubsystem,
@@ -113,10 +129,11 @@ func Register() {
 	registerMetrics.Do(func() {
 		prometheus.MustRegister(PodOperations)
 		prometheus.MustRegister(PodOperationsDuration)
-		prometheus.MustRegister(PodOperationsErrors)
 		prometheus.MustRegister(CheckerMissMatchStats)
 		prometheus.MustRegister(CheckerRemedyStats)
 		prometheus.MustRegister(CheckerScanDuration)
+		prometheus.MustRegister(DWSOperationCounter)
+		prometheus.MustRegister(DWSOperationDuration)
 		prometheus.MustRegister(UWSOperationDuration)
 		prometheus.MustRegister(ClusterHealthStats)
 	})
@@ -137,5 +154,17 @@ func RecordCheckerScanDuration(checkerTarget string, start time.Time) {
 }
 
 func RecordUWSOperationDuration(resource string, start time.Time) {
-	UWSOperationDuration.WithLabelValues(resource).Observe(SinceInSeconds(start))
+	UWSOperationDuration.With(prometheus.Labels{"resource": resource}).Observe(SinceInSeconds(start))
+}
+
+func RecordUWSOperationStatus(resource, code string) {
+	UWSOperationCounter.With(prometheus.Labels{"resource": resource, "code": code}).Inc()
+}
+
+func RecordDWSOperationDuration(resource, cluster string, start time.Time) {
+	DWSOperationDuration.With(prometheus.Labels{"resource": resource, "cluster": cluster}).Observe(SinceInSeconds(start))
+}
+
+func RecordDWSOperationStatus(resource, cluster, code string) {
+	DWSOperationCounter.With(prometheus.Labels{"resource": resource, "cluster": cluster, "code": code}).Inc()
 }
