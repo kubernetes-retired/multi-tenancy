@@ -87,6 +87,10 @@ const (
 	DefaultSyncerClientQPS   = 1000
 	DefaultSyncerClientBurst = 2000
 
+	// DefaultRequestTimeout is set for all client-go request. This is the absolute
+	// timeout of the HTTP request, including reading the response body.
+	DefaultRequestTimeout = 30 * time.Second
+
 	// StatusCode represents the status of every syncer operations.
 	// TODO: more detailed error code
 	StatusCodeOK                     = "OK"
