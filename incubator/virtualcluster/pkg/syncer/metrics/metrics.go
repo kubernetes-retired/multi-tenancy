@@ -79,7 +79,7 @@ var (
 			Help:      "Duration in seconds of each resource checker's scan time.",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"checker_target"},
+		[]string{"resource"},
 	)
 	DWSOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -149,8 +149,8 @@ func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
-func RecordCheckerScanDuration(checkerTarget string, start time.Time) {
-	CheckerScanDuration.WithLabelValues(checkerTarget).Observe(SinceInSeconds(start))
+func RecordCheckerScanDuration(resource string, start time.Time) {
+	CheckerScanDuration.WithLabelValues(resource).Observe(SinceInSeconds(start))
 }
 
 func RecordUWSOperationDuration(resource string, start time.Time) {

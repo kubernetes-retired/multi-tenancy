@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -133,7 +132,7 @@ func (c *controller) PatrollerDo() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-	defer metrics.RecordCheckerScanDuration("pod", time.Now())
+
 	wg := sync.WaitGroup{}
 
 	numStatusMissMatchedPods = 0

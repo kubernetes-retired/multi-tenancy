@@ -18,7 +18,6 @@ package namespace
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -79,7 +78,6 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 // PatrollerDo checks to see if namespaces in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	defer metrics.RecordCheckerScanDuration("namespace", time.Now())
 	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
 	if len(clusterNames) != 0 {
 		wg := sync.WaitGroup{}

@@ -111,7 +111,7 @@ func NewPVController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", *patrolOptions)
+	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", &v1.PersistentVolume{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume patroller: %v", err)
 	}

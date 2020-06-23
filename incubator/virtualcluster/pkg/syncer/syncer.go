@@ -341,7 +341,7 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluste
 }
 
 func (s *Syncer) healthPatrol() {
-	defer metrics.RecordCheckerScanDuration("tenant-master", time.Now())
+	defer metrics.RecordCheckerScanDuration("TenantMaster", time.Now())
 	var clusters []mc.ClusterInterface
 	s.mu.Lock()
 	for _, c := range s.clusterSet {
