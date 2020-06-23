@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	clientgokubescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	restclient "k8s.io/client-go/rest"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/klog"
 
 	syncerappconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
@@ -156,6 +158,11 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// Setup Scheme for all resources
+	if err := apis.AddToScheme(scheme.Scheme); err != nil {
+		return nil, err
 	}
 
 	c.SecretClient = superMasterClient.CoreV1()

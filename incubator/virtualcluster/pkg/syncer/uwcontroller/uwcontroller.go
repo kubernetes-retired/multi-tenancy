@@ -23,10 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -35,6 +37,9 @@ type UpwardController struct {
 
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
+
+	// objectKind is the kind of target object this controller watched.
+	objectKind string
 
 	Options
 }
@@ -59,9 +64,15 @@ func NewUWController(name string, objectType runtime.Object, options Options) (*
 		return nil, fmt.Errorf("must specify Name for Controller")
 	}
 
+	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
+	if err != nil || len(kinds) == 0 {
+		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+	}
+
 	c := &UpwardController{
 		name:       name,
 		objectType: objectType,
+		objectKind: kinds[0].Kind,
 		Options:    options,
 	}
 
@@ -115,19 +126,24 @@ func (c *UpwardController) processNextWorkItem() bool {
 		return true
 	}
 
+	defer metrics.RecordUWSOperationDuration(c.objectKind, time.Now())
+
 	klog.V(4).Infof("%s back populate %+v", c.name, key)
 	err := c.Reconciler.BackPopulate(key)
 	if err == nil {
+		metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeOK)
 		c.Queue.Forget(obj)
 		return true
 	}
 
 	utilruntime.HandleError(fmt.Errorf("%s error processing %s (will retry): %v", c.name, key, err))
 	if c.Queue.NumRequeues(key) >= constants.MaxReconcileRetryAttempts {
+		metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeExceedMaxRetryAttempts)
 		klog.Warningf("%s uws request is dropped due to reaching max retry limit: %s", c.name, key)
 		c.Queue.Forget(obj)
 		return true
 	}
+	metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeError)
 	c.Queue.AddRateLimited(obj)
 	return true
 }
