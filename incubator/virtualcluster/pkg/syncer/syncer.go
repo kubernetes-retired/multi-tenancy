@@ -241,7 +241,16 @@ func (s *Syncer) syncVirtualCluster(key string) error {
 		return nil
 	}
 
-	return s.addCluster(key, vc)
+	switch vc.Status.Phase {
+	case v1alpha1.ClusterRunning:
+		return s.addCluster(key, vc)
+	case v1alpha1.ClusterError:
+		s.removeCluster(key)
+		return nil
+	default:
+		klog.Infof("Cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
+		return nil
+	}
 }
 
 func (s *Syncer) removeCluster(key string) {
@@ -298,17 +307,12 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
 
-	s.mu.Lock()
-	if _, exist := s.clusterSet[key]; exist {
-		s.mu.Unlock()
-		return nil
-	}
-
 	// for each resource type of the newly added VirtualCluster, we add a listener
 	for _, clusterChangeListener := range listener.Listeners {
 		clusterChangeListener.AddCluster(tenantCluster)
 	}
 
+	s.mu.Lock()
 	s.clusterSet[key] = tenantCluster
 	s.mu.Unlock()
 
