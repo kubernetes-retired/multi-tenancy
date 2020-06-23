@@ -181,7 +181,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 		if len(inst.ObjectMeta.Finalizers) == 0 {
 			log.Info("Adding finalizers since there's at least one anchor in the namespace.")
 		}
-		inst.ObjectMeta.Finalizers = []string{api.FinalizerHasOwnedNamespace}
+		inst.ObjectMeta.Finalizers = []string{api.FinalizerHasSubnamespace}
 	}
 }
 
