@@ -139,7 +139,7 @@ func NewPodController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	podPatroller, err := pa.NewPatroller("pod-patroller", *patrolOptions)
+	podPatroller, err := pa.NewPatroller("pod-patroller", &v1.Pod{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create pod patroller %v", err)
 	}

@@ -79,7 +79,7 @@ var (
 			Help:      "Duration in seconds of each resource checker's scan time.",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"checker_target"},
+		[]string{"resource"},
 	)
 	DWSOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -88,14 +88,14 @@ var (
 			Help:      "Duration in seconds of each resource dws operation time.",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"resource", "cluster"})
+		[]string{"resource", "vc_name"})
 	DWSOperationCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Subsystem: ResourceSyncerSubsystem,
 			Name:      DWSOperationCounterKey,
 			Help:      "Cumulative number of downward resource operations.",
 		},
-		[]string{"resource", "cluster", "code"})
+		[]string{"resource", "vc_name", "code"})
 	UWSOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Subsystem: ResourceSyncerSubsystem,
@@ -149,8 +149,8 @@ func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
-func RecordCheckerScanDuration(checkerTarget string, start time.Time) {
-	CheckerScanDuration.WithLabelValues(checkerTarget).Observe(SinceInSeconds(start))
+func RecordCheckerScanDuration(resource string, start time.Time) {
+	CheckerScanDuration.WithLabelValues(resource).Observe(SinceInSeconds(start))
 }
 
 func RecordUWSOperationDuration(resource string, start time.Time) {
@@ -162,9 +162,9 @@ func RecordUWSOperationStatus(resource, code string) {
 }
 
 func RecordDWSOperationDuration(resource, cluster string, start time.Time) {
-	DWSOperationDuration.With(prometheus.Labels{"resource": resource, "cluster": cluster}).Observe(SinceInSeconds(start))
+	DWSOperationDuration.With(prometheus.Labels{"resource": resource, "vc_name": cluster}).Observe(SinceInSeconds(start))
 }
 
 func RecordDWSOperationStatus(resource, cluster, code string) {
-	DWSOperationCounter.With(prometheus.Labels{"resource": resource, "cluster": cluster, "code": code}).Inc()
+	DWSOperationCounter.With(prometheus.Labels{"resource": resource, "vc_name": cluster, "code": code}).Inc()
 }

@@ -20,14 +20,19 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
 type Patroller struct {
 	name string
+	// objectKind is the kind of target object this controller watched.
+	objectKind string
 
 	Options
 }
@@ -38,7 +43,7 @@ type Options struct {
 	Period     time.Duration
 }
 
-func NewPatroller(name string, options Options) (*Patroller, error) {
+func NewPatroller(name string, objectType runtime.Object, options Options) (*Patroller, error) {
 	if options.Reconciler == nil {
 		return nil, fmt.Errorf("must specify patrol reconciler")
 	}
@@ -46,9 +51,16 @@ func NewPatroller(name string, options Options) (*Patroller, error) {
 	if len(name) == 0 {
 		return nil, fmt.Errorf("must specify Name for patrol reconciler")
 	}
+
+	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
+	if err != nil || len(kinds) == 0 {
+		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+	}
+
 	p := &Patroller{
-		name:    name,
-		Options: options,
+		name:       name,
+		objectKind: kinds[0].Kind,
+		Options:    options,
 	}
 	if p.Period == 0 {
 		p.Period = 60 * time.Second
@@ -58,5 +70,10 @@ func NewPatroller(name string, options Options) (*Patroller, error) {
 
 func (p *Patroller) Start(stop <-chan struct{}) {
 	klog.Infof("start periodic checker %s", p.name)
-	wait.Until(p.Reconciler.PatrollerDo, p.Period, stop)
+	wait.Until(p.run, p.Period, stop)
+}
+
+func (p *Patroller) run() {
+	defer metrics.RecordCheckerScanDuration(p.objectKind, time.Now())
+	p.Reconciler.PatrollerDo()
 }

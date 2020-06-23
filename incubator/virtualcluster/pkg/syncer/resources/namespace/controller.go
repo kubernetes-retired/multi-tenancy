@@ -92,7 +92,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	namespacePatroller, err := pa.NewPatroller("namespace-patroller", *patrolOptions)
+	namespacePatroller, err := pa.NewPatroller("namespace-patroller", &v1.Namespace{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create namespace patroller: %v", err)
 	}

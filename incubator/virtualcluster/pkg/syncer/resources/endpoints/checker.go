@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,7 +53,6 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	defer metrics.RecordCheckerScanDuration("endpoints", time.Now())
 	numMissingEndPoints = 0
 	numMissMatchedEndPoints = 0
 	wg := sync.WaitGroup{}
@@ -67,8 +65,8 @@ func (c *controller) PatrollerDo() {
 		}(clusterName)
 	}
 	wg.Wait()
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissingEndPoints").Set(float64(numMissingEndPoints))
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissingEndPoints").Set(float64(numMissingEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
 }
 
 // checkEndPointsOfTenantCluster checks to see if endpoints controller in tenant and super master working consistently.

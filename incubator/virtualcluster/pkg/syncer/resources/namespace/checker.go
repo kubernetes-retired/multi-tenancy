@@ -18,7 +18,6 @@ package namespace
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -79,7 +78,6 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 // PatrollerDo checks to see if namespaces in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	defer metrics.RecordCheckerScanDuration("namespace", time.Now())
 	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
 	if len(clusterNames) != 0 {
 		wg := sync.WaitGroup{}
@@ -135,7 +133,7 @@ func (c *controller) PatrollerDo() {
 			if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
 				klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterNamespaces").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterNamespaces").Inc()
 			}
 		}
 	}
@@ -158,7 +156,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
 				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantNamespaces").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantNamespaces").Inc()
 			}
 			continue
 		}
