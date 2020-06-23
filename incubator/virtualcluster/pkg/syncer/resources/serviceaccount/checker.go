@@ -92,7 +92,7 @@ func (c *controller) PatrollerDo() {
 			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServiceAccounts").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServiceAccounts").Inc()
 			}
 		}
 	}
@@ -115,7 +115,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
 				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServiceAccounts").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServiceAccounts").Inc()
 			}
 			continue
 		}

@@ -65,8 +65,8 @@ func (c *controller) PatrollerDo() {
 		}(clusterName)
 	}
 	wg.Wait()
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissingEndPoints").Set(float64(numMissingEndPoints))
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissingEndPoints").Set(float64(numMissingEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
 }
 
 // checkEndPointsOfTenantCluster checks to see if endpoints controller in tenant and super master working consistently.

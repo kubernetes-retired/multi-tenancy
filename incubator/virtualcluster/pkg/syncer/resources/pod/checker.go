@@ -196,7 +196,7 @@ func (c *controller) PatrollerDo() {
 			if err = c.client.Pods(pPod.Namespace).Delete(pPod.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPods").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPods").Inc()
 			}
 		}
 	}
@@ -204,9 +204,9 @@ func (c *controller) PatrollerDo() {
 	// GC unused(orphan) vNodes in tenant masters
 	c.vNodeGCDo()
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedPods").Set(float64(numStatusMissMatchedPods))
-	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPods").Set(float64(numSpecMissMatchedPods))
-	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedPods").Set(float64(numUWMetaMissMatchedPods))
+	metrics.CheckerMissMatchStats.WithLabelValues("StatusMissMatchedPods").Set(float64(numStatusMissMatchedPods))
+	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedPods").Set(float64(numSpecMissMatchedPods))
+	metrics.CheckerMissMatchStats.WithLabelValues("UWMetaMissMatchedPods").Set(float64(numUWMetaMissMatchedPods))
 }
 
 func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod, graceful bool) {
@@ -265,12 +265,12 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 				// If the vPod has been bound, we'd better delete the vPod since the new pPod may have a different nodename.
 				if isPodScheduled(&vPod) {
 					c.forceDeletevPod(clusterName, &vPod, false)
-					metrics.CheckerRemedyStats.WithLabelValues("numDeletedTenantPodsDueToSuperEviction").Inc()
+					metrics.CheckerRemedyStats.WithLabelValues("DeletedTenantPodsDueToSuperEviction").Inc()
 				} else {
 					if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 						klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 					} else {
-						metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPods").Inc()
+						metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
 					}
 				}
 			}
@@ -292,7 +292,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			// However, uws bound vPod to a wrong node already. There is no easy remediation besides deleting tenant pod.
 			c.forceDeletevPod(clusterName, &vPod, true)
 			klog.Errorf("Found pPod %s/%s nodename is different from tenant pod nodename, delete the vPod.", targetNamespace, pPod.Name)
-			metrics.CheckerRemedyStats.WithLabelValues("numDeletedTenantPodsDueToNodeMissMatch").Inc()
+			metrics.CheckerRemedyStats.WithLabelValues("DeletedTenantPodsDueToNodeMissMatch").Inc()
 			continue
 		}
 		spec, err := c.multiClusterPodController.GetSpec(clusterName)
@@ -307,7 +307,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPods").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
 			}
 		}
 

@@ -108,13 +108,13 @@ func (c *controller) PatrollerDo() {
 			if err := c.secretClient.Secrets(pSecret.Namespace).Delete(pSecret.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pSecret %s/%s in super master: %v", pSecret.Namespace, pSecret.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterSecrets").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterSecrets").Inc()
 			}
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedOpaqueSecrets").Set(float64(numMissMatchedOpaqueSecrets))
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedSASecrets").Set(float64(numMissMatchedSASecrets))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedOpaqueSecrets").Set(float64(numMissMatchedOpaqueSecrets))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedSASecrets").Set(float64(numMissMatchedSASecrets))
 }
 
 func (c *controller) checkSecretOfTenantCluster(clusterName string) {
@@ -138,7 +138,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i]); err != nil {
 				klog.Errorf("error requeue vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantOpaqueSecrets").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantOpaqueSecrets").Inc()
 			}
 			continue
 		}
@@ -174,7 +174,7 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret); err != nil {
 			klog.Errorf("error requeue service account type vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 		} else {
-			metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantSASecrets").Inc()
+			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantSASecrets").Inc()
 		}
 		return
 	}

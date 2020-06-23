@@ -77,7 +77,7 @@ func (c *controller) PatrollerDo() {
 			_, err := c.multiClusterStorageClassController.Get(clusterName, "", pStorageClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
+					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterStorageClasses").Inc()
 					c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
@@ -111,7 +111,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			if err := tenantClient.StorageV1().StorageClasses().Delete(vStorageClass.Name, opts); err != nil {
 				klog.Errorf("error deleting storageclass %v in cluster %s: %v", vStorageClass.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantStorageClasses").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantStorageClasses").Inc()
 			}
 			continue
 		}

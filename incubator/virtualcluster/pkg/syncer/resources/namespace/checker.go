@@ -133,7 +133,7 @@ func (c *controller) PatrollerDo() {
 			if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
 				klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterNamespaces").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterNamespaces").Inc()
 			}
 		}
 	}
@@ -156,7 +156,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
 				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantNamespaces").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantNamespaces").Inc()
 			}
 			continue
 		}

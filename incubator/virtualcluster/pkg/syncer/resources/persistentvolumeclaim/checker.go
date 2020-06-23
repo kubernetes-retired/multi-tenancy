@@ -92,12 +92,12 @@ func (c *controller) PatrollerDo() {
 			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(pPVC.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pPVC %s/%s in super master: %v", pPVC.Namespace, pPVC.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterPVCs").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPVCs").Inc()
 			}
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedPVCs").Set(float64(numMissMatchedPVCs))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedPVCs").Set(float64(numMissMatchedPVCs))
 }
 
 func (c *controller) checkPVCOfTenantCluster(clusterName string) {
@@ -115,7 +115,7 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 			if err := c.multiClusterPersistentVolumeClaimController.RequeueObject(clusterName, &pvcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vPVC %v/%v in cluster %s: %v", vPVC.Namespace, vPVC.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantPVCs").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPVCs").Inc()
 			}
 			continue
 		}
