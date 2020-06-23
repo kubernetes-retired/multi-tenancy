@@ -266,6 +266,10 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 		return nil, nil, nil, err
 	}
 
+	if restConfig.Timeout == 0 {
+		restConfig.Timeout = constants.DefaultRequestTimeout
+	}
+
 	restConfig.ContentConfig.ContentType = config.AcceptContentTypes
 	restConfig.QPS = config.QPS
 	if restConfig.QPS == 0 {
