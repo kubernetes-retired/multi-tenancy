@@ -54,9 +54,9 @@ const (
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
 type TypeSynchronizationSpec struct {
 	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIVersion string `json:"apiVersion"`
 	// Kind to be configured.
-	Kind string `json:"kind,omitempty"`
+	Kind string `json:"kind"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
 	// as "propagate". An unsupported mode will be treated as "ignore".
 	// +optional
@@ -66,9 +66,9 @@ type TypeSynchronizationSpec struct {
 // TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
 type TypeSynchronizationStatus struct {
 	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIVersion string `json:"apiVersion"`
 	// Kind to be configured.
-	Kind string `json:"kind,omitempty"`
+	Kind string `json:"kind"`
 	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
 	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
 	// spec and the default is chosen.
