@@ -16,12 +16,13 @@ package kubectl
 
 import (
 	"fmt"
-	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 )
 
 var (
@@ -77,17 +78,50 @@ func runTests() error {
 		return err
 	}
 
-	for _, b := range benchmarks {
-		err := b.PreRun(tenantNamespace, k8sClient, tenantClient)
-		if err != nil {
-			fmt.Println("Error:", err.Error())
-			os.Exit(1)
-		}
-		err = b.Run(tenantNamespace, k8sClient, tenantClient)
+	r := reporter.NewDefaultReporter()
+	suiteSummary := &reporter.SuiteSummary{
+		Suite:              bs,
+		NumberOfTotalTests: len(benchmarks),
+	}
 
+	r.SuiteWillBegin(suiteSummary)
+
+	for _, b := range benchmarks {
+
+		ts := &reporter.TestSummary{
+			Benchmark: b,
+		}
+
+		err := ts.SetDefaults()
 		if err != nil {
 			return err
 		}
+
+		start := time.Now()
+
+		// Run Prerun
+		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
+		if err != nil {
+			suiteSummary.NumberOfSkippedTests++
+			ts.Validation = false
+			ts.ValidationError = err
+		}
+
+		// Check PreRun status
+		if ts.Validation {
+			err = b.Run(tenantNamespace, k8sClient, tenantClient)
+			if err != nil {
+				suiteSummary.NumberOfFailedTests++
+				ts.Test = false
+			} else {
+				suiteSummary.NumberOfPassedTests++
+			}
+		}
+
+		elapsed := time.Since(start)
+		ts.RunTime = elapsed
+
+		r.TestWillRun(ts)
 	}
 	return nil
 }

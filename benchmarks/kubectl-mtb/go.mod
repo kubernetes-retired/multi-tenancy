@@ -7,6 +7,7 @@ require (
 	github.com/gobuffalo/packr/v2 v2.5.1
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/kr/fs v0.1.0
+	github.com/onsi/ginkgo v1.11.0
 	github.com/phoenixking25/kubectl-mtb v0.0.0-20200607051717-90ca51647eb6 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1
 	github.com/spf13/cobra v1.0.0
