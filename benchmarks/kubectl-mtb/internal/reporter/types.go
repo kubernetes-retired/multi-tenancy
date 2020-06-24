@@ -22,6 +22,7 @@ type TestSummary struct {
 	Validation      bool `default:"true"`
 	ValidationError error
 	Test            bool `default:"true"`
+	TestError       error
 	RunTime         time.Duration
 	Benchmark       *benchmark.Benchmark
 }

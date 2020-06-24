@@ -84,6 +84,8 @@ func runTests() error {
 		NumberOfTotalTests: len(benchmarks),
 	}
 
+	suiteStartTime := time.Now()
+
 	r.SuiteWillBegin(suiteSummary)
 
 	for _, b := range benchmarks {
@@ -113,6 +115,7 @@ func runTests() error {
 			if err != nil {
 				suiteSummary.NumberOfFailedTests++
 				ts.Test = false
+				ts.TestError = err
 			} else {
 				suiteSummary.NumberOfPassedTests++
 			}
@@ -123,6 +126,12 @@ func runTests() error {
 
 		r.TestWillRun(ts)
 	}
+
+	suiteElapsedTime := time.Since(suiteStartTime)
+	suiteSummary.RunTime = suiteElapsedTime
+
+	r.SuiteDidEnd(suiteSummary)
+
 	return nil
 }
 

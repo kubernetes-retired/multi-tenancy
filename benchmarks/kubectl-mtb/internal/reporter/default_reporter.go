@@ -32,15 +32,27 @@ func (r *DefaultReporter) SuiteWillBegin(suiteSummary *SuiteSummary) {
 
 func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 	if testSummary.Validation {
-		writer.Println(0, writer.Colorize(cyanColor, "%s", testSummary.Benchmark.Title))
+		writer.Println(0, writer.Colorize(cyanColor, "[PL%d] [%s] %s", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category, testSummary.Benchmark.Title))
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
+		if testSummary.Test {
+			writer.Println(0, writer.Colorize(greenColor, "Passed"))
+		} else {
+			writer.Println(0, writer.Colorize(redColor, "Failed"))
+			writer.Println(0, writer.Colorize(lightGrayColor, "Remediation: %s", testSummary.Benchmark.Remediation))
+
+		}
 		writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", testSummary.RunTime), "-")
 		return
 	}
 
 	writer.Println(0, writer.Colorize(yellowColor, "Skipping %s: %v", testSummary.Benchmark.Title, testSummary.ValidationError))
+	r.testSummaries = append(r.testSummaries, testSummary)
 }
 
 func (r *DefaultReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
-
+	writer.Print(0, writer.Colorize(greenColor, "%d Passed | ", suiteSummary.NumberOfPassedTests))
+	writer.Print(0, writer.Colorize(redColor, "%d Failed | ", suiteSummary.NumberOfFailedTests))
+	writer.Print(0, writer.Colorize(yellowColor, "%d Skipped | ", suiteSummary.NumberOfSkippedTests))
+	writer.PrintNewLine()
+	writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", suiteSummary.RunTime), "=")
 }

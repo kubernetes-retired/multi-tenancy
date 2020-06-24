@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
-	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
 type GroupResource struct {
@@ -82,7 +82,6 @@ var bpcBenchmark = &benchmark.Benchmark{
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod that sets privileged to true")
 		}
-		fmt.Println(err.Error())
 		return nil
 	},
 }
