@@ -52,7 +52,6 @@ const templ = `
 func deleteFields(fieldname string, fieldmap map[string]interface{}) {
 
 	delete(fieldmap, fieldname)
-	delete(fieldmap, "description")
 
 }
 
