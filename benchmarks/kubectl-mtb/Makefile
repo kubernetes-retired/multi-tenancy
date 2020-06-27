@@ -21,9 +21,9 @@ clean:
 kubectl: generate readme build
 	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
 
-# Add-benchmark
-add-benchmark:
-	go run tpl/*.go
+# Build the Mtb-builder
+builder:
+	go build -o mtb-builder ./cmd/mtb_builder/main.go
 
 # Convert config yaml as static assets 
 # Generate benchmarks import file

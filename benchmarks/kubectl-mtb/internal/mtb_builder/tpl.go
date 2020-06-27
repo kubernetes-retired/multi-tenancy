@@ -1,6 +1,7 @@
-package main
+package mtb_builder
 
-func BenchmarkPackage() []byte {
+// BenchmarkFileTemplate returns the main file template
+func BenchmarkFileTemplate() []byte {
 	return []byte(`package {{ .PkgName }}
 
 import (
@@ -36,6 +37,12 @@ func init() {
 	`)
 }
 
+// BenchmarkTestTemplate returns benchmarks test file template
+func BenchmarkTestTemplate() []byte {
+	return []byte(`package {{ .PkgName }}`)
+}
+
+// ConfigYamlTemplate returns the config file template
 func ConfigYamlTemplate() []byte {
 	return []byte(
 		`id: {{ .ID }}
