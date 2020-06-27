@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"gopkg.in/yaml.v2"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
@@ -19,35 +20,41 @@ const (
 
 // Structure of yaml (Used for README generation)
 type Doc struct {
-	ID            string `yaml:"id"`
-	Title         string `yaml:"title"`
-	BenchmarkType string `yaml:"benchmarkType"`
-	Category      string `yaml:"category"`
-	Description   string `yaml:"description"`
-	Remediation   string `yaml:"remediation"`
-	ProfileLevel  int    `yaml:"profileLevel"`
+	ID              string                 `yaml:"id"`
+	Title           string                 `yaml:"title"`
+	BenchmarkType   string                 `yaml:"benchmarkType"`
+	Category        string                 `yaml:"category"`
+	Description     string                 `yaml:"description"`
+	Remediation     string                 `yaml:"remediation"`
+	ProfileLevel    int                    `yaml:"profileLevel"`
+	AdditionalField map[string]interface{} `yaml:"additionalFields"`
 }
 
 // README template
 const templ = `
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>README</title>
-  </head>
-  <body>
-  <h2> {{.Title}} [{{.ID}}] </h2>
-	<p>
-		<b> Profile Applicability: </b> {{.ProfileLevel}} <br>
-		<b> Type: </b> {{.BenchmarkType}} <br>
-		<b> Category: </b> {{.Category}} <br>
-		<b> Description: </b> {{.Description}} <br>
-		<b> Remediation: </b> {{.Remediation}} <br>
-	</p>
-    
-  </body>
-</html>
+# {{.Title}} <small>[{{.ID}}] </small>
+**Profile Applicability:** 
+{{.ProfileLevel}}
+**Type:** 
+{{.BenchmarkType}}
+**Category:** 
+{{.Category}} 
+**Description:** 
+{{.Description}} 
+**Remediation:**
+{{.Remediation}}
+{{ range $key, $value := .AdditionalField }}
+**{{ $key }}:** 
+{{ $value }}
+{{ end }}
 `
+
+func deleteFields(fieldname string, fieldmap map[string]interface{}) {
+
+	delete(fieldmap, fieldname)
+	delete(fieldmap, "description")
+
+}
 
 func main() {
 
@@ -58,8 +65,29 @@ func main() {
 				b, err := ioutil.ReadFile(path)
 				util.CheckError(err)
 				d := Doc{}
+				// Unmarshall first time to get existing fields
 				err = yaml.Unmarshal(b, &d)
 				util.CheckError(err)
+				// Unmarshall second time to add additonal fields
+				err = yaml.Unmarshal(b, &d.AdditionalField)
+				util.CheckError(err)
+				structVal := reflect.ValueOf(d)
+				typeOfS := structVal.Type()
+
+				values := make([]string, structVal.NumField())
+
+				// iterate through struct to collect the fields
+				for structField := 0; structField < structVal.NumField(); structField++ {
+					if typeOfS.Field(structField).Name != "AdditionalField" {
+						values[structField] = typeOfS.Field(structField).Tag.Get("yaml")
+					}
+				}
+				// delete the existing fields which were added in the set of additional fields
+				// during second unmarshalling
+				for _, i := range values {
+					deleteFields(i, d.AdditionalField)
+				}
+
 				t := template.New("README template")
 				t, err = t.Parse(templ)
 
