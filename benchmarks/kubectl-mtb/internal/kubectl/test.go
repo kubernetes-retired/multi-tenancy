@@ -36,7 +36,7 @@ var testCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		cmdutil.CheckErr(validateFlags(cmd))
-		cmdutil.CheckErr(runTests())
+		cmdutil.CheckErr(runTests(cmd, args))
 	},
 }
 
@@ -54,7 +54,7 @@ func validateFlags(cmd *cobra.Command) error {
 	return nil
 }
 
-func runTests() error {
+func runTests(cmd *cobra.Command, args []string) error {
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
@@ -78,14 +78,19 @@ func runTests() error {
 		return err
 	}
 
-	r := reporter.NewDefaultReporter()
+	// Get reporter from the user
+	reporterType, _ := cmd.Flags().GetString("out")
+	r, err := reporter.GetReporter(reporterType)
+	if err != nil {
+		return err
+	}
+
 	suiteSummary := &reporter.SuiteSummary{
 		Suite:              bs,
 		NumberOfTotalTests: len(benchmarks),
 	}
 
 	suiteStartTime := time.Now()
-
 	r.SuiteWillBegin(suiteSummary)
 
 	for _, b := range benchmarks {
@@ -99,12 +104,12 @@ func runTests() error {
 			return err
 		}
 
-		start := time.Now()
+		startTest := time.Now()
 
 		// Run Prerun
 		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
-			suiteSummary.NumberOfSkippedTests++
+			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
 		}
@@ -121,15 +126,14 @@ func runTests() error {
 			}
 		}
 
-		elapsed := time.Since(start)
+		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
-
 		r.TestWillRun(ts)
 	}
 
 	suiteElapsedTime := time.Since(suiteStartTime)
 	suiteSummary.RunTime = suiteElapsedTime
-
+	suiteSummary.NumberOfSkippedTests = bs.Totals() - len(benchmarks)
 	r.SuiteDidEnd(suiteSummary)
 
 	return nil
@@ -138,6 +142,7 @@ func runTests() error {
 func newTestCmd() *cobra.Command {
 	testCmd.Flags().StringP("namespace", "n", "", "name of tenant-admin namespace")
 	testCmd.Flags().StringP("tenant-admin", "t", "", "name of tenant service account")
+	testCmd.Flags().StringP("out", "o", "default", "output reporter format")
 
 	return testCmd
 }
