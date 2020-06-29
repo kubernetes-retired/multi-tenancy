@@ -161,6 +161,8 @@ func RetryUpdateVCStatusOnConflict(ctx context.Context, cli client.Client, vc *t
 
 // SetVCStatus set the virtualcluster 'vc' status, and append the new status to conditions list
 func SetVCStatus(vc *tenancyv1alpha1.VirtualCluster, phase tenancyv1alpha1.ClusterPhase, message, reason string) {
+	nsName := conversion.ToClusterKey(vc)
+	vc.Status.ClusterNamespace = nsName
 	vc.Status.Phase = phase
 	vc.Status.Message = message
 	vc.Status.Reason = reason
