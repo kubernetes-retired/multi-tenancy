@@ -50,6 +50,8 @@ spec:
           type: object
         status:
           properties:
+            clusterNamespace:
+              type: string
             conditions:
               items:
                 properties:

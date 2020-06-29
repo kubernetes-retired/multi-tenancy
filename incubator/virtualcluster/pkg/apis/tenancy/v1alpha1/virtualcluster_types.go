@@ -58,6 +58,11 @@ type VirtualClusterStatus struct {
 	// cluster phase of the virtual cluster
 	Phase ClusterPhase `json:"phase"`
 
+	// ClusterNamespace defines the namespace where the control plane components
+	// are deployed into.
+	// +optional
+	ClusterNamespace string `json:"clusterNamespace,omitempty"`
+
 	// A human readable message indicating details about why the cluster is in
 	// this condition.
 	// +optional
