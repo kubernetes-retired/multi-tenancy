@@ -31,11 +31,11 @@ const (
 
 // Constants for labels and annotations
 const (
-	MetaGroup                  = "hnc.x-k8s.io"
-	LabelInheritedFrom         = MetaGroup + "/inheritedFrom"
-	FinalizerHasOwnedNamespace = MetaGroup + "/hasOwnedNamespace"
-	LabelTreeDepthSuffix       = ".tree." + MetaGroup + "/depth"
-	AnnotationManagedBy        = MetaGroup + "/managedBy"
+	MetaGroup                = "hnc.x-k8s.io"
+	LabelInheritedFrom       = MetaGroup + "/inheritedFrom"
+	FinalizerHasSubnamespace = MetaGroup + "/hasSubnamespace"
+	LabelTreeDepthSuffix     = ".tree." + MetaGroup + "/depth"
+	AnnotationManagedBy      = MetaGroup + "/managedBy"
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code, be
