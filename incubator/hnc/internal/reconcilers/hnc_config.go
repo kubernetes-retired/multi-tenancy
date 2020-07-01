@@ -183,6 +183,11 @@ func (r *ConfigReconciler) isRoleBinding(t api.TypeSynchronizationSpec) bool {
 // reconciler is called very infrequently and is not performance critical.
 func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConfiguration) error {
 	if inst.CreationTimestamp.IsZero() {
+		// No point creating it if the CRD's being deleted
+		if isDeleted, err := isDeletingCRD(ctx, r, api.HNCConfigSingletons); isDeleted || err != nil {
+			r.Log.Info("CRD is being deleted (or CRD deletion status couldn't be determined); skip update")
+			return err
+		}
 		r.Log.Info("Creating a default singleton on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
 			r.Log.Error(err, "while creating on apiserver")
