@@ -22,10 +22,27 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      securityContext:
+        # Generally to run as non-root, the GID and UID can be any number
+        # between 1 to 65535 (root is 0). These numbers were chosen
+        # arbitrarily; HNC can work with any value of fsGroup and runAsUser, so
+        # if your pod security policies (PSPs) require something different,
+        # feel free to modify these numbers.
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
       containers:
       - command:
         - /manager
-        args: {} # overridden if manager_auth_proxy_patch.yaml is used
+        args:
+        - "--webhook-server-port=9443"
+        # If /config/default/manager_auth_proxy_patch.yaml is used,
+        # --metrics-addr must match the value of --upstream passed to
+        # kube-rbac-proxy.
+        - "--metrics-addr=127.0.0.1:8080"
+        - "--max-reconciles=10"
+        - "--apiserver-qps-throttle=50"
+        - "--enable-internal-cert-management=true"
         image: controller:latest
         name: manager
         resources:
