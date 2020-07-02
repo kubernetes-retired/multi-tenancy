@@ -85,7 +85,7 @@ func (c *controller) PatrollerDo() {
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedStorageClasses").Set(float64(numMissMatchedStorageClasses))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedStorageClasses").Set(float64(numMissMatchedStorageClasses))
 }
 
 func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {

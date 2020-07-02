@@ -135,6 +135,7 @@ func Register() {
 		prometheus.MustRegister(DWSOperationCounter)
 		prometheus.MustRegister(DWSOperationDuration)
 		prometheus.MustRegister(UWSOperationDuration)
+		prometheus.MustRegister(UWSOperationCounter)
 		prometheus.MustRegister(ClusterHealthStats)
 	})
 }
