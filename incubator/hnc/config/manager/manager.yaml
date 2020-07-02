@@ -42,7 +42,8 @@ spec:
         - "--metrics-addr=127.0.0.1:8080"
         - "--max-reconciles=10"
         - "--apiserver-qps-throttle=50"
-        - "--enable-internal-cert-management=true"
+        - "--enable-internal-cert-management"
+        - "--cert-restart-on-secret-refresh"
         image: controller:latest
         name: manager
         resources:
