@@ -28,6 +28,8 @@ endif
 
 HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/hnc/controller:${HNC_IMG_TAG}"
 
+CONTROLLER_GEN ?= "./bin/controller-gen"
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -90,9 +92,15 @@ krew-uninstall:
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
 # files in /manifest (which are not checked into Git).
+#
+# Ensure that everything from ${DIRS}, above, is in "paths" in the call to
+# controller-gen.  We can't say paths="./..." because that would include
+# hack/tools.go, which is a fake file used to ensure that CONTROLLER_GEN gets
+# vendored.
 manifests: controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	@# See the comment above about the 'paths' arguments
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." paths="./third_party/..." output:crd:artifacts:config=config/crd/bases
 	-rm -rf manifests/
 	mkdir manifests
 	cd manifests && \
@@ -115,13 +123,10 @@ generate: controller-gen
 
 # find or download controller-gen
 # download controller-gen if necessary
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
+controller-gen: $(CONTROLLER_GEN)
+
+$(CONTROLLER_GEN):
+	go build -o $(CONTROLLER_GEN) sigs.k8s.io/controller-tools/cmd/controller-gen
 
 ###################### DEPLOYABLE ARTIFACTS AND ACTIONS #########################
 
