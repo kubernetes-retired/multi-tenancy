@@ -48,6 +48,7 @@ const (
 	CannotUpdate              Code = "CannotUpdateObject"
 	CritAncestor              Code = "CritAncestor"
 	CritCycle                 Code = "CritCycle"
+	CritDeletingCRD           Code = "CritDeletingCRD"
 	CritParentMissing         Code = "CritParentMissing"
 	SubnamespaceAnchorMissing Code = "SubnamespaceAnchorMissing"
 )
@@ -57,6 +58,7 @@ var AllCodes = []Code{
 	CannotUpdate,
 	CritAncestor,
 	CritCycle,
+	CritDeletingCRD,
 	CritParentMissing,
 	SubnamespaceAnchorMissing,
 }
@@ -165,6 +167,10 @@ type Condition struct {
 	// parent is namespace A, but namespace A says that its parent is namespace B, then A and B are in
 	// a cycle with each other and both of them will have the CritCycle condition.
 	//
+	// - "CritDeletingCRD": The HierarchyConfiguration CRD is being deleted. No more objects will be
+	// propagated into or out of this namespace. It is expected that the HNC controller will be
+	// stopped soon after the CRDs are fully deleted.
+	//
 	// - "CritAncestor": a critical error exists in an ancestor namespace, so this namespace is no
 	// longer being updated either.
 	//
@@ -269,9 +275,10 @@ func init() {
 	SchemeBuilder.Register(&HierarchyConfiguration{}, &HierarchyConfigurationList{})
 	ClearConditionCriteria = map[Code]ClearConditionCriterion{
 		// All conditions on namespaces are set/cleared manually by the HCR
-		CritParentMissing:         CCCManual,
-		CritCycle:                 CCCManual,
 		CritAncestor:              CCCManual,
+		CritCycle:                 CCCManual,
+		CritDeletingCRD:           CCCManual,
+		CritParentMissing:         CCCManual,
 		SubnamespaceAnchorMissing: CCCManual,
 
 		// A source object can cause the CannotPropagate condition in two ways: if it cannot be

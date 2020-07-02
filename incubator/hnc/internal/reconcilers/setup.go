@@ -1,11 +1,17 @@
 package reconcilers
 
 import (
+	"context"
 	"fmt"
 
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
 
@@ -53,4 +59,23 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 	}
 
 	return nil
+}
+
+// crdClient is any client that can be used in isDeletingCRD (i.e. any reconciler).
+type crdClient interface {
+	Get(context.Context, types.NamespacedName, runtime.Object) error
+}
+
+// isDeletingCRD returns true if the specified HNC CRD is being or has been deleted. The argument
+// expected is the CRD name minus the HNC suffix, e.g. "hierarchyconfigurations".
+func isDeletingCRD(ctx context.Context, c crdClient, nm string) (bool, error) {
+	crd := &apiextensions.CustomResourceDefinition{}
+	nsn := types.NamespacedName{Name: nm + "." + api.MetaGroup}
+	if err := c.Get(ctx, nsn, crd); err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	return !crd.DeletionTimestamp.IsZero(), nil
 }

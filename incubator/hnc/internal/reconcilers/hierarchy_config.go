@@ -17,7 +17,6 @@ package reconcilers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -26,7 +25,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,9 +107,15 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	origNS := nsInst.DeepCopy()
 
 	// Get singleton from apiserver. If it doesn't exist, initialize one.
-	inst, err := r.getSingleton(ctx, nm)
+	inst, deletingCRD, err := r.getSingleton(ctx, nm)
 	if err != nil {
 		return err
+	}
+	// Don't _create_ the singleton if its CRD is being deleted. But if the singleton is already
+	// _present_, we may need to update it to remove finalizers (see #824).
+	if deletingCRD && inst.CreationTimestamp.IsZero() {
+		log.Info("Skipping reconcile due to CRD deletion")
+		return nil
 	}
 	origHC := inst.DeepCopy()
 
@@ -125,7 +129,7 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst, anms)
+	r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
 
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
 	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
@@ -191,7 +195,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, anms []string) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -218,7 +222,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Sync the status
 	inst.Status.Children = ns.ChildNames()
-	r.syncConditions(log, inst, ns, hadCrit)
+	r.syncConditions(log, inst, ns, deletingCRD, hadCrit)
 
 	// Sync the tree labels. This should go last since it can depend on the conditions.
 	r.syncLabel(log, nsInst, ns)
@@ -396,12 +400,12 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	}
 }
 
-func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, hadCrit bool) {
+func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {
 	// Hierarchy changes may mean that some object conditions are no longer relevant.
 	ns.ClearObsoleteConditions(log)
 
 	// Sync critical conditions after all locally-set conditions are updated.
-	r.syncCritConditions(log, ns, hadCrit)
+	r.syncCritConditions(log, ns, deletingCRD, hadCrit)
 
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
 	inst.Status.Conditions = ns.Conditions()
@@ -411,11 +415,15 @@ func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.Hi
 
 // syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
 // namespace are gone or critical conditions are newly found.
-func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, hadCrit bool) {
+func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, deletingCRD, hadCrit bool) {
 	// If we're in a cycle, determine that now
 	if cycle := ns.CycleNames(); cycle != nil {
 		msg := fmt.Sprintf("Namespace is a member of the cycle: %s", strings.Join(cycle, " <- "))
 		ns.SetLocalCondition(api.CritCycle, msg)
+	}
+
+	if deletingCRD {
+		ns.SetLocalCondition(api.CritDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all syncing is disabled.")
 	}
 
 	// Early exit if there's no need to enqueue relatives.
@@ -427,7 +435,7 @@ func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *fore
 	if hadCrit == true {
 		msg = "removed"
 	}
-	log.Info("Critical conditions are " + msg)
+	log.Info("Critical conditions are "+msg, "conditions", ns.Conditions())
 	r.enqueueAffected(log, "descendant of a namespace with critical conditions "+msg, ns.DescendantNames()...)
 }
 
@@ -552,13 +560,14 @@ func (r *HierarchyConfigReconciler) updateObjects(ctx context.Context, log logr.
 	return nil
 }
 
-// getSingleton returns the singleton if it exists, or creates an empty one if it doesn't.
-func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, error) {
+// getSingleton returns the singleton if it exists, or creates an empty one if
+// it doesn't. The second parameter is true if the CRD itself is being deleted.
+func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, bool, error) {
 	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	inst := &api.HierarchyConfiguration{}
 	if err := r.Get(ctx, nnm, inst); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return nil, err
+			return nil, false, err
 		}
 
 		// It doesn't exist - initialize it to a sane initial value.
@@ -567,23 +576,19 @@ func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string)
 	}
 
 	// If the HC is either being deleted, or it doesn't exist, this may be because HNC is being
-	// uninstalled and the HierarchyConfiguration CRD is being/has been deleted. If so, simply start
-	// returning errors - do _not_ attempt to sync the rest of the forest. This will ensure that the
-	// object reconciler won't start deleting objects, both because existing namespaces won't suddenly
-	// look like roots, or if HNC is restarted, because the namespace will never be set as Exists()
-	// and therefore will be left alone.
+	// uninstalled and the HierarchyConfiguration CRD is being/has been deleted. If so, we'll need to
+	// put a critical condition on this singleton so that we stop making any changes to its objects,
+	// but we can't just stop syncing it because we may need to delete its finalizers (see #824).
+	deletingCRD := false
 	if inst.CreationTimestamp.IsZero() || !inst.DeletionTimestamp.IsZero() {
-		crd := &apiextensions.CustomResourceDefinition{}
-		nsn := types.NamespacedName{Name: api.HierarchyConfigurations + "." + api.MetaGroup}
-		if err := r.Get(ctx, nsn, crd); err != nil {
-			return nil, err
-		}
-		if !crd.DeletionTimestamp.IsZero() {
-			return nil, errors.New("HierarchyConfiguration CRD is being deleted, cannot load")
+		var err error
+		deletingCRD, err = isDeletingCRD(ctx, r, api.HierarchyConfigurations)
+		if err != nil {
+			return nil, false, err
 		}
 	}
 
-	return inst, nil
+	return inst, deletingCRD, nil
 }
 
 // getNamespace returns the namespace if it exists, or returns an invalid, blank, unnamed one if it
