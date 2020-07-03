@@ -19,23 +19,27 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis"
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
+
+	// logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller")
+// var log = logf.Log.WithName("controller")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
@@ -45,16 +49,16 @@ var log = logf.Log.WithName("controller")
 // Add creates a new Tenant Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	return AddManagerReconciler(mgr, NewReconciler(mgr))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func NewReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileTenant{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+// AddManagerReconciler adds a new Controller to mgr with r as the reconcile.Reconciler
+func AddManagerReconciler(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("tenant-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -109,10 +113,11 @@ func (r *ReconcileTenant) clientApply(obj runtime.Object) error {
 // +kubebuilder:rbac:groups=tenancy.x-k8s.io,resources=tenants/status,verbs=get;update;patch
 func (r *ReconcileTenant) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Tenant instance
+	apis.AddToScheme(scheme.Scheme)
 	instance := &tenancyv1alpha1.Tenant{}
-	// Tenant is a cluster scoped CR, we should clear the namespace field in request
+	// // Tenant is a cluster scoped CR, we should clear the namespace field in request
 	request.NamespacedName.Namespace = ""
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -131,12 +136,15 @@ func (r *ReconcileTenant) Reconcile(request reconcile.Request) (reconcile.Result
 	}
 
 	// Create tenantAdminNamespace
+	//Append second line
 	if instance.Spec.TenantAdminNamespaceName != "" {
 		nsList := &corev1.NamespaceList{}
+		time.Sleep(10 * time.Second)
 		err := r.List(context.TODO(), nsList, &client.ListOptions{})
 		if err != nil {
 			return reconcile.Result{}, err
 		}
+
 		foundNs := false
 		for _, each := range nsList.Items {
 			if each.Name == instance.Spec.TenantAdminNamespaceName {
@@ -220,7 +228,7 @@ func (r *ReconcileTenant) Reconcile(request reconcile.Request) (reconcile.Result
 				Name:     crName,
 			},
 		}
-		if err = r.clientApply(crbinding); err != nil {
+		if err := r.clientApply(crbinding); err != nil {
 			return reconcile.Result{}, err
 		}
 		// Second, create namespace role to allow them to create tenantnamespace CR in tenantAdminNamespace.
@@ -262,7 +270,7 @@ func (r *ReconcileTenant) Reconcile(request reconcile.Request) (reconcile.Result
 				Name:     "tenant-admin-role",
 			},
 		}
-		if err = r.clientApply(rbinding); err != nil {
+		if err := r.clientApply(rbinding); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

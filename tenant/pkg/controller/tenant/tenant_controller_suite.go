@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
 // writes the request to requests after Reconcile is finished.
 func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
@@ -50,9 +49,9 @@ func StartTestManager(mgr manager.Manager, g *gomega.GomegaWithT) (chan struct{}
 }
 
 func SetupNewReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return newReconciler(mgr)
+	return NewReconciler(mgr)
 }
 
 func AddManager(mgr manager.Manager, r reconcile.Reconciler) error {
-	return add(mgr, r)
+	return AddManagerReconciler(mgr, r)
 }
