@@ -46,7 +46,6 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid         HNCConfigurationCode = "CritSingletonNameInvalid"
 	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
 	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
 )
@@ -148,16 +147,10 @@ type HNCConfigurationCondition struct {
 	// shown below, but new values may be added over time. This field is always present in a
 	// condition.
 	//
-	// All codes that begin with the prefix `crit` indicate that reconciliation has
-	// been paused for this configuration. Future changes of the configuration will be
-	// ignored by HNC until the condition has been resolved. Non-critical conditions
-	// typically indicate some kinds of error that HNC itself can ignore. However,
+	// Conditions typically indicate some kinds of error that HNC itself can ignore. However,
 	// the behaviors of some types might be out-of-sync with the users' expectations.
 	//
 	// Currently, the supported values are:
-	//
-	// - "critSingletonNameInvalid": the specified singleton name is invalid. The name should be the
-	// same as HNCConfigSingleton.
 	//
 	// - "objectReconcilerCreationFailed": an error exists when creating the object
 	// reconciler for the type specified in Msg.
