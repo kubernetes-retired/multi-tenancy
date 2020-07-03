@@ -133,7 +133,7 @@ func (r *ReconcileTenant) Reconcile(request reconcile.Request) (reconcile.Result
 	// Create tenantAdminNamespace
 	if instance.Spec.TenantAdminNamespaceName != "" {
 		nsList := &corev1.NamespaceList{}
-		err := r.List(context.TODO(), &client.ListOptions{}, nsList)
+		err := r.List(context.TODO(), nsList, &client.ListOptions{})
 		if err != nil {
 			return reconcile.Result{}, err
 		}

@@ -83,7 +83,7 @@ func getTemplateContent(kubeConfigTmpl string, context interface{}) (string, err
 func findSecretNameOfSA(c client.Client, saName string) (string, error) {
 	var saSecretName string
 	secretList := corev1.SecretList{}
-	if err := c.List(context.TODO(), &client.ListOptions{}, &secretList); err != nil {
+	if err := c.List(context.TODO(), &secretList, &client.ListOptions{}); err != nil {
 		return "", err
 	}
 	for _, eachSecret := range secretList.Items {
