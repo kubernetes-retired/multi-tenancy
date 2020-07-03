@@ -32,6 +32,8 @@ Lead developer: @adrianludwin (aludwin@google.com).
 
 ## Using HNC
 
+<a name="start"/>
+
 ### Getting started and learning more
 
 The [latest version of HNC is
@@ -167,42 +169,4 @@ Within the `reconcilers` directory, there are four reconcilers:
 
 ### Releasing
 
-1. Ensure you have a Personal Access Token from Github with permissions to write
-   to the repo, and
-   [permission](https://github.com/kubernetes/k8s.io/blob/master/groups/groups.yaml#L566)
-   to access `k8s-staging-multitenancy`'s GCR.
-
-2. Set the following environment variables:
-
-```
-export HNC_USER=<your github name>
-export HNC_PAT=<your personal access token>
-export HNC_IMG_TAG=<the desired image tag, eg v0.1.0-rc1>
-```
-
-3. Create a draft release in Github. Ensure that the Github tag name is
-   `hnc-$HNC_IMG_TAG`. Save the release in order to tag the repo, or manually
-   create the tag beforehand and just save the release as a draft.
-
-4. Get the release ID by calling `curl -u "$HNC_USER:$HNC_PAT"
-   https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases`, finding
-   your release, and noting it's ID. Save this as an env var: `export
-   HNC_RELEASE_ID=<id>`
-
-5. Call `make release`. **Note that your personal access token will be visible
-   in the build logs,** but will not be printed to the console from `make`
-   itself.  TODO: fix this (see
-   https://cloud.google.com/cloud-build/docs/securing-builds/use-encrypted-secrets-credentials#example_build_request_using_an_encrypted_variable).
-
-6. Exit your shell so your personal access token isn't lying around.
-
-7. Publish the release if you didn't do it already.
-
-8. Test! At a minimum, install it onto a cluster and ensure that the controller
-   comes up.
-
-9. Update the "installing HNC" section of this README with the latest version.
-
-After the release, you can run `curl -u "$HNC_USER:$HNC_PAT"
-https://api.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$HNC_RELEASE_ID`
-to see how many times the assets have been downloaded.
+To release HNC, follow [this guide](docs/releasing.md).
