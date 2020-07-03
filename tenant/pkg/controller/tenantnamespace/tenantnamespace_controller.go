@@ -50,16 +50,16 @@ const (
 // Add creates a new TenantNamespace Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+	return AddManager(mgr, NewReconciler(mgr))
 }
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+// NewReconciler returns a new reconcile.Reconciler
+func NewReconciler(mgr manager.Manager) reconcile.Reconciler {
 	return &ReconcileTenantNamespace{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func AddManager(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("tenantnamespace-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -147,14 +147,14 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	}
 	// Fetch namespace list
 	nsList := &corev1.NamespaceList{}
-	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
+	err = r.List(context.TODO(), nsList, &client.ListOptions{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// Fetch tenant list
 	tenantList := &tenancyv1alpha1.TenantList{}
-	err = r.List(context.TODO(), &client.ListOptions{}, tenantList)
+	err = r.List(context.TODO(), tenantList, &client.ListOptions{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}

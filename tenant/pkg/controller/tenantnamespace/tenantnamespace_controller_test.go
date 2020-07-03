@@ -18,10 +18,11 @@ package tenantnamespace
 
 import (
 	"fmt"
-	v1 "k8s.io/api/rbac/v1"
-	"k8s.io/client-go/tools/clientcmd"
 	"testing"
 	"time"
+
+	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/onsi/gomega"
 	"golang.org/x/net/context"
@@ -585,8 +586,8 @@ func TestReconcile(t *testing.T) {
 	g.Expect(tenant2.AddManager(mgr, recFnTenant)).NotTo(gomega.HaveOccurred())
 
 	//start tenantnamespace controller
-	recFnTenantNS, requestsTenantNS := SetupTestReconcile(newReconciler(mgr))
-	g.Expect(add(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
+	recFnTenantNS, requestsTenantNS := SetupTestReconcile(NewReconciler(mgr))
+	g.Expect(AddManager(mgr, recFnTenantNS)).NotTo(gomega.HaveOccurred())
 
 	//start and defer manager
 	stopMgr, mgrStopped := StartTestManager(mgr, g)
