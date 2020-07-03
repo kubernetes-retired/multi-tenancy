@@ -26,6 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const (
@@ -99,4 +100,16 @@ func findSecretNameOfSA(c client.Client, saName string) (string, error) {
 
 func getUniqueName(str, a string) string {
 	return fmt.Sprintf("%+v-%+v", str, a)
+}
+
+// SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
+// writes the request to requests after Reconcile is finished.
+func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
+	requests := make(chan reconcile.Request)
+	fn := reconcile.Func(func(req reconcile.Request) (reconcile.Result, error) {
+		result, err := inner.Reconcile(req)
+		requests <- req
+		return result, err
+	})
+	return fn, requests
 }
