@@ -71,13 +71,6 @@ const checkPeriod = 3 * time.Second
 func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 
-	// Validate the singleton name, and early exit if we're not validating the real one (note that the
-	// bad singleton will have a condition set, but the main one will not be affected).
-	if ok, err := r.validateSingletonName(ctx, req.NamespacedName.Name); !ok || err != nil {
-		r.Log.Error(err, "An incorrectly-named HNC Config exists", "name", req.NamespacedName.Name)
-		return ctrl.Result{}, err
-	}
-
 	// Load the config and clear its conditions so they can be reset.
 	inst, err := r.getSingleton(ctx)
 	if err != nil {
@@ -364,33 +357,6 @@ func (r *ConfigReconciler) writeObjectReconcilerCreationFailedCondition(inst *ap
 		Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
 	}
 	inst.Status.Conditions = append(inst.Status.Conditions, condition)
-}
-
-// validateSingletonName tries to ensure we only have a single HNC Config object in the cluster. It
-// returns true if the singleton name is correct, and false if there's a bad copy (in which case,
-// the rest of the reconciler is skipped).
-func (r *ConfigReconciler) validateSingletonName(ctx context.Context, nm string) (bool, error) {
-	// If the name is expected, no problem.
-	if nm == api.HNCConfigSingleton {
-		return true, nil
-	}
-
-	// Otherwise, let's update whatever's in this wayward copy by setting a critical condition on it.
-	nnm := types.NamespacedName{Name: nm}
-	inst := &api.HNCConfiguration{}
-	if err := r.Get(ctx, nnm, inst); err != nil {
-		return false, err
-	}
-
-	msg := "Singleton name is wrong. It should be 'config'"
-	condition := api.HNCConfigurationCondition{
-		Code: api.CritSingletonNameInvalid,
-		Msg:  msg,
-	}
-	inst.Status.Conditions = nil
-	inst.Status.Conditions = append(inst.Status.Conditions, condition)
-
-	return false, r.writeSingleton(ctx, inst)
 }
 
 // setTypeStatuses adds Status.Types for types configured in the spec. Only the status of
