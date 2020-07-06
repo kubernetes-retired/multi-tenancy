@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -52,7 +51,7 @@ func (c *controller) PatrollerDo() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-	defer metrics.RecordCheckerScanDuration("PV", time.Now())
+
 	wg := sync.WaitGroup{}
 	numClaimMissMatchedPVs = 0
 	numSpecMissMatchedPVs = 0
@@ -91,7 +90,7 @@ func (c *controller) PatrollerDo() {
 		vPVObj, err := c.multiClusterPersistentVolumeController.Get(clusterName, "", pPV.Name)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterPVs").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPVs").Inc()
 				c.upwardPersistentVolumeController.AddToQueue(pPV.Name)
 			}
 			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
@@ -105,8 +104,8 @@ func (c *controller) PatrollerDo() {
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numClaimMissMatchedPVs").Set(float64(numClaimMissMatchedPVs))
-	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedPVs").Set(float64(numSpecMissMatchedPVs))
+	metrics.CheckerMissMatchStats.WithLabelValues("ClaimMissMatchedPVs").Set(float64(numClaimMissMatchedPVs))
+	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedPVs").Set(float64(numSpecMissMatchedPVs))
 }
 
 func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
@@ -149,7 +148,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			if err := tenantClient.CoreV1().PersistentVolumes().Delete(vPV.Name, opts); err != nil {
 				klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantPVs").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantPVs").Inc()
 			}
 			continue
 		}

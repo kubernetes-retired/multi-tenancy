@@ -86,7 +86,7 @@ func NewEndpointsController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", *patrolOptions)
+	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", &v1.Endpoints{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create endpoints patroller: %v", err)
 	}

@@ -147,14 +147,14 @@ func (r *ReconcileTenantNamespace) Reconcile(request reconcile.Request) (reconci
 	}
 	// Fetch namespace list
 	nsList := &corev1.NamespaceList{}
-	err = r.List(context.TODO(), &client.ListOptions{}, nsList)
+	err = r.List(context.TODO(), nsList, &client.ListOptions{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// Fetch tenant list
 	tenantList := &tenancyv1alpha1.TenantList{}
-	err = r.List(context.TODO(), &client.ListOptions{}, tenantList)
+	err = r.List(context.TODO(), tenantList, &client.ListOptions{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}

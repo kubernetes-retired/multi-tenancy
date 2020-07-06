@@ -86,7 +86,7 @@ func NewSecretController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	secretPatroller, err := pa.NewPatroller("secret-patroller", *patrolOptions)
+	secretPatroller, err := pa.NewPatroller("secret-patroller", &v1.Secret{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create secret patroller: %v", err)
 	}

@@ -87,7 +87,7 @@ func NewConfigMapController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	configMapPatroller, err := pa.NewPatroller("configMap-patroller", *patrolOptions)
+	configMapPatroller, err := pa.NewPatroller("configMap-patroller", &v1.ConfigMap{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create configMap patroller: %v", err)
 	}

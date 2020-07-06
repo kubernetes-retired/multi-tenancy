@@ -18,7 +18,6 @@ package serviceaccount
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,7 +50,7 @@ func (c *controller) PatrollerDo() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-	defer metrics.RecordCheckerScanDuration("serviceaccount", time.Now())
+
 	wg := sync.WaitGroup{}
 
 	for _, clusterName := range clusterNames {
@@ -93,7 +92,7 @@ func (c *controller) PatrollerDo() {
 			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServiceAccounts").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServiceAccounts").Inc()
 			}
 		}
 	}
@@ -116,7 +115,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
 				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServiceAccounts").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServiceAccounts").Inc()
 			}
 			continue
 		}

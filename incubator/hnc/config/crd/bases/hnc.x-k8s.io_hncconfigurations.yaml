@@ -54,6 +54,9 @@ spec:
                       empty, it will be treated as "propagate". An unsupported mode
                       will be treated as "ignore".
                     type: string
+                required:
+                - apiVersion
+                - kind
                 type: object
               type: array
           type: object
@@ -149,6 +152,9 @@ spec:
                       users.
                     minimum: 0
                     type: integer
+                required:
+                - apiVersion
+                - kind
                 type: object
               type: array
           type: object

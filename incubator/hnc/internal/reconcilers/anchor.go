@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -113,20 +112,19 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		return false, nil
 	}
 
-	deletingCRD, err := r.isDeletingCRD(ctx)
+	deletingCRD, err := isDeletingCRD(ctx, r, api.Anchors)
 	if err != nil {
 		log.Info("Couldn't determine if CRD is being deleted")
 		return false, err
 	}
 
-	cnm := inst.Name
 	log.Info("The anchor is being deleted", "deletingCRD", deletingCRD)
 	switch {
 	case len(inst.ObjectMeta.Finalizers) == 0:
 		// We've finished processing this, nothing to do.
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
-	case r.shouldDeleteSubns(cnm, snsInst, deletingCRD):
+	case r.shouldDeleteSubns(inst, snsInst, deletingCRD):
 		// The subnamespace is not already being deleted but it allows cascadingDelete or it's a leaf.
 		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
 		// namespaces alone.
@@ -143,24 +141,9 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 	}
 }
 
-// isDeletingCRD returns true if the Anchor CRD is being deleted. This can happen if HNC is being
-// uninstalled. In such cases, we shouldn't perform a cascading deletion.
-func (r *AnchorReconciler) isDeletingCRD(ctx context.Context) (bool, error) {
-	crd := &apiextensions.CustomResourceDefinition{}
-	nsn := types.NamespacedName{Name: api.Anchors + "." + api.MetaGroup}
-	if err := r.Get(ctx, nsn, crd); err != nil {
-		// Either the CRD wasn't found, in which case, HNC can't operate propertly; hopefully, the admin
-		// is uninstalling HNC, and the HNC pod is also about to be shut down. Otherwise, there was some
-		// transient error and we should just retry.
-		return false, err
-	}
-
-	return !crd.DeletionTimestamp.IsZero(), nil
-}
-
 // shouldDeleteSubns returns true if the namespace still exists and it is a leaf
 // subnamespace or it allows cascading delete unless the CRD is being deleted.
-func (r *AnchorReconciler) shouldDeleteSubns(nm string, inst *corev1.Namespace, deletingCRD bool) bool {
+func (r *AnchorReconciler) shouldDeleteSubns(inst *api.SubnamespaceAnchor, nsInst *corev1.Namespace, deletingCRD bool) bool {
 	r.forest.Lock()
 	defer r.forest.Unlock()
 
@@ -169,16 +152,24 @@ func (r *AnchorReconciler) shouldDeleteSubns(nm string, inst *corev1.Namespace, 
 		return false
 	}
 
-	// If the subnamespace is already being deleted, or has already been deleted,
-	// then there's no need to delete it again.
-	ns := r.forest.Get(nm)
-	if !inst.DeletionTimestamp.IsZero() || !ns.Exists() {
+	cnm := inst.Name
+	pnm := inst.Namespace
+	cns := r.forest.Get(cnm)
+
+	// If the declared subnamespace is not created by this anchor, don't delete it.
+	if cns.Parent().Name() != pnm {
+		return false
+	}
+
+	// If the subnamespace is created by this anchor but is already being deleted,
+	// or has already been deleted, then there's no need to delete it again.
+	if !nsInst.DeletionTimestamp.IsZero() || !cns.Exists() {
 		return false
 	}
 
 	// The subnamespace exists and isn't being deleted. We should delete it if it
 	// doesn't have any children itself, or if cascading deletion is enabled.
-	return ns.ChildNames() == nil || ns.AllowsCascadingDelete()
+	return cns.ChildNames() == nil || cns.AllowsCascadingDelete()
 }
 
 func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
