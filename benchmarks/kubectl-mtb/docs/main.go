@@ -7,10 +7,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 
 	"gopkg.in/yaml.v2"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 const (
@@ -62,53 +61,33 @@ func main() {
 			extension := filepath.Ext(path)
 			if extension == ".yml" || extension == ".yaml" {
 				b, err := ioutil.ReadFile(path)
-				util.CheckError(err)
+				utils.CheckError(err)
 				d := Doc{}
 				// Unmarshall first time to get existing fields
 				err = yaml.Unmarshal(b, &d)
-				util.CheckError(err)
-				// Unmarshall second time to add additonal fields
-				err = yaml.Unmarshal(b, &d.AdditionalField)
-				util.CheckError(err)
-				structVal := reflect.ValueOf(d)
-				typeOfS := structVal.Type()
-
-				values := make([]string, structVal.NumField())
-
-				// iterate through struct to collect the fields
-				for structField := 0; structField < structVal.NumField(); structField++ {
-					if typeOfS.Field(structField).Name != "AdditionalField" {
-						values[structField] = typeOfS.Field(structField).Tag.Get("yaml")
-					}
-				}
-				// delete the existing fields which were added in the set of additional fields
-				// during second unmarshalling
-				for _, i := range values {
-					deleteFields(i, d.AdditionalField)
-				}
-
+				utils.CheckError(err)
 				t := template.New("README template")
 				t, err = t.Parse(templ)
 
 				// Get directory of the config file
-				dirPath := util.GetDirectory(path, "/")
+				dirPath := utils.GetDirectory(path, "/")
 
 				//Check if Path exists
-				_, err = util.Exists(dirPath)
-				util.CheckError(err)
+				_, err = utils.Exists(dirPath)
+				utils.CheckError(err)
 
 				f, err := os.Create(dirPath + "/README.md")
-				util.CheckError(err)
+				utils.CheckError(err)
 
 				// Write the output to the README file
 				err = t.Execute(f, d)
-				util.CheckError(err)
+				utils.CheckError(err)
 				if err == nil {
 					fmt.Println("README.md generated successfully")
 				}
 
 				err = f.Close()
-				util.CheckError(err)
+				utils.CheckError(err)
 
 			}
 		}

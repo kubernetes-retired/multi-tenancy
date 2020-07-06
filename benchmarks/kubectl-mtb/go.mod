@@ -4,6 +4,8 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
+	github.com/kubernetes-sigs/multi-tenancy v0.0.0-20200706144853-a49a9fcaee27
+	github.com/onsi/gomega v1.8.1
 	github.com/spf13/cobra v1.0.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.3
@@ -12,9 +14,12 @@ require (
 	k8s.io/client-go v0.18.3
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.18.3
+	sigs.k8s.io/controller-runtime v0.6.0
+	sigs.k8s.io/kind v0.8.1
 )
 
 replace (
+	github.com/kubernetes-sigs/multi-tenancy => github.com/Divya063/multi-tenancy v0.0.0-20200703122503-2307447baef6
 	k8s.io/api => k8s.io/api v0.18.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.18.3
 	k8s.io/apimachinery => k8s.io/apimachinery v0.18.3

@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
+	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 )
 
 type GroupResource struct {
@@ -47,7 +47,11 @@ func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource Gro
 	return false, fmt.Sprintf("User cannot %s %s", verb, resource.APIResource.Name), nil
 }
 
+<<<<<<< HEAD
 var b = &benchmark.Benchmark{
+=======
+var BpcBenchmark = &benchmark.Benchmark{
+>>>>>>> 5f12ec3f... minor refactoring
 
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
@@ -89,10 +93,18 @@ var b = &benchmark.Benchmark{
 
 func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
+<<<<<<< HEAD
 	err := b.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
+=======
+	err := BpcBenchmark.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
+>>>>>>> 5f12ec3f... minor refactoring
 	if err != nil {
 		fmt.Println(err)
 	}
 
+<<<<<<< HEAD
 	test.BenchmarkSuite.Add(b)
+=======
+	return BpcBenchmark
+>>>>>>> 5f12ec3f... minor refactoring
 }
