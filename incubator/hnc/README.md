@@ -37,7 +37,7 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Getting started and learning more
 
 The [latest version of HNC is
-v0.4.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.4.0).
+v0.5.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.0).
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
 workstation, follow the instructions on that page.
 
@@ -60,8 +60,10 @@ milestones are defined:
   type configuration and better self-service namespace UX.
 * [v0.4 - COMPLETE JUN 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
   stabilize the API and add productionization features.
-* [v0.5 - IN PROGRESS](https://github.com/kubernetes-sigs/multi-tenancy/milestone/13):
+* [v0.5 - COMPLETE JUL 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/13):
   feature simplification and improved testing and stability.
+* [v0.6 - TARGET SEP 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/14):
+  introduce the v1alpha2 API and fully automated end-to-end testing.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
@@ -70,40 +72,56 @@ project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
 
 ## Developing HNC
 
-HNC is a small project, and we have limited abilities to help onboard developers
-and review pull requests at this time. However, if you want to *use* HNC
-yourself and are also a developer, we want to know what does and does not work
-for you, and we'd welcome any PRs that might solve your problems.
+HNC is a small project, and we have limited abilities to help onboard
+developers. If you'd like to contribute to the core of HNC, it would be helpful
+if you've created your own controllers before using
+[controller-runtime](https://github.com/kubernetes-sigs/controller-runtime) and
+have a good understanding at least one non-functional task such as monitoring or
+lifecycle management. However, there are sometimes tasks to help improve the
+CLI or other aspects of usability that require less background knowledge.
 
-* Design doc: http://bit.ly/k8s-hnc-design
+With that said, if you want to *use* HNC yourself and are also a developer, we
+want to know what does and does not work for you, and we'd welcome any PRs that
+might solve your problems.
+
+The main design doc is [here](http://bit.ly/k8s-hnc-design); other design docs
+are listed [here](docs/links.md).
 
 ### Prerequisites
 
 Make sure you have installed the following libraries/packages and that they're
 accessible from your `PATH`:
+
   - Docker
   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
   - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
-  - [kubebuilder](https://kubebuilder.io) - this [Github issue](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527) may help you resolve errors you get when running the tests or any other command.
+  - [kubebuilder](https://kubebuilder.io)
+    - This [Github issue](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527)
+      may help you resolve errors you get when running the tests or any other
+      command.
+
+If you're using `gcloud` and the GCP Container Registry, make sure that `gcloud`
+is configured to use the project containing the registry you want to use, and
+that you've previously run `gcloud auth configure-docker` so that Docker can use
+your GCP credentials.
 
 ### Building and deploying to a test cluster
 
-To deploy to a cluster:
+To build from source and deploy to a cluster:
   - Ensure your `kubeconfig` is configured to point at your cluster
     - For example, if you're using GKE, run `gcloud container clusters
       get-credentials <cluster-name> --zone <cluster-zone>`
     - To deploy to KIND, see below instead.
-  - If you're using GCR, make sure that gcloud is set to the project containing
-    the GCR repo you want to use, then say `make deploy` to deploy to your cluster.
+  - Use `make deploy` to deploy to your cluster.
     - Ensure you run `gcloud auth configure-docker` so that `docker-push` works
       correctly.
-    - If you get an error referencing the certificate manager, wait a minute or
-      so and then try again. The certificate manager takes a few moments for its
-      webhook to become available. This should only happen the first time you
-      deploy this way, or if we change the recommended version of cert-manager.
-    - This will install the `kubectl-hns` plugin into `$GOPATH/bin`.
+    - This will also install the `kubectl-hns` plugin into `$GOPATH/bin`. Ensure
+      that this is in your `PATH` env var if you want to use it by saying `kubectl
+      hns`, as described in the user guide.
     - The manifests that get deployed will be output to
       `/manifests/hnc-controller.yaml` if you want to check them out.
+    - Note that `make deploy` can respond to env vars in your environment; see
+      the Makefile for more information.
   - To view logs, say `make deploy-watch`
 
 ### Development Workflow
@@ -124,17 +142,15 @@ While developing the HNC, it's usually faster to deploy locally to
 
 * Run `. devenv` (or `source devenv`) to setup your `KUBECONFIG` env var to
   point to the local Kind cluster.
-* Run `make kind-reset` to stop any existing KIND cluster and setup a new one,
-  including the cert manager required to run the webhooks. You don't need to run
-  this every time, only when you're first starting development or you think your
-  KIND cluster is in a bad state.
+* Run `make kind-reset` to stop any existing KIND cluster and setup a new one.
+  You don't need to run this every time, only when you're first starting
+  development or you think your KIND cluster is in a bad state.
 * Run `CONFIG=kind make deploy` or `make kind-deploy` to build the image, load
   it into KIND, and deploy to KIND. See the notes above for caveats on `make
   deploy`, though you don't need to set `IMG` yourself.
 * Alternatively, you can also run the controller locally (ie, not on the
   cluster) by saying `make run`. Webhooks don't work in this mode because I
   haven't bothered to find an easy way to make them work yet.
-
 
 KIND doesn't integrate with any identity providers - that is, you can't add
 "sara@foo.com" as a "regular user." So you'll have to use service accounts and
@@ -150,10 +166,13 @@ interesting directories are probably:
 
 * `/api`: the API definition.
 * `/cmd`: top-level executables. Currently the manager and the kubectl plugin.
-* `/pkg/reconcilers`: the reconcilers and their tests
-* `/pkg/validators`: validating admission controllers
-* `/pkg/forest`: the in-memory data structure, shared between the reconcilers
-  and validators.
+* `/hack`: various release scripts, end-to-end bash script tests and other
+  miscellaneous files.
+* `/internal/reconcilers`: the reconcilers and their tests
+* `/internal/validators`: validating admission controllers
+* `/internal/forest`: the in-memory data structure, shared between the reconcilers
+  and validators
+* `/internal/kubectl`: implementation of the `kubectl-hns` plugin
 
 Within the `reconcilers` directory, there are four reconcilers:
 
