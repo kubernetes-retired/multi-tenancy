@@ -46,7 +46,6 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
-	CritSingletonNameInvalid         HNCConfigurationCode = "CritSingletonNameInvalid"
 	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
 	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
 )
@@ -54,9 +53,9 @@ const (
 // TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
 type TypeSynchronizationSpec struct {
 	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIVersion string `json:"apiVersion"`
 	// Kind to be configured.
-	Kind string `json:"kind,omitempty"`
+	Kind string `json:"kind"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
 	// as "propagate". An unsupported mode will be treated as "ignore".
 	// +optional
@@ -66,9 +65,9 @@ type TypeSynchronizationSpec struct {
 // TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
 type TypeSynchronizationStatus struct {
 	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion,omitempty"`
+	APIVersion string `json:"apiVersion"`
 	// Kind to be configured.
-	Kind string `json:"kind,omitempty"`
+	Kind string `json:"kind"`
 	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
 	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
 	// spec and the default is chosen.
@@ -148,16 +147,10 @@ type HNCConfigurationCondition struct {
 	// shown below, but new values may be added over time. This field is always present in a
 	// condition.
 	//
-	// All codes that begin with the prefix `crit` indicate that reconciliation has
-	// been paused for this configuration. Future changes of the configuration will be
-	// ignored by HNC until the condition has been resolved. Non-critical conditions
-	// typically indicate some kinds of error that HNC itself can ignore. However,
+	// Conditions typically indicate some kinds of error that HNC itself can ignore. However,
 	// the behaviors of some types might be out-of-sync with the users' expectations.
 	//
 	// Currently, the supported values are:
-	//
-	// - "critSingletonNameInvalid": the specified singleton name is invalid. The name should be the
-	// same as HNCConfigSingleton.
 	//
 	// - "objectReconcilerCreationFailed": an error exists when creating the object
 	// reconciler for the type specified in Msg.

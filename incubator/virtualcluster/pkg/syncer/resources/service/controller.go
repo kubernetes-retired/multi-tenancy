@@ -103,7 +103,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	servicePatroller, err := pa.NewPatroller("service-patroller", *patrolOptions)
+	servicePatroller, err := pa.NewPatroller("service-patroller", &v1.Service{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create service patroller: %v", err)
 	}

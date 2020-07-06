@@ -42,7 +42,7 @@ To install the plugin (Linux-only), first switch to a directory on your `PATH`
 # Select the HNC version that matches the version installed on your cluster.
 # Ask your cluster administrator if you're not sure. The latest version is
 # shown below.
-HNC_VERSION=v0.4.0
+HNC_VERSION=v0.5.0
 
 # Download the plugin
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
@@ -166,7 +166,7 @@ This section is under construction (as of Apr 2020). For now, please see
 
 ### Delete a subnamespace
 
-In order to delete a subnamespace, you must have permissions to delete its
+In order to delete a subnamespace, you must first have permissions to delete its
 anchor in its parent namespace. Ask your cluster administrator to give you this
 permission if you do not have it.
 
@@ -176,53 +176,56 @@ Kubernetes 1.15 and higher installed. See [issue
 In Kubernetes 1.14 and earlier, HNC is unable to stop you from deleting
 namespaces.**
 
-You cannot delete a subnamespace by deleting its namespace:
+Subnamespaces are _always_ manipulated via their anchors. For example, you
+cannot delete a subnamespace by deleting it directly:
 
 ```
 $ kubectl delete namespace child
 # Output:
-Error from server (Forbidden): admission webhook "vnamespace.k8s.io" denied the request: The namespace "child" is a subnamespace. Please delete the subnamespace anchor from the parent namespace "parent" instead.
+Error from server (Forbidden): admission webhook "namespaces.x-hnc.k8s.io" denied the request: The namespace "child" is a subnamespace. Please delete the subnamespace anchor from the parent namespace "parent" instead.
 ```
 
-However, if you simply try to delete the subnamespace anchor, it will give you a validation error:
+Instead, you must delete its anchor (note that `subns` is a short form of
+`subnamespaceanchor`):
 
 ```
-$ kubectl delete subns -nparent child
-# Output:
-Error from server (Forbidden): admission webhook "subnamespaces.hnc.x-k8s.io" denied the request: The subnamespace child doesn't allow cascading deletion. Please set allowCascadingDelete flag first.
+$ kubectl delete subns child -n parent
 ```
 
-_Note: `subns` is a short form of `subnamespaceanchor`._
-
-Similarly, if you try to delete the parent of a subnamespace, you’ll get a
-validation error, even if the parent is not a subnamespace itself:
+This _seems_ to imply that if you delete a _parent_ namespace, all its
+subnamespace children (and their descendants) will be deleted as well, since all
+objects in a namespace (such as anchors) are deleted along with the namespace.
+However, if you actually try this, you'll get an error:
 
 ```
 $ kubectl delete namespace parent
 # Output:
-Error from server (Forbidden): admission webhook "vnamespace.k8s.io" denied the request: Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.
+Error from server (Forbidden): admission webhook "namespaces.hnc.x-k8s.io" denied the request: Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.
  Subnamespace(s) without allowCascadingDelete set: [child].
 ```
 
 These errors are there for your protection. Deleting namespaces is very
 dangerous, and deleting _subnamespaces_ can result in entire subtrees of
-namespaces being deleted as well. Therefore, you may set the
-`allowCascadingDelete` field either on the child namespace, on its parent, or (if
-the parent is a subnamespace itself) on its parent, and so on. For example, set
-the field on `child` if you’re only trying to delete the child, or on `parent` if
-you’re trying to delete the parent.
+namespaces being deleted as well. Therefore, if deleting a namespace (or
+subnamespace) would result in the deletion of any namespace _other than the one
+explicitly being deleted_, HNC requires that you must specify the
+`allowCascadingDelete` field on either all the namespaces that will be
+implicitly deleted, or any of their ancestors.
+
+The `allowCascadingDelete` field is a bit like `rm -rf` in a Linux shell.
 
 > **WARNING: this option is very dangerous, so you should only set it on the lowest
 possible level of the hierarchy.**
 
 > **WARNING: any subnamespaces of the namespace you are deleting will also be
 deleted, and so will any subnamespaces of those namespaces, and so on. However,
-any full namespaces that are descendants of a subnamespace will not be
+any _full_ namespaces that are descendants of a subnamespace will not be
 deleted.**
 
-> _Note: The inheritance of `allowCascadingDelete` is actually a bit more
-> restricted than what's sketched out above: its value is only inherited through
-> ancestor _subnamespaces_, or up to the _first_ full namespace._
+> _Note: In HNC v0.4.x and earlier, the inheritance of `allowCascadingDelete` is
+> actually a bit more restricted than what's sketched out above: its value is
+> only inherited through ancestor _subnamespaces_, or up to the _first_ full
+> namespace._
 >
 > _For example, if subnamespace `child` has ancestors `parent` and `grandparent`,
 > both of which are full namespaces, we will only respect the
@@ -230,24 +233,23 @@ deleted.**
 > because if `grandparent` is deleted, `parent` will not be affected, and
 > therefore neither will `child`._
 >
-> _This behaviour may be simplified in a future release of HNC
+> _This behaviour was simplified in HNC v0.5.x
 > ([#730](https://github.com/kubernetes-sigs/multi-tenancy/issues/730))._
 
 To set the `allowCascadingDelete` field on a namespace using the plugin:
 
 ```
-$ kubectl hns set child --allowCascadingDelete
+$ kubectl hns set parent --allowCascadingDelete
 # Output:
-Allowing cascading deletion on 'child'
-Succesfully updated 1 property of the hierarchical configuration of child
+Allowing cascading deletion on 'parent'
+Succesfully updated 1 property of the hierarchical configuration of parent
 
-$ kubectl delete subns child -nparent
-# Output:
-subnamespaceanchor.hnc.x-k8s.io "child" deleted
+$ kubectl delete namespace parent
+# Should succeed
 ```
 
 To set the `allowCascadingDelete` field without the plugin, simply set the
-`spec.allowCascadingDelete field` to true in the child’s
+`spec.allowCascadingDelete field` to true in the namespace's
 `hierarchyconfiguration/hierarchy` object - for example, via:
 
 ```
@@ -331,11 +333,11 @@ release notes for that version.
 
 #### Install an official release
 
-The most recent official release is v0.4.0.
+The most recent official release is v0.5.0.
 
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.4.0
+HNC_VERSION=v0.5.0
 
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
@@ -381,19 +383,36 @@ kubectl delete validatingwebhookconfiguration.admissionregistration.k8s.io hnc-v
 ```
 
 You may also completely delete HNC, including its CRDs and namespaces. However,
-**this is a destructive process that results in data loss.** In particular, you
-will lose any cluster-wide configuration in your `HNCConfig` object, as well as
-any hierarchical relationships between different namespaces, _excluding_
+**this is a destructive process that results in some data loss.** In particular,
+you will lose any cluster-wide configuration in your `HNCConfig` object, as well
+as any hierarchical relationships between different namespaces, _excluding_
 subnamespaces (subnamespace relationships are saved as annotations on the
 namespaces themselves, and so can be recreated when HNC is reinstalled).
 
 To avoid data loss, consider [backing up](#admin-backup-restore) your HNC
 objects so they can later be restored.
 
+Note that even though the subnamespace anchors are deleted during this process,
+the namespaces themselves will not be. HNC distinguishes between anchors that
+are being deleted "normally" and those that are being deleted because their CRD
+is being removed.
+
 To completely delete HNC, including all non-subnamespace hierarchical
 relationships and configuration settings:
 
 ```bash
+# Firstly, delete the CRDs. Some of the objects have finalizers on them, so
+# if you delete the deployment first, the finalizers will never be removed
+# and you won't be able to delete the objects without explicitly removing
+# the finalizers first.
+#
+# NB: this process is somewhat broken in HNC v0.4.x. Upgrade to v0.5.x
+# before attempting this, or else be prepared to look for resources that
+# aren't deleted and manually remove their finalizers. See issue #824 for
+# more information.
+kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete crd
+
+# Delete the rest of HNC.
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
 

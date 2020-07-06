@@ -84,7 +84,7 @@ func NewServiceAccountController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	serviceAccountPatroller, err := pa.NewPatroller("serviceAccount-patroller", *patrolOptions)
+	serviceAccountPatroller, err := pa.NewPatroller("serviceAccount-patroller", &v1.ServiceAccount{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create serviceAccount patroller: %v", err)
 	}

@@ -87,6 +87,9 @@ type Cluster struct {
 // Options are the arguments for creating a new Cluster.
 type Options struct {
 	CacheOptions
+	// RequestTimeout is the rest client request timeout.
+	// Set this to something reasonable so request to apiserver don't hang forever.
+	RequestTimeout time.Duration
 }
 
 // CacheOptions is embedded in Options to configure the new Cluster's cache.
@@ -107,6 +110,10 @@ func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.Virtu
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
+	}
+
+	if o.RequestTimeout == 0 {
+		clusterRestConfig.Timeout = constants.DefaultRequestTimeout
 	}
 
 	if clusterRestConfig.QPS == 0 {

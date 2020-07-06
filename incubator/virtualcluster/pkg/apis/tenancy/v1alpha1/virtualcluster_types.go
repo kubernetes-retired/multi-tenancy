@@ -58,6 +58,11 @@ type VirtualClusterStatus struct {
 	// cluster phase of the virtual cluster
 	Phase ClusterPhase `json:"phase"`
 
+	// ClusterNamespace defines the namespace where the control plane components
+	// are deployed into.
+	// +optional
+	ClusterNamespace string `json:"clusterNamespace,omitempty"`
+
 	// A human readable message indicating details about why the cluster is in
 	// this condition.
 	// +optional
@@ -110,6 +115,9 @@ type ClusterCondition struct {
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:shortName=vc
+// +k8s:openapi-gen=true
 
 // VirtualCluster is the Schema for the virtualclusters API
 // +k8s:openapi-gen=true
@@ -121,6 +129,7 @@ type VirtualCluster struct {
 	Status VirtualClusterStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:object:root=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // VirtualClusterList contains a list of VirtualCluster

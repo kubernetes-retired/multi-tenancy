@@ -2,25 +2,8 @@
 
 This demo illustrates how to setup a virtualcluster in an existing `minikube` Kubernetes cluster.
 
-All virtualcluster related API resources (CRD, Secret, Configmap etc.) are created in a
-tenant admin namespace. The tenant admin namespace can be created using the
-[Tenant CRD](https://sigs.k8s.io/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1/tenant_types.go),
-or created manually.
-If the Tenant CRD is desired, one can follow the [instructions](https://sigs.k8s.io/multi-tenancy/tenant)
-to install it. We repeat some of the steps in this demo.
- 
-## Create tenant admin namespace
-First, we install all tenant CRDs and the tenant controller manager.
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenantnamespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/manager/all_in_one.yaml
-```
-
-Then we create a tenant CR, a tenant admin namespace `tenant1admin` will be created.
-```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
-```
+All virtualcluster related API resources (CRD, Secret, Configmap etc.) are created in an
+"admin namespace" for the rest of this demo we'll use the `default` namespace.
 
 ## Build `vcctl`
 It is recommended to use `vcctl` cli tool to simplify some operations.
@@ -36,8 +19,8 @@ The binary can be found in `_output/bin/vcctl`.
 ## Install CRDs and all components
 Running following cmds will install all CRDs and create all virtualcluster components.
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy_v1alpha1_clusterversion.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy_v1alpha1_virtualcluster.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_clusterversions.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_virtualclusters.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/setup/all_in_one.yaml
 ```
 
