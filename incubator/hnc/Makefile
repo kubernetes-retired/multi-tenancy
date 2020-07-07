@@ -182,13 +182,20 @@ kind-deploy:
 	CONFIG=kind $(MAKE) deploy
 
 ###################### E2E TEST #########################
-
+# Sleep time is added for the webhook to get ready before test. The time 
+# comes from watching the log as well as multiple experiments. 
 .PHONY: e2e-test
 e2e-test: deploy
+	go clean -testcache
+	sleep 15
 	go test ./e2e/...
 
+# The sleep time needed for kind cluster is longer than that for a real 
+# cluster, from the experiments. I don't know why - @GinnyJI, July 2020
 .PHONY: local-e2e-test
 local-e2e-test: kind-deploy
+	go clean -testcache
+	sleep 20
 	go test ./e2e/...
 
 ###################### RELEASE ACTIONS #########################
