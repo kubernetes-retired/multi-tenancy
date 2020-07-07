@@ -44,11 +44,8 @@ func init() {
 
 			cmdutil.CheckErr(validateResource(args))
 
-			// Initiate new suite instance
-			bs = test.NewBenchmarkSuite()
-
 			profileLevel, _ := cmd.Flags().GetInt("profile-level")
-			benchmarks = bs.ProfileLevel(profileLevel)
+			benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
 
 			return nil
 		},

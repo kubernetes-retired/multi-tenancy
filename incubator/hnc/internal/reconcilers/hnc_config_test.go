@@ -111,17 +111,6 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
-	It("should set CritSingletonNameInvalid condition if singleton name is wrong", func() {
-		nm := "wrong-config-1"
-		Eventually(func() error {
-			config := &api.HNCConfiguration{}
-			config.ObjectMeta.Name = nm
-			return updateHNCConfig(ctx, config)
-		}).Should(Succeed())
-
-		Eventually(hasHNCConfigurationConditionWithName(ctx, api.CritSingletonNameInvalid, nm)).Should(BeTrue())
-	})
-
 	It("should unset ObjectReconcilerCreationFailed condition if a bad type spec is removed", func() {
 		// API version of ConfigMap should be "v1"
 		addToHNCConfig(ctx, "v2", "ConfigMap", api.Propagate)

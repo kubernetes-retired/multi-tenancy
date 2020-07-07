@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the tenancy v1alpha1 API group
+// +kubebuilder:object:generate=true
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
 // +k8s:conversion-gen=sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy

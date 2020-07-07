@@ -19,7 +19,7 @@ func TestDeletingConfigObject(t *testing.T) {
 		req := admission.Request{
 			AdmissionRequest: v1beta1.AdmissionRequest{
 				Operation: v1beta1.Delete,
-				Name:      "config",
+				Name:      api.HNCConfigSingleton,
 			}}
 		config := &HNCConfig{}
 
@@ -44,24 +44,6 @@ func TestDeletingOtherObject(t *testing.T) {
 
 		logResult(t, got.AdmissionResponse.Result)
 		g.Expect(got.AdmissionResponse.Allowed).Should(BeTrue())
-	})
-}
-
-func TestInvalidName(t *testing.T) {
-	t.Run("Invalid config name", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-		c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
-			{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-			{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
-		}}}
-		// Name should be "config"
-		c.Name = "invalid-name"
-		config := &HNCConfig{}
-
-		got := config.handle(context.Background(), c)
-
-		logResult(t, got.AdmissionResponse.Result)
-		g.Expect(got.AdmissionResponse.Allowed).Should(BeFalse())
 	})
 }
 
@@ -139,7 +121,7 @@ func TestRBACTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
-			c.Name = "config"
+			c.Name = api.HNCConfigSingleton
 
 			got := config.handle(context.Background(), c)
 
@@ -215,7 +197,7 @@ func TestNonRBACTypes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
-			c.Name = "config"
+			c.Name = api.HNCConfigSingleton
 			config := &HNCConfig{validator: tc.validator}
 
 			got := config.handle(context.Background(), c)

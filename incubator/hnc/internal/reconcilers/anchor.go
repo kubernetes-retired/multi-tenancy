@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -113,7 +112,7 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		return false, nil
 	}
 
-	deletingCRD, err := r.isDeletingCRD(ctx)
+	deletingCRD, err := isDeletingCRD(ctx, r, api.Anchors)
 	if err != nil {
 		log.Info("Couldn't determine if CRD is being deleted")
 		return false, err
@@ -140,21 +139,6 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		log.Info("Do nothing since the subnamespace is still being deleted (not purged yet).")
 		return true, nil
 	}
-}
-
-// isDeletingCRD returns true if the Anchor CRD is being deleted. This can happen if HNC is being
-// uninstalled. In such cases, we shouldn't perform a cascading deletion.
-func (r *AnchorReconciler) isDeletingCRD(ctx context.Context) (bool, error) {
-	crd := &apiextensions.CustomResourceDefinition{}
-	nsn := types.NamespacedName{Name: api.Anchors + "." + api.MetaGroup}
-	if err := r.Get(ctx, nsn, crd); err != nil {
-		// Either the CRD wasn't found, in which case, HNC can't operate propertly; hopefully, the admin
-		// is uninstalling HNC, and the HNC pod is also about to be shut down. Otherwise, there was some
-		// transient error and we should just retry.
-		return false, err
-	}
-
-	return !crd.DeletionTimestamp.IsZero(), nil
 }
 
 // shouldDeleteSubns returns true if the namespace still exists and it is a leaf

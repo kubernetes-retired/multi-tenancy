@@ -99,12 +99,15 @@ spec:
                       example, if namespace B says that its parent is namespace A,
                       but namespace A says that its parent is namespace B, then A
                       and B are in a cycle with each other and both of them will have
-                      the CritCycle condition. \n - \"CritAncestor\": a critical error
-                      exists in an ancestor namespace, so this namespace is no longer
-                      being updated either. \n - \"SubnamespaceAnchorMissing\": this
-                      namespace is a subnamespace, but the anchor referenced in its
-                      `subnamespaceOf` annotation does not exist in the parent. \n
-                      - \"CannotPropagateObject\": this namespace contains an object
+                      the CritCycle condition. \n - \"CritDeletingCRD\": The HierarchyConfiguration
+                      CRD is being deleted. No more objects will be propagated into
+                      or out of this namespace. It is expected that the HNC controller
+                      will be stopped soon after the CRDs are fully deleted. \n -
+                      \"CritAncestor\": a critical error exists in an ancestor namespace,
+                      so this namespace is no longer being updated either. \n - \"SubnamespaceAnchorMissing\":
+                      this namespace is a subnamespace, but the anchor referenced
+                      in its `subnamespaceOf` annotation does not exist in the parent.
+                      \n - \"CannotPropagateObject\": this namespace contains an object
                       that couldn't be propagated *out* of this namespace, to one
                       or more of this namespace's descendants. If the object couldn't
                       be propagated to *any* descendants - for example, because it

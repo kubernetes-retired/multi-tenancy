@@ -40,9 +40,11 @@ type StatefulSetSvcBundle struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// StatefulSet that manages the specified component
+	// +kubebuilder:validation:XEmbeddedResource
 	StatefulSet *appsv1.StatefulSet `json:"statefulset,omitempty"`
 
 	// Service that exposes the StatefulSet
+	// +kubebuilder:validation:XEmbeddedResource
 	Service *corev1.Service `json:"service,omitempty"`
 }
 
@@ -50,9 +52,11 @@ type StatefulSetSvcBundle struct {
 type ClusterVersionStatus struct {
 }
 
+// +kubebuilder:object:root=true
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient:nonNamespaced
+// +kubebuilder:resource:scope=Cluster,shortName=cv
 
 // ClusterVersion is the Schema for the clusterversions API
 // +k8s:openapi-gen=true
@@ -64,6 +68,7 @@ type ClusterVersion struct {
 	Status ClusterVersionStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:object:root=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient:nonNamespaced
 
