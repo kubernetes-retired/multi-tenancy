@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
 var (
@@ -86,7 +87,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 	}
 
 	suiteSummary := &reporter.SuiteSummary{
-		Suite:              bs,
+		Suite:              test.BenchmarkSuite,
 		NumberOfTotalTests: len(benchmarks),
 	}
 
@@ -133,7 +134,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 	suiteElapsedTime := time.Since(suiteStartTime)
 	suiteSummary.RunTime = suiteElapsedTime
-	suiteSummary.NumberOfSkippedTests = bs.Totals() - len(benchmarks)
+	suiteSummary.NumberOfSkippedTests = test.BenchmarkSuite.Totals() - len(benchmarks)
 	r.SuiteDidEnd(suiteSummary)
 
 	return nil

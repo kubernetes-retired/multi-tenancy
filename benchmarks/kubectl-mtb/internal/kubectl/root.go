@@ -22,14 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
-	benchmarksuite "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark_suite"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
 var rootCmd *cobra.Command
 var maxProfileLevel = 3
 var benchmarks []*benchmark.Benchmark
-var bs *benchmarksuite.BenchmarkSuite
 
 // singular-plural
 var supportedResourceNames = sets.NewString("benchmarks", "benchmark")
