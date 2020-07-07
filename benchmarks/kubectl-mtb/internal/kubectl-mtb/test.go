@@ -16,12 +16,14 @@ package kubectl
 
 import (
 	"fmt"
-	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
 var (
@@ -35,7 +37,7 @@ var testCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		cmdutil.CheckErr(validateFlags(cmd))
-		cmdutil.CheckErr(runTests())
+		cmdutil.CheckErr(runTests(cmd, args))
 	},
 }
 
@@ -53,7 +55,7 @@ func validateFlags(cmd *cobra.Command) error {
 	return nil
 }
 
-func runTests() error {
+func runTests(cmd *cobra.Command, args []string) error {
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
@@ -77,24 +79,71 @@ func runTests() error {
 		return err
 	}
 
-	for _, b := range benchmarks {
-		err := b.PreRun(tenantNamespace, k8sClient, tenantClient)
-		if err != nil {
-			fmt.Println("Error:", err.Error())
-			os.Exit(1)
-		}
-		err = b.Run(tenantNamespace, k8sClient, tenantClient)
+	// Get reporter from the user
+	reporterType, _ := cmd.Flags().GetString("out")
+	r, err := reporter.GetReporter(reporterType)
+	if err != nil {
+		return err
+	}
 
+	suiteSummary := &reporter.SuiteSummary{
+		Suite:              test.BenchmarkSuite,
+		NumberOfTotalTests: len(benchmarks),
+	}
+
+	suiteStartTime := time.Now()
+	r.SuiteWillBegin(suiteSummary)
+
+	for _, b := range benchmarks {
+
+		ts := &reporter.TestSummary{
+			Benchmark: b,
+		}
+
+		err := ts.SetDefaults()
 		if err != nil {
 			return err
 		}
+
+		startTest := time.Now()
+
+		// Run Prerun
+		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
+		if err != nil {
+			suiteSummary.NumberOfFailedValidations++
+			ts.Validation = false
+			ts.ValidationError = err
+		}
+
+		// Check PreRun status
+		if ts.Validation {
+			err = b.Run(tenantNamespace, k8sClient, tenantClient)
+			if err != nil {
+				suiteSummary.NumberOfFailedTests++
+				ts.Test = false
+				ts.TestError = err
+			} else {
+				suiteSummary.NumberOfPassedTests++
+			}
+		}
+
+		elapsed := time.Since(startTest)
+		ts.RunTime = elapsed
+		r.TestWillRun(ts)
 	}
+
+	suiteElapsedTime := time.Since(suiteStartTime)
+	suiteSummary.RunTime = suiteElapsedTime
+	suiteSummary.NumberOfSkippedTests = test.BenchmarkSuite.Totals() - len(benchmarks)
+	r.SuiteDidEnd(suiteSummary)
+
 	return nil
 }
 
 func newTestCmd() *cobra.Command {
 	testCmd.Flags().StringP("namespace", "n", "", "name of tenant-admin namespace")
 	testCmd.Flags().StringP("tenant-admin", "t", "", "name of tenant service account")
+	testCmd.Flags().StringP("out", "o", "default", "output reporter format")
 
 	return testCmd
 }
