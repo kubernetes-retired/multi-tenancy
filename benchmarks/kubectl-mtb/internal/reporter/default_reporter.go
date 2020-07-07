@@ -42,7 +42,7 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 		return
 	}
 
-	writer.Println(0, writer.Colorize(magentaColor, "PreRun-Validation Error %s: %v", testSummary.Benchmark.Title, testSummary.ValidationError))
+	writer.PrintBanner(writer.Colorize(magentaColor, "PreRun-Validation Error %s: %v", testSummary.Benchmark.Title, testSummary.ValidationError), "-")
 	r.testSummaries = append(r.testSummaries, testSummary)
 }
 

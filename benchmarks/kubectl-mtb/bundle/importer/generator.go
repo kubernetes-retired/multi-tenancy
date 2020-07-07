@@ -67,5 +67,5 @@ func main() {
 		log.Fatal("Error executing template", err)
 	}
 
-	fmt.Println("Import file generated successfully!")
+	fmt.Printf("Import file generated successfully. \xE2\x9C\x94 \n")
 }

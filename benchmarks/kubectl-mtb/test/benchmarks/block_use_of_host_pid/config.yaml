@@ -1,0 +1,7 @@
+id: MTB-PL1-BC-HI-4
+title: Block use of host PID
+benchmarkType: Behavioral Check
+category: Host Isolation
+description: Tenants should not be allowed to share the host process ID (PID) namespace.
+remediation: Define a `PodSecurityPolicy` with `hostPID` set to `false` and map the policy to each tenant's namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `hostPID` cannot be set to `true`.
+profileLevel: 1

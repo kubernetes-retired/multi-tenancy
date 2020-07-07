@@ -1,4 +1,4 @@
-package blockprivilegedcontainers
+package blockuseofhostipc
 
 import (
 	"context"
@@ -9,12 +9,8 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-<<<<<<< HEAD
-	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
-=======
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
->>>>>>> added 10 benchmarks
 )
 
 var b = &benchmark.Benchmark{
@@ -38,10 +34,10 @@ var b = &benchmark.Benchmark{
 
 		return nil
 	},
+
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
-		// IsPrivileged set to true so that pod creation would fail
-		podSpec := &podutil.PodSpec{NS: tenantNamespace, IsPrivileged: true, AllowPrivilegeEscalation: true}
+		podSpec := &podutil.PodSpec{NS: tenantNamespace, HostIPC: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			return err
@@ -51,15 +47,16 @@ var b = &benchmark.Benchmark{
 		pod := podSpec.MakeSecPod()
 		_, err = tclient.CoreV1().Pods(tenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
-			return fmt.Errorf("Tenant must be unable to create pod that sets privileged to true")
+			return fmt.Errorf("Tenant must be unable to create pod with HostIPC set to true")
 		}
+
 		return nil
 	},
 }
 
 func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
-	err := b.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
+	err := b.ReadConfig(box.Get("block_use_of_host_ipc/config.yaml"))
 	if err != nil {
 		fmt.Println(err)
 	}

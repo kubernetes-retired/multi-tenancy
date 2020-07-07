@@ -57,19 +57,19 @@ func main() {
 
 		if info.IsDir() {
 			// Skip directories
-			log.Println(path, "is a directory, skipping...")
+			// log.Println(path, "is a directory, skipping...")
 			return nil
 		} else {
 
 			extension := filepath.Ext(path)
 			// If element is a yaml file, embed
 			if extension == ".yaml" || extension == ".yml" {
-				log.Println(path, "is a file, packing in...")
+				// log.Println(path, "is a file, packing in...")
 
 				b, err := ioutil.ReadFile(path)
 				if err != nil {
 					// If file not reading
-					log.Printf("Error reading %s: %s", path, err)
+					// log.Printf("Error reading %s: %s", path, err)
 					return err
 				}
 
@@ -109,4 +109,6 @@ func main() {
 	if err = ioutil.WriteFile(blobFileName, data, os.ModePerm); err != nil {
 		log.Fatal("Error writing blob file", err)
 	}
+
+	fmt.Printf("Successfully converted yaml files to static assets. \xE2\x9C\x94 \n")
 }

@@ -18,7 +18,7 @@ const (
 	embedFolder string = "./test/benchmarks/"
 )
 
-// Structure of yaml (Used for README generation)
+// Doc represents structure of yaml (Used for README generation)
 type Doc struct {
 	ID              string                 `yaml:"id"`
 	Title           string                 `yaml:"title"`
@@ -31,8 +31,7 @@ type Doc struct {
 }
 
 // README template
-const templ = `
-# {{.Title}} <small>[{{.ID}}] </small>
+const templ = `# {{.Title}} <small>[{{.ID}}] </small>
 **Profile Applicability:** 
 {{.ProfileLevel}}
 **Type:** 
@@ -50,25 +49,34 @@ const templ = `
 `
 
 func deleteFields(fieldname string, fieldmap map[string]interface{}) {
-
 	delete(fieldmap, fieldname)
-
 }
 
 func main() {
 	err := filepath.Walk(embedFolder, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
+
 			extension := filepath.Ext(path)
+
 			if extension == ".yml" || extension == ".yaml" {
 				b, err := ioutil.ReadFile(path)
-				utils.CheckError(err)
+				if err != nil {
+					return err
+				}
+
 				d := Doc{}
 				// Unmarshall first time to get existing fields
 				err = yaml.Unmarshal(b, &d)
-				utils.CheckError(err)
+				if err != nil {
+					return err
+				}
+
 				// Unmarshall second time to add additonal fields
 				err = yaml.Unmarshal(b, &d.AdditionalField)
-				utils.CheckError(err)
+				if err != nil {
+					return err
+				}
+
 				structVal := reflect.ValueOf(d)
 				typeOfS := structVal.Type()
 
@@ -80,6 +88,7 @@ func main() {
 						values[structField] = typeOfS.Field(structField).Tag.Get("yaml")
 					}
 				}
+
 				// delete the existing fields which were added in the set of additional fields
 				// during second unmarshalling
 				for _, i := range values {
@@ -93,27 +102,33 @@ func main() {
 
 				//Check if Path exists
 				_, err = utils.Exists(dirPath)
-				utils.CheckError(err)
+				if err != nil {
+					return err
+				}
 
 				f, err := os.Create(dirPath + "/README.md")
-				utils.CheckError(err)
+				if err != nil {
+					return err
+				}
 
 				// Write the output to the README file
 				err = t.Execute(f, d)
-				utils.CheckError(err)
-				if err == nil {
-					fmt.Println("README.md generated successfully")
+				if err != nil {
+					return err
 				}
 
 				err = f.Close()
-				utils.CheckError(err)
-
+				if err != nil {
+					return err
+				}
 			}
 		}
-
 		return nil
 	})
+
 	if err != nil {
 		log.Fatal("Error walking through embed directory:", err)
 	}
+
+	fmt.Printf("Successfully Created README files. \xE2\x9C\x94 \n")
 }
