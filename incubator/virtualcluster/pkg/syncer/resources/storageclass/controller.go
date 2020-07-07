@@ -108,7 +108,7 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 	} else {
 		patrolOptions = options.PatrolOptions
 	}
-	storageClassPatroller, err := pa.NewPatroller("storageClass-patroller", *patrolOptions)
+	storageClassPatroller, err := pa.NewPatroller("storageClass-patroller", &v1.StorageClass{}, *patrolOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageClass patroller: %v", err)
 	}

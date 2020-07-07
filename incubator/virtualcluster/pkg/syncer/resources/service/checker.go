@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -55,7 +54,7 @@ func (c *controller) PatrollerDo() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-	defer metrics.RecordCheckerScanDuration("service", time.Now())
+
 	wg := sync.WaitGroup{}
 	numSpecMissMatchedServices = 0
 	numStatusMissMatchedServices = 0
@@ -98,14 +97,14 @@ func (c *controller) PatrollerDo() {
 			if err = c.serviceClient.Services(pService.Namespace).Delete(pService.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterServices").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
 			}
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numSpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
-	metrics.CheckerMissMatchStats.WithLabelValues("numStatusMissMatchedServices").Set(float64(numStatusMissMatchedServices))
-	metrics.CheckerMissMatchStats.WithLabelValues("numUWMetaMissMatchedServices").Set(float64(numUWMetaMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("StatusMissMatchedServices").Set(float64(numStatusMissMatchedServices))
+	metrics.CheckerMissMatchStats.WithLabelValues("UWMetaMissMatchedServices").Set(float64(numUWMetaMissMatchedServices))
 }
 
 func (c *controller) checkServicesOfTenantCluster(clusterName string) {
@@ -123,7 +122,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServices").Inc()
 			}
 			continue
 		}
@@ -150,7 +149,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			if err := c.multiClusterServiceController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
 				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantServices").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServices").Inc()
 			}
 		}
 		if isBackPopulateService(pService) {

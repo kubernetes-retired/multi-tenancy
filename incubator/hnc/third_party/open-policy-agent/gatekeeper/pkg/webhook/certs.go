@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"flag"
 	"fmt"
 	"math/big"
 	"os"
@@ -46,6 +47,12 @@ var crLog = logf.Log.WithName("cert-rotation")
 var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 
 var _ manager.Runnable = &CertRotator{}
+
+var restartOnSecretRefresh = false
+
+func init() {
+	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
+}
 
 // AddRotator adds the CertRotator and ReconcileVWH to the manager.
 func AddRotator(mgr manager.Manager, cr *CertRotator, vwhName string) error {
@@ -129,6 +136,10 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 				return false, nil
 			}
 			crLog.Info("server certs refreshed")
+			if restartOnSecretRefresh {
+				crLog.Info("Secrets have been updated; exiting so pod can be restarted (omit --cert-restart-on-secret-refresh to wait instead of restarting")
+				os.Exit(0)
+			}
 			return true, nil
 		}
 		// make sure our reconciler is initialized on startup (either this or the above refreshCerts() will call this)

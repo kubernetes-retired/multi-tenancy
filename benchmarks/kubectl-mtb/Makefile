@@ -18,12 +18,17 @@ clean:
 	rm -f ${GOPATH}/bin/kubectl-mtb
 
 # Install kubectl plugin
-kubectl-mtb: build
+kubectl-mtb: generate readme build
 	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
 
+# Build the Mtb-builder
+builder:
+	go build -o mtb-builder ./cmd/mtb_builder/main.go
+
+# Convert config yaml as static assets 
+# Generate benchmarks import file
 generate:
 	@go generate ./...
-	@echo "[OK] Files added to embed box!"
 
 .PHONY: readme
 readme: 

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -52,7 +51,6 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	defer metrics.RecordCheckerScanDuration("storageClass", time.Now())
 	wg := sync.WaitGroup{}
 	numMissMatchedStorageClasses = 0
 
@@ -79,7 +77,7 @@ func (c *controller) PatrollerDo() {
 			_, err := c.multiClusterStorageClassController.Get(clusterName, "", pStorageClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					metrics.CheckerRemedyStats.WithLabelValues("numRequeuedSuperMasterStorageClasses").Inc()
+					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterStorageClasses").Inc()
 					c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
@@ -87,7 +85,7 @@ func (c *controller) PatrollerDo() {
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedStorageClasses").Set(float64(numMissMatchedStorageClasses))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedStorageClasses").Set(float64(numMissMatchedStorageClasses))
 }
 
 func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
@@ -113,7 +111,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			if err := tenantClient.StorageV1().StorageClasses().Delete(vStorageClass.Name, opts); err != nil {
 				klog.Errorf("error deleting storageclass %v in cluster %s: %v", vStorageClass.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanTenantStorageClasses").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantStorageClasses").Inc()
 			}
 			continue
 		}

@@ -49,12 +49,13 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 	}
 
 	if req.Operation == v1beta1.Delete {
-		if req.Name == "config" {
+		if req.Name == api.HNCConfigSingleton {
 			return deny(metav1.StatusReasonForbidden, "Deleting the 'config' object is forbidden")
 		} else {
-			// We allow deleting other objects. If the validation controller has always been running, we should not
-			// enter this case because objects of other names cannot be created. If users somehow bypass the
-			// validation controller and create objects of other names, we will allow them to delete the objects.
+			// We allow deleting other objects. We should never enter this case with the CRD validation. We introduced
+			// the CRD validation in v0.6. Before that, it was protected by the validation controller. If users somehow
+			// bypassed the validation controller and created objects of other names, those objects would still have an
+			// obsolete condition and we will allow users to delete the objects.
 			return allow("")
 		}
 	}
@@ -73,10 +74,6 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 // handle implements the validation logic of this validator for Create and Update operations,
 // allowing it to be more easily unit tested (ie without constructing a full admission.Request).
 func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admission.Response {
-	if inst.GetName() != "config" {
-		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Wrong singleton name: %s; the name should be 'config'", inst.GetName()))
-	}
-
 	roleExist := false
 	roleBindingExist := false
 	ts := gvkSet{}

@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,8 +53,6 @@ func (c *controller) PatrollerDo() {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
 	}
-
-	defer metrics.RecordCheckerScanDuration("configMap", time.Now())
 
 	wg := sync.WaitGroup{}
 	numMissMatchedConfigMaps = 0
@@ -100,12 +97,12 @@ func (c *controller) PatrollerDo() {
 			if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(pConfigMap.Name, deleteOptions); err != nil {
 				klog.Errorf("error deleting pConfigMap %v/%v in super master: %v", pConfigMap.Namespace, pConfigMap.Name, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numDeletedOrphanSuperMasterConfigMaps").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterConfigMaps").Inc()
 			}
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("numMissMatchedConfigMaps").Set(float64(numMissMatchedConfigMaps))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedConfigMaps").Set(float64(numMissMatchedConfigMaps))
 }
 
 // checkConfigMapsOfTenantCluster checks to see if configmaps in specific cluster keeps consistency.
@@ -125,7 +122,7 @@ func (c *controller) checkConfigMapsOfTenantCluster(clusterName string) {
 			if err := c.multiClusterConfigMapController.RequeueObject(clusterName, &configMapList.Items[i]); err != nil {
 				klog.Errorf("error requeue vConfigMap %v/%v in cluster %s: %v", vConfigMap.Namespace, vConfigMap.Name, clusterName, err)
 			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("numRequeuedTenantConfigMaps").Inc()
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantConfigMaps").Inc()
 			}
 			continue
 		}

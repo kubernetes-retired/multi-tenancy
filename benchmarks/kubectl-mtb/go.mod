@@ -4,16 +4,7 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
-	github.com/gobuffalo/packr/v2 v2.5.1
-	github.com/golang/protobuf v1.4.2 // indirect
-	github.com/kr/fs v0.1.0
-	github.com/phoenixking25/kubectl-mtb v0.0.0-20200607051717-90ca51647eb6 // indirect
-	github.com/russross/blackfriday/v2 v2.0.1
 	github.com/spf13/cobra v1.0.0
-	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9 // indirect
-	golang.org/x/net v0.0.0-20200602114024-627f9648deb9 // indirect
-	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
-	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.3
 	k8s.io/apimachinery v0.18.3
@@ -21,7 +12,7 @@ require (
 	k8s.io/client-go v0.18.3
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.18.3
-	k8s.io/utils v0.0.0-20200603063816-c1c6865ac451 // indirect
+	sigs.k8s.io/structured-merge-diff v1.0.2
 )
 
 replace (

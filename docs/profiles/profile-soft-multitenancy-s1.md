@@ -2,13 +2,13 @@
 
 __** Note: This document is incomplete and a work in progress. **__
 
-A description of a reference configuration of a Kubernetes cluster to implemnent an example of "Soft Multi-tenancy".
+A description of a reference configuration of a Kubernetes cluster to implement an example of "Soft Multi-tenancy".
 
 ## Overall functional model summary
 
 1. A **Tenant** is defined as a team of users/ identities that shall have exclusive use of one or more resources of a Kubernetes cluster in parallel with users of other tenants using their own separate and isolated resources within the same cluster. We will interchangeably use the terms \"users\" or \"members\" of a tenant.
 
-2. In profile S1, a Tenant shall exxclusively \"own" 1 or more Kubernetes namespaces. In other words, only members of this Tenant are allowed to perform CRUD operations on kubernetes objects in the namespaces owned by this Tenant by default (unless the Tenant is specially configured to allow for broader access and authorization). We shall also use the term \"resources scoped to a Tenant\" to refer to resources that are scoped to namespaces owned by that Tenant.
+2. In profile S1, a Tenant shall exclusively \"own" 1 or more Kubernetes namespaces. In other words, only members of this Tenant are allowed to perform CRUD operations on kubernetes objects in the namespaces owned by this Tenant by default (unless the Tenant is specially configured to allow for broader access and authorization). We shall also use the term \"resources scoped to a Tenant\" to refer to resources that are scoped to namespaces owned by that Tenant.
 
 3. This profile shall support the following persona types.
 
@@ -23,7 +23,7 @@ A description of a reference configuration of a Kubernetes cluster to implemnent
 
 1. The recommended minimum version of Kubernetes release is 1.11. Earlier kubernetes releases may be used with some potential restrictions.  (Note: Maybe better to list api versions required for various Kubernetes resources/ apis).
 2. Kubernetes Role Based Access Control RBAC must be supported and enabled.
-3. Alternately a functional equivalent of Kubernetes RBAC may be supported vias alternative authorization mechanisms such as Open Policy Agent based access control as long as the behavior and requirements listed below are met.
+3. Alternately a functional equivalent of Kubernetes RBAC may be supported via alternative authorization mechanisms such as Open Policy Agent based access control as long as the behavior and requirements listed below are met.
 4. Attribute Based Access Control or static file based access control options should be disabled on the cluster.
 5. The following set of Kubernetes built-in admission controllers is recommended to be enabled.  Functionally equivalent admission control via alternative mechanisms such as Open Policy Agent or other custom admission controllers may be used as long as they are functionally equivalent to the requirements listed here.
   - PodSecurityPolicy

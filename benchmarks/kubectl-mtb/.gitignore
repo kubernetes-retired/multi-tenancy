@@ -1,2 +1,6 @@
 /vendor
 /bin
+
+blob.go
+import.go
+mtb-builder
