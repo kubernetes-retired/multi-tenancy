@@ -12,6 +12,7 @@ require (
 	k8s.io/client-go v0.18.3
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.18.3
+	sigs.k8s.io/structured-merge-diff v1.0.2
 )
 
 replace (

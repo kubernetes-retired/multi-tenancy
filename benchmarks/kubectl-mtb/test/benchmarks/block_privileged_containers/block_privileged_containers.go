@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
-	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
 type GroupResource struct {
@@ -46,7 +47,7 @@ func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource Gro
 	return false, fmt.Sprintf("User cannot %s %s", verb, resource.APIResource.Name), nil
 }
 
-var bpcBenchmark = &benchmark.Benchmark{
+var b = &benchmark.Benchmark{
 
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
@@ -87,14 +88,12 @@ var bpcBenchmark = &benchmark.Benchmark{
 	},
 }
 
-// NewBenchmark returns the pointer of the benchmark
-func NewBenchmark() *benchmark.Benchmark {
-
+func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
-	err := bpcBenchmark.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
+	err := b.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	return bpcBenchmark
+	test.BenchmarkSuite.Add(b)
 }
