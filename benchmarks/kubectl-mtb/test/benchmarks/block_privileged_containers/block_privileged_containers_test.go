@@ -52,7 +52,7 @@ func TestTenant(t *testing.T) {
 			if err != nil {
 				t.Logf(err.Error())
 			}
-			err = BpcBenchmark.PreRun(tc.tenantNamespace, k8sClient, tenantClient)
+			err = b.PreRun(tc.tenantNamespace, k8sClient, tenantClient)
 			if err != nil {
 				t.Logf(err.Error())
 				os.Exit(1)
