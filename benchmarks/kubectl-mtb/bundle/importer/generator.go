@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	importFileName string = "../../internal/kubectl/import.go"
+	importFileName string = "../../internal/kubectl-mtb/import.go"
 	embedFolder    string = "../../test/benchmarks/"
 )
 

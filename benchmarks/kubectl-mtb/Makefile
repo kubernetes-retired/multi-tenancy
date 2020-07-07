@@ -11,14 +11,14 @@ test: build
 
 # Builds all binaries
 build:
-	go build -o bin/kubectl/kubectl-mtb ./cmd/kubectl/main.go
+	go build -o bin/kubectl/kubectl-mtb ./cmd/kubectl-mtb/main.go
 
 # Clean all binaries
 clean:
 	rm -f ${GOPATH}/bin/kubectl-mtb
 
 # Install kubectl plugin
-kubectl: generate readme build
+kubectl-mtb: generate readme build
 	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
 
 # Build the Mtb-builder
