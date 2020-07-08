@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
+	github.com/kubernetes-sigs/wg-policy-prototypes/policy-report v0.0.0-20200701192251-679efd0b105e
 	github.com/spf13/cobra v1.0.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.3
