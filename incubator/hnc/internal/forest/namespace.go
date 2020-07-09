@@ -142,6 +142,16 @@ func (ns *Namespace) SetAnchors(anchors []string) (diff []string) {
 	return
 }
 
+// HasAnchor returns true if the name exists in the anchor list.
+func (ns *Namespace) HasAnchor(n string) bool {
+	for _, a := range ns.Anchors {
+		if a == n {
+			return true
+		}
+	}
+	return false
+}
+
 // IsExternal returns true if the namespace is not managed by HNC.
 func (ns *Namespace) IsExternal() bool {
 	return len(ns.ExternalTreeLabels) > 0
