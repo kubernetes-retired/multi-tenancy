@@ -50,16 +50,16 @@ func TestMain(m *testing.M) {
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
 
-	//tearDown := func() error {
-	//	err := kind.DeleteCluster()
-	//	return err
-	//}
-	//// exec tearDown function
-	//err = tearDown()
-	//if err != nil {
-	//	log.Print(err.Error())
-	//
-	//}
+	tearDown := func() error {
+		err := kind.DeleteCluster()
+		return err
+	}
+	// exec tearDown function
+	err = tearDown()
+	if err != nil {
+		log.Print(err.Error())
+
+	}
 
 	os.Exit(retCode)
 }
@@ -82,24 +82,28 @@ func TestBenchmark(t *testing.T) {
 	// test to create tenants
 	testCreateTenants(t, g, tenantNamespace, serviceAccount)
 	tests := []struct {
+		testName     string
 		testFunction TestFunction
 		preRun       bool
 		run          bool
 	}{
 
-		//{
-		//	testFunction: testPreRunWithoutRole,
-		//	preRun:       false,
-		//	run:          false,
-		//},
-		//
-		//{
-		//	testFunction: testPreRunWithRole,
-		//	preRun:       true,
-		//	run:          false,
-		//},
+		{
+			testName:     "TestPreRunWithoutRole",
+			testFunction: testPreRunWithoutRole,
+			preRun:       false,
+			run:          false,
+		},
 
 		{
+			testName:     "TestPreRunWithRole",
+			testFunction: testPreRunWithRole,
+			preRun:       true,
+			run:          false,
+		},
+
+		{
+			testName:     "TestRunWithPolicy",
 			testFunction: testRunWithPolicy,
 			preRun:       true,
 			run:          true,
@@ -107,6 +111,7 @@ func TestBenchmark(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		t.Logf("Running test: ", tc.testName)
 		preRun, run := tc.testFunction(t)
 		g.Expect(preRun).To(gomega.Equal(tc.preRun))
 		g.Expect(run).To(gomega.Equal(tc.run))
@@ -132,6 +137,7 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 	if err != nil {
 		t.Logf(err.Error())
 	}
+	t.Logf("Roles are created")
 	tenantConfig := testClient.Config
 	tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
 	tenantClient, _ := kubernetes.NewForConfig(tenantConfig)
