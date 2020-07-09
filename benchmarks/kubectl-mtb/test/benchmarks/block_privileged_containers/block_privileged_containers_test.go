@@ -22,7 +22,6 @@ import (
 
 var testClient *unittestutils.TestClient
 var crdPath = "https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml"
-var policyPath = "/home/phoenix/yaml-files/kyverno/disallow_privileged_containers.yaml"
 var tenantConfig *rest.Config
 var tenantClient *kubernetes.Clientset
 var tenantNamespace = "tenant1admin"
@@ -174,10 +173,14 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 }
 
 func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
-	err := testClient.CreatePolicy(policyPath)
-	if err != nil {
-		fmt.Println(err.Error())
-		return false, false
+	paths := []string{crdPath, unittestutils.ClusterPolicy}
+
+	for _, path := range paths {
+		err := testClient.CreatePolicy(path)
+		if err != nil {
+			fmt.Println(err.Error())
+			return false, false
+		}
 	}
 
 	podsList, err := testClient.Kubernetes.CoreV1().Pods("kyverno").List(context.TODO(), metav1.ListOptions{})

@@ -69,10 +69,6 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 		if err != nil {
 			fmt.Println(err.Error())
 		}
-		fmt.Println(gvk)
-
-		fmt.Println(obj)
-
 		// Find GVR
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
