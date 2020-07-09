@@ -55,7 +55,6 @@ func deleteFields(fieldname string, fieldmap map[string]interface{}) {
 }
 
 func main() {
-
 	err := filepath.Walk(embedFolder, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
 			extension := filepath.Ext(path)
@@ -97,5 +96,4 @@ func main() {
 	if err != nil {
 		log.Fatal("Error walking through embed directory:", err)
 	}
-
 }

@@ -1,8 +1,7 @@
-package utils
+package unittestutils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -47,8 +46,7 @@ func (k *KindCluster) CreateCluster() error {
 		fmt.Println(err.Error())
 		return err
 	}
-	kubeConfFile, err := ioutil.TempFile(".", "kubeconf")
-	k.KubeConfigFile = kubeConfFile.Name()
+	k.KubeConfigFile, _ = newProvider.KubeConfig(k.Name, false)
 	newProvider.ExportKubeConfig(k.Name, k.KubeConfigFile)
 
 	if err != nil {

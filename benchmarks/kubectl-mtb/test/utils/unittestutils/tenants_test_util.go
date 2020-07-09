@@ -1,8 +1,7 @@
-package utils
+package unittestutils
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,38 +32,45 @@ const timeout = time.Second * 25
 var tenants []*tenancyv1alpha1.Tenant
 var tenantnamespaces []*tenancyv1alpha1.TenantNamespace
 
-var sa = &corev1.ServiceAccount{
-	TypeMeta: metav1.TypeMeta{
-		Kind: "ServiceAccount",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      "t1-admin1",
-		Namespace: "default",
-	},
+type RoleRuleOwner struct {
+	Role *v1.Role
 }
 
-func CreateCrds() {
+func CreateCrds() error {
 	tr := true
 	apis.AddToScheme(scheme.Scheme)
 
 	e := &envtest.Environment{
-		CRDDirectoryPaths:  []string{filepath.Join("..", "crds")},
+		CRDDirectoryPaths:  []string{filepath.Join("..", "..", "assets")},
 		UseExistingCluster: &tr,
 	}
 
 	if cfg, err = e.Start(); err != nil {
-		fmt.Println(err)
+		return err
 	}
 	e.Stop()
+
+	return err
 }
 
-func CreateTenant(t *testing.T, g *gomega.WithT) {
+func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc string) {
+
+	var sa = &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{
+			Kind: "ServiceAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceAcc,
+			Namespace: "default",
+		},
+	}
+
 	var tenant1 = &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tenant1-sample",
 		},
 		Spec: tenancyv1alpha1.TenantSpec{
-			TenantAdminNamespaceName: "tenant1admin",
+			TenantAdminNamespaceName: namespace,
 			TenantAdmins: []v1.Subject{
 				{
 					Kind:      "ServiceAccount",
@@ -134,15 +140,4 @@ func CreateTenant(t *testing.T, g *gomega.WithT) {
 		g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 			Should(gomega.Succeed())
 	}
-}
-
-func DestroyTenant(g *gomega.WithT) {
-	// Delete Tenant
-	for _, tenant := range tenants {
-		err = c.Delete(context.TODO(), tenant)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}
-	// Delete Service Account
-	err = c.Delete(context.TODO(), sa)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
 }
