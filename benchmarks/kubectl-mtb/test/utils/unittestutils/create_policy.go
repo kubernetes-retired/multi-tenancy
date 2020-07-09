@@ -11,8 +11,9 @@ import (
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
-	//"k8s.io/apimachinery/pkg/runtime/schema"
+	"net/http"
 	"os"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -20,7 +21,13 @@ import (
 var decUnstructured = yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 
 func (self *TestClient) CreatePolicy(resourcePath string) error {
-	data, err := loadFile(resourcePath)
+
+	var data []byte
+	if utils.IsValidUrl(resourcePath) {
+		data, err = readYAMLFromUrl(resourcePath)
+	} else {
+		data, err = loadFile(resourcePath)
+	}
 	if err != nil {
 		return nil
 	}
@@ -76,8 +83,20 @@ func (self *TestClient) DeletePolicy() error {
 	return err
 }
 
-func loadFile(path string) ([]byte, error) {
+func readYAMLFromUrl(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
 
+	defer resp.Body.Close()
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	respByte := buf.Bytes()
+	return respByte, nil
+}
+
+func loadFile(path string) ([]byte, error) {
 	fmt.Println("Reading", path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, err

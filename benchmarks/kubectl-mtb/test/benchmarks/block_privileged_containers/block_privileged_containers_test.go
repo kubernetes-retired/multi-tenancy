@@ -50,22 +50,21 @@ func TestMain(m *testing.M) {
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
 
-	tearDown := func() error {
-		err := kind.DeleteCluster()
-		return err
-	}
-	// exec tearDown function
-	err = tearDown()
-	if err != nil {
-		log.Print(err.Error())
-
-	}
+	//tearDown := func() error {
+	//	err := kind.DeleteCluster()
+	//	return err
+	//}
+	//// exec tearDown function
+	//err = tearDown()
+	//if err != nil {
+	//	log.Print(err.Error())
+	//
+	//}
 
 	os.Exit(retCode)
 }
 
 func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, serviceAcc string) {
-	fmt.Println("Creating CRDs")
 	err := unittestutils.CreateCrds()
 	fmt.Println("Creating tenants")
 	unittestutils.CreateTenant(t, g, namespace, serviceAcc)
@@ -88,17 +87,17 @@ func TestBenchmark(t *testing.T) {
 		run          bool
 	}{
 
-		{
-			testFunction: testPreRunWithoutRole,
-			preRun:       false,
-			run:          false,
-		},
-
-		{
-			testFunction: testPreRunWithRole,
-			preRun:       true,
-			run:          false,
-		},
+		//{
+		//	testFunction: testPreRunWithoutRole,
+		//	preRun:       false,
+		//	run:          false,
+		//},
+		//
+		//{
+		//	testFunction: testPreRunWithRole,
+		//	preRun:       true,
+		//	run:          false,
+		//},
 
 		{
 			testFunction: testRunWithPolicy,
@@ -150,7 +149,7 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 
 func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
 	path := filepath.Join("..", "..", "assets")
-	crdPath := filepath.Join(path, "install.yaml")
+	crdPath := "https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml"
 	policyPath := filepath.Join(path, "policy.yaml")
 
 	paths := []string{crdPath, policyPath}

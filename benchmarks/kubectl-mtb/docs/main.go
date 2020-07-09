@@ -85,7 +85,6 @@ func main() {
 				for _, i := range values {
 					deleteFields(i, d.AdditionalField)
 				}
-				utils.CheckError(err)
 				t := template.New("README template")
 				t, err = t.Parse(templ)
 
