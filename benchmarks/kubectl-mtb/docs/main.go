@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"gopkg.in/yaml.v2"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
@@ -64,6 +65,26 @@ func main() {
 				d := Doc{}
 				// Unmarshall first time to get existing fields
 				err = yaml.Unmarshal(b, &d)
+				utils.CheckError(err)
+				// Unmarshall second time to add additonal fields
+				err = yaml.Unmarshal(b, &d.AdditionalField)
+				utils.CheckError(err)
+				structVal := reflect.ValueOf(d)
+				typeOfS := structVal.Type()
+
+				values := make([]string, structVal.NumField())
+
+				// iterate through struct to collect the fields
+				for structField := 0; structField < structVal.NumField(); structField++ {
+					if typeOfS.Field(structField).Name != "AdditionalField" {
+						values[structField] = typeOfS.Field(structField).Tag.Get("yaml")
+					}
+				}
+				// delete the existing fields which were added in the set of additional fields
+				// during second unmarshalling
+				for _, i := range values {
+					deleteFields(i, d.AdditionalField)
+				}
 				utils.CheckError(err)
 				t := template.New("README template")
 				t, err = t.Parse(templ)

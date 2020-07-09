@@ -40,23 +40,20 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 			fmt.Println(err.Error())
 		}
 
-		// 3. Decode YAML manifest into unstructured.Unstructured
+		// Decode YAML manifest into unstructured.Unstructured
 		obj := &unstructured.Unstructured{}
 		_, gvk, err := decUnstructured.Decode([]byte(policy), nil, obj)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
 
-		//gvr, _ := schema.ParseResourceArg("kyverno.io.v1")
-		//fmt.Println(gvr)
-
-		// 4. Find GVR
+		// Find GVR
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
 
-		// 5. Obtain REST interface for the GVR
+		// Obtain REST interface for the GVR
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			// namespaced resources should specify the namespace
 			self.DynamicResource = dyn.Resource(mapping.Resource).Namespace(obj.GetNamespace())
@@ -65,9 +62,9 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 			self.DynamicResource = dyn.Resource(mapping.Resource)
 		}
 
-		// 7. Create or Update the object with SSA
-		//     types.ApplyPatchType indicates SSA.
-		//     FieldManager specifies the field owner ID.
+		// Create or Update the object with SSA
+		// types.ApplyPatchType indicates SSA.
+		// FieldManager specifies the field owner ID.
 		_, err = self.DynamicResource.Create(self.Context, obj, metav1.CreateOptions{})
 	}
 
