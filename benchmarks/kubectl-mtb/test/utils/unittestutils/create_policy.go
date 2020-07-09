@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -23,14 +22,10 @@ import (
 var decUnstructured = yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 
 func (self *TestClient) CreatePolicy(resourcePath string) error {
-
 	var data []byte
-	check := utils.IsValidUrl(resourcePath)
-	if check == true {
-		fmt.Println("Reading from URL")
-		data, err = readYAMLFromUrl(resourcePath)
+	if strings.Contains(resourcePath, "yaml") {
+		data, err = loadFile(resourcePath)
 	} else {
-		fmt.Println("Reading from string")
 		data = []byte(resourcePath)
 	}
 	if err != nil {
@@ -88,7 +83,6 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 		// types.ApplyPatchType indicates SSA.
 		// FieldManager specifies the field owner ID.
 		_, err = self.DynamicResource.Create(self.Context, obj, metav1.CreateOptions{})
-
 	}
 	return err
 }
@@ -96,19 +90,6 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 func (self *TestClient) DeletePolicy() error {
 	err = self.DynamicResource.Delete(self.Context, self.PolicyName, metav1.DeleteOptions{})
 	return err
-}
-
-func readYAMLFromUrl(url string) ([]byte, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
-	respByte := buf.Bytes()
-	return respByte, nil
 }
 
 func loadFile(path string) ([]byte, error) {

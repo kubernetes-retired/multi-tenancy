@@ -3,6 +3,7 @@ package blockprivilegedcontainers
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"log"
@@ -21,7 +22,6 @@ import (
 )
 
 var testClient *unittestutils.TestClient
-var crdPath = "https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml"
 var tenantConfig *rest.Config
 var tenantClient *kubernetes.Clientset
 var tenantNamespace = "tenant1admin"
@@ -50,6 +50,8 @@ func TestMain(m *testing.M) {
 		tenantConfig := testClient.Config
 		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		path := filepath.Join("..", "..", "assets")
+		crdPath := filepath.Join(path, "kyverno.yaml")
 		err = testClient.CreatePolicy(crdPath)
 		if err != nil {
 			fmt.Println(err.Error())
@@ -131,13 +133,11 @@ func TestBenchmark(t *testing.T) {
 }
 
 func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {
-
 	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
 		return false, false
 	}
 	return true, false
-
 }
 
 func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
@@ -173,10 +173,10 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 }
 
 func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
-	paths := []string{crdPath, unittestutils.ClusterPolicy}
+	paths := []string{unittestutils.ClusterPolicy}
 
-	for _, path := range paths {
-		err := testClient.CreatePolicy(path)
+	for _, p := range paths {
+		err := testClient.CreatePolicy(p)
 		if err != nil {
 			fmt.Println(err.Error())
 			return false, false
