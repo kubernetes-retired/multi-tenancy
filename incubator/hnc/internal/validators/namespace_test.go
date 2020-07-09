@@ -14,10 +14,12 @@ import (
 func TestDeleteSubNamespace(t *testing.T) {
 	// Create a namespace with owner annotation.
 	sub := &corev1.Namespace{}
-	sub.Name = "sub"
-	setSubAnnotation(sub)
+	sub.Name = "a"
+	setSubAnnotation(sub, "b")
 
-	vns := &Namespace{}
+	// a (subnamespace of b) -> b
+	f := foresttest.Create("B-")
+	vns := &Namespace{Forest: f}
 
 	t.Run("Delete namespace with owner annotation", func(t *testing.T) {
 		g := NewGomegaWithT(t)
@@ -180,8 +182,8 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 	}
 }
 
-func setSubAnnotation(ns *corev1.Namespace) {
+func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 	a := make(map[string]string)
-	a[api.SubnamespaceOf] = "someParent"
+	a[api.SubnamespaceOf] = pnm
 	ns.SetAnnotations(a)
 }

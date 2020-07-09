@@ -64,48 +64,73 @@ func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission
 // handle implements the non-boilerplate logic of this validator, allowing it to be more easily unit
 // tested (ie without constructing a full admission.Request).
 func (v *Namespace) handle(req *nsRequest) admission.Response {
-	parent := req.ns.Annotations[api.SubnamespaceOf]
-	if parent != "" && req.op == v1beta1.Delete {
-		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
-		return deny(metav1.StatusReasonForbidden, msg)
-	}
-
-	return v.checkForest(req)
-}
-
-func (v *Namespace) checkForest(req *nsRequest) admission.Response {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
 	ns := v.Forest.Get(req.ns.Name)
 
-	// Allow all create namespace requests except if the namespace name already exists in
-	// the external hierarchy (the apiserver already denies existing namespace names).
-	if req.op == v1beta1.Create {
-		for _, nm := range v.Forest.GetNamespaceNames() {
-			if _, ok := v.Forest.Get(nm).ExternalTreeLabels[req.ns.Name]; ok {
-				msg := fmt.Sprintf("The namespace name %q is reserved by the external hierarchy manager %q.", req.ns.Name, v.Forest.Get(nm).Manager)
-				return deny(metav1.StatusReasonAlreadyExists, msg)
-			}
+	switch req.op {
+	case v1beta1.Create:
+		// This check only applies to the Create operation since namespace name
+		// cannot be updated.
+		if rsp := v.nameExistsInExternalHierarchy(req); !rsp.Allowed {
+			return rsp
+		}
+	case v1beta1.Update:
+		// This check only applies to the Update operation. Creating a namespace
+		// with external manager is allowed and we will prevent this conflict by not
+		// allowing setting a parent when validating the HierarchyConfiguration.
+		if rsp := v.conflictBetweenParentAndExternalManager(req, ns); !rsp.Allowed {
+			return rsp
+		}
+	case v1beta1.Delete:
+		if rsp := v.cannotDeleteSubnamespace(req); !rsp.Allowed {
+			return rsp
+		}
+		if rsp := v.illegalCascadingDeletion(ns); !rsp.Allowed {
+			return rsp
 		}
 	}
 
-	// Allow all update namespace requests except if the namespace has a parent and wants
-	// to add "hnc.x-k8s.io/managedBy" annotation other than "hnc.x-k8s.io".
-	if req.op == v1beta1.Update && req.ns.Annotations[api.AnnotationManagedBy] != "" {
-		if req.ns.Annotations[api.AnnotationManagedBy] != api.MetaGroup && ns.Parent() != nil {
-			msg := fmt.Sprintf("Namespace %q is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
-				"To manage this namespace with %q, first make it a root in HNC.", ns.Name(), ns.Parent().Name(), req.ns.Annotations[api.AnnotationManagedBy])
-			return deny(metav1.StatusReasonForbidden, msg)
+	return allow("")
+}
+
+func (v *Namespace) nameExistsInExternalHierarchy(req *nsRequest) admission.Response {
+	for _, nm := range v.Forest.GetNamespaceNames() {
+		if _, ok := v.Forest.Get(nm).ExternalTreeLabels[req.ns.Name]; ok {
+			msg := fmt.Sprintf("The namespace name %q is reserved by the external hierarchy manager %q.", req.ns.Name, v.Forest.Get(nm).Manager)
+			return deny(metav1.StatusReasonAlreadyExists, msg)
 		}
 	}
+	return allow("")
+}
 
-	// Early exit to allow other non-delete requests or if the namespace allows cascading deletion.
-	if req.op != v1beta1.Delete || ns.AllowsCascadingDelete() {
+func (v *Namespace) conflictBetweenParentAndExternalManager(req *nsRequest, ns *forest.Namespace) admission.Response {
+	mgr := req.ns.Annotations[api.AnnotationManagedBy]
+	if mgr != "" && mgr != api.MetaGroup && ns.Parent() != nil {
+		msg := fmt.Sprintf("Namespace %q is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
+			"To manage this namespace with %q, first make it a root in HNC.", ns.Name(), ns.Parent().Name(), mgr)
+		return deny(metav1.StatusReasonForbidden, msg)
+	}
+	return allow("")
+}
+
+func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response {
+	parent := req.ns.Annotations[api.SubnamespaceOf]
+	if parent != "" {
+		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
+		return deny(metav1.StatusReasonForbidden, msg)
+	}
+	return allow("")
+}
+
+func (v *Namespace) illegalCascadingDeletion(ns *forest.Namespace) admission.Response {
+	// Early exit if the namespace allows cascading deletion.
+	if ns.AllowsCascadingDelete() {
 		return allow("")
 	}
 
-	// Check if the deleting namespace has subnamespaces that can't be deleted.
+	// Check if all children allow cascading deletion.
 	cantDelete := []string{}
 	for _, cnm := range ns.ChildNames() {
 		cns := v.Forest.Get(cnm)
@@ -117,6 +142,7 @@ func (v *Namespace) checkForest(req *nsRequest) admission.Response {
 		msg := fmt.Sprintf("Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.\n  Subnamespace(s) without allowCascadingDelete set: %s.", cantDelete)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
+
 	return allow("")
 }
 
