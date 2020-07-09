@@ -6,28 +6,14 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (self *TestClient) CreateRole() (*v1.Role, error) {
-	policy := v1.PolicyRule{
-		Verbs:           []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		APIGroups:       []string{""},
-		Resources:       []string{"pods", "services"},
-		ResourceNames:   nil,
-		NonResourceURLs: nil,
-	}
-	policy2 := v1.PolicyRule{
-		Verbs:           []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		APIGroups:       []string{"app"},
-		Resources:       []string{"deployments"},
-		ResourceNames:   nil,
-		NonResourceURLs: nil,
-	}
+func (self *TestClient) CreateRole(roleName string, policy []v1.PolicyRule) (*v1.Role, error) {
 	role := &v1.Role{
 		TypeMeta: meta.TypeMeta{
 			Kind:       "Role",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: meta.ObjectMeta{Name: "role1"},
-		Rules:      []v1.PolicyRule{policy, policy2},
+		Rules:      policy,
 	}
 
 	if role, err := self.Kubernetes.RbacV1().Roles(self.Namespace).Create(self.Context, role, meta.CreateOptions{}); err == nil {

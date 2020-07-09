@@ -26,7 +26,7 @@ var cfg *rest.Config
 var c client.Client
 var err error
 
-const timeout = time.Second * 25
+const timeout = time.Second * 40
 
 // In future if we want to add more tenants and tenantnamespaces
 var tenants []*tenancyv1alpha1.Tenant

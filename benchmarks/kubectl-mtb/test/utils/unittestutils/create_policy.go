@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"os"
+
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
-	"net/http"
-	"os"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -29,20 +31,28 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 		data, err = loadFile(resourcePath)
 	}
 	if err != nil {
-		return nil
+		return fmt.Errorf("could not load file")
 	}
+
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return err
+	}
+
 
 	pBytes := bytes.Split(data, []byte("---"))
 	for _, policy := range pBytes {
 		// Prepare a RESTMapper to find GVR
-		dc, err := discovery.NewDiscoveryClientForConfig(self.Config)
+		dc, err := discovery.NewDiscoveryClientForConfig(config)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
 		mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
 
 		// Prepare the dynamic unittestutils
-		dyn, err := dynamic.NewForConfig(self.Config)
+		dyn, err := dynamic.NewForConfig(config)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
