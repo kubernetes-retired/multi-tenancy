@@ -20,25 +20,30 @@ import (
 
 var decUnstructured = yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 
+
 func (self *TestClient) CreatePolicy(resourcePath string) error {
 
 	var data []byte
-	if utils.IsValidUrl(resourcePath) {
+	check := utils.IsValidUrl(resourcePath)
+	if check == true {
+		fmt.Println("Reading from URL")
 		data, err = readYAMLFromUrl(resourcePath)
 	} else {
-		data, err = loadFile(resourcePath)
+		fmt.Println("Reading from string")
+		data = []byte(resourcePath)
 	}
 	if err != nil {
 		return nil
 	}
-
 	pBytes := bytes.Split(data, []byte("---"))
 	for _, policy := range pBytes {
+
 		// Prepare a RESTMapper to find GVR
 		dc, err := discovery.NewDiscoveryClientForConfig(self.Config)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
+
 		mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
 
 		// Prepare the dynamic unittestutils
@@ -49,10 +54,15 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 
 		// Decode YAML manifest into unstructured.Unstructured
 		obj := &unstructured.Unstructured{}
+
 		_, gvk, err := decUnstructured.Decode([]byte(policy), nil, obj)
+
 		if err != nil {
 			fmt.Println(err.Error())
 		}
+		fmt.Println(gvk)
+
+		fmt.Println(obj)
 
 		// Find GVR
 		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
@@ -73,8 +83,8 @@ func (self *TestClient) CreatePolicy(resourcePath string) error {
 		// types.ApplyPatchType indicates SSA.
 		// FieldManager specifies the field owner ID.
 		_, err = self.DynamicResource.Create(self.Context, obj, metav1.CreateOptions{})
-	}
 
+	}
 	return err
 }
 
