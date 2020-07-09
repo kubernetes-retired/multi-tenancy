@@ -1,18 +1,32 @@
 package blockprivilegedcontainers
 
 import (
+	"context"
 	"fmt"
-	apiextensionspkg "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"github.com/onsi/gomega"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/kubernetes"
+	"time"
+
 	"log"
 	"os"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 	"testing"
+
+	"github.com/onsi/gomega"
+	v1 "k8s.io/api/rbac/v1"
+	apiextensionspkg "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	podutil "k8s.io/kubernetes/test/e2e/framework/pod"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 )
 
 var testClient *unittestutils.TestClient
+var crdPath = "https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml"
+var policyPath = "/home/phoenix/yaml-files/kyverno/disallow_privileged_containers.yaml"
+var tenantConfig *rest.Config
+var tenantClient *kubernetes.Clientset
+var tenantNamespace = "tenant1admin"
+var serviceAccount = "t1-admin1"
 
 type TestFunction func(t *testing.T) (bool, bool)
 
@@ -20,9 +34,9 @@ func TestMain(m *testing.M) {
 
 	kind := &unittestutils.KindCluster{}
 	setUp := func() error {
-		fmt.Println("Setup Cluster")
 		err := kind.CreateCluster()
 		kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
 		// create the K8s clientSet
 		cfg, err := kubecfgFlags.ToRESTConfig()
 		k8sClient, err := kubernetes.NewForConfig(cfg)
@@ -34,6 +48,13 @@ func TestMain(m *testing.M) {
 		var apiExtensions *apiextensionspkg.Clientset
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
+		tenantConfig := testClient.Config
+		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
+		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		err = testClient.CreatePolicy(crdPath)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
 		return err
 	}
 	//exec setUp function
@@ -72,8 +93,6 @@ func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, se
 
 func TestBenchmark(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	tenantNamespace := "tenant1admin"
-	serviceAccount := "t1-admin1"
 	testClient.Namespace = tenantNamespace
 	testClient.ServiceAccount = serviceAccount
 	// test to create tenants
@@ -84,21 +103,18 @@ func TestBenchmark(t *testing.T) {
 		preRun       bool
 		run          bool
 	}{
-
 		{
 			testName:     "TestPreRunWithoutRole",
 			testFunction: testPreRunWithoutRole,
 			preRun:       false,
 			run:          false,
 		},
-
 		{
 			testName:     "TestPreRunWithRole",
 			testFunction: testPreRunWithRole,
 			preRun:       true,
 			run:          false,
 		},
-
 		{
 			testName:     "TestRunWithPolicy",
 			testFunction: testRunWithPolicy,
@@ -116,9 +132,7 @@ func TestBenchmark(t *testing.T) {
 }
 
 func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {
-	tenantConfig := testClient.Config
-	tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
-	tenantClient, _ := kubernetes.NewForConfig(tenantConfig)
+
 	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
 		return false, false
@@ -128,65 +142,64 @@ func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {
 }
 
 func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
-	createdRole, err := testClient.CreateRole()
+	policies := []v1.PolicyRule{
+		{
+			Verbs:           []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			APIGroups:       []string{""},
+			Resources:       []string{"pods"},
+			ResourceNames:   nil,
+			NonResourceURLs: nil,
+		},
+	}
+
+	createdRole, err := testClient.CreateRole("pod-role", policies)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
 	_, err = testClient.CreateRoleBinding(createdRole)
 	if err != nil {
-		t.Logf(err.Error())
+		fmt.Println(err.Error())
 	}
-	t.Logf("Roles are created")
-	tenantConfig := testClient.Config
-	tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
-	tenantClient, _ := kubernetes.NewForConfig(tenantConfig)
+
 	err = b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
 		t.Logf(err.Error())
 		return false, false
-	} else {
-		err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient)
-		if err != nil {
-			t.Logf(err.Error())
-			return true, false
-		}
+	}
+	if err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient); err != nil {
+		return true, false
 	}
 	return true, true
 }
 
 func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
-	policyPath := unittestutils.ClusterPolicy
-	crdPath := "https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml"
-
-	paths := []string{crdPath, policyPath}
-
-	for _, p := range paths {
-
-		err := testClient.CreatePolicy(p)
-		if err != nil {
-			t.Logf(err.Error())
-			return false, false
-		}
-	}
-
-	createdRole, err := testClient.CreateRole()
-	_, err = testClient.CreateRoleBinding(createdRole)
+	err := testClient.CreatePolicy(policyPath)
 	if err != nil {
-		t.Logf(err.Error())
+		fmt.Println(err.Error())
+		return false, false
 	}
-	t.Logf("Roles are created")
 
-	tenantConfig := testClient.Config
-	tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
-	tenantClient, _ := kubernetes.NewForConfig(tenantConfig)
+	podsList, err := testClient.Kubernetes.CoreV1().Pods("kyverno").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	podNames := []string{podsList.Items[0].ObjectMeta.Name}
+	for {
+		if podutil.CheckPodsRunningReady(testClient.Kubernetes, "kyverno", podNames, 200*time.Second) {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
 
 	err = b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
-		t.Logf(err.Error())
+		fmt.Println(err.Error())
 		return false, false
-	} else {
-		err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient)
-		if err != nil {
-			fmt.Println(err.Error())
-			return true, false
-		}
+	}
+	if err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient); err != nil {
+		fmt.Println(err.Error())
+		return true, false
 	}
 	return true, true
 }
