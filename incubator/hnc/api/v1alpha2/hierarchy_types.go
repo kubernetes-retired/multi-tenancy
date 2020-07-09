@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1alpha2
 
 import (
 	"fmt"
@@ -92,7 +92,7 @@ var ClearConditionCriteria map[Code]ClearConditionCriterion
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // +kubebuilder:object:root=true
-// +kubebuilder:storageversion
+// +kubebuilder:skipversion
 
 // Hierarchy is the Schema for the hierarchies API
 type HierarchyConfiguration struct {

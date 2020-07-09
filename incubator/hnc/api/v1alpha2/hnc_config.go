@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,7 +95,7 @@ type CodeAndAffectedNamespaces struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hncconfigurations,scope=Cluster
-// +kubebuilder:storageversion
+// +kubebuilder:skipversion
 
 // HNCConfiguration is a cluster-wide configuration for HNC as a whole. See details in http://bit.ly/hnc-type-configuration
 type HNCConfiguration struct {
