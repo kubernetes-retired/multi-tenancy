@@ -11,6 +11,8 @@ kubectl create ns p1
 kubectl create ns p2
 sleep 1
 
+echo "${bold}Creating a copy of the webhook manifest at hnc_e2e_797_webhook.yaml...${normal}"
+kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration -o yaml > hnc_e2e_797_webhook.yaml
 echo "${bold}Disabling webhook to generate the race condition...${normal}"
 kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration
 sleep 1
@@ -30,7 +32,9 @@ echo "${bold}subns (anchor) 'sub' in 'p2' should have 'status: conflict' because
 kubectl get subns sub -n p2 -o yaml
 
 echo "${bold}Enabling webhook again...${normal}"
-kubectl apply -f manifests/hnc-manager.yaml
+kubectl apply -f hnc_e2e_797_webhook.yaml
+echo "${bold}Deleting the webhook manifest hnc_e2e_797_webhook.yaml...${normal}"
+rm hnc_e2e_797_webhook.yaml
 
 echo "----------------------------------------------------"
 echo "${bold}Test-1:${normal} Remove subns (anchor) in the bad parent 'p2'"
