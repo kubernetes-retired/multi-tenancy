@@ -1,6 +1,11 @@
 package reporter
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter/printer"
+)
 
 // Reporter defines the lifecycle of reporter
 type Reporter interface {
@@ -14,7 +19,13 @@ func GetReporter(reporter string) (Reporter, error) {
 	switch reporter {
 	case "default":
 		return NewDefaultReporter(), nil
+
+	case "policy":
+		return NewPolicyReporter(), nil
 	}
 
 	return nil, fmt.Errorf("Wrong reporter value passed")
 }
+
+// Hard coded the color bool value
+var writer = printer.NewConsoleLogger(true, os.Stdout)
