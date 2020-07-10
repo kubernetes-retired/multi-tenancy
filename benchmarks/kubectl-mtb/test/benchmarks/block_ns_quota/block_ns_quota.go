@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var b = &benchmark.Benchmark{
@@ -19,7 +19,7 @@ var b = &benchmark.Benchmark{
 	},
 
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
-		resources := []util.GroupResource{
+		resources := []utils.GroupResource{
 			{
 				APIGroup: "",
 				APIResource: metav1.APIResource{
@@ -30,7 +30,7 @@ var b = &benchmark.Benchmark{
 		verbs := []string{"create", "update", "patch", "delete", "deletecollection"}
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := util.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
 				if err != nil {
 					fmt.Println(err.Error())
 				}

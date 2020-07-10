@@ -861,6 +861,7 @@ sigs.k8s.io/kustomize v2.0.3+incompatible h1:JUufWFNlI44MdtnjUqVnvh29rR37PQFzPbL
 sigs.k8s.io/kustomize v2.0.3+incompatible/go.mod h1:MkjgH3RdOWrievjo6c9T245dYlB5QeXV4WCbnt/PEpU=
 sigs.k8s.io/multi-tenancy v0.0.0-20200707060558-ea14282f3be6 h1:dQH2DhMa8HWxC8t7I1iGG6VndpPrLqqfSYOgmORjkWA=
 sigs.k8s.io/multi-tenancy v0.0.0-20200710135948-2d1071532987 h1:tJTZBwaG1ryvKEM9qAvgA/c1Zc7uxdEpGVUxuDu5Tw8=
+sigs.k8s.io/multi-tenancy v0.0.0-20200710152148-20515322b4e5 h1:zNaPpPazyROkh3h19JUmxlcfTUqFQ7ZxlX/g1p0jl0A=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200707060558-ea14282f3be6 h1:V4K5fPHAgNnYTFmhKlU4cp03o7/nuZbbVqFnEHvcyHk=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200710152148-20515322b4e5 h1:h21E7xB6JQ19Hy5ypObM90L4xScjwiNQxrOACXJ409w=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0-20200116222232-67a7b8c61874/go.mod h1:PlARxl6Hbt/+BC80dRLi1qAmnMqwqDg62YvvVkZjemw=

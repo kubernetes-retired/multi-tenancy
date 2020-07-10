@@ -12,15 +12,15 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
-	serviceutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/service"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	serviceutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/service"
 )
 
 var b = &benchmark.Benchmark{
 
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
-		resources := []util.GroupResource {
+		resources := []utils.GroupResource {
 			{
 				APIGroup: "",
 				APIResource: metav1.APIResource{
@@ -36,7 +36,7 @@ var b = &benchmark.Benchmark{
 		}
 
 		for _, resource := range resources {
-			access, msg, err := util.RunAccessCheck(tclient, tenantNamespace, resource, "create")
+			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, "create")
 			if err != nil {
 				return err
 			}

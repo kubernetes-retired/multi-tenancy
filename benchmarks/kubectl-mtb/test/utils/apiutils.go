@@ -1,4 +1,4 @@
-package util
+package utils
 
 import (
 	"context"
@@ -14,6 +14,7 @@ type GroupResource struct {
 	APIResource metav1.APIResource
 }
 
+// RunAccessCheck checks that given client can perform the given verb on the resource or not
 func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource GroupResource, verb string) (bool, string, error) {
 	var sar *authorizationv1.SelfSubjectAccessReview
 

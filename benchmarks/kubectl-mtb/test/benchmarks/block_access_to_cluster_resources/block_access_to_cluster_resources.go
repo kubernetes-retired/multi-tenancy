@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var verbs = []string{"get", "update"}
@@ -20,7 +20,7 @@ var b = &benchmark.Benchmark{
 		return nil
 	},
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
-		resources := []util.GroupResource{}
+		resources := []utils.GroupResource{}
 
 		lists, err := kclient.Discovery().ServerPreferredResources()
 		if err != nil {
@@ -43,7 +43,7 @@ var b = &benchmark.Benchmark{
 				if resource.Namespaced {
 					continue
 				}
-				resources = append(resources, util.GroupResource{
+				resources = append(resources, utils.GroupResource{
 					APIGroup:    gv.Group,
 					APIResource: resource,
 				})
@@ -52,7 +52,7 @@ var b = &benchmark.Benchmark{
 
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := util.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
 				if err != nil {
 					return err
 				}

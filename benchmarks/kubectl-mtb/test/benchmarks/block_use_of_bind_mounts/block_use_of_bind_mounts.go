@@ -10,22 +10,22 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util"
-	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 )
 
 var b = &benchmark.Benchmark{
 
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
-		resource := util.GroupResource{
+		resource := utils.GroupResource{
 			APIGroup: "",
 			APIResource: metav1.APIResource{
 				Name: "pods",
 			},
 		}
 
-		access, msg, err := util.RunAccessCheck(tclient, tenantNamespace, resource, "create")
+		access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, "create")
 		if err != nil {
 			return err
 		}

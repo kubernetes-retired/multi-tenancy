@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"gopkg.in/yaml.v2"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 const (
@@ -47,6 +47,22 @@ const templ = `# {{.Title}} <small>[{{.ID}}] </small>
 {{ $value }}
 {{ end }}
 `
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	return false, err
+}
+
+func getDirectory(path string, delimiter string) string {
+	dir := strings.Split(path, delimiter)
+	dir = dir[0 : len(dir)-1]
+	dirPath := strings.Join(dir[:], "/")
+
+	return dirPath
+}
 
 func deleteFields(fieldname string, fieldmap map[string]interface{}) {
 	delete(fieldmap, fieldname)
@@ -98,10 +114,10 @@ func main() {
 				t, err = t.Parse(templ)
 
 				// Get directory of the config file
-				dirPath := utils.GetDirectory(path, "/")
+				dirPath := getDirectory(path, "/")
 
 				//Check if Path exists
-				_, err = utils.Exists(dirPath)
+				_, err = exists(dirPath)
 				if err != nil {
 					return err
 				}
@@ -132,3 +148,4 @@ func main() {
 
 	fmt.Printf("Successfully Created README files. \xE2\x9C\x94 \n")
 }
+
