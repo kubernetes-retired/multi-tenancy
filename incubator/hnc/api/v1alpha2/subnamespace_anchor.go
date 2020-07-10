@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,7 +23,7 @@ import (
 const (
 	Anchors          = "subnamespaceanchors"
 	AnchorKind       = "SubnamespaceAnchor"
-	AnchorAPIVersion = MetaGroup + "/v1alpha1"
+	AnchorAPIVersion = MetaGroup + "/v1alpha2"
 	SubnamespaceOf   = MetaGroup + "/subnamespaceOf"
 )
 
@@ -60,7 +60,7 @@ type SubnamespaceAnchorStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=subnamespaceanchors,shortName=subns,scope=Namespaced
-// +kubebuilder:storageversion
+// +kubebuilder:skipversion
 
 // SubnamespaceAnchor is the Schema for the subnamespace API.
 // See details at http://bit.ly/hnc-self-serve-ux.
