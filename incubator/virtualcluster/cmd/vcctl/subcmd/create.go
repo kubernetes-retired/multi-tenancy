@@ -151,7 +151,8 @@ func createVirtualCluster(cli client.Client, vc *tenancyv1alpha1.VirtualCluster,
 	// fail early, if service type is not supported
 	svcType := cv.Spec.APIServer.Service.Spec.Type
 	if svcType != v1.ServiceTypeNodePort &&
-		svcType != v1.ServiceTypeLoadBalancer {
+		svcType != v1.ServiceTypeLoadBalancer &&
+		  svcType != v1.ServiceTypeClusterIP {
 		return fmt.Errorf("unsupported apiserver service type: %s", svcType)
 	}
 

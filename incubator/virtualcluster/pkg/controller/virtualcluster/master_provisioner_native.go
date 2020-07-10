@@ -76,26 +76,40 @@ func (mpn *MasterProvisionerNative) CreateVirtualCluster(vc *tenancyv1alpha1.Vir
 	if err != nil {
 		return err
 	}
+	isClusterIP := cv.Spec.APIServer.Service != nil && cv.Spec.APIServer.Service.Spec.Type == v1.ServiceTypeClusterIP
+	// if ClusterIP, have to create API Server ahead of time to lay it down in the PKI
+	if isClusterIP {
+		log.Info("deploying ClusterIP Service for API component", "component", cv.Spec.APIServer.Name)
+		complementAPIServerTemplate(conversion.ToClusterKey(vc), cv.Spec.APIServer)
+		err = mpn.Create(context.TODO(), cv.Spec.APIServer.Service)
+		if err != nil {
+			if !apierrors.IsAlreadyExists(err) {
+				return err
+			}
+			log.Info("service already exist",
+				"service", cv.Spec.APIServer.Service.GetName())
+		}
+	}
 
-	// 3. create PKI
-	err = mpn.createPKI(vc, cv)
+	// 2. create PKI
+	err = mpn.createPKI(vc, cv, isClusterIP)
 	if err != nil {
 		return err
 	}
 
-	// 4. deploy etcd
+	// 3. deploy etcd
 	err = mpn.deployComponent(vc, cv.Spec.ETCD)
 	if err != nil {
 		return err
 	}
 
-	// 5. deploy apiserver
+	// 4. deploy apiserver
 	err = mpn.deployComponent(vc, cv.Spec.APIServer)
 	if err != nil {
 		return err
 	}
 
-	// 6. deploy controller-manager
+	// 5. deploy controller-manager
 	err = mpn.deployComponent(vc, cv.Spec.ControllerManager)
 	if err != nil {
 		return err
@@ -240,7 +254,7 @@ func (mpn *MasterProvisionerNative) createPKISecrets(caGroup *vcpki.ClusterCAGro
 
 // createPKI constructs the PKI (all crt/key pair and kubeconfig) for the
 // virtual clusters, and store them as secrets in the meta cluster
-func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster, cv *tenancyv1alpha1.ClusterVersion) error {
+func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster, cv *tenancyv1alpha1.ClusterVersion, isClusterIP bool) error {
 	ns := conversion.ToClusterKey(vc)
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
@@ -272,17 +286,31 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster
 	}
 	caGroup.ETCD = etcdCAPair
 
+	clusterIP := ""
+	if isClusterIP {
+		var err error
+		clusterIP, err = kubeutil.GetSvcClusterIP(mpn, conversion.ToClusterKey(vc), cv.Spec.APIServer.Service.GetName())
+		if err != nil {
+			log.Info("Warning: failed to get API Service", "service", cv.Spec.APIServer.Service.GetName(), "err", err)
+		}
+	}
+
 	apiserverDomain := cv.GetAPIServerDomain(ns)
-	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain)
+	apiserverCAPair, err := vcpki.NewAPIServerCrtAndKey(rootCAPair, vc, apiserverDomain, clusterIP)
 	if err != nil {
 		return err
 	}
 	caGroup.APIServer = apiserverCAPair
 
+	finalAPIAddress := apiserverDomain
+	if clusterIP != "" {
+		finalAPIAddress = clusterIP
+	}
+
 	// create kubeconfig for controller-manager
 	ctrlmgrKbCfg, err := kubeconfig.GenerateKubeconfig(
 		"system:kube-controller-manager",
-		vc.Name, apiserverDomain, []string{}, rootCAPair)
+		vc.Name, finalAPIAddress, []string{}, rootCAPair)
 	if err != nil {
 		return err
 	}
@@ -290,7 +318,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster
 
 	// create kubeconfig for admin user
 	adminKbCfg, err := kubeconfig.GenerateKubeconfig(
-		"admin", vc.Name, apiserverDomain,
+		"admin", vc.Name, finalAPIAddress,
 		[]string{"system:masters"}, rootCAPair)
 	if err != nil {
 		return err
