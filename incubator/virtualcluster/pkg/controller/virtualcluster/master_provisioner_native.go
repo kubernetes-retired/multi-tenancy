@@ -121,9 +121,9 @@ func genInitialClusterArgs(replicas int32, stsName, svcName string) (argsVal str
 	return argsVal
 }
 
-// completmentETCDTemplate completments the ETCD template of the specified clusterversion
+// complementETCDTemplate complements the ETCD template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	etcdBdl.StatefulSet.ObjectMeta.Namespace = vcns
 	etcdBdl.Service.ObjectMeta.Namespace = vcns
 	args := etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args
@@ -133,16 +133,16 @@ func completmentETCDTemplate(vcns string, etcdBdl *tenancyv1alpha1.StatefulSetSv
 	etcdBdl.StatefulSet.Spec.Template.Spec.Containers[0].Args = args
 }
 
-// completmentAPIServerTemplate completments the apiserver template of the specified clusterversion
+// complementAPIServerTemplate complements the apiserver template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentAPIServerTemplate(vcns string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementAPIServerTemplate(vcns string, apiserverBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	apiserverBdl.StatefulSet.ObjectMeta.Namespace = vcns
 	apiserverBdl.Service.ObjectMeta.Namespace = vcns
 }
 
-// completmentCtrlMgrTemplate completments the controller manager template of the specified clusterversion
+// complementCtrlMgrTemplate complements the controller manager template of the specified clusterversion
 // based on the virtual cluster setting
-func completmentCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
+func complementCtrlMgrTemplate(vcns string, ctrlMgrBdl *tenancyv1alpha1.StatefulSetSvcBundle) {
 	ctrlMgrBdl.StatefulSet.ObjectMeta.Namespace = vcns
 }
 
@@ -155,11 +155,11 @@ func (mpn *MasterProvisionerNative) deployComponent(vc *tenancyv1alpha1.VirtualC
 
 	switch ssBdl.Name {
 	case "etcd":
-		completmentETCDTemplate(ns, ssBdl)
+		complementETCDTemplate(ns, ssBdl)
 	case "apiserver":
-		completmentAPIServerTemplate(ns, ssBdl)
+		complementAPIServerTemplate(ns, ssBdl)
 	case "controller-manager":
-		completmentCtrlMgrTemplate(ns, ssBdl)
+		complementCtrlMgrTemplate(ns, ssBdl)
 	default:
 		return fmt.Errorf("try to deploy unknwon component: %s", ssBdl.Name)
 	}

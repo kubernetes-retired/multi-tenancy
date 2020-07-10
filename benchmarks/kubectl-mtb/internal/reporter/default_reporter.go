@@ -1,11 +1,5 @@
 package reporter
 
-import (
-	"os"
-
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter/printer"
-)
-
 const defaultStyle = "\x1b[0m"
 const boldStyle = "\x1b[1m"
 const redColor = "\x1b[91m"
@@ -20,9 +14,6 @@ const lightGrayColor = "\x1b[37m"
 type DefaultReporter struct {
 	testSummaries []*TestSummary
 }
-
-// Hard coded the color bool value
-var writer = printer.NewConsoleLogger(true, os.Stdout)
 
 // NewDefaultReporter returns the pointer of DefaultReporter
 func NewDefaultReporter() *DefaultReporter {

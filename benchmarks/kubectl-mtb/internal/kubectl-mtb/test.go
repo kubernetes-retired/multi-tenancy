@@ -87,8 +87,9 @@ func runTests(cmd *cobra.Command, args []string) error {
 	}
 
 	suiteSummary := &reporter.SuiteSummary{
-		Suite:              test.BenchmarkSuite,
-		NumberOfTotalTests: len(benchmarks),
+		Suite:                test.BenchmarkSuite,
+		NumberOfTotalTests:   len(benchmarks),
+		TenantAdminNamespace: tenantNamespace,
 	}
 
 	suiteStartTime := time.Now()
