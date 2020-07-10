@@ -4,15 +4,22 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
+	github.com/kubernetes-sigs/multi-tenancy v0.0.0-20200707060558-ea14282f3be6
+	github.com/onsi/gomega v1.8.1
+	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
+	github.com/sirupsen/logrus v1.4.2
 	github.com/kubernetes-sigs/wg-policy-prototypes/policy-report v0.0.0-20200701192251-679efd0b105e
 	github.com/spf13/cobra v1.0.0
 	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.3
+	k8s.io/apiextensions-apiserver v0.18.2
 	k8s.io/apimachinery v0.18.3
 	k8s.io/cli-runtime v0.18.3
 	k8s.io/client-go v0.18.3
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v1.18.3
+	sigs.k8s.io/controller-runtime v0.6.0
+	sigs.k8s.io/kind v0.8.1
 )
 
 replace (

@@ -33,3 +33,5 @@ generate:
 .PHONY: readme
 readme: 
 	go run docs/main.go
+unittest:
+	go test ./test/benchmarks/...

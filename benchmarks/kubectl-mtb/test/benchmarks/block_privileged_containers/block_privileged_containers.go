@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/util/resources/pod"
+	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 )
 
 type GroupResource struct {
