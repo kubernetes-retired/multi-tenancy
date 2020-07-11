@@ -1,6 +1,10 @@
 package benchmarksuite
 
 import (
+	"sort"
+	"strconv"
+	"strings"
+
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 )
 
@@ -29,5 +33,38 @@ func (bs *BenchmarkSuite) ProfileLevel(pl int) []*benchmark.Benchmark {
 			benchmarksArray = append(benchmarksArray, b)
 		}
 	}
-	return benchmarksArray
+	sortedBenchmarks := SortBenchmarks(benchmarksArray)
+	return sortedBenchmarks
+}
+
+// SortBenchmarks returns slice of Benchmarks sorted according to Profile level, category and id respectively
+func SortBenchmarks(benchmarks []*benchmark.Benchmark) []*benchmark.Benchmark {
+	sort.SliceStable(benchmarks, func(i, j int) bool {
+		b1, b2 := benchmarks[i], benchmarks[j]
+		switch {
+		//sort according to Profile Level
+		case b1.ProfileLevel != b2.ProfileLevel:
+			return b1.ProfileLevel < b2.ProfileLevel
+		// sort according to category (lexicographical order)
+		case returnCategory(b1.ID) != returnCategory(b2.ID):
+			return returnCategory(b1.ID) < returnCategory(b2.ID)
+		// sort according to sequence
+		default:
+			return returnID(b1.ID) < returnID(b2.ID)
+		}
+	})
+	return benchmarks
+}
+
+// returns category by parsing id
+func returnCategory(id string) string {
+	result := strings.Split(id, "-")
+	return result[len(result)-2]
+}
+
+// returns sequence by parsing id
+func returnID(id string) int {
+	result := strings.Split(id, "-")
+	res, _ := strconv.Atoi(result[len(result)-1])
+	return res
 }
