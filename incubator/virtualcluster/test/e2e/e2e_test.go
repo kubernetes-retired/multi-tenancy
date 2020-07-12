@@ -24,6 +24,9 @@ import (
 
 	vcapis "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework"
+
+	// test sources
+	_ "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/multi-tenancy"
 )
 
 func TestMain(m *testing.M) {

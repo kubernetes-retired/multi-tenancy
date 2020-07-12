@@ -18,8 +18,10 @@ package conversion
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -30,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -83,6 +86,23 @@ func GetVirtualOwner(obj runtime.Object) (cluster, namespace string) {
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
 	namespace = meta.GetAnnotations()[constants.LabelNamespace]
 	return cluster, namespace
+}
+
+func GetKubeConfigOfVC(c v1core.SecretsGetter, vc *v1alpha1.VirtualCluster) ([]byte, error) {
+	if adminKubeConfig, exists := vc.GetAnnotations()[constants.LabelAdminKubeConfig]; exists {
+		decoded, err := base64.StdEncoding.DecodeString(adminKubeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode kubeconfig from annotations %s: %v", constants.LabelAdminKubeConfig, err)
+		}
+		return decoded, nil
+	}
+
+	clusterName := ToClusterKey(vc)
+	adminKubeConfigSecret, err := c.Secrets(clusterName).Get(constants.KubeconfigAdminSecretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", constants.KubeconfigAdminSecretName, clusterName, err)
+	}
+	return adminKubeConfigSecret.Data[constants.KubeconfigAdminSecretName], nil
 }
 
 func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {

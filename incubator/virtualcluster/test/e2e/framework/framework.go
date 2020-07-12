@@ -33,6 +33,7 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	e2evc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework/virtualcluster"
 )
 
 const (
@@ -418,6 +419,16 @@ func (f *Framework) AddNamespacesToDelete(namespaces ...*v1.Namespace) {
 		}
 		f.namespacesToDelete = append(f.namespacesToDelete, ns)
 	}
+}
+
+// WaitForVCRunning waits for the vc to run in the namespace.
+func (f *Framework) WaitForVCRunning(vcName string) error {
+	return e2evc.WaitForVCRunningInNamespace(f.VCClientSet, vcName, f.Namespace.Name)
+}
+
+// WaitForVCRunning waits for the vc to be deleted in the namespace.
+func (f *Framework) WaitForVCNotFound(vcName string) error {
+	return e2evc.WaitForVCNotFoundInNamespace(f.VCClientSet, vcName, f.Namespace.Name)
 }
 
 // VCDescribe is wrapper function for ginkgo describe.  Adds namespacing.
