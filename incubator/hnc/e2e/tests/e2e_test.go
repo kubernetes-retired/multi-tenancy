@@ -27,6 +27,11 @@ func mustRun(cmdln ...string) {
 	Expect(err).Should(BeNil())
 }
 
+func mustNotRun(cmdln ...string) {
+	err := tryRun(cmdln...)
+	Expect(err).Should(Not(BeNil()))
+}
+
 func tryRun(cmdln ...string) error {
 	var args []string
 	for _, subcmdln := range cmdln {
@@ -37,4 +42,15 @@ func tryRun(cmdln ...string) error {
 	stdout, err := cmd.CombinedOutput()
 	GinkgoT().Log("Output: ", string(stdout))
 	return err
+}
+
+func cleanupNamespaces(nses ...string) {
+	// Remove all possible objections HNC might have to deleting a namesplace. Make sure it 
+	// has cascading deletion so we can delete any of its subnamespace descendants, and 
+	// make sure that it's not a subnamespace itself so we can delete it directly.
+	for _, ns := range nses {
+		tryRun("kubectl hns set", ns, "-a")
+		tryRun("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
+		tryRun("kubectl delete ns", ns)
+	}
 }
