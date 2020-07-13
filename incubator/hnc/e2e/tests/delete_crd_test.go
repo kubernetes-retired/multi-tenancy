@@ -7,21 +7,16 @@ import (
 )
 
 var _ = Describe("Delete-anchor-crd", func() {
+
 	hncRecoverPath := os.Getenv("HNC_REPAIR")
+
+	const (
+		nsParent = "delete-crd-parent"
+		nsChild = "delete-crd-child"
+	)
+
 	AfterEach(func() {
-		// clean up
-		nses := []string{
-			"delete-crd-parent",
-			"delete-crd-child",
-		}
-		// Remove all possible objections HNC might have to deleting a network. Make sure it 
-		// has cascading deletion so we can delete any of its subnamespace descendants, and 
-		// make sure that it's not a subnamespace itself so we can delete it directly.
-		for _, ns := range nses {
-			tryRun("kubectl hns set", ns, "-a")
-			tryRun("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
-			tryRun("kubectl delete ns", ns)
-		}
+		cleanupNamespaces(nsParent, nsChild)
 		mustRun("kubectl apply -f", hncRecoverPath)
 	})
 
@@ -31,11 +26,11 @@ var _ = Describe("Delete-anchor-crd", func() {
 			Skip("Environment variable HNC_REPAIR not set. Skipping reocovering HNC.")
 		}
 		// set up
-		mustRun("kubectl create ns delete-crd-parent")
-		mustRun("kubectl hns create delete-crd-child -n delete-crd-parent")
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
 		// test
 		mustRun("kubectl delete customresourcedefinition/subnamespaceanchors.hnc.x-k8s.io")
 		// verify
-		mustRun("kubectl get ns delete-crd-child")
+		mustRun("kubectl get ns", nsChild)
 	})
 })
