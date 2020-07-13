@@ -1,0 +1,7 @@
+id: MTB-PL1-CC-FNS-1
+title: Configure namespace resource quotas 
+benchmarkType: Configuration
+category:  Fairness
+description: Namespace resource quotas should be used to allocate, track, and limit a tenant's use of shared resources.
+remediation: Create ResourceQuota object.
+profileLevel: 1
