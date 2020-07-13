@@ -53,7 +53,7 @@ var b = &benchmark.Benchmark{
 		for _, resource := range resources {
 			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
 			if err != nil {
-				fmt.Println(err.Error())
+				return err
 			}
 			if !access {
 				return fmt.Errorf(msg)
@@ -65,15 +65,12 @@ var b = &benchmark.Benchmark{
 
 		resourceNameList, err := getResourceNameList(tclient)
 		if err != nil {
-			fmt.Println(err.Error())
 			return err
 		}
 		tenantResourcequotas := utils.GetTenantResoureQuotas(tenantNamespace, tclient)
 		expectedVal := strings.Join(tenantResourcequotas, " ")
 		for _, r := range resourceNameList {
 			if !strings.Contains(expectedVal, r) {
-				fmt.Println(expectedVal)
-				fmt.Println(r)
 				return fmt.Errorf("%s must be configured in tenant %s namespace resource quotas", r, tenantNamespace)
 			}
 		}

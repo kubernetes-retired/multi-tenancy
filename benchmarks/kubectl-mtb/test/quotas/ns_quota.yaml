@@ -18,12 +18,3 @@ spec:
     configmaps: "1"
     secrets: "1"
     services: "1"
-
-
-
-
-
-
-
-
-

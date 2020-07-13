@@ -8,5 +8,5 @@ Fairness
 **Description:** 
 Namespace resource quotas should be used to allocate, track, and limit a tenant&#39;s use of shared resources. 
 **Remediation:**
-Create ResourceQuota object.
+Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml`
 
