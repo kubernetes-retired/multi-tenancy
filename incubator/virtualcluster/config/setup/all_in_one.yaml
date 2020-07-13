@@ -350,6 +350,7 @@ rules:
   - pods/log
   - pods/exec
   - pods/portforward
+  - nodes/proxy
   verbs:
   - get
   - list
