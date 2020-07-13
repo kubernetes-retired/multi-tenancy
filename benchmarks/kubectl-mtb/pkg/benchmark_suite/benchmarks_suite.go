@@ -33,12 +33,12 @@ func (bs *BenchmarkSuite) ProfileLevel(pl int) []*benchmark.Benchmark {
 			benchmarksArray = append(benchmarksArray, b)
 		}
 	}
-	sortedBenchmarks := SortBenchmarks(benchmarksArray)
+	sortedBenchmarks := sortBenchmarks(benchmarksArray)
 	return sortedBenchmarks
 }
 
-// SortBenchmarks returns slice of Benchmarks sorted according to Profile level, category and id respectively
-func SortBenchmarks(benchmarks []*benchmark.Benchmark) []*benchmark.Benchmark {
+// sortBenchmarks returns slice of Benchmarks sorted according to Profile level, category and id respectively
+func sortBenchmarks(benchmarks []*benchmark.Benchmark) []*benchmark.Benchmark {
 	sort.SliceStable(benchmarks, func(i, j int) bool {
 		b1, b2 := benchmarks[i], benchmarks[j]
 		switch {

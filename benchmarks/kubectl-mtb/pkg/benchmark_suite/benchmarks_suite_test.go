@@ -215,7 +215,7 @@ func TestSortBenchmarks(t *testing.T) {
 	}
 
 	for _, item := range tests {
-		sortedBenchmarks := SortBenchmarks(item.testBenchmarks)
+		sortedBenchmarks := sortBenchmarks(item.testBenchmarks)
 		if !reflect.DeepEqual(sortedBenchmarks, item.expectedBenchmarks) {
 			t.Errorf("Error in sorting the benchmarks. Output from SortBenchmarks function")
 			for _, b := range sortedBenchmarks {
