@@ -1,0 +1,7 @@
+id: MTB-PL1-CC-TI-1
+title: Block modification of resource quotas
+benchmarkType: Behavioral Check
+category: Tenant Isolation
+description: Tenants should not be able to modify the resource quotas defined in their namespaces
+remediation: 
+profileLevel: 1

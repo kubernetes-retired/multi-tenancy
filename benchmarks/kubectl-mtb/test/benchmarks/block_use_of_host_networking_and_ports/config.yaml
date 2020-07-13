@@ -1,0 +1,7 @@
+id: MTB-PL1-BC-HI-3
+title: Block use of host networking and ports
+benchmarkType: Behavioral Check
+category: Host Isolation
+description: Tenants should not be allowed to use host networking and host ports for their workloads.
+remediation: 
+profileLevel: 1

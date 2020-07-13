@@ -1,4 +1,3 @@
-
 # Block privileged containers <small>[MTB-PL1-BC-CPI-5] </small>
 **Profile Applicability:** 
 1

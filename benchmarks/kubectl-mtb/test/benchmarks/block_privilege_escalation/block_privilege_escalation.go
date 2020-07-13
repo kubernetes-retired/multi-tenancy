@@ -1,4 +1,4 @@
-package blockprivilegedcontainers
+package blockprivilegeescalation
 
 import (
 	"context"
@@ -34,10 +34,10 @@ var b = &benchmark.Benchmark{
 
 		return nil
 	},
+
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
-		// IsPrivileged set to true so that pod creation would fail
-		podSpec := &podutil.PodSpec{NS: tenantNamespace, IsPrivileged: true, AllowPrivilegeEscalation: true}
+		podSpec := &podutil.PodSpec{NS: tenantNamespace, AllowPrivilegeEscalation: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			return err
@@ -47,18 +47,20 @@ var b = &benchmark.Benchmark{
 		pod := podSpec.MakeSecPod()
 		_, err = tclient.CoreV1().Pods(tenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
-			return fmt.Errorf("Tenant must be unable to create pod that sets privileged to true")
+			return fmt.Errorf("Tenant must be unable to create pod that sets AllowPrivilegeEscalation to true")
 		}
+
 		return nil
 	},
 }
 
 func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
-	err := b.ReadConfig(box.Get("block_privileged_containers/config.yaml"))
+	err := b.ReadConfig(box.Get("block_privilege_escalation/config.yaml"))
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	test.BenchmarkSuite.Add(b)
+	test.BenchmarkSuite.Add(b);
 }
+	

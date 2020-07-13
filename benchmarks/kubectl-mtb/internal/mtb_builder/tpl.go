@@ -51,6 +51,5 @@ benchmarkType: {{ .BenchmarkType }}
 category: {{ .Category }} 
 description: {{ .Description }}
 remediation: {{ .Remediation }}
-profileLevel: {{ .ProfileLevel  }}
-`)
+profileLevel: {{ .ProfileLevel  }}`)
 }
