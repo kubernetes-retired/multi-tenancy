@@ -1,6 +1,7 @@
 package reporter
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 
@@ -16,6 +17,7 @@ const cyanColor = "\x1b[36m"
 const grayColor = "\x1b[90m"
 const magentaColor = "\033[35m"
 const lightGrayColor = "\x1b[37m"
+const lilac = "\033[38;2;200;162;200m"
 const tick = "\u2705"
 const cross = "\u274c"
 const skipped = "\u23ed"
@@ -39,20 +41,26 @@ func (r *DefaultReporter) SuiteWillBegin(suiteSummary *SuiteSummary) {
 // TestWillRun prints each test status
 func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 	if testSummary.Validation {
-		writer.Println(0, writer.Colorize(cyanColor, "[PL%d] [%s] %s", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category, testSummary.Benchmark.Title))
+		writer.Print(0, writer.Colorize(cyanColor, "[PL%d] [%s] ", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category))
+		writer.Println(0, testSummary.Benchmark.Title)
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
 		if testSummary.Test {
-			writer.Println(0, writer.Colorize(greenColor, "Passed"))
+			passed := "Passed " + tick
+			writer.Println(0, writer.Colorize(greenColor, passed))
 		} else {
-			writer.Println(0, writer.Colorize(redColor, "Failed"))
-			writer.Println(0, writer.Colorize(lightGrayColor, "Remediation: %s", testSummary.Benchmark.Remediation))
+			failed := "Failed " + cross
+			writer.Println(0, writer.Colorize(redColor, failed))
+			writer.Print(0, writer.Colorize(lilac, "Remediation: "))
+			writer.Println(0, writer.Colorize(lightGrayColor, testSummary.Benchmark.Remediation))
 
 		}
 		writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", testSummary.RunTime), "-")
 		return
 	}
-
-	writer.PrintBanner(writer.Colorize(magentaColor, "PreRun-Validation Error %s: %v", testSummary.Benchmark.Title, testSummary.ValidationError), "-")
+	preRunfmt := writer.Colorize(magentaColor, "[PreRun-Validation Error]")
+	errormsg := writer.Colorize(redColor, testSummary.ValidationError.Error())
+	bannerText := fmt.Sprintf("%s %s: %s %s", preRunfmt, testSummary.Benchmark.Title, errormsg, cross)
+	writer.PrintBanner(bannerText, "-")
 	r.testSummaries = append(r.testSummaries, testSummary)
 }
 
