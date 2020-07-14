@@ -16,11 +16,13 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,7 +130,10 @@ func newTreeCmd() *cobra.Command {
 }
 
 func getAllNamespaces() []string {
-	nsList, err := k8sClient.CoreV1().Namespaces().List(metav1.ListOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	nsList, err := k8sClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		fmt.Printf("Could not list namespaces: %s\n", err)
 		os.Exit(1)

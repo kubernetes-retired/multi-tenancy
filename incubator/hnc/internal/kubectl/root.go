@@ -17,8 +17,10 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -114,14 +116,17 @@ func homeDir() string {
 }
 
 func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
-	if _, err := k8sClient.CoreV1().Namespaces().Get(nnm, metav1.GetOptions{}); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := k8sClient.CoreV1().Namespaces().Get(ctx, nnm, metav1.GetOptions{}); err != nil {
 		fmt.Printf("Error reading namespace %s: %s\n", nnm, err)
 		os.Exit(1)
 	}
 	hier := &api.HierarchyConfiguration{}
 	hier.Name = api.Singleton
 	hier.Namespace = nnm
-	err := hncClient.Get().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Do().Into(hier)
+	err := hncClient.Get().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Do(ctx).Into(hier)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error reading hierarchy for %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -130,13 +135,16 @@ func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 }
 
 func (cl *realClient) getAnchorNames(nnm string) []string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var anms []string
 
 	// List all the anchors in the namespace.
 	ul := &unstructured.UnstructuredList{}
 	ul.SetKind(api.AnchorKind)
 	ul.SetAPIVersion(api.AnchorAPIVersion)
-	err := hncClient.Get().Resource(api.Anchors).Namespace(nnm).Do().Into(ul)
+	err := hncClient.Get().Resource(api.Anchors).Namespace(nnm).Do(ctx).Into(ul)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error listing subnamespace anchors for %s: %s\n", nnm, err)
 		os.Exit(1)
@@ -151,12 +159,15 @@ func (cl *realClient) getAnchorNames(nnm string) []string {
 }
 
 func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	nnm := hier.Namespace
 	var err error
 	if hier.CreationTimestamp.IsZero() {
-		err = hncClient.Post().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
+		err = hncClient.Post().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do(ctx).Error()
 	} else {
-		err = hncClient.Put().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do().Error()
+		err = hncClient.Put().Resource(api.HierarchyConfigurations).Namespace(nnm).Name(api.Singleton).Body(hier).Do(ctx).Error()
 	}
 	if err != nil {
 		fmt.Printf("\nCould not %s.\nReason: %s\n", reason, err)
@@ -165,10 +176,13 @@ func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason s
 }
 
 func (cl *realClient) createAnchor(nnm string, hnnm string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	anchor := &api.SubnamespaceAnchor{}
 	anchor.Name = hnnm
 	anchor.Namespace = nnm
-	err := hncClient.Post().Resource(api.Anchors).Namespace(nnm).Name(hnnm).Body(anchor).Do().Error()
+	err := hncClient.Post().Resource(api.Anchors).Namespace(nnm).Name(hnnm).Body(anchor).Do(ctx).Error()
 	if err != nil {
 		fmt.Printf("\nCould not create subnamespace anchor.\nReason: %s\n", err)
 		os.Exit(1)
@@ -177,9 +191,12 @@ func (cl *realClient) createAnchor(nnm string, hnnm string) {
 }
 
 func (cl *realClient) getHNCConfig() *api.HNCConfiguration {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	config := &api.HNCConfiguration{}
 	config.Name = api.HNCConfigSingleton
-	err := hncClient.Get().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Do().Into(config)
+	err := hncClient.Get().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Do(ctx).Into(config)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error reading the HNC Configuration: %s\n", err)
 		os.Exit(1)
@@ -188,11 +205,14 @@ func (cl *realClient) getHNCConfig() *api.HNCConfiguration {
 }
 
 func (cl *realClient) updateHNCConfig(config *api.HNCConfiguration) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var err error
 	if config.CreationTimestamp.IsZero() {
-		err = hncClient.Post().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+		err = hncClient.Post().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do(ctx).Error()
 	} else {
-		err = hncClient.Put().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do().Error()
+		err = hncClient.Put().Resource(api.HNCConfigSingletons).Name(api.HNCConfigSingleton).Body(config).Do(ctx).Error()
 	}
 	if err != nil {
 		fmt.Printf("\nCould not update the HNC Configuration: %s\n", err)

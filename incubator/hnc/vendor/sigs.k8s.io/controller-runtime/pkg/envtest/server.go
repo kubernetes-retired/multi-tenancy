@@ -72,6 +72,15 @@ func defaultAssetPath(binary string) string {
 
 }
 
+// ControlPlane is the re-exported ControlPlane type from the internal integration package
+type ControlPlane = integration.ControlPlane
+
+// APIServer is the re-exported APIServer type from the internal integration package
+type APIServer = integration.APIServer
+
+// Etcd is the re-exported Etcd type from the internal integration package
+type Etcd = integration.Etcd
+
 // Environment creates a Kubernetes test environment that will start / stop the Kubernetes control plane and
 // install extension APIs
 type Environment struct {
@@ -85,6 +94,9 @@ type Environment struct {
 
 	// CRDInstallOptions are the options for installing CRDs.
 	CRDInstallOptions CRDInstallOptions
+
+	// CRDInstallOptions are the options for installing webhooks.
+	WebhookInstallOptions WebhookInstallOptions
 
 	// ErrorIfCRDPathMissing provides an interface for the underlying
 	// CRDInstallOptions.ErrorIfPathMissing. It prevents silent failures
@@ -136,6 +148,10 @@ func (te *Environment) Stop() error {
 	}
 	if te.useExistingCluster() {
 		return nil
+	}
+	err := te.WebhookInstallOptions.Cleanup()
+	if err != nil {
+		return err
 	}
 	return te.ControlPlane.Stop()
 }
@@ -240,7 +256,14 @@ func (te *Environment) Start() (*rest.Config, error) {
 	te.CRDInstallOptions.Paths = mergePaths(te.CRDInstallOptions.Paths, te.CRDDirectoryPaths)
 	te.CRDInstallOptions.ErrorIfPathMissing = te.ErrorIfCRDPathMissing
 	crds, err := InstallCRDs(te.Config, te.CRDInstallOptions)
+	if err != nil {
+		return te.Config, err
+	}
 	te.CRDs = crds
+
+	log.V(1).Info("installing webhooks")
+	err = te.WebhookInstallOptions.Install(te.Config)
+
 	return te.Config, err
 }
 
@@ -293,3 +316,7 @@ func (te *Environment) useExistingCluster() bool {
 	}
 	return *te.UseExistingCluster
 }
+
+// DefaultKubeAPIServerFlags exposes the default args for the APIServer so that
+// you can use those to append your own additional arguments.
+var DefaultKubeAPIServerFlags = integration.APIServerDefaultArgs
