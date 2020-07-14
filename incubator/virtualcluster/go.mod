@@ -8,6 +8,7 @@ require (
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.0
 	github.com/google/cadvisor v0.34.0
+	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.2
@@ -18,6 +19,7 @@ require (
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	k8s.io/api v0.16.6
+	k8s.io/apiextensions-apiserver v0.16.6
 	k8s.io/apimachinery v0.16.6
 	k8s.io/apiserver v0.16.6
 	k8s.io/client-go v0.16.6

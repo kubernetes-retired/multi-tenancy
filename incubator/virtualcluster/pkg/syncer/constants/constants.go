@@ -96,6 +96,8 @@ const (
 	StatusCodeOK                     = "OK"
 	StatusCodeExceedMaxRetryAttempts = "ExceedMaxRetryAttempts"
 	StatusCodeError                  = "Error"
+
+	KubeconfigAdminSecretName = "admin-kubeconfig"
 )
 
 const (
