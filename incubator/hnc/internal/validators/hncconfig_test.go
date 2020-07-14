@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 func TestDeletingConfigObject(t *testing.T) {

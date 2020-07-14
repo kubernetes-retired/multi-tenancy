@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
@@ -17,13 +17,13 @@ import (
 // AnchorServingPath is where the validator will run. Must be kept in sync with the
 // kubebuilder markers below.
 const (
-	AnchorServingPath = "/validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors"
+	AnchorServingPath = "/validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors"
 )
 
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=subnamespaceanchors,verbs=create;delete,versions=v1alpha1,name=subnamespaceanchors.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=subnamespaceanchors,verbs=create;delete,versions=v1alpha2,name=subnamespaceanchors.hnc.x-k8s.io
 
 type Anchor struct {
 	Log     logr.Logger

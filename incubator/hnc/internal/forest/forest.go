@@ -8,7 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 // Forest defines a forest of namespaces - that is, a set of trees. It includes methods to mutate

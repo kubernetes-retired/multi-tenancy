@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
@@ -24,14 +24,14 @@ import (
 const (
 	// HierarchyServingPath is where the validator will run. Must be kept in sync with the
 	// kubebuilder marker below.
-	HierarchyServingPath = "/validate-hnc-x-k8s-io-v1alpha1-hierarchyconfigurations"
+	HierarchyServingPath = "/validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations"
 )
 
 // Note: the validating webhook FAILS CLOSED. This means that if the webhook goes down, all further
 // changes to the hierarchy are forbidden. However, new objects will still be propagated according
 // to the existing hierarchy (unless the reconciler is down too).
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha1-hierarchyconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hierarchyconfigurations,verbs=create;update,versions=v1alpha1,name=hierarchyconfigurations.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hierarchyconfigurations,verbs=create;update,versions=v1alpha2,name=hierarchyconfigurations.hnc.x-k8s.io
 
 type Hierarchy struct {
 	Log     logr.Logger

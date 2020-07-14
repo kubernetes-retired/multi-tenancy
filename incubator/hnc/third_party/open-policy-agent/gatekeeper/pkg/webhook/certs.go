@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,8 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -46,6 +47,8 @@ var crLog = logf.Log.WithName("cert-rotation")
 
 var vwhGVK = schema.GroupVersionKind{Group: "admissionregistration.k8s.io", Version: "v1beta1", Kind: "ValidatingWebhookConfiguration"}
 
+var crdGVK = schema.GroupVersionKind{Group: "apiextensions.k8s.io", Version: "v1beta1", Kind: "CustomResourceDefinition"}
+
 var _ manager.Runnable = &CertRotator{}
 
 var restartOnSecretRefresh = false
@@ -54,23 +57,28 @@ func init() {
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
 }
 
-// AddRotator adds the CertRotator and ReconcileVWH to the manager.
-func AddRotator(mgr manager.Manager, cr *CertRotator, vwhName string) error {
+// AddRotator adds the CertRotator and ReconcileWH to the manager.
+func AddRotator(mgr manager.Manager, cr *CertRotator) error {
 	cr.client = mgr.GetClient()
+	cr.certsMounted = make(chan struct{})
 	cr.certsNotMounted = make(chan struct{})
+	cr.wasCAInjected = atomic.NewBool(false)
+	cr.caNotInjected = make(chan struct{})
 	if err := mgr.Add(cr); err != nil {
 		return err
 	}
 
-	vwhKey := types.NamespacedName{Name: vwhName}
-	reconciler := &ReconcileVWH{
-		client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		ctx:       context.Background(),
-		secretKey: cr.SecretKey,
-		vwhKey:    vwhKey,
+	vwhKey := types.NamespacedName{Name: cr.VWHName}
+	reconciler := &ReconcileWH{
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		ctx:           context.Background(),
+		secretKey:     cr.SecretKey,
+		vwhKey:        vwhKey,
+		crdNames:      cr.CRDNames,
+		wasCAInjected: cr.wasCAInjected,
 	}
-	if err := addController(mgr, reconciler, cr.SecretKey, vwhKey); err != nil {
+	if err := addController(mgr, reconciler); err != nil {
 		return err
 	}
 	return nil
@@ -84,8 +92,13 @@ type CertRotator struct {
 	CAName          string
 	CaOrganization  string
 	DNSName         string
-	CertsMounted    chan struct{}
+	IsReady         chan struct{}
+	certsMounted    chan struct{}
 	certsNotMounted chan struct{}
+	wasCAInjected   *atomic.Bool
+	caNotInjected   chan struct{}
+	VWHName         string
+	CRDNames        []string
 }
 
 // Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
@@ -100,7 +113,8 @@ func (cr *CertRotator) Start(stop <-chan (struct{})) error {
 	}
 
 	// Once the certs are ready, close the channel.
-	go cr.ensureCertsExist()
+	go cr.ensureCertsMounted()
+	go cr.ensureReady()
 
 	ticker := time.NewTicker(rotationCheckFrequency)
 
@@ -115,6 +129,8 @@ tickerLoop:
 			break tickerLoop
 		case <-cr.certsNotMounted:
 			return errors.New("could not mount certs")
+		case <-cr.caNotInjected:
+			return errors.New("could not inject certs to webhooks")
 		}
 	}
 
@@ -213,6 +229,21 @@ func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
 		return err
 	}
 	return nil
+}
+
+func injectCertToConversionWebhook(crd *unstructured.Unstructured, certPem []byte) (notFound bool, err error) {
+	_, found, err := unstructured.NestedMap(crd.Object, "spec", "conversion", "webhookClientConfig")
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return true, errors.New("`webhookClientConfig` field not found in CustomResourceDefinition")
+	}
+	if err := unstructured.SetNestedField(crd.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "conversion", "webhookClientConfig", "caBundle"); err != nil {
+		return false, err
+	}
+
+	return false, nil
 }
 
 func (cr *CertRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
@@ -416,7 +447,26 @@ func validCert(caCert, cert, key []byte, dnsName string, at time.Time) (bool, er
 }
 
 // controller code for making sure the CA cert on the
-// validatingwebhookconfiguration doesn't get clobbered
+// webhooks don't get clobbered
+
+var _ handler.Mapper = &crdMapper{}
+
+type crdMapper struct {
+	secretKey types.NamespacedName
+	crdNames  []string
+}
+
+func (m *crdMapper) Map(object handler.MapObject) []reconcile.Request {
+	if object.Meta.GetNamespace() != "" {
+		return nil
+	}
+	for _, crdName := range m.crdNames {
+		if object.Meta.GetName() == crdName {
+			return []reconcile.Request{{NamespacedName: m.secretKey}}
+		}
+	}
+	return nil
+}
 
 var _ handler.Mapper = &mapper{}
 
@@ -436,47 +486,46 @@ func (m *mapper) Map(object handler.MapObject) []reconcile.Request {
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func addController(mgr manager.Manager, r reconcile.Reconciler, secretKey, vwhKey types.NamespacedName) error {
-	// Create a new controller
-	c, err := controller.New(("validating-webhook-controller"), mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to the provided ValidatingWebhookConfiguration
-	s := &corev1.Secret{}
-	if err := c.Watch(&source.Kind{Type: s}, &handler.EnqueueRequestForObject{}); err != nil {
-		return err
-	}
-
+func addController(mgr manager.Manager, r *ReconcileWH) error {
 	vwh := &unstructured.Unstructured{}
 	vwh.SetGroupVersionKind(vwhGVK)
-	mapper := &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
-		secretKey: secretKey,
-		vwhKey:    vwhKey,
-	}}
-	if err := c.Watch(&source.Kind{Type: vwh}, mapper); err != nil {
+	crd := &unstructured.Unstructured{}
+	crd.SetGroupVersionKind(crdGVK)
+	// Create a new controller
+	err := ctrl.NewControllerManagedBy(mgr).
+		For(&corev1.Secret{}).
+		Watches(&source.Kind{Type: vwh}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &mapper{
+			secretKey: r.secretKey,
+			vwhKey:    r.vwhKey,
+		}}).
+		Watches(&source.Kind{Type: crd}, &handler.EnqueueRequestsFromMapFunc{ToRequests: &crdMapper{
+			secretKey: r.secretKey,
+			crdNames:  r.crdNames,
+		}}).Complete(r)
+	if err != nil {
 		return err
 	}
 
 	return nil
 }
 
-var _ reconcile.Reconciler = &ReconcileVWH{}
+var _ reconcile.Reconciler = &ReconcileWH{}
 
-// ReconcileVWH reconciles a validatingwebhookconfiguration, making sure it
+// ReconcileWH reconciles a validatingwebhookconfiguration, making sure it
 // has the appropriate CA cert
-type ReconcileVWH struct {
-	client    client.Client
-	scheme    *runtime.Scheme
-	ctx       context.Context
-	secretKey types.NamespacedName
-	vwhKey    types.NamespacedName
+type ReconcileWH struct {
+	client        client.Client
+	scheme        *runtime.Scheme
+	ctx           context.Context
+	secretKey     types.NamespacedName
+	vwhKey        types.NamespacedName
+	crdNames      []string
+	wasCAInjected *atomic.Bool
 }
 
 // Reconcile reads that state of the cluster for a validatingwebhookconfiguration
 // object and makes sure the most recent CA cert is included
-func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	if request.NamespacedName != r.secretKey {
 		return reconcile.Result{}, nil
 	}
@@ -517,13 +566,59 @@ func (r *ReconcileVWH) Reconcile(request reconcile.Request) (reconcile.Result, e
 		if err := r.client.Update(r.ctx, vwh); err != nil {
 			return reconcile.Result{Requeue: true}, err
 		}
+
+		// Ensure certs on CRD conversion webhooks if there's any.
+		if result, err := r.ensureCRDConvWHCerts(artifacts.CertPEM); err != nil {
+			return result, err
+		}
+
+		if !r.wasCAInjected.Load() {
+			r.wasCAInjected.Store(true)
+		}
 	}
 
 	return reconcile.Result{}, nil
 }
 
-// ensureCertsExist ensure the cert files exist.
-func (cr *CertRotator) ensureCertsExist() {
+func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) (reconcile.Result, error) {
+	for _, crdName := range r.crdNames {
+		crd := &unstructured.Unstructured{}
+		crd.SetGroupVersionKind(crdGVK)
+		crdKey := types.NamespacedName{Name: crdName}
+		if err := r.client.Get(r.ctx, crdKey, crd); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				crLog.Info("CRD " + crdName + " is not found")
+				continue
+			}
+			// Error reading the object - requeue the request.
+			return reconcile.Result{Requeue: true}, err
+		}
+
+		if !crd.GetDeletionTimestamp().IsZero() {
+			crLog.Info("CRD " + crdName + " is being deleted")
+			continue
+		}
+
+		crLog.Info("ensuring CA cert on CRD conversion webhook")
+		if notFound, err := injectCertToConversionWebhook(crd, certPem); err != nil {
+			crLog.Error(err, "unable to inject cert to CRD conversion webhook")
+			if notFound {
+				// Don't retry if the conversion webhook fields are not there.
+				continue
+			}
+			return reconcile.Result{Requeue: true}, err
+		}
+		if err := r.client.Update(r.ctx, crd); err != nil {
+			crLog.Info("unable to update cert on CRD " + crdName)
+			return reconcile.Result{Requeue: true}, err
+		}
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// ensureCertsMounted ensure the cert files exist.
+func (cr *CertRotator) ensureCertsMounted() {
 	checkFn := func() (bool, error) {
 		certFile := cr.CertDir + "/" + certName
 		_, err := os.Stat(certFile)
@@ -543,5 +638,25 @@ func (cr *CertRotator) ensureCertsExist() {
 		return
 	}
 	crLog.Info(fmt.Sprintf("certs are ready in %s", cr.CertDir))
-	close(cr.CertsMounted)
+	close(cr.certsMounted)
+}
+
+// ensureReady ensure the cert files exist and the CAs are injected.
+func (cr *CertRotator) ensureReady() {
+	<-cr.certsMounted
+	checkFn := func() (bool, error) {
+		return cr.wasCAInjected.Load(), nil
+	}
+	if err := wait.ExponentialBackoff(wait.Backoff{
+		Duration: 1 * time.Second,
+		Factor:   2,
+		Jitter:   1,
+		Steps:    10,
+	}, checkFn); err != nil {
+		crLog.Error(err, "max retries for checking CA injection")
+		close(cr.caNotInjected)
+		return
+	}
+	crLog.Info(fmt.Sprintf("CA certs are injected to webhooks"))
+	close(cr.IsReady)
 }

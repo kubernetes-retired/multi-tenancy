@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
