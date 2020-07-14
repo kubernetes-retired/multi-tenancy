@@ -17,7 +17,14 @@ var _ = Describe("Delete-anchor-crd", func() {
 
 	AfterEach(func() {
 		cleanupNamespaces(nsParent, nsChild)
-		mustRun("kubectl apply -f", hncRecoverPath)
+		err := tryRun("kubectl apply -f", hncRecoverPath)
+		if err != nil {
+			GinkgoT().Log("-----------------------------WARNING------------------------------")
+			GinkgoT().Logf("WARNING: COULDN'T REPAIR HNC: %v", err)
+			GinkgoT().Log("ANY TEST AFTER THIS COULD FAIL BECAUSE WE COULDN'T REPAIR HNC HERE")
+			GinkgoT().Log("------------------------------------------------------------------")
+			GinkgoT().FailNow()
+		}
 	})
 
 	It("should create parent and deletable child, and delete the CRD", func() {
