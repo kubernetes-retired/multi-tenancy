@@ -21,6 +21,8 @@ const (
 	certDir         = "/tmp/k8s-webhook-server/serving-certs"
 )
 
+var crds = []string{"hncconfigurations.hnc.x-k8s.io"}
+
 // DNSName is <service name>.<namespace>.svc
 var dnsName = fmt.Sprintf("%s.%s.svc", serviceName, secretNamespace)
 
@@ -42,7 +44,9 @@ func CreateCertsIfNeeded(mgr ctrl.Manager, novalidation, internalCert bool) (cha
 		CaOrganization: caOrganization,
 		DNSName:        dnsName,
 		CertsMounted:   setupFinished,
-	}, vwhName)
+		VWHName:        vwhName,
+		CRDNames:       crds,
+	})
 }
 
 // Create creates all validators. This function is called from main.go.

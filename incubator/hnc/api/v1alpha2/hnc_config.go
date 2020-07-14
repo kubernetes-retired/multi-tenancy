@@ -32,15 +32,15 @@ type SynchronizationMode string
 
 const (
 	// Propagate objects from ancestors to descendants and deletes obsolete descendants.
-	Propagate SynchronizationMode = "propagate"
+	Propagate SynchronizationMode = "Propagate"
 
 	// Ignore the modification of this type. New or changed objects will not be propagated,
 	// and obsolete objects will not be deleted. The inheritedFrom label is not removed.
 	// Any unknown mode is treated as ignore.
-	Ignore SynchronizationMode = "ignore"
+	Ignore SynchronizationMode = "Ignore"
 
 	// Remove all existing propagated copies.
-	Remove SynchronizationMode = "remove"
+	Remove SynchronizationMode = "Remove"
 )
 
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
