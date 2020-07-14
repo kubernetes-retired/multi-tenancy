@@ -21,6 +21,7 @@ import (
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
+	crdclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -129,6 +130,13 @@ func (f *Framework) BeforeEach() {
 		ExpectNoError(err)
 		f.DynamicClient, err = dynamic.NewForConfig(config)
 		ExpectNoError(err)
+
+		crdClient, err := crdclient.NewForConfig(config)
+		ExpectNoError(err)
+		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("clusterversions.tenancy.x-k8s.io", metav1.GetOptions{})
+		ExpectNoError(err, "clusterversions crd not installed")
+		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("virtualclusters.tenancy.x-k8s.io", metav1.GetOptions{})
+		ExpectNoError(err, "virtualclusters crd not installed")
 	}
 
 	ginkgo.By(fmt.Sprintf("Building a namespace api object, basename %s", f.BaseName))

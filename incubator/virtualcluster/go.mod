@@ -19,6 +19,7 @@ require (
 	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
 	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 	k8s.io/api v0.16.6
+	k8s.io/apiextensions-apiserver v0.16.6
 	k8s.io/apimachinery v0.16.6
 	k8s.io/apiserver v0.16.6
 	k8s.io/client-go v0.16.6
