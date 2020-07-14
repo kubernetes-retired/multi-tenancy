@@ -108,6 +108,12 @@ manifests: controller-gen
 		kustomize edit add resource ../config/default && \
 		kustomize edit set image controller=${HNC_IMG}
 	kustomize build manifests/ -o manifests/hnc-manager.yaml
+	@echo "Building CRD-only manifest"
+	rm manifests/kustomization.yaml
+	cd manifests && \
+		touch kustomization.yaml && \
+		kustomize edit add resource ../config/crd
+	kustomize build manifests/ -o manifests/hnc-crds.yaml
 
 # Run go fmt against code
 fmt:
@@ -143,11 +149,21 @@ deploy: docker-push kubectl manifests
 deploy-watch:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
 
-# Installs cert-manager. See https://cert-manager.io/docs/installation/kubernetes/ for why we're not validating our YAML.
-deploy-cm:
-	@kubectl cluster-info
-	-kubectl create namespace cert-manager
-	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v0.11.0/cert-manager.yaml
+undeploy: manifests
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@echo "This will FULLY delete HNC, including all CRDs. You have 5s to turn back"
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@echo "********************************************************************************"
+	@sleep 5
+	@echo "Deleting all CRDs to ensure all finalizers are removed"
+	-kubectl delete -f manifests/hnc-crds.yaml
+	@echo "Deleting the rest of HNC"
+	-kubectl delete -f manifests/hnc-manager.yaml
 
 # Push the docker image
 docker-push: docker-build
