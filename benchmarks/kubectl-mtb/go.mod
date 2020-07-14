@@ -6,6 +6,7 @@ require (
 	github.com/creasty/defaults v1.3.0
 	github.com/kubernetes-sigs/multi-tenancy v0.0.0-20200707060558-ea14282f3be6
 	github.com/kubernetes-sigs/wg-policy-prototypes/policy-report v0.0.0-20200701192251-679efd0b105e
+	github.com/olekukonko/tablewriter v0.0.4
 	github.com/onsi/gomega v1.8.1
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/sirupsen/logrus v1.4.2
