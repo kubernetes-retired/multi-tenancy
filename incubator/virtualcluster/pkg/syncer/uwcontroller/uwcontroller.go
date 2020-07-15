@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
@@ -132,6 +133,13 @@ func (c *UpwardController) processNextWorkItem() bool {
 	err := c.Reconciler.BackPopulate(key)
 	if err == nil {
 		metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeOK)
+		c.Queue.Forget(obj)
+		return true
+	}
+
+	if errors.IsClusterNotFound(err) {
+		// The virtual cluster has been removed, do not reconcile for its uws requests.
+		klog.Warningf("%v, drop the uws request %v", err.Error(), key)
 		c.Queue.Forget(obj)
 		return true
 	}

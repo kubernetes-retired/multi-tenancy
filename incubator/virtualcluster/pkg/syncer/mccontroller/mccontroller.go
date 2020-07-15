@@ -37,6 +37,7 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -187,7 +188,7 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	instance := getTargetObject(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
@@ -205,7 +206,7 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name string, objectType runtime.Object) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	instance := getTargetObject(objectType)
 	if instance == nil {
@@ -226,7 +227,7 @@ func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name st
 func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	instanceList := getTargetObjectList(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
@@ -241,7 +242,7 @@ func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 func (c *MultiClusterController) ListByObjectType(clusterName string, objectType runtime.Object) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	instanceList := getTargetObjectList(objectType)
 	if instanceList == nil {
@@ -265,7 +266,7 @@ func (c *MultiClusterController) getCluster(clusterName string) ClusterInterface
 func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset.Interface, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	return cluster.GetClientSet()
 }
@@ -274,7 +275,7 @@ func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset
 func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return "", fmt.Errorf("could not find cluster %s", clusterName)
+		return "", errors.NewClusterNotFound(clusterName)
 	}
 	spec, err := cluster.GetSpec()
 	if err != nil {
@@ -286,20 +287,19 @@ func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, e
 func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.VirtualClusterSpec, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return nil, fmt.Errorf("could not find cluster %s", clusterName)
+		return nil, errors.NewClusterNotFound(clusterName)
 	}
 	spec, err := cluster.GetSpec()
 	if err != nil {
 		return nil, err
 	}
 	return spec, nil
-
 }
 
 func (c *MultiClusterController) GetOwnerInfo(clusterName string) (string, string, string, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return "", "", "", fmt.Errorf("could not find cluster %s", clusterName)
+		return "", "", "", errors.NewClusterNotFound(clusterName)
 	}
 	name, namespace, uid := cluster.GetOwnerInfo()
 	return name, namespace, uid, nil
@@ -325,7 +325,7 @@ func (c *MultiClusterController) RequeueObject(clusterName string, obj interface
 
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
-		return fmt.Errorf("could not find cluster %s", clusterName)
+		return errors.NewClusterNotFound(clusterName)
 	}
 	//FIXME: we dont need event here.
 	r := reconciler.Request{}

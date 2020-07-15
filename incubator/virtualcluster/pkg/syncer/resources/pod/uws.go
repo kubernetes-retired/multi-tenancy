@@ -18,6 +18,8 @@ package pod
 
 import (
 	"fmt"
+
+	pkgerr "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +69,7 @@ func (c *controller) BackPopulate(key string) error {
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("could not find pPod %s/%s's vPod in controller cache %v", vNamespace, pName, err)
+		return pkgerr.Wrapf(err, "could not find pPod %s/%s's vPod in controller cache", vNamespace, pName)
 	}
 	vPod := vPodObj.(*v1.Pod)
 	if pPod.Annotations[constants.LabelUID] != string(vPod.UID) {
@@ -76,7 +78,7 @@ func (c *controller) BackPopulate(key string) error {
 
 	tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
 	// If tenant Pod has not been assigned, bind to virtual Node.

@@ -19,6 +19,7 @@ package event
 import (
 	"fmt"
 
+	pkgerr "github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -66,7 +67,7 @@ func (c *controller) BackPopulate(key string) error {
 
 	tenantClient, err := c.multiClusterEventController.GetClusterClient(clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
 	vInvolvedObjectType, accepted := c.acceptedEventObj[pEvent.InvolvedObject.Kind]
