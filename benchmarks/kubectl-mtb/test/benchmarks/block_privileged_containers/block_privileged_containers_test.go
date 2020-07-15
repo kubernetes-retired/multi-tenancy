@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	podutil "k8s.io/kubernetes/test/e2e/framework/pod"
+	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 )
 
@@ -33,6 +34,10 @@ func TestMain(m *testing.M) {
 
 	kind := &unittestutils.KindCluster{}
 	setUp := func() error {
+		provider := cluster.Provider()
+		kind.Provider = provider
+		clusterList = kind.ListClusters()
+
 		err := kind.CreateCluster()
 		kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
