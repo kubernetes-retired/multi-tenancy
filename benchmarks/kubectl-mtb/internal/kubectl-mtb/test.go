@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
@@ -32,7 +31,6 @@ import (
 var (
 	tenant          string
 	tenantNamespace string
-	config          *rest.Config
 	k8sClient       *kubernetes.Clientset
 	tenantClient    *kubernetes.Clientset
 )
@@ -95,9 +93,10 @@ func validateFlags(cmd *cobra.Command) error {
 		APIResource: metav1.APIResource{
 			Name: "namespaces",
 		},
+		ResourceName: tenantNamespace,
 	}
 	// checks if tenant-admin and tenant namespace are valid
-	access, _, err := utils.RunAccessCheck(tenantClient, tenantNamespace, resource, "list", tenantNamespace)
+	access, _, err := utils.RunAccessCheck(tenantClient, "", resource, "get")
 	if err != nil {
 		return err
 	}

@@ -10,34 +10,25 @@ import (
 )
 
 type GroupResource struct {
-	APIGroup    string
-	APIResource metav1.APIResource
+	APIGroup     string
+	APIResource  metav1.APIResource
+	ResourceName string
 }
 
 // RunAccessCheck checks that given client can perform the given verb on the resource or not
-func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource GroupResource, verb string, name ...string) (bool, string, error) {
+func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource GroupResource, verb string) (bool, string, error) {
 	var sar *authorizationv1.SelfSubjectAccessReview
-	var rname string
-	var rnamespace string
-	if len(name) == 0 {
-		rnamespace = namespace
-		rname = ""
-	} else {
-		rname = name[0]
-		// namespace should empty for cluster-scoped resources
-		rnamespace = ""
-	}
 
 	// Todo for non resource url
 	sar = &authorizationv1.SelfSubjectAccessReview{
 		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
-				Namespace:   rnamespace,
+				Namespace:   namespace,
 				Verb:        verb,
 				Group:       resource.APIGroup,
 				Resource:    resource.APIResource.Name,
 				Subresource: "",
-				Name:        rname,
+				Name:        resource.ResourceName,
 			},
 		},
 	}
