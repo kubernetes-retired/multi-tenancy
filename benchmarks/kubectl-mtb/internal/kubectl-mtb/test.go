@@ -16,6 +16,7 @@ package kubectl
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -55,6 +56,24 @@ func validateFlags(cmd *cobra.Command) error {
 	return nil
 }
 
+func reportSuiteWillBegin(suiteSummary *reporter.SuiteSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.SuiteWillBegin(suiteSummary)
+	}
+}
+
+func reportTestWillRun(testSummary *reporter.TestSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.TestWillRun(testSummary)
+	}
+}
+
+func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.SuiteDidEnd(suiteSummary)
+	}
+}
+
 func runTests(cmd *cobra.Command, args []string) error {
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
@@ -80,8 +99,8 @@ func runTests(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get reporter from the user
-	reporterType, _ := cmd.Flags().GetString("out")
-	r, err := reporter.GetReporter(reporterType)
+	reporters, _ := cmd.Flags().GetString("out")
+	reportersArray, err := reporter.GetReporters(strings.Split(reporters, ","))
 	if err != nil {
 		return err
 	}
@@ -93,7 +112,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 	}
 
 	suiteStartTime := time.Now()
-	r.SuiteWillBegin(suiteSummary)
+	reportSuiteWillBegin(suiteSummary, reportersArray)
 
 	for _, b := range benchmarks {
 
@@ -130,13 +149,13 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
-		r.TestWillRun(ts)
+		reportTestWillRun(ts, reportersArray)
 	}
 
 	suiteElapsedTime := time.Since(suiteStartTime)
 	suiteSummary.RunTime = suiteElapsedTime
 	suiteSummary.NumberOfSkippedTests = test.BenchmarkSuite.Totals() - len(benchmarks)
-	r.SuiteDidEnd(suiteSummary)
+	reportSuiteDidEnd(suiteSummary, reportersArray)
 
 	return nil
 }
