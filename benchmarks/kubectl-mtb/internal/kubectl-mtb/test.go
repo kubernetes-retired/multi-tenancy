@@ -19,16 +19,22 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var (
 	tenant          string
 	tenantNamespace string
+	config          *rest.Config
+	k8sClient       *kubernetes.Clientset
+	tenantClient    *kubernetes.Clientset
 )
 
 var testCmd = &cobra.Command{
@@ -39,6 +45,32 @@ var testCmd = &cobra.Command{
 		cmdutil.CheckErr(validateFlags(cmd))
 		cmdutil.CheckErr(runTests(cmd, args))
 	},
+}
+
+func initConfig() error {
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return err
+	}
+
+	// create the K8s clientset
+	k8sClient, err = kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	tenantConfig := config
+	tenantConfig.Impersonate.UserName = tenant
+
+	// create the tenant clientset
+	tenantClient, err = kubernetes.NewForConfig(tenantConfig)
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 // Validation of the flag inputs
@@ -52,32 +84,30 @@ func validateFlags(cmd *cobra.Command) error {
 	if tenantNamespace == "" {
 		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
 	}
+
+	err := initConfig()
+	if err != nil {
+		return err
+	}
+
+	resource := utils.GroupResource{
+		APIGroup: "",
+		APIResource: metav1.APIResource{
+			Name: "namespaces",
+		},
+	}
+	// checks if tenant-admin and tenant namespace are valid
+	access, _, err := utils.RunAccessCheck(tenantClient, tenantNamespace, resource, "list", tenantNamespace)
+	if err != nil {
+		return err
+	}
+	if !access {
+		return fmt.Errorf("Make sure you have entered valid tenant-admin and tenant namespace. ")
+	}
 	return nil
 }
 
 func runTests(cmd *cobra.Command, args []string) error {
-
-	kubecfgFlags := genericclioptions.NewConfigFlags(false)
-
-	config, err := kubecfgFlags.ToRESTConfig()
-	if err != nil {
-		return err
-	}
-
-	// create the K8s clientset
-	k8sClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-
-	tenantConfig := config
-	tenantConfig.Impersonate.UserName = tenant
-
-	// create the tenant clientset
-	tenantClient, err := kubernetes.NewForConfig(tenantConfig)
-	if err != nil {
-		return err
-	}
 
 	// Get reporter from the user
 	reporterType, _ := cmd.Flags().GetString("out")
@@ -108,7 +138,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		startTest := time.Now()
 
-		// Run Prerun
+		//Run Prerun
 		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
 			suiteSummary.NumberOfFailedValidations++
