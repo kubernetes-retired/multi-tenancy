@@ -125,7 +125,7 @@ func New(
 
 // enqueue deleted and running object.
 func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
-	vc, ok := obj.(*v1alpha1.VirtualCluster)
+	_, ok := obj.(*v1alpha1.VirtualCluster)
 
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -133,15 +133,11 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %+v", obj))
 			return
 		}
-		vc, ok = tombstone.Obj.(*v1alpha1.VirtualCluster)
+		_, ok = tombstone.Obj.(*v1alpha1.VirtualCluster)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a vc %+v", obj))
 			return
 		}
-	}
-
-	if vc.Status.Phase != v1alpha1.ClusterRunning {
-		return
 	}
 
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)

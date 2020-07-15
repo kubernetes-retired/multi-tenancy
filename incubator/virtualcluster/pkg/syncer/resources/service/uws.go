@@ -19,6 +19,7 @@ package service
 import (
 	"fmt"
 
+	pkgerr "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -80,7 +81,7 @@ func (c *controller) BackPopulate(key string) error {
 		if errors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("could not find pService %s/%s's vService in controller cache %v", vNamespace, pName, err)
+		return pkgerr.Wrapf(err, "could not find pService %s/%s's vService in controller cache", vNamespace, pName)
 	}
 	vService := vServiceObj.(*v1.Service)
 	if pService.Annotations[constants.LabelUID] != string(vService.UID) {
@@ -89,12 +90,12 @@ func (c *controller) BackPopulate(key string) error {
 
 	tenantClient, err := c.multiClusterServiceController.GetClusterClient(clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
 	spec, err := c.multiClusterServiceController.GetSpec(clusterName)
 	if err != nil {
-		return err
+		return pkgerr.Wrapf(err, "failed to get spec of cluster %s", clusterName)
 	}
 
 	var newService *v1.Service
