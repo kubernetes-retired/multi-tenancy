@@ -8,6 +8,7 @@ import (
 
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -27,21 +28,31 @@ var tenantConfig *rest.Config
 var tenantClient *kubernetes.Clientset
 var tenantNamespace = "tenant1admin"
 var serviceAccount = "t1-admin1"
+var g *gomega.GomegaWithT
 
 type TestFunction func(t *testing.T) (bool, bool)
 
 func TestMain(m *testing.M) {
-
+	var clusterExists bool
 	kind := &unittestutils.KindCluster{}
 	setUp := func() error {
-		provider := cluster.Provider()
-		kind.Provider = provider
-		clusterList = kind.ListClusters()
-
-		err := kind.CreateCluster()
+		provider := cluster.NewProvider()
+		// List the clusters available
+		clusterList, err := provider.List()
+		clusters := strings.Join(clusterList, " ")
+		// Checks if the main cluster (test) is running
+		if !strings.Contains(clusters, "kubectl-mtb-suite") {
+			err := kind.CreateCluster()
+			clusterExists = false
+			if err != nil {
+				return err
+			}
+		} else {
+			clusterExists = true
+		}
 		kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
-		// create the K8s clientSet
+		// Create the K8s clientSet
 		cfg, err := kubecfgFlags.ToRESTConfig()
 		k8sClient, err := kubernetes.NewForConfig(cfg)
 
@@ -51,10 +62,12 @@ func TestMain(m *testing.M) {
 		rest := k8sClient.CoreV1().RESTClient()
 		var apiExtensions *apiextensionspkg.Clientset
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
+		// Initialize testclient
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
 		tenantConfig := testClient.Config
 		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		// Install Kyverno
 		path := filepath.Join("..", "..", "assets")
 		crdPath := filepath.Join(path, "kyverno.yaml")
 		err = testClient.CreatePolicy(crdPath)
@@ -75,14 +88,20 @@ func TestMain(m *testing.M) {
 	retCode := m.Run()
 
 	tearDown := func() error {
-		err := kind.DeleteCluster()
+		var err error
+		if !clusterExists {
+			err := kind.DeleteCluster()
+			return err
+		} else {
+			unittestutils.DestroyTenant(g)
+		}
 		return err
 	}
+
 	// exec tearDown function
 	err = tearDown()
 	if err != nil {
 		log.Print(err.Error())
-
 	}
 
 	os.Exit(retCode)
@@ -98,7 +117,7 @@ func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, se
 }
 
 func TestBenchmark(t *testing.T) {
-	g := gomega.NewGomegaWithT(t)
+	g = gomega.NewGomegaWithT(t)
 	testClient.Namespace = tenantNamespace
 	testClient.ServiceAccount = serviceAccount
 	// test to create tenants
@@ -135,6 +154,7 @@ func TestBenchmark(t *testing.T) {
 		g.Expect(preRun).To(gomega.Equal(tc.preRun))
 		g.Expect(run).To(gomega.Equal(tc.run))
 	}
+
 }
 
 func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {

@@ -19,12 +19,6 @@ type KindCluster struct {
 	Provider       *cluster.Provider
 }
 
-func (k *KindCluster) ListClusters() {
-	clusters, err := k.Provider.List()
-
-	fmt.Println(clusters, err)
-}
-
 // Creates Cluster
 func (k *KindCluster) CreateCluster() error {
 	k.Name = "kubectl-mtb"
