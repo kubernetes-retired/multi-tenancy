@@ -76,6 +76,6 @@ var _ = Describe("When deleting CRDs", func() {
 		mustRun("kubectl delete crd hncconfigurations.hnc.x-k8s.io")
 		// Give HNC 10s to have the chance to fully delete everything (5s wasn't enough).
 		// Verify that the HNC CRDs are gone (if nothing's printed, then they are).
-		runShouldNotContain("hnc", "10s", "kubectl get crd")
+		runShouldNotContain("hnc", 10, "kubectl get crd")
 	})
 })
