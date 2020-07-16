@@ -57,8 +57,9 @@ type TypeSynchronizationSpec struct {
 	// Kind to be configured.
 	Kind string `json:"kind"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
-	// as "propagate". An unsupported mode will be treated as "ignore".
+	// as "propagate".
 	// +optional
+	// +kubebuilder:validation:Enum=propagate;ignore;remove
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }
 
