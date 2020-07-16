@@ -14,6 +14,10 @@ var _ = Describe("Namespace", func() {
 		nsB = prefix+"b"
 	)
 
+	BeforeEach(func() {
+		cleanupNamespaces(nsA, nsB)
+	})
+
 	AfterEach(func() {
 		cleanupNamespaces(nsA, nsB)
 	})

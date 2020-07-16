@@ -21,6 +21,7 @@ var _ = Describe("When deleting CRDs", func() {
 		if hncRecoverPath == ""{
 			Skip("Environment variable HNC_REPAIR not set. Skipping reocovering HNC.")
 		}
+		cleanupNamespaces(nsParent, nsChild)
 	})
 
 	AfterEach(func() {
