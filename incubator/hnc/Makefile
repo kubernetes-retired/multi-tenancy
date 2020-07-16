@@ -7,6 +7,7 @@ CONFIG ?= "default"
 PROJECT_ID=$(shell gcloud config get-value project)
 
 # Set default version tag for krew build and Docker image (unless version is set)
+HNC_IMG_NAME ?= hnc-manager
 HNC_IMG_TAG ?= latest
 
 # Image URL to use all building/pushing image targets
@@ -16,7 +17,7 @@ ifeq ($(CONFIG),kind)
 # on the docker-push target, below, to push the image into Kind).
 HNC_IMG ?= controller:kind-local
 else
-HNC_IMG ?= "gcr.io/${PROJECT_ID}/hnc/controller:${HNC_IMG_TAG}"
+HNC_IMG ?= "gcr.io/${PROJECT_ID}/${HNC_IMG_NAME}:${HNC_IMG_TAG}"
 # We don't want to overwrite an existing docker image and tag so we query the repository
 # to see if the image already exists. This can be overridden by setting FORCE_RELEASE=true
 ifeq ($(FORCE_RELEASE), true)
@@ -26,7 +27,7 @@ else
 endif
 endif
 
-HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/hnc/controller:${HNC_IMG_TAG}"
+HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/${HNC_IMG_NAME}:${HNC_IMG_TAG}"
 
 CONTROLLER_GEN ?= "./bin/controller-gen"
 
@@ -107,7 +108,7 @@ manifests: controller-gen
 		touch kustomization.yaml && \
 		kustomize edit add resource ../config/default && \
 		kustomize edit set image controller=${HNC_IMG}
-	kustomize build manifests/ -o manifests/hnc-manager.yaml
+	kustomize build manifests/ -o manifests/${HNC_IMG_NAME}.yaml
 	@echo "Building CRD-only manifest"
 	rm manifests/kustomization.yaml
 	cd manifests && \
@@ -144,7 +145,7 @@ $(CONTROLLER_GEN):
 # unless the tag changes.
 deploy: docker-push kubectl manifests
 	-kubectl -n hnc-system delete deployment hnc-controller-manager
-	kubectl apply -f manifests/hnc-manager.yaml
+	kubectl apply -f manifests/${HNC_IMG_NAME}.yaml
 
 deploy-watch:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
