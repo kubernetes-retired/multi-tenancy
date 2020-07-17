@@ -39,7 +39,34 @@ func tryRun(cmdln ...string) error {
 	return err
 }
 
-func runShouldNotContain(substr string, timeDuration string, cmdln ...string) {
+func runShouldContain(substr string, seconds float64, cmdln ...string) {
+	runShouldContainMultiple([]string{substr}, seconds, cmdln...)
+}
+
+func runShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
+	Eventually(func() error {
+		stdout, err := runCommand(cmdln...)
+		if err != nil {
+			return err
+		}
+
+		allContained := true
+		for _, substr := range substrs {
+			if strings.Contains(stdout, substr) == false {
+				allContained = false
+				break
+			}
+		}
+
+		if allContained == false {
+			return errors.New("Expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
+		}
+
+		return nil
+	}, seconds).Should(Succeed())
+}
+
+func runShouldNotContain(substr string, seconds float64, cmdln ...string) {
 	Eventually(func() error {
 		stdout, err := runCommand(cmdln...)
 		if err != nil {
@@ -49,7 +76,7 @@ func runShouldNotContain(substr string, timeDuration string, cmdln ...string) {
 			return errors.New("Not expecting: " + substr + " but get: " + stdout)
 		}
 		return nil
-	}, timeDuration).Should(Succeed())
+	}, seconds).Should(Succeed())
 }
 
 func runCommand(cmdln ...string) (string, error) {
