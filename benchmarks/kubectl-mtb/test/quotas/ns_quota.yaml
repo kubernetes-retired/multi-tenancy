@@ -6,8 +6,6 @@ spec:
   hard:
     cpu: "1" 
     ephemeral-storage: "1" 
-    hugepages-1Gi: "1" 
-    hugepages-2Mi: "1" 
     memory: "1" 
     persistentvolumeclaims: "1"
     services.loadbalancers: "1"
