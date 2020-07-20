@@ -139,13 +139,7 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 			fmt.Sprintf("Cannot find the %s in the apiserver with error: %s", gvk, err.Error()))
 	}
 
-	// The mode of a type should be either unset or set to one of the supported modes.
-	switch t.Mode {
-	case api.Propagate, api.Ignore, api.Remove, "":
-		return allow("")
-	default:
-		return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Unrecognized mode '%s' for %s", t.Mode, gvk))
-	}
+	return allow("")
 }
 
 // realGVKValidator implements gvkValidator, and is not used during unit tests.

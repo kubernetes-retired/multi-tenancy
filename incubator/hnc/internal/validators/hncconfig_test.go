@@ -160,17 +160,6 @@ func TestNonRBACTypes(t *testing.T) {
 			},
 			validator: f,
 			allow:     false,
-		},
-		{
-			name: "Unrecognized mode",
-			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
-				// "delete" mode is unsupported
-				{APIVersion: "v1", Kind: "Secret", Mode: "delete"},
-			},
-			validator: f,
-			allow:     false,
 		}, {
 			name: "Duplicate types with different modes",
 			configs: []api.TypeSynchronizationSpec{
