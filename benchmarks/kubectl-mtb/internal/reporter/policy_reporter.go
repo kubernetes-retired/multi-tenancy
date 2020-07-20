@@ -72,6 +72,10 @@ func (p *PolicyReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
 	CreatePolicy(suiteSummary.TenantAdminNamespace, p.policy)
 }
 
+func (p *PolicyReporter) FullSummary(finalSummary *FinalSummary) {
+
+}
+
 // CreatePolicy creates the policy object
 func CreatePolicy(namespace string, policy v1alpha1.PolicyReport) {
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)

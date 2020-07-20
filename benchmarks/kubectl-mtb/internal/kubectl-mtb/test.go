@@ -23,6 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
@@ -92,6 +93,9 @@ func runTests(cmd *cobra.Command, args []string) error {
 		TenantAdminNamespace: tenantNamespace,
 	}
 
+	finalSummary := &reporter.FinalSummary{}
+	finalSummary.TestResult = make(map[*benchmark.Benchmark]*reporter.Result)
+
 	suiteStartTime := time.Now()
 	r.SuiteWillBegin(suiteSummary)
 
@@ -100,6 +104,8 @@ func runTests(cmd *cobra.Command, args []string) error {
 		ts := &reporter.TestSummary{
 			Benchmark: b,
 		}
+
+		result := &reporter.Result{}
 
 		err := ts.SetDefaults()
 		if err != nil {
@@ -111,6 +117,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		// Run Prerun
 		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
+			result.Error = true
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
@@ -121,13 +128,15 @@ func runTests(cmd *cobra.Command, args []string) error {
 			err = b.Run(tenantNamespace, k8sClient, tenantClient)
 			if err != nil {
 				suiteSummary.NumberOfFailedTests++
+				result.Failed = true
 				ts.Test = false
 				ts.TestError = err
 			} else {
 				suiteSummary.NumberOfPassedTests++
+				result.Passed = true
 			}
 		}
-
+		finalSummary.TestResult[b] = result
 		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
 		r.TestWillRun(ts)
@@ -137,6 +146,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 	suiteSummary.RunTime = suiteElapsedTime
 	suiteSummary.NumberOfSkippedTests = test.BenchmarkSuite.Totals() - len(benchmarks)
 	r.SuiteDidEnd(suiteSummary)
+	r.FullSummary(finalSummary)
 
 	return nil
 }

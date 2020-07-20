@@ -1,5 +1,13 @@
 package reporter
 
+import (
+	"fmt"
+	"os"
+	"strconv"
+
+	"github.com/olekukonko/tablewriter"
+)
+
 const defaultStyle = "\x1b[0m"
 const boldStyle = "\x1b[1m"
 const redColor = "\x1b[91m"
@@ -9,6 +17,10 @@ const cyanColor = "\x1b[36m"
 const grayColor = "\x1b[90m"
 const magentaColor = "\033[35m"
 const lightGrayColor = "\x1b[37m"
+const lilac = "\033[38;2;200;162;200m"
+const tick = "\u2705"
+const cross = "\u274c"
+const skipped = "\u23ed"
 
 // DefaultReporter collects all the test summaries
 type DefaultReporter struct {
@@ -29,20 +41,26 @@ func (r *DefaultReporter) SuiteWillBegin(suiteSummary *SuiteSummary) {
 // TestWillRun prints each test status
 func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 	if testSummary.Validation {
-		writer.Println(0, writer.Colorize(cyanColor, "[PL%d] [%s] %s", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category, testSummary.Benchmark.Title))
+		writer.Print(0, writer.Colorize(cyanColor, "[PL%d] [%s] ", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category))
+		writer.Println(0, testSummary.Benchmark.Title)
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
 		if testSummary.Test {
-			writer.Println(0, writer.Colorize(greenColor, "Passed"))
+			passed := "Passed " + tick
+			writer.Println(0, writer.Colorize(greenColor, passed))
 		} else {
-			writer.Println(0, writer.Colorize(redColor, "Failed"))
-			writer.Println(0, writer.Colorize(lightGrayColor, "Remediation: %s", testSummary.Benchmark.Remediation))
+			failed := "Failed " + cross
+			writer.Println(0, writer.Colorize(redColor, failed))
+			writer.Print(0, writer.Colorize(lilac, "Remediation: "))
+			writer.Println(0, writer.Colorize(lightGrayColor, testSummary.Benchmark.Remediation))
 
 		}
 		writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", testSummary.RunTime), "-")
 		return
 	}
-
-	writer.PrintBanner(writer.Colorize(magentaColor, "PreRun-Validation Error %s: %v", testSummary.Benchmark.Title, testSummary.ValidationError), "-")
+	preRunfmt := writer.Colorize(magentaColor, "[PreRun-Validation Error]")
+	errormsg := writer.Colorize(redColor, testSummary.ValidationError.Error())
+	bannerText := fmt.Sprintf("%s %s: %s %s", preRunfmt, testSummary.Benchmark.Title, errormsg, cross)
+	writer.PrintBanner(bannerText, "-")
 	r.testSummaries = append(r.testSummaries, testSummary)
 }
 
@@ -54,4 +72,41 @@ func (r *DefaultReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
 	writer.Print(0, writer.Colorize(magentaColor, "%d Errors | ", suiteSummary.NumberOfFailedValidations))
 	writer.PrintNewLine()
 	writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", suiteSummary.RunTime), "=")
+}
+
+// FullSummary prints end result of all the tests at one place.
+func (r *DefaultReporter) FullSummary(finalSummary *FinalSummary) {
+	data := [][]string{}
+	counter := 0
+
+	for val, key := range finalSummary.TestResult {
+		counter++
+		var status string
+		var symbol string
+		if key.Error {
+			status = writer.Colorize(magentaColor, "Error")
+			symbol = cross
+		} else if key.Passed {
+			status = writer.Colorize(greenColor, "Passed")
+			symbol = tick
+		} else if key.Failed {
+			status = writer.Colorize(redColor, "Failed")
+			symbol = cross
+		} else {
+			status = writer.Colorize(yellowColor, "Skipped")
+			symbol = skipped
+		}
+		testName := val.Title + " " + symbol
+		result := []string{strconv.Itoa(counter), strconv.Itoa(val.ProfileLevel), testName, status}
+		data = append(data, result)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"No.", "PLevel", "Test", "Result"})
+	table.SetAutoWrapText(false)
+
+	for _, v := range data {
+		table.Append(v)
+	}
+	table.Render() // Send output
 }

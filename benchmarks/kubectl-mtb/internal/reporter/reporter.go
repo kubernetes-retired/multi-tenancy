@@ -12,6 +12,7 @@ type Reporter interface {
 	SuiteWillBegin(suiteSummary *SuiteSummary)
 	TestWillRun(testSummary *TestSummary)
 	SuiteDidEnd(suiteSummary *SuiteSummary)
+	FullSummary(finalSummary *FinalSummary)
 }
 
 // GetReporter returns the Reporter pointer as per the user input
