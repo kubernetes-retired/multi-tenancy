@@ -2,6 +2,7 @@ package unittestutils
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ const timeout = time.Second * 40
 // In future if we want to add more tenants and tenantnamespaces
 var tenants []*tenancyv1alpha1.Tenant
 var tenantnamespaces []*tenancyv1alpha1.TenantNamespace
+var serviceAccount []*corev1.ServiceAccount
 
 type RoleRuleOwner struct {
 	Role *v1.Role
@@ -64,6 +66,8 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 			Namespace: "default",
 		},
 	}
+
+	serviceAccount = append(serviceAccount, sa)
 
 	var tenant1 = &tenancyv1alpha1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
@@ -112,9 +116,11 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 		mgrStopped.Wait()
 	}()
 
-	// Create the service account
-	err = c.Create(context.TODO(), sa)
-	g.Expect(err).NotTo(gomega.HaveOccurred())
+	for _, sa := range serviceAccount {
+		// Create the service account
+		err = c.Create(context.TODO(), sa)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}
 
 	for _, tenant := range tenants {
 		// Create the Tenant object and expect the tenantAdminNamespace to be created
@@ -139,5 +145,29 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 		tenantNs := &corev1.Namespace{}
 		g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 			Should(gomega.Succeed())
+	}
+
+}
+
+func DestroyTenant(g *gomega.WithT) {
+	// Delete Service Account
+	fmt.Println("Deleting service accounts")
+	for _, sa := range serviceAccount {
+		err = c.Delete(context.TODO(), sa)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}
+
+	// Delete Tenant
+	fmt.Println("Deleting tenants")
+	for _, tenant := range tenants {
+		err = c.Delete(context.TODO(), tenant)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
+	}
+
+	// Delete TenantNamespace
+	fmt.Println("Deleting tenant namespaces")
+	for _, tenantnamespace := range tenantnamespaces {
+		err = c.Delete(context.TODO(), tenantnamespace)
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 }

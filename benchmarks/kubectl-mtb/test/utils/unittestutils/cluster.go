@@ -47,10 +47,6 @@ func (k *KindCluster) CreateCluster() error {
 	k.KubeConfigFile, _ = newProvider.KubeConfig(k.Name, false)
 	newProvider.ExportKubeConfig(k.Name, k.KubeConfigFile)
 
-	if err != nil {
-		log.Println(err.Error())
-		return err
-	}
 	k.Provider = newProvider
 	fmt.Println(k.Name, "cluster is created")
 	return nil
