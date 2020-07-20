@@ -11,8 +11,9 @@ import (
 )
 
 type GroupResource struct {
-	APIGroup    string
-	APIResource metav1.APIResource
+	APIGroup     string
+	APIResource  metav1.APIResource
+	ResourceName string
 }
 
 // RunAccessCheck checks that given client can perform the given verb on the resource or not
@@ -28,7 +29,7 @@ func RunAccessCheck(client *kubernetes.Clientset, namespace string, resource Gro
 				Group:       resource.APIGroup,
 				Resource:    resource.APIResource.Name,
 				Subresource: "",
-				Name:        "",
+				Name:        resource.ResourceName,
 			},
 		},
 	}

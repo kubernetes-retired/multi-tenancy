@@ -8,59 +8,45 @@ import (
 )
 
 var _ = Describe("Namespace", func() {
-	var (
-		prefix string
+	const (
+		prefix = namspacePrefix+"namespace-"
+		nsA = prefix+"a"
+		nsB = prefix+"b"
 	)
 
 	BeforeEach(func() {
-		prefix = namspacePrefix+"namespace-"
+		cleanupNamespaces(nsA, nsB)
+	})
+
+	AfterEach(func() {
+		cleanupNamespaces(nsA, nsB)
 	})
 
 	It("should create and delete a namespace", func() {
-		// Create a namespace "a"
-		cmd := exec.Command("kubectl", "create", "ns", prefix+"a")
-		Expect(cmd.Run()).Should(BeNil())
+		// set up
+		mustRun("kubectl create ns", nsA)
+		mustRun("kubectl get ns", nsA)
 
-		// The namespace "a" should exist.
-		cmd = exec.Command("kubectl", "get", "ns", prefix+"a")
-		Expect(cmd.Run()).Should(BeNil())
+		// test
+		mustRun("kubectl", "delete", "ns", nsA)
 
-		// Delete the created namespace "a"
-		cmd = exec.Command("kubectl", "delete", "ns", prefix+"a")
-		Expect(cmd.Run()).Should((BeNil()))
-
-		// The namespace "a" should not exist.
-		cmd = exec.Command("kubectl", "get", "ns", prefix+"a")
-		Expect(cmd.Run()).Should(Not(BeNil()))
+		// verify
+		mustNotRun("kubectl", "get", "ns", nsA)
 	})
 
 	It("should have 'CritParentMissing' condition on orphaned namespace", func() {
-		// Create a namespace "a"
-		cmd := exec.Command("kubectl", "create", "ns", prefix+"a")
-		Expect(cmd.Run()).Should(BeNil())
-
-		// Create a namespace "b"
-		cmd = exec.Command("kubectl", "create", "ns", prefix+"b")
-		Expect(cmd.Run()).Should(BeNil())
-
-		// Set "b" as a child of "a"
-		cmd = exec.Command("kubectl", "hns", "set", prefix+"b", "--parent", prefix+"a")
-		Expect(cmd.Run()).Should(BeNil())
-
-		// Delete the created namespace "a"
-		cmd = exec.Command("kubectl", "delete", "ns", prefix+"a")
-		Expect(cmd.Run()).Should((BeNil()))
+		// set up
+		mustRun("kubectl create ns", nsA)
+		mustRun("kubectl create ns", nsB)
+		mustRun("kubectl hns set", nsB, "--parent", nsA)
+		mustRun("kubectl delete ns", nsA)
 
 		// "b" should have 'CritParentMissing' condition. The command to use:
 		// kubectl get hierarchyconfigurations.hnc.x-k8s.io hierarchy -n b -o jsonpath='{.status.conditions..code}'
-		out, err := exec.Command("kubectl","get","hierarchyconfigurations.hnc.x-k8s.io","hierarchy","-n",prefix+"b","-o", "jsonpath='{.status.conditions..code}'").Output()
+		out, err := exec.Command("kubectl","get","hierarchyconfigurations.hnc.x-k8s.io","hierarchy","-n",nsB,"-o", "jsonpath='{.status.conditions..code}'").Output()
 		// Convert []byte to string and remove the quotes to get the condition value.
 		condition := string(out)[1:len(out)-1]
 		Expect(err).Should(BeNil())
 		Expect(condition).Should(Equal("CritParentMissing"))
-
-		// Clean up - delete namespace "b"
-		cmd = exec.Command("kubectl", "delete", "ns", prefix+"b")
-		Expect(cmd.Run()).Should((BeNil()))
 	})
 })

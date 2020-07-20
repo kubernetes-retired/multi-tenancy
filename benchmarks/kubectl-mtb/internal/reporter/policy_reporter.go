@@ -103,9 +103,9 @@ func CreatePolicy(namespace string, policy v1alpha1.PolicyReport) {
 		Do(context.TODO()).
 		Into(&result)
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println(err.Error(), "\nTry installing the policyreport CRD following the link https://github.com/kubernetes-sigs/wg-policy-prototypes/tree/master/policy-report#installing")
 	} else {
-		fmt.Println(result.ObjectMeta.Name, "is Created")
+		writer.PrintBanner(writer.Colorize(defaultStyle, "%s is Created in %s namespace.", result.ObjectMeta.Name, namespace), "=")
 	}
 }
 

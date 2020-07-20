@@ -117,7 +117,15 @@ func (v *Namespace) conflictBetweenParentAndExternalManager(req *nsRequest, ns *
 
 func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response {
 	parent := req.ns.Annotations[api.SubnamespaceOf]
-	if parent != "" {
+	// Early exit if the namespace is not a subnamespace.
+	if parent == "" {
+		return allow("")
+	}
+
+	// If the anchor doesn't exist, we want to allow it to be deleted anyway.
+	// See issue https://github.com/kubernetes-sigs/multi-tenancy/issues/847.
+	anchorExists := v.Forest.Get(parent).HasAnchor(req.ns.Name)
+	if anchorExists {
 		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}

@@ -70,6 +70,10 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 		}
 	}
 	if req.Operation != admissionv1beta1.Create {
+		// See issue #688 and #889
+		if req.Operation == admissionv1beta1.Delete && req.OldObject.Raw == nil {
+			return allow("cannot validate deletions in K8s 1.14")
+		}
 		if err := o.decoder.DecodeRaw(req.OldObject, oldInst); err != nil {
 			log.Error(err, "Couldn't decode req.OldObject", "raw", req.OldObject)
 			return deny(metav1.StatusReasonBadRequest, err.Error())

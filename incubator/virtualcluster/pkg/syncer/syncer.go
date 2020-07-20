@@ -17,7 +17,6 @@ limitations under the License.
 package syncer
 
 import (
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"sync"
@@ -27,7 +26,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -52,10 +50,6 @@ import (
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources"
-)
-
-const (
-	KubeconfigAdmin = "admin-kubeconfig"
 )
 
 var (
@@ -131,7 +125,7 @@ func New(
 
 // enqueue deleted and running object.
 func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
-	vc, ok := obj.(*v1alpha1.VirtualCluster)
+	_, ok := obj.(*v1alpha1.VirtualCluster)
 
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -139,15 +133,11 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %+v", obj))
 			return
 		}
-		vc, ok = tombstone.Obj.(*v1alpha1.VirtualCluster)
+		_, ok = tombstone.Obj.(*v1alpha1.VirtualCluster)
 		if !ok {
 			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a vc %+v", obj))
 			return
 		}
-	}
-
-	if vc.Status.Phase != v1alpha1.ClusterRunning {
-		return
 	}
 
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
@@ -287,19 +277,9 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 
 	clusterName := conversion.ToClusterKey(vc)
 
-	var adminKubeConfigBytes []byte
-	if adminKubeConfig, exists := vc.GetAnnotations()[constants.LabelAdminKubeConfig]; exists {
-		decoded, err := base64.StdEncoding.DecodeString(adminKubeConfig)
-		if err != nil {
-			return fmt.Errorf("failed to decode kubeconfig from annotations %s: %v", constants.LabelAdminKubeConfig, err)
-		}
-		adminKubeConfigBytes = decoded
-	} else {
-		adminKubeConfigSecret, err := s.secretClient.Secrets(clusterName).Get(KubeconfigAdmin, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", KubeconfigAdmin, clusterName, err)
-		}
-		adminKubeConfigBytes = adminKubeConfigSecret.Data[KubeconfigAdmin]
+	adminKubeConfigBytes, err := conversion.GetKubeConfigOfVC(s.secretClient, vc)
+	if err != nil {
+		return err
 	}
 
 	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), s.lister, adminKubeConfigBytes, cluster.Options{})

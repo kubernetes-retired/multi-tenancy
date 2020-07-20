@@ -12,29 +12,58 @@ import (
 )
 
 func TestDeleteSubNamespace(t *testing.T) {
-	// Create a namespace with owner annotation.
-	sub := &corev1.Namespace{}
-	sub.Name = "a"
-	setSubAnnotation(sub, "b")
 
-	// a (subnamespace of b) -> b
-	f := foresttest.Create("B-")
-	vns := &Namespace{Forest: f}
+	// We will put an anchor a in the namespace c if it exists.
+	tests := []struct {
+		name string
+		// We only use the forest here to create full namespace hierarchy.
+		forest string
+		// The subnamespaces are created by manually adding the annotation.
+		subnamespaceOf string
+		fail           bool
+	}{
+		// There's no test case for when parent and annotation don't match, since the
+		// reconciler always sets the parent to match the subnamespaceOf annotation.
+		// - a (subnamespaceOf b)
+		{name: "when parent is missing", forest: "-", subnamespaceOf: "b"},
+		// - a (subnamespaceOf b) -> b (no anchor)
+		{name: "when anchor is missing", forest: "b-", subnamespaceOf: "b"},
+		// - a (subnamespaceOf c) -> c (has anchor a), b
+		{name: "when annotation and anchor match", forest: "c--", subnamespaceOf: "c", fail: true},
+		// - a (subnamespaceOf b) -> b, c(has anchor a)
+		{name: "when annotation and anchor don't match", forest: "b--", subnamespaceOf: "b"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
 
-	t.Run("Delete namespace with owner annotation", func(t *testing.T) {
-		g := NewGomegaWithT(t)
-		req := &nsRequest{
-			ns: sub,
-			op: v1beta1.Delete,
-		}
+			// Create a namespace instance a and add the subnamespaceOf annotation.
+			sub := &corev1.Namespace{}
+			sub.Name = "a"
+			setSubAnnotation(sub, tc.subnamespaceOf)
 
-		// Test
-		got := vns.handle(req)
+			req := &nsRequest{
+				ns: sub,
+				op: v1beta1.Delete,
+			}
 
-		// Report
-		logResult(t, got.AdmissionResponse.Result)
-		g.Expect(got.AdmissionResponse.Allowed).Should(BeFalse())
-	})
+			// Construct the forest
+			f := foresttest.Create(tc.forest)
+			// Add anchor "a" to namespace "c" if it exists. This is to test the cases
+			// when the subnamespaceOf annotation in "a" matches/dismatches "c".
+			if f.Get("c").Exists() {
+				f.Get("c").SetAnchors([]string{"a"})
+			}
+			vns := &Namespace{Forest: f}
+
+			// Test
+			got := vns.handle(req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
 }
 
 func TestDeleteOwnerNamespace(t *testing.T) {
@@ -182,8 +211,12 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 	}
 }
 
+// setSubAnnotations sets subnamespaceOf annotation with a parent name on the
+// namespace. If the parent name is empty, it removes the annotation.
 func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 	a := make(map[string]string)
-	a[api.SubnamespaceOf] = pnm
+	if pnm != "" {
+		a[api.SubnamespaceOf] = pnm
+	}
 	ns.SetAnnotations(a)
 }
