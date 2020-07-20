@@ -16,6 +16,7 @@ package kubectl
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,7 +25,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
@@ -72,6 +72,24 @@ func initConfig() error {
 	return err
 }
 
+func reportSuiteWillBegin(suiteSummary *reporter.SuiteSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.SuiteWillBegin(suiteSummary)
+	}
+}
+
+func reportTestWillRun(testSummary *reporter.TestSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.TestWillRun(testSummary)
+	}
+}
+
+func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []reporter.Reporter) {
+	for _, reporter := range reportersArray {
+		reporter.SuiteDidEnd(suiteSummary)
+	}
+}
+
 // Validation of the flag inputs
 func validateFlags(cmd *cobra.Command) error {
 	tenant, _ = cmd.Flags().GetString("tenant-admin")
@@ -110,8 +128,8 @@ func validateFlags(cmd *cobra.Command) error {
 func runTests(cmd *cobra.Command, args []string) error {
 
 	// Get reporter from the user
-	reporterType, _ := cmd.Flags().GetString("out")
-	r, err := reporter.GetReporter(reporterType)
+	reporters, _ := cmd.Flags().GetString("out")
+	reportersArray, err := reporter.GetReporters(strings.Split(reporters, ","))
 	if err != nil {
 		return err
 	}
@@ -122,19 +140,14 @@ func runTests(cmd *cobra.Command, args []string) error {
 		TenantAdminNamespace: tenantNamespace,
 	}
 
-	finalSummary := &reporter.FinalSummary{}
-	finalSummary.TestResult = make(map[*benchmark.Benchmark]*reporter.Result)
-
 	suiteStartTime := time.Now()
-	r.SuiteWillBegin(suiteSummary)
+	reportSuiteWillBegin(suiteSummary, reportersArray)
 
 	for _, b := range benchmarks {
 
 		ts := &reporter.TestSummary{
 			Benchmark: b,
 		}
-
-		result := &reporter.Result{}
 
 		err := ts.SetDefaults()
 		if err != nil {
@@ -146,7 +159,6 @@ func runTests(cmd *cobra.Command, args []string) error {
 		//Run Prerun
 		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
-			result.Error = true
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
@@ -157,25 +169,21 @@ func runTests(cmd *cobra.Command, args []string) error {
 			err = b.Run(tenantNamespace, k8sClient, tenantClient)
 			if err != nil {
 				suiteSummary.NumberOfFailedTests++
-				result.Failed = true
 				ts.Test = false
 				ts.TestError = err
 			} else {
 				suiteSummary.NumberOfPassedTests++
-				result.Passed = true
 			}
 		}
-		finalSummary.TestResult[b] = result
 		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
-		r.TestWillRun(ts)
+		reportTestWillRun(ts, reportersArray)
 	}
 
 	suiteElapsedTime := time.Since(suiteStartTime)
 	suiteSummary.RunTime = suiteElapsedTime
 	suiteSummary.NumberOfSkippedTests = test.BenchmarkSuite.Totals() - len(benchmarks)
-	r.SuiteDidEnd(suiteSummary)
-	r.FullSummary(finalSummary)
+	reportSuiteDidEnd(suiteSummary, reportersArray)
 
 	return nil
 }

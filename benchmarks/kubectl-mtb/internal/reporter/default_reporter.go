@@ -5,27 +5,17 @@ import (
 	"os"
 	"strconv"
 
+	v1alpha1 "github.com/kubernetes-sigs/wg-policy-prototypes/policy-report/api/v1alpha1"
 	"github.com/olekukonko/tablewriter"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 )
-
-const defaultStyle = "\x1b[0m"
-const boldStyle = "\x1b[1m"
-const redColor = "\x1b[91m"
-const greenColor = "\x1b[32m"
-const yellowColor = "\x1b[33m"
-const cyanColor = "\x1b[36m"
-const grayColor = "\x1b[90m"
-const magentaColor = "\033[35m"
-const lightGrayColor = "\x1b[37m"
-const lilac = "\033[38;2;200;162;200m"
-const tick = "\u2705"
-const cross = "\u274c"
-const skipped = "\u23ed"
 
 // DefaultReporter collects all the test summaries
 type DefaultReporter struct {
 	testSummaries []*TestSummary
 }
+
+var testResult = map[*benchmark.Benchmark]v1alpha1.PolicyStatus{}
 
 // NewDefaultReporter returns the pointer of DefaultReporter
 func NewDefaultReporter() *DefaultReporter {
@@ -45,9 +35,11 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 		writer.Println(0, testSummary.Benchmark.Title)
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
 		if testSummary.Test {
+			testResult[testSummary.Benchmark] = "Pass"
 			passed := "Passed " + tick
 			writer.Println(0, writer.Colorize(greenColor, passed))
 		} else {
+			testResult[testSummary.Benchmark] = "Fail"
 			failed := "Failed " + cross
 			writer.Println(0, writer.Colorize(redColor, failed))
 			writer.Print(0, writer.Colorize(lilac, "Remediation: "))
@@ -57,6 +49,7 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 		writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", testSummary.RunTime), "-")
 		return
 	}
+	testResult[testSummary.Benchmark] = "Error"
 	preRunfmt := writer.Colorize(magentaColor, "[PreRun-Validation Error]")
 	errormsg := writer.Colorize(redColor, testSummary.ValidationError.Error())
 	bannerText := fmt.Sprintf("%s %s: %s %s", preRunfmt, testSummary.Benchmark.Title, errormsg, cross)
@@ -72,30 +65,35 @@ func (r *DefaultReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
 	writer.Print(0, writer.Colorize(magentaColor, "%d Errors | ", suiteSummary.NumberOfFailedValidations))
 	writer.PrintNewLine()
 	writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", suiteSummary.RunTime), "=")
+
+	printScoreCard(testResult)
 }
 
 // FullSummary prints end result of all the tests at one place.
-func (r *DefaultReporter) FullSummary(finalSummary *FinalSummary) {
+func printScoreCard(testResult map[*benchmark.Benchmark]v1alpha1.PolicyStatus) {
 	data := [][]string{}
 	counter := 0
 
-	for val, key := range finalSummary.TestResult {
+	for val, key := range testResult{
 		counter++
 		var status string
 		var symbol string
-		if key.Error {
+		
+		switch key {
+		case "Error":
 			status = writer.Colorize(magentaColor, "Error")
 			symbol = cross
-		} else if key.Passed {
+		case "Pass":
 			status = writer.Colorize(greenColor, "Passed")
 			symbol = tick
-		} else if key.Failed {
+		case "Fail":
 			status = writer.Colorize(redColor, "Failed")
 			symbol = cross
-		} else {
+		case "Skip":
 			status = writer.Colorize(yellowColor, "Skipped")
 			symbol = skipped
 		}
+
 		testName := val.Title + " " + symbol
 		result := []string{strconv.Itoa(counter), strconv.Itoa(val.ProfileLevel), testName, status}
 		data = append(data, result)

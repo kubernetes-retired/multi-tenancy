@@ -21,19 +21,6 @@ type SuiteSummary struct {
 	Suite                     *benchmarksuite.BenchmarkSuite
 }
 
-// Result stores the result of particular test
-type Result struct {
-	Passed  bool
-	Failed  bool
-	Skipped bool
-	Error   bool
-}
-
-// FinalSummary stores the bechmark results
-type FinalSummary struct {
-	TestResult map[*benchmark.Benchmark]*Result
-}
-
 // TestSummary summaries the result of benchmark
 type TestSummary struct {
 	Validation      bool `default:"true"`
