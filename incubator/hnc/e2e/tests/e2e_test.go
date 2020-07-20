@@ -1,6 +1,7 @@
 package test
 
 import (
+	"errors"
 	"testing"
 	"time"
 	"os/exec"
@@ -33,6 +34,52 @@ func mustNotRun(cmdln ...string) {
 }
 
 func tryRun(cmdln ...string) error {
+	stdout, err := runCommand(cmdln...)
+	GinkgoT().Log("Output: ", stdout)
+	return err
+}
+
+func runShouldContain(substr string, seconds float64, cmdln ...string) {
+	runShouldContainMultiple([]string{substr}, seconds, cmdln...)
+}
+
+func runShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
+	Eventually(func() error {
+		stdout, err := runCommand(cmdln...)
+		if err != nil {
+			return err
+		}
+
+		allContained := true
+		for _, substr := range substrs {
+			if strings.Contains(stdout, substr) == false {
+				allContained = false
+				break
+			}
+		}
+
+		if allContained == false {
+			return errors.New("Expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
+		}
+
+		return nil
+	}, seconds).Should(Succeed())
+}
+
+func runShouldNotContain(substr string, seconds float64, cmdln ...string) {
+	Eventually(func() error {
+		stdout, err := runCommand(cmdln...)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(stdout, substr) != false {
+			return errors.New("Not expecting: " + substr + " but get: " + stdout)
+		}
+		return nil
+	}, seconds).Should(Succeed())
+}
+
+func runCommand(cmdln ...string) (string, error) {
 	var args []string
 	for _, subcmdln := range cmdln {
 		args = append(args, strings.Split(subcmdln, " ")...)
@@ -40,8 +87,7 @@ func tryRun(cmdln ...string) error {
 	GinkgoT().Log("Running: ", args)
 	cmd := exec.Command(args[0], args[1:]...)
 	stdout, err := cmd.CombinedOutput()
-	GinkgoT().Log("Output: ", string(stdout))
-	return err
+	return string(stdout), err
 }
 
 func cleanupNamespaces(nses ...string) {

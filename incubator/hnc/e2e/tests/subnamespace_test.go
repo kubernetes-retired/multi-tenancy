@@ -15,6 +15,7 @@ var _ = Describe("Subnamespaces", func() {
 	)
 
 	BeforeEach(func() {
+		cleanupNamespaces(nsA, nsB)
 	})
 
 	AfterEach(func() {

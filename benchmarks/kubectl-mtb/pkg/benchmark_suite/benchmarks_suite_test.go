@@ -1,6 +1,7 @@
 package benchmarksuite
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -107,6 +108,121 @@ func TestGetBenchmarksOfProfileLevel(t *testing.T) {
 		filteredBenchmarks := bs.ProfileLevel(item.profileLevel)
 		if !reflect.DeepEqual(item.benchmarks, filteredBenchmarks) {
 			t.Errorf("Error in filtering the benchmarks according to Profile Level of %d.", item.profileLevel)
+		}
+	}
+}
+
+func TestSortBenchmarks(t *testing.T) {
+	tests := []struct {
+		testBenchmarks     []*benchmark.Benchmark
+		expectedBenchmarks []*benchmark.Benchmark
+	}{
+		{
+			testBenchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-CPI-2",
+					ProfileLevel: 2,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-HI-1",
+					ProfileLevel: 1,
+					Category:     "Host Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-CPI-1",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-CPI-2",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+			},
+
+			expectedBenchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-CPI-1",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-CPI-2",
+					ProfileLevel: 1,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-HI-1",
+					ProfileLevel: 1,
+					Category:     "Host Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-CPI-2",
+					ProfileLevel: 2,
+					Category:     "control plane Isolation",
+				},
+			},
+		},
+
+		{
+			testBenchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-CPI-2",
+					ProfileLevel: 2,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL3-CC-HI-2",
+					ProfileLevel: 3,
+					Category:     "Host Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-TI-2",
+					ProfileLevel: 2,
+					Category:     "Tenant Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-TI-1",
+					ProfileLevel: 1,
+					Category:     "Tenant Isolation",
+				},
+			},
+
+			expectedBenchmarks: []*benchmark.Benchmark{
+				&benchmark.Benchmark{
+					ID:           "MTB-PL1-CC-TI-1",
+					ProfileLevel: 1,
+					Category:     "Tenant Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-CPI-2",
+					ProfileLevel: 2,
+					Category:     "control plane Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL2-CC-TI-2",
+					ProfileLevel: 2,
+					Category:     "Tenant Isolation",
+				},
+				&benchmark.Benchmark{
+					ID:           "MTB-PL3-CC-HI-2",
+					ProfileLevel: 3,
+					Category:     "Host Isolation",
+				},
+			},
+		},
+	}
+
+	for _, item := range tests {
+		sortedBenchmarks := sortBenchmarks(item.testBenchmarks)
+		if !reflect.DeepEqual(sortedBenchmarks, item.expectedBenchmarks) {
+			t.Errorf("Error in sorting the benchmarks. Output from SortBenchmarks function")
+			for _, b := range sortedBenchmarks {
+				fmt.Println("ID: ", b.ID)
+				fmt.Println("Profile Level: ", string(b.ProfileLevel))
+				fmt.Println("Category: ", b.Category)
+			}
 		}
 	}
 }

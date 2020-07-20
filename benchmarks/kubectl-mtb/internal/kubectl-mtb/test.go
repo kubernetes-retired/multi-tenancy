@@ -20,16 +20,20 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var (
 	tenant          string
 	tenantNamespace string
+	k8sClient       *kubernetes.Clientset
+	tenantClient    *kubernetes.Clientset
 )
 
 var testCmd = &cobra.Command{
@@ -42,18 +46,30 @@ var testCmd = &cobra.Command{
 	},
 }
 
-// Validation of the flag inputs
-func validateFlags(cmd *cobra.Command) error {
-	tenant, _ = cmd.Flags().GetString("tenant-admin")
-	if tenant == "" {
-		return fmt.Errorf("tenant-admin must be set via --tenant-admin or -t")
+func initConfig() error {
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return err
 	}
 
-	tenantNamespace, _ = cmd.Flags().GetString("namespace")
-	if tenantNamespace == "" {
-		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
+	// create the K8s clientset
+	k8sClient, err = kubernetes.NewForConfig(config)
+	if err != nil {
+		return err
 	}
-	return nil
+
+	tenantConfig := config
+	tenantConfig.Impersonate.UserName = tenant
+
+	// create the tenant clientset
+	tenantClient, err = kubernetes.NewForConfig(tenantConfig)
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 func reportSuiteWillBegin(suiteSummary *reporter.SuiteSummary, reportersArray []reporter.Reporter) {
@@ -74,29 +90,42 @@ func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []rep
 	}
 }
 
+// Validation of the flag inputs
+func validateFlags(cmd *cobra.Command) error {
+	tenant, _ = cmd.Flags().GetString("tenant-admin")
+	if tenant == "" {
+		return fmt.Errorf("tenant-admin must be set via --tenant-admin or -t")
+	}
+
+	tenantNamespace, _ = cmd.Flags().GetString("namespace")
+	if tenantNamespace == "" {
+		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
+	}
+
+	err := initConfig()
+	if err != nil {
+		return err
+	}
+
+	resource := utils.GroupResource{
+		APIGroup: "",
+		APIResource: metav1.APIResource{
+			Name: "namespaces",
+		},
+		ResourceName: tenantNamespace,
+	}
+	// checks if tenant-admin and tenant namespace are valid
+	access, _, err := utils.RunAccessCheck(tenantClient, "", resource, "get")
+	if err != nil {
+		return err
+	}
+	if !access {
+		return fmt.Errorf("Make sure you have entered valid tenant-admin and tenant namespace. ")
+	}
+	return nil
+}
+
 func runTests(cmd *cobra.Command, args []string) error {
-
-	kubecfgFlags := genericclioptions.NewConfigFlags(false)
-
-	config, err := kubecfgFlags.ToRESTConfig()
-	if err != nil {
-		return err
-	}
-
-	// create the K8s clientset
-	k8sClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-
-	tenantConfig := config
-	tenantConfig.Impersonate.UserName = tenant
-
-	// create the tenant clientset
-	tenantClient, err := kubernetes.NewForConfig(tenantConfig)
-	if err != nil {
-		return err
-	}
 
 	// Get reporter from the user
 	reporters, _ := cmd.Flags().GetString("out")
@@ -127,7 +156,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		startTest := time.Now()
 
-		// Run Prerun
+		//Run Prerun
 		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
 		if err != nil {
 			suiteSummary.NumberOfFailedValidations++
@@ -146,7 +175,6 @@ func runTests(cmd *cobra.Command, args []string) error {
 				suiteSummary.NumberOfPassedTests++
 			}
 		}
-
 		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
 		reportTestWillRun(ts, reportersArray)

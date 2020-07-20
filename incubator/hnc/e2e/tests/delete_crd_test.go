@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 )
 
-var _ = Describe("Delete-anchor-crd", func() {
+var _ = Describe("When deleting CRDs", func() {
 
 	hncRecoverPath := os.Getenv("HNC_REPAIR")
 
@@ -21,6 +21,7 @@ var _ = Describe("Delete-anchor-crd", func() {
 		if hncRecoverPath == ""{
 			Skip("Environment variable HNC_REPAIR not set. Skipping reocovering HNC.")
 		}
+		cleanupNamespaces(nsParent, nsChild)
 	})
 
 	AfterEach(func() {
@@ -33,9 +34,11 @@ var _ = Describe("Delete-anchor-crd", func() {
 			GinkgoT().Log("------------------------------------------------------------------")
 			GinkgoT().FailNow()
 		}
+		// give HNC enough time to repair
+		time.Sleep(5 * time.Second)
 	})
 
-	It("should create parent and deletable child, and delete the CRD", func() {
+	It("should not delete subnamespaces", func() {
 		// set up
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl hns create", nsChild, "-n", nsParent)
@@ -61,5 +64,19 @@ var _ = Describe("Delete-anchor-crd", func() {
 		time.Sleep(5 * time.Second)
 		// verify
 		mustRun("kubectl get -oyaml rolebinding foo -n", nsChild)
+	})
+
+	It("should fully delete all CRDs", func() {
+		// set up
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		// test
+		mustRun("kubectl delete crd hierarchyconfigurations.hnc.x-k8s.io")
+		time.Sleep(1 * time.Second)
+		mustRun("kubectl delete crd subnamespaceanchors.hnc.x-k8s.io")
+		mustRun("kubectl delete crd hncconfigurations.hnc.x-k8s.io")
+		// Give HNC 10s to have the chance to fully delete everything (5s wasn't enough).
+		// Verify that the HNC CRDs are gone (if nothing's printed, then they are).
+		runShouldNotContain("hnc", 10, "kubectl get crd")
 	})
 })

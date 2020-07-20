@@ -12,4 +12,5 @@ spec:
           properties:
             name:
               type: string
-              pattern: '^config$'
+              enum:
+                - config
