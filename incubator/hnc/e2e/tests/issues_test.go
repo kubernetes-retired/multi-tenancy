@@ -147,4 +147,27 @@ var _ = Describe("Issues", func() {
 		runShouldContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
 		runShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
 	})
+
+	It("Should have CritParentMissing condition when parent namespace is deleted - issue #716", func(){
+		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsChild)
+		mustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		// Test: Remove parent namespace 'a'
+		// Expected: b should have 'CritParentMissing' condition
+		mustRun("kubectl delete ns", nsParent)
+		runShouldContain("CritParentMissing", 1, "kubectl hns describe", nsChild)
+	})
+
+	It("Should delete namespace with CritParentMissing condition - issue #716", func(){
+		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsChild)
+		mustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		// create and verify CritParentMissing condition
+		mustRun("kubectl delete ns", nsParent)
+		runShouldContain("CritParentMissing", 1, "kubectl hns describe", nsChild)
+		// test: delete namespace 
+		mustRun("kubectl delete ns", nsChild)
+	})
 })
