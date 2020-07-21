@@ -8,8 +8,7 @@
 clusters are set up correctly for multi-tenancy.
 
 ## Demo
-[![asciicast](https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK.svg)](https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK)
-
+<a href="https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK?autoplay=1&preload=1"><img src="https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK.svg" width="836"/></a>
 
 ## Setup Instructions
 
@@ -25,10 +24,11 @@ or by cloning this repository, and running
 ```bash 
 $ make kubectl-mtb
 ```
+<hr>
 
 ## How to use
 
-Table of Contents
+## Table of Contents
 =================
 * [List available benchmarks](#list-available-benchmarks)
 * [Run the available benchmarks](#run-the-available-benchmarks)
@@ -79,6 +79,8 @@ make readme
 
 
 *If kind cannot be found on your system the target will try to install it using `go get`*
+
+<hr>
  
 ## How to include bechmarks
 
