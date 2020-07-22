@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 func Test_mutateDownwardAPIField(t *testing.T) {
@@ -125,19 +124,13 @@ func Test_mutateDownwardAPIField(t *testing.T) {
 }
 
 func Test_mutateContainerSecret(t *testing.T) {
-	saSecret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "service-token-secret",
-			Annotations: map[string]string{
-				constants.LabelSecretName: "service-token-secret-tenant",
-			},
-		},
-		Type: v1.SecretTypeOpaque,
+	saSecretMap := map[string]string{
+		"service-token-secret-tenant": "service-token-secret",
 	}
 	for _, tt := range []struct {
 		name              string
 		container         *v1.Container
-		saSecret          *v1.Secret
+		saSecretMap       map[string]string
 		expectedContainer *v1.Container
 	}{
 		{
@@ -156,7 +149,7 @@ func Test_mutateContainerSecret(t *testing.T) {
 					},
 				},
 			},
-			saSecret: saSecret,
+			saSecretMap: saSecretMap,
 			expectedContainer: &v1.Container{
 				VolumeMounts: []v1.VolumeMount{
 					{
@@ -174,7 +167,7 @@ func Test_mutateContainerSecret(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			mutateContainerSecret(tt.container, tt.saSecret)
+			mutateContainerSecret(tt.container, tt.saSecretMap)
 			if !equality.Semantic.DeepEqual(tt.container, tt.expectedContainer) {
 				tc.Errorf("expected container %+v, got %+v", tt.expectedContainer, tt.container)
 			}

@@ -17,6 +17,8 @@ limitations under the License.
 package pod
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,12 +30,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
 	"k8s.io/utils/pointer"
-	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
+
+const testTenantServiceAccountTokenSecretName = "default-token-jbrn5"
+const testSuperServiceAccountTokenSecretName = "default-token-12345"
 
 func tenantPod(name, namespace, uid string) *v1.Pod {
 	return &v1.Pod{
@@ -42,6 +47,53 @@ func tenantPod(name, namespace, uid string) *v1.Pod {
 			Namespace: namespace,
 			UID:       types.UID(uid),
 		},
+		Spec: v1.PodSpec{
+			ServiceAccountName: "default",
+			Containers: []v1.Container{
+				{
+					Image: "busybox",
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      testTenantServiceAccountTokenSecretName,
+							MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+						},
+						{
+							Name:      "i-want-to-mount",
+							MountPath: "/path",
+						},
+					},
+				},
+			},
+			Volumes: []v1.Volume{
+				{
+					Name: testTenantServiceAccountTokenSecretName,
+					VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: testTenantServiceAccountTokenSecretName,
+						},
+					},
+				},
+				{
+					Name: "i-want-to-mount",
+					VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: testTenantServiceAccountTokenSecretName,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func tenantSecret(name, namespace, uid string) *v1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			UID:       types.UID(uid),
+		},
+		Type: v1.SecretTypeServiceAccountToken,
 	}
 }
 
@@ -57,13 +109,65 @@ func applyDeletionTimestampToPod(vPod *v1.Pod, t time.Time, gracePeriodSeconds i
 	return vPod
 }
 
-func superPod(name, namespace, uid string) *v1.Pod {
+func superPod(clusterKey, name, namespace, uid string) *v1.Pod {
 	return &v1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: conversion.ToSuperMasterNamespace(clusterKey, namespace),
+			Labels: map[string]string{
+				constants.LabelCluster: clusterKey,
+			},
 			Annotations: map[string]string{
-				constants.LabelUID: uid,
+				constants.LabelCluster:         clusterKey,
+				constants.LabelNamespace:       namespace,
+				constants.LabelOwnerReferences: "null",
+				constants.LabelUID:             uid,
+			},
+		},
+		Spec: v1.PodSpec{
+			ServiceAccountName:           "default",
+			AutomountServiceAccountToken: pointer.BoolPtr(false),
+			Containers: []v1.Container{
+				{
+					Image: "busybox",
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      testSuperServiceAccountTokenSecretName,
+							MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+						},
+						{
+							Name:      "i-want-to-mount",
+							MountPath: "/path",
+						},
+					},
+				},
+			},
+			Volumes: []v1.Volume{
+				{
+					Name: testSuperServiceAccountTokenSecretName,
+					VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: testSuperServiceAccountTokenSecretName,
+						},
+					},
+				},
+				{
+					Name: "i-want-to-mount",
+					VolumeSource: v1.VolumeSource{
+						Secret: &v1.SecretVolumeSource{
+							SecretName: testSuperServiceAccountTokenSecretName,
+						},
+					},
+				},
+			},
+			HostAliases: []v1.HostAlias{
+				{
+					Hostnames: []string{"kubernetes", "kubernetes.default", "kubernetes.default.svc"},
+				},
 			},
 		},
 	}
@@ -78,7 +182,7 @@ func tenantServiceAccount(name, namespace, uid string) *v1.ServiceAccount {
 		},
 		Secrets: []v1.ObjectReference{
 			{
-				Name: "default-token-x6nbf",
+				Name: testTenantServiceAccountTokenSecretName,
 			},
 		},
 	}
@@ -106,7 +210,7 @@ func superSecret(name, namespace, uid string) *v1.Secret {
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				constants.LabelServiceAccountUID: uid,
+				constants.LabelSecretUID: uid,
 			},
 		},
 	}
@@ -131,29 +235,29 @@ func TestDWPodCreation(t *testing.T) {
 	testcases := map[string]struct {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant []runtime.Object
-		ExpectedCreatedPods    []string
+		ExpectedCreatedPods    []*v1.Pod
 		ExpectedError          string
 	}{
 		"new Pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
 				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedCreatedPods: []string{superDefaultNSName + "/pod-1"},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
 		},
 		"load pod which under deletion": {
 			ExistingObjectInSuper: []runtime.Object{},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
 			},
-			ExpectedCreatedPods: []string{},
-			ExpectedError:       "",
+			ExpectedError: "",
 		},
-		"missing service account token secret": {
+		"missing tenant service account token secret": {
 			ExistingObjectInSuper: []runtime.Object{
 				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
@@ -161,60 +265,98 @@ func TestDWPodCreation(t *testing.T) {
 				tenantPod("pod-1", "default", "12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedError: "service account token secret for pod is not ready",
+			ExpectedError: "failed to get vSecret",
 		},
-		"without any services": {
+		"missing super service account token secret": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedError: "failed to find sa secret from super master",
+		},
+		"multi tenant service account token secret": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
+				superService("kubernetes", superDefaultNSName, "12345", ""),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName+"dup", "default", "s123456"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
+		},
+		"multi service account token secret": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
+				superSecret("default-token-123456", superDefaultNSName, "s123456"),
+				superService("kubernetes", superDefaultNSName, "12345", ""),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName+"dup", "default", "s123456"),
+				tenantServiceAccount("default", "default", "12345"),
+			},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
+		},
+		"without any services": {
+			ExistingObjectInSuper: []runtime.Object{
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantPod("pod-1", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
 			ExpectedError: "service is not ready",
 		},
 		"only a dns service": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("default-token-12345", conversion.ToSuperMasterNamespace(defaultClusterKey, "kube-system"), "12345"),
+				superSecret("default-token-12345", conversion.ToSuperMasterNamespace(defaultClusterKey, "kube-system"), "s12345"),
 				superService(constants.TenantDNSServerServiceName, conversion.ToSuperMasterNamespace(defaultClusterKey, constants.TenantDNSServerNS), "12345", "192.168.0.10"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "kube-system", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "kube-system", "s12345"),
 				tenantServiceAccount("default", "kube-system", "12345"),
 			},
-			ExpectedCreatedPods: []string{conversion.ToSuperMasterNamespace(defaultClusterKey, "kube-system") + "/pod-1"},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "kube-system", "12345")},
 			ExpectedError:       "",
 		},
 		"new pod with nodeName": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
 				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyNodeNameToPod(tenantPod("pod-1", "default", "12345"), "i-xxxx"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedCreatedPods: []string{},
 		},
 		"new Pod but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod("pod-1", superDefaultNSName, "12345"),
+				superPod(defaultClusterKey, "pod-1", "default", "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
 			},
-			ExpectedCreatedPods: []string{},
-			ExpectedError:       "",
+			ExpectedError: "",
 		},
 		"new Pod but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod("pod-1", superDefaultNSName, "123456"),
+				superPod(defaultClusterKey, "pod-1", "default", "123456"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
 			},
-			ExpectedCreatedPods: []string{},
-			ExpectedError:       "delegated UID is different",
+			ExpectedError: "delegated UID is different",
 		},
 	}
 
@@ -242,16 +384,24 @@ func TestDWPodCreation(t *testing.T) {
 				t.Errorf("%s: Expected to create Pod %#v. Actual actions were: %#v", k, tc.ExpectedCreatedPods, actions)
 				return
 			}
-			for i, expectedName := range tc.ExpectedCreatedPods {
+
+			for i := range tc.ExpectedCreatedPods {
 				action := actions[i]
 				if !action.Matches("create", "pods") {
 					t.Errorf("%s: Unexpected action %s", k, action)
 				}
 				createdPod := action.(core.CreateAction).GetObject().(*v1.Pod)
-				fullName := createdPod.Namespace + "/" + createdPod.Name
-				if fullName != expectedName {
-					t.Errorf("%s: Expected %s to be created, got %s", k, expectedName, fullName)
+
+				bb, _ := json.Marshal(createdPod)
+				fmt.Printf("==== %s\n\n\n\n", string(bb))
+
+				bb, _ = json.Marshal(tc.ExpectedCreatedPods)
+				fmt.Printf("=== %s", string(bb))
+
+				if !equality.Semantic.DeepEqual(createdPod, tc.ExpectedCreatedPods[i]) {
+					t.Errorf("%s: Expected %+v to be created, got %+v", k, tc.ExpectedCreatedPods, createdPod)
 				}
+
 			}
 		})
 	}
@@ -282,14 +432,14 @@ func TestDWPodDeletion(t *testing.T) {
 	}{
 		"delete Pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod("pod-1", superDefaultNSName, "12345"),
+				superPod(defaultClusterKey, "pod-1", "default", "12345"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
 		},
 		"delete vPod and pPod is already running": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyNodeNameToPod(superPod("pod-1", superDefaultNSName, "12345"), "i-xxx"),
+				applyNodeNameToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), "i-xxx"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
@@ -302,7 +452,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"delete Pod but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod("pod-1", superDefaultNSName, "123456"),
+				superPod(defaultClusterKey, "pod-1", "default", "123456"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{},
@@ -310,7 +460,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"terminating vPod but running pPod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod("pod-1", superDefaultNSName, "12345"),
+				superPod(defaultClusterKey, "pod-1", "default", "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
@@ -321,7 +471,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"terminating vPod and terminating pPod": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDeletionTimestampToPod(superPod("pod-1", superDefaultNSName, "12345"), time.Now(), 30),
+				applyDeletionTimestampToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), time.Now(), 30),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
@@ -389,7 +539,6 @@ func TestDWPodUpdate(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	spec1 := &v1.PodSpec{
 		Containers: []v1.Container{
@@ -434,7 +583,7 @@ func TestDWPodUpdate(t *testing.T) {
 	}{
 		"no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
@@ -443,18 +592,18 @@ func TestDWPodUpdate(t *testing.T) {
 		},
 		"diff in container": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec2),
 			},
 			ExpectedUpdatedPods: []runtime.Object{
-				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec2),
+				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec2),
 			},
 		},
 		"diff in container added by webhook": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec3),
+				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec3),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
@@ -463,7 +612,7 @@ func TestDWPodUpdate(t *testing.T) {
 		},
 		"diff exists but uid is wrong": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod("pod-1", superDefaultNSName, "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "123456"), spec2),
