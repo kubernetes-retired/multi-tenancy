@@ -136,11 +136,12 @@ func TestPodPatrol(t *testing.T) {
 		},
 		"vPod not scheduled, pPod does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("default-token-12345", superDefaultNSName, "12345"),
+				superSecret("default-token-12345", superDefaultNSName, "s12345"),
 				superService("kubernetes", superDefaultNSName, "12345", ""),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-5", "default", "12345"),
+				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
 			ExpectedCreatedPPods: []string{
