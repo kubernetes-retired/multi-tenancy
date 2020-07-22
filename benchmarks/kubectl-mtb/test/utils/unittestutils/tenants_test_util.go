@@ -158,26 +158,3 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 	}
 
 }
-
-func DestroyTenantSA(g *gomega.WithT) {
-	// // Delete Service Account
-	// fmt.Println("Deleting service accounts")
-	// for _, sa := range serviceAccount {
-	// 	err = c.Delete(context.TODO(), sa)
-	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	// }
-
-	// // Delete Tenant
-	// fmt.Println("Deleting tenants")
-	// for _, tenant := range tenants {
-	// 	err = c.Delete(context.TODO(), tenant)
-	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	// }
-
-	// // Delete TenantNamespace
-	// fmt.Println("Deleting tenant namespaces")
-	// for _, tenantnamespace := range tenantnamespaces {
-	// 	err = c.Delete(context.TODO(), tenantnamespace)
-	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	// }
-}
