@@ -20,11 +20,13 @@ import (
 	"fmt"
 	"time"
 
+	pkgerr "github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
@@ -154,7 +156,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 
 	pPod := newObj.(*v1.Pod)
 
-	pSecret, err := c.getPodServiceAccountSecret(clusterName, pPod, vPod)
+	pSecretMap, err := c.findPodServiceAccountSecret(clusterName, pPod, vPod)
 	if err != nil {
 		return fmt.Errorf("failed to get service account secret from cluster %s cache: %v", clusterName, err)
 	}
@@ -170,7 +172,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 	}
 
 	var ms = []conversion.PodMutator{
-		conversion.PodMutateDefault(vPod, pSecret, services, nameServer),
+		conversion.PodMutateDefault(vPod, pSecretMap, services, nameServer),
 		conversion.PodMutateAutoMountServiceAccountToken(c.config.DisableServiceAccountToken),
 		// TODO: make extension configurable
 		//conversion.PodAddExtensionMeta(vPod),
@@ -193,29 +195,40 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 	return err
 }
 
-func (c *controller) getPodServiceAccountSecret(clusterName string, pPod, vPod *v1.Pod) (*v1.Secret, error) {
-	saName := "default"
-	if pPod.Spec.ServiceAccountName != "" {
-		saName = pPod.Spec.ServiceAccountName
+func (c *controller) findPodServiceAccountSecret(clusterName string, pPod, vPod *v1.Pod) (map[string]string, error) {
+	mountSecretSet := sets.NewString()
+	for _, volume := range vPod.Spec.Volumes {
+		if volume.Secret != nil {
+			mountSecretSet.Insert(volume.Secret.SecretName)
+		}
 	}
-	// find tenant sa UID
-	vSaObj, err := c.multiClusterPodController.GetByObjectType(clusterName, vPod.Namespace, saName, &v1.ServiceAccount{})
-	if err != nil {
-		return nil, fmt.Errorf("fail to get tenant service account UID")
-	}
-	vSa := vSaObj.(*v1.ServiceAccount)
 
-	// find service account token secret and replace the one set by tenant kcm.
-	secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.SelectorFromSet(map[string]string{
-		constants.LabelServiceAccountUID: string(vSa.UID),
-	}))
-	if err != nil && !errors.IsNotFound(err) {
-		return nil, err
+	// vSecretName -> pSecretName
+	mutateNameMap := make(map[string]string)
+
+	for secretName := range mountSecretSet {
+		vSecretObj, err := c.multiClusterPodController.GetByObjectType(clusterName, vPod.Namespace, secretName, &v1.Secret{})
+		if err != nil {
+			return nil, pkgerr.Wrapf(err, "failed to get vSecret %s/%s", vPod.Namespace, secretName)
+		}
+		vSecret := vSecretObj.(*v1.Secret)
+
+		// normal secret. pSecret name is the same as the vSecret.
+		if vSecret.Type != v1.SecretTypeServiceAccountToken {
+			continue
+		}
+
+		secretList, err := c.secretLister.Secrets(pPod.Namespace).List(labels.SelectorFromSet(map[string]string{
+			constants.LabelSecretUID: string(vSecret.UID),
+		}))
+		if err != nil || len(secretList) == 0 {
+			return nil, fmt.Errorf("failed to find sa secret from super master %s/%s: %v", pPod.Namespace, vSecret.UID, err)
+		}
+
+		mutateNameMap[secretName] = secretList[0].Name
 	}
-	if secretList == nil || len(secretList) == 0 {
-		return nil, fmt.Errorf("service account token secret for pod is not ready")
-	}
-	return secretList[0], nil
+
+	return mutateNameMap, nil
 }
 
 func (c *controller) getClusterNameServer(cluster string) (string, error) {
