@@ -1,6 +1,8 @@
 package test
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 )
 
@@ -15,14 +17,17 @@ var _ = Describe("Issues", func() {
 		nsSub2Sub1 = "sub2-sub1"
 		nsSubSub2 = "sub-sub2"
 		nsSubChild = "sub-child"
+		nsSubSubChild = "sub-sub-child"
 	)
 
 	BeforeEach(func() {
-		cleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, nsSubSub2, nsSubChild)
+		cleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, 
+			nsSubSub2, nsSubChild, nsSubSubChild)
 	})
 
 	AfterEach(func() {
-		cleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, nsSubSub2, nsSubChild)
+		cleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, 
+			nsSubSub2, nsSubChild, nsSubSubChild)
 	}) 
 
 	It("Should remove obsolete conditions CannotPropagateObject and CannotUpdateObject - issue #328", func() {
@@ -111,5 +116,35 @@ var _ = Describe("Issues", func() {
 		mustNotRun("kubectl hns tree", nsSub2)
 		runShouldContain("CritParentMissing: missing parent", 1, "kubectl hns tree", nsChild)
 		runShouldContain("CritAncestor", 1, "kubectl hns describe", nsSubChild)
+	})
+
+	It("Should clear CannotUpdate conditions in descendants when a hierarchy changes - issue #605", func() {
+		// Setting up hierarchy with rolebinding that HNC doesn't have permission to copy
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsChild)
+		mustRun("kubectl create ns", nsSubChild)
+		mustRun("kubectl create ns", nsSubSubChild)
+		mustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		mustRun("kubectl hns set", nsSubChild, "--parent", nsChild)
+		mustRun("kubectl hns set", nsSubSubChild, "--parent", nsSubChild)
+		// cluster-admin is the highest-powered ClusterRole and HNC is missing some of its permissions, so it cannot propagate it.
+		mustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent, "--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
+		// We put 30s sleep here because - before fixing issue #605, we should see the object gets reconciled after around 8s, 
+		// triggered by controller-runtime, with this sleep time. After fixing this issue, the obsolete condition should be cleared
+		// immediately 
+		time.Sleep(30 * time.Second)
+		// Tree should show CannotPropagateObject in parent and CannotUpdateObject in child and subchild
+		runShouldContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
+		runShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
+		runShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsSubChild)
+		// Remove the grandchild to avoid removing CannotPropagate condition in parent or CannotUpdate condition in child.
+		// Verify that the conditions in grandchild and greatgrandchild are gone.
+		mustRun("kubectl hns set", nsSubChild, "--root")
+		// We should see sub-child has conditions, and should see sub-sub-child has no conditions immediately after the fix.
+		runShouldNotContain("CannotUpdateObject", 1, "kubectl hns describe", nsSubChild)
+		runShouldNotContain("CannotUpdateObject", 1, "kubectl hns describe", nsSubSubChild)
+		// There should still be CannotPropagate condition in parent and CannotUpdate condition in child
+		runShouldContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
+		runShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
 	})
 })
