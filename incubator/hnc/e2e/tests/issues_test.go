@@ -170,4 +170,20 @@ var _ = Describe("Issues", func() {
 		// test: delete namespace 
 		mustRun("kubectl delete ns", nsChild)
 	})
+
+	It("Should not delete a parent of a subnamespace if allowCascadingDelete is not set -issue #716", func(){
+		// Setting up a 2-level tree 
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		// test
+		mustNotRun("kubectl delete ns", nsParent)
+	})
+
+	It("Should delete leaf subnamespace without setting allowCascadingDelete - issue #716", func(){
+		// Setting up a 2-level tree 
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		// test
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
+	})
 })
