@@ -205,7 +205,7 @@ kind-deploy:
 e2e-test: 
 	@echo "If these tests fail due to the webhook not being ready, wait 30s and try again. Note that webhooks can take up to 30s to become ready after HNC is first deployed in a cluster."
 	go clean -testcache
-	go test ./e2e/...
+	go test ./test/...
 
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
