@@ -8,10 +8,9 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
@@ -144,25 +143,38 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 
 // realGVKValidator implements gvkValidator, and is not used during unit tests.
 type realGVKValidator struct {
-	client client.Client
+	config *rest.Config
 }
 
-// Exists validates if a given GVK exists in the apiserver.
+// Exists validates if a given GVK exists in the apiserver. The function uses a
+// discovery client to find a matching resource for the GVK. It returns an error
+// if it doesn't exist and returns nil if it does exist.
 func (r *realGVKValidator) Exists(ctx context.Context, gvk schema.GroupVersionKind) error {
-	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(gvk)
-	err := r.client.Get(ctx, types.NamespacedName{Name: "nm"}, inst)
-	// We try to get an object of the given GVK with name "nm". It is possible that the
-	// object does not exist. Therefore, we will ignore the IsNotFound error.
-	if errors.IsNotFound(err) {
-		return nil
+	dc, err := discovery.NewDiscoveryClientForConfig(r.config)
+	if err != nil {
+		// Fail close if we cannot create discovery client.
+		return err
 	}
-	// if err is nil, that means the object was found, which means the type exists.
-	return err
+
+	resources, err := dc.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+	if err != nil {
+		// No matching GV found.
+		return err
+	}
+
+	// The GV exists. Look for the matching kind now.
+	for _, resource := range resources.APIResources {
+		if resource.Kind == gvk.Kind {
+			return nil
+		}
+	}
+
+	// No matching kind. Use the same error message when the GV is not found above.
+	return errors.NewBadRequest("the server could not find the requested resource")
 }
 
-func (c *HNCConfig) InjectClient(cl client.Client) error {
-	c.validator = &realGVKValidator{client: cl}
+func (c *HNCConfig) InjectConfig(cf *rest.Config) error {
+	c.validator = &realGVKValidator{config: cf}
 	return nil
 }
 
