@@ -48,8 +48,6 @@ const (
 	// LabelVCRootNS means the namespace is the rootns created by vc-manager.
 	LabelVCRootNS = "tenancy.x-k8s.io/vcrootns"
 
-	// LabelServiceAccountUID is the tenant service account UID related to the secret.
-	LabelServiceAccountUID = "tenancy.x-k8s.io/service-account.UID"
 	// LabelSecretUID is the service account token secret UID in tenant namespace.
 	LabelSecretUID = "tenancy.x-k8s.io/secret.UID"
 

@@ -131,6 +131,7 @@ func Test_mutateContainerSecret(t *testing.T) {
 		name              string
 		container         *v1.Container
 		saSecretMap       map[string]string
+		vPod              *v1.Pod
 		expectedContainer *v1.Container
 	}{
 		{
@@ -150,6 +151,20 @@ func Test_mutateContainerSecret(t *testing.T) {
 				},
 			},
 			saSecretMap: saSecretMap,
+			vPod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Volumes: []v1.Volume{
+						{
+							Name: "service-token-secret-tenant",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "service-token-secret-tenant",
+								},
+							},
+						},
+					},
+				},
+			},
 			expectedContainer: &v1.Container{
 				VolumeMounts: []v1.VolumeMount{
 					{
@@ -167,7 +182,7 @@ func Test_mutateContainerSecret(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			mutateContainerSecret(tt.container, tt.saSecretMap)
+			mutateContainerSecret(tt.container, tt.saSecretMap, tt.vPod)
 			if !equality.Semantic.DeepEqual(tt.container, tt.expectedContainer) {
 				tc.Errorf("expected container %+v, got %+v", tt.expectedContainer, tt.container)
 			}

@@ -76,8 +76,7 @@ func superServiceAccountSecret(name, namespace, uid, clusterKey string) *v1.Secr
 				constants.LabelSecretName:      name,
 			},
 			Labels: map[string]string{
-				constants.LabelServiceAccountUID: "",
-				constants.LabelSecretUID:         uid,
+				constants.LabelSecretUID: uid,
 			},
 		},
 		Type: v1.SecretTypeOpaque,
