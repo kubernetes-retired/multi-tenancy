@@ -62,7 +62,7 @@ var b = &benchmark.Benchmark{
 
 		svcSpec := &serviceutil.ServiceConfig{Type: "NodePort", Selector: podLabels}
 		svc := svcSpec.CreateServiceSpec()
-		_, err = kclient.CoreV1().Services(tenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = tclient.CoreV1().Services(tenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create service of type NodePort")

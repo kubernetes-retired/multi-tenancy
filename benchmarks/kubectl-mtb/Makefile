@@ -37,7 +37,7 @@ readme:
 # Setup a cluster to be used for testing.
 HAS_KIND := $(shell command -v kind;)
 KIND_PROFILE := "kubectl-mtb-suite"
-kind-unittest:
+kind-create:
 ifndef HAS_KIND
 	go get -u sigs.k8s.io/kind
 endif
@@ -45,5 +45,11 @@ endif
 		echo "Could not find $(KIND_PROFILE) cluster. Creating...";\
 		kind create cluster --name $(KIND_PROFILE) --wait 5m;\
 	fi
-	go test ./test/benchmarks/... -v
+		
+kind-test:
+	go test ./test/benchmarks/... -v -p 1		
+
+kind-delete:
 	kind delete cluster --name $(KIND_PROFILE)
+
+unit-tests: kind-create kind-test kind-delete

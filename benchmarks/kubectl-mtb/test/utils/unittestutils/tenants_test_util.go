@@ -2,7 +2,6 @@ package unittestutils
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -16,6 +15,8 @@ import (
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -98,6 +99,15 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 	}
 	tenantnamespaces = append(tenantnamespaces, tenantnamespaceOne)
 
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)	// Create the K8s clientSet
+	cfg, err := kubecfgFlags.ToRESTConfig()
+	k8sClient, err := kubernetes.NewForConfig(cfg)
+	_, err = k8sClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})	
+	if err == nil {
+		return
+	}
+
+
 	mgr, err := manager.New(cfg, manager.Options{})
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
@@ -149,25 +159,25 @@ func CreateTenant(t *testing.T, g *gomega.WithT, namespace string, serviceAcc st
 
 }
 
-func DestroyTenant(g *gomega.WithT) {
-	// Delete Service Account
-	fmt.Println("Deleting service accounts")
-	for _, sa := range serviceAccount {
-		err = c.Delete(context.TODO(), sa)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+func DestroyTenantSA(g *gomega.WithT) {
+	// // Delete Service Account
+	// fmt.Println("Deleting service accounts")
+	// for _, sa := range serviceAccount {
+	// 	err = c.Delete(context.TODO(), sa)
+	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	// }
 
-	// Delete Tenant
-	fmt.Println("Deleting tenants")
-	for _, tenant := range tenants {
-		err = c.Delete(context.TODO(), tenant)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+	// // Delete Tenant
+	// fmt.Println("Deleting tenants")
+	// for _, tenant := range tenants {
+	// 	err = c.Delete(context.TODO(), tenant)
+	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	// }
 
-	// Delete TenantNamespace
-	fmt.Println("Deleting tenant namespaces")
-	for _, tenantnamespace := range tenantnamespaces {
-		err = c.Delete(context.TODO(), tenantnamespace)
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}
+	// // Delete TenantNamespace
+	// fmt.Println("Deleting tenant namespaces")
+	// for _, tenantnamespace := range tenantnamespaces {
+	// 	err = c.Delete(context.TODO(), tenantnamespace)
+	// 	g.Expect(err).NotTo(gomega.HaveOccurred())
+	// }
 }
