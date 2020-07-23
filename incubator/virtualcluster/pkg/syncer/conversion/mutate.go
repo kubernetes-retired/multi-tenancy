@@ -120,12 +120,12 @@ func PodMutateDefault(vPod *v1.Pod, saSecretMap map[string]string, services []*v
 
 		for i := range p.pPod.Spec.Containers {
 			mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
-			mutateContainerSecret(&p.pPod.Spec.Containers[i], saSecretMap)
+			mutateContainerSecret(&p.pPod.Spec.Containers[i], saSecretMap, vPod)
 		}
 
 		for i := range p.pPod.Spec.InitContainers {
 			mutateContainerEnv(&p.pPod.Spec.InitContainers[i], vPod, serviceEnv)
-			mutateContainerSecret(&p.pPod.Spec.InitContainers[i], saSecretMap)
+			mutateContainerSecret(&p.pPod.Spec.InitContainers[i], saSecretMap, vPod)
 		}
 
 		for i, volume := range p.pPod.Spec.Volumes {
@@ -192,10 +192,21 @@ func mutateContainerEnv(c *v1.Container, vPod *v1.Pod, serviceEnvMap map[string]
 	}
 }
 
-func mutateContainerSecret(c *v1.Container, SASecretMap map[string]string) {
+func mutateContainerSecret(c *v1.Container, SASecretMap map[string]string, vPod *v1.Pod) {
 	for j, volumeMount := range c.VolumeMounts {
-		if pSecretName, exists := SASecretMap[volumeMount.Name]; exists {
-			c.VolumeMounts[j].Name = pSecretName
+		needMutation := false
+		for _, volume := range vPod.Spec.Volumes {
+			if volumeMount.Name == volume.Name {
+				if volume.Secret != nil && volume.Name == volume.Secret.SecretName {
+					needMutation = true
+				}
+				break
+			}
+		}
+		if needMutation {
+			if pSecretName, exists := SASecretMap[volumeMount.Name]; exists {
+				c.VolumeMounts[j].Name = pSecretName
+			}
 		}
 	}
 }
@@ -427,7 +438,6 @@ func (s *saSecretMutator) Mutate(vSecret *v1.Secret, clusterName string) {
 
 	annotations[constants.LabelSecretName] = vSecret.Name
 	labels[constants.LabelSecretUID] = string(vSecret.UID)
-	labels[constants.LabelServiceAccountUID] = vSecret.GetAnnotations()[v1.ServiceAccountUIDKey]
 	s.pSecret.SetLabels(labels)
 	s.pSecret.SetAnnotations(annotations)
 
