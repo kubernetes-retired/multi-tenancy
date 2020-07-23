@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-quota
+spec:
+  hard:
+    cpu: "1" 
+    ephemeral-storage: "1" 
+    memory: "1" 
+    persistentvolumeclaims: "1"
+    services.loadbalancers: "1"
+    services.nodeports: "1"
+    pods: "1"
+    replicationcontrollers: "1"
+    resourcequotas: "1"
+    configmaps: "1"
+    secrets: "1"
+    services: "1"
