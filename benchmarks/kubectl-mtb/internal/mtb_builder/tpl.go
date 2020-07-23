@@ -123,14 +123,12 @@ func TestMain(m *testing.M) {
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
 
-	tearDown := func() error {
+tearDown := func() error {
 		var err error
 		if !clusterExists {
 			err := kind.DeleteCluster()
 			return err
-		} else {
-			unittestutils.DestroyTenant(g)
-		}
+			} 
 		return err
 	}
 
@@ -153,6 +151,12 @@ func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, se
 }
 
 func TestBenchmark(t *testing.T) {
+
+	defer func() {
+		testClient.DeletePolicy()
+		testClient.DeleteRole()
+	}()
+
 	g = gomega.NewGomegaWithT(t)
 	testClient.Namespace = tenantNamespace
 	testClient.ServiceAccount = serviceAccount

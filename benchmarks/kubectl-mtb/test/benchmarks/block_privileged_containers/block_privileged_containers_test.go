@@ -87,14 +87,12 @@ func TestMain(m *testing.M) {
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
 
-	tearDown := func() error {
+tearDown := func() error {
 		var err error
 		if !clusterExists {
 			err := kind.DeleteCluster()
 			return err
-		} else {
-			unittestutils.DestroyTenant(g)
-		}
+			} 
 		return err
 	}
 
@@ -117,6 +115,12 @@ func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, se
 }
 
 func TestBenchmark(t *testing.T) {
+
+	defer func() {
+		testClient.DeletePolicy()
+		testClient.DeleteRole()
+	}()
+
 	g = gomega.NewGomegaWithT(t)
 	testClient.Namespace = tenantNamespace
 	testClient.ServiceAccount = serviceAccount
@@ -154,7 +158,6 @@ func TestBenchmark(t *testing.T) {
 		g.Expect(preRun).To(gomega.Equal(tc.preRun))
 		g.Expect(run).To(gomega.Equal(tc.run))
 	}
-
 }
 
 func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {
@@ -176,12 +179,12 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 		},
 	}
 
-	createdRole, err := testClient.CreateRole("pod-role", policies)
+	createdRole, err := testClient.CreateRole("pod-role-2", policies)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 
-	_, err = testClient.CreateRoleBinding(createdRole)
+	_, err = testClient.CreateRoleBinding("pod-role-binding-2", createdRole)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -198,7 +201,7 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 }
 
 func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
-	paths := []string{unittestutils.ClusterPolicy}
+	paths := []string{unittestutils.DisallowPrivilegedContainers}
 
 	for _, p := range paths {
 		err := testClient.CreatePolicy(p)
