@@ -209,4 +209,20 @@ var _ = Describe("Issues", func() {
 		// Expected: delete successfully
 		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
+
+	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue 771", func(){
+		// set up
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsChild)
+		mustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		// Creating unpropagatable object; both namespaces should have a condition
+		mustRun("kubectl create rolebinding --clusterrole=cluster-admin --serviceaccount=default:default -n", nsParent, "foo")
+		// verify
+		runShouldContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
+		runShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
+		// Deleting unpropagatable object; all conditions should be cleared
+		mustRun("kubectl delete rolebinding -n", nsParent, "foo")
+		runShouldNotContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
+		runShouldNotContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
+	})
 })
