@@ -186,4 +186,27 @@ var _ = Describe("Issues", func() {
 		// test
 		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
+
+	It("Should not delete a non-leaf subnamespace if allowCascadingDelete is not set - issue #716", func(){
+		// Setting up a 3-level tree 
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		// Test: remove non-leaf subnamespace with 'allowCascadingDelete' unset.
+		// Expected: forbidden because 'allowCascadingDelete'flag is not set
+		mustNotRun("kubectl delete subns", nsChild, "-n", nsParent)
+	})
+
+	It("Should delete a subnamespace if it's changed from non-leaf to leaf without setting allowCascadingDelete - issue #716", func(){
+		// Setting up a 3-level tree 
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		// Test: remove leaf subnamespaces with 'allowCascadingDelete' unset.
+		// Expected: delete successfully
+		mustRun("kubectl delete subns", nsSubChild, "-n", nsChild)
+		// Test: delete child subns in parent
+		// Expected: delete successfully
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
+	})
 })
