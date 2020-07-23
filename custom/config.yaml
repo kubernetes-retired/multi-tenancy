@@ -1,0 +1,19 @@
+# path to cluster administrator's kubeconfig file
+# Path relative to ./benchmarks/e2e/tests directory
+adminKubeconfig: ../../../custom/kubeconfig_cluster-admin.yml
+ 
+# path to the tenant's kubeconfig and its namespace
+# Path relative to ./benchmarks/e2e/tests directory
+tenantA:
+  kubeconfig: ../../../custom/kubeconfig_tenant-a-prod-testrunner-tenant-admin.yml
+  namespace: tenant-a-prod
+ 
+# path to the tenant's kubeconfig and its namespace
+# Path relative to ./benchmarks/e2e/tests directory
+stenantB:
+  kubeconfig: ../../../custom/kubeconfig_tenant-b-prod-testrunner-tenant-admin.yml
+  namespace: tenant-b-prod
+
+# label is used to identify the resources
+# managed by the cluster administrator
+label:
