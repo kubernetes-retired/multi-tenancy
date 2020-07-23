@@ -10,7 +10,7 @@ tenantA:
  
 # path to the tenant's kubeconfig and its namespace
 # Path relative to ./benchmarks/e2e/tests directory
-stenantB:
+tenantB:
   kubeconfig: ../../../custom/kubeconfig_tenant-b-prod-testrunner-tenant-admin.yml
   namespace: tenant-b-prod
 
