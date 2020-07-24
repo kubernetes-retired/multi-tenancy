@@ -19,5 +19,5 @@ tenantB:
 # label is used to identify the resources
 # managed by the cluster administrator
 label:
-  # provider="eon.esp"
-  # owner="cluster-admin"
+  provider="eon.esp"
+  owner="cluster-admin"
