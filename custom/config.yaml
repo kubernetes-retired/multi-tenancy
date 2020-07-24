@@ -5,15 +5,19 @@ adminKubeconfig: ../../../custom/kubeconfig_cluster-admin.yml
 # path to the tenant's kubeconfig and its namespace
 # Path relative to ./benchmarks/e2e/tests directory
 tenantA:
-  kubeconfig: ../../../custom/kubeconfig_tenant-a-prod-testrunner-tenant-admin.yml
-  namespace: tenant-a-prod
+  kubeconfig: ../../../custom/kubeconfig_tenant-a-dev-testrunner-tenant-admin.yml
+  # kubeconfig: ../../../custom/kubeconfig_cluster-admin.yml
+  namespace: tenant-a-dev
  
 # path to the tenant's kubeconfig and its namespace
 # Path relative to ./benchmarks/e2e/tests directory
 tenantB:
-  kubeconfig: ../../../custom/kubeconfig_tenant-b-prod-testrunner-tenant-admin.yml
-  namespace: tenant-b-prod
+  kubeconfig: ../../../custom/kubeconfig_tenant-b-dev-testrunner-tenant-admin.yml
+  # kubeconfig: ../../../custom/kubeconfig_cluster-admin.yml
+  namespace: tenant-b-dev
 
 # label is used to identify the resources
 # managed by the cluster administrator
 label:
+  # provider="eon.esp"
+  # owner="cluster-admin"
