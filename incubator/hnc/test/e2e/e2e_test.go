@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -13,6 +14,8 @@ import (
 )
 
 const namspacePrefix = "e2e-test-"
+
+var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
 func TestE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -118,4 +121,24 @@ func cleanupNamespaces(nses ...string) {
 		tryRunSuppressLog("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
 		tryRunSuppressLog("kubectl delete ns", ns)
 	}
+}
+
+func checkHNCPath() {
+	// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
+	if hncRecoverPath == ""{
+		Skip("Environment variable HNC_REPAIR not set. Skipping tests that require repairing HNC.")
+	}
+}
+
+func recoverHNC() {
+	err := tryRun("kubectl apply -f", hncRecoverPath)
+	if err != nil {
+		GinkgoT().Log("-----------------------------WARNING------------------------------")
+		GinkgoT().Logf("WARNING: COULDN'T REPAIR HNC: %v", err)
+		GinkgoT().Log("ANY TEST AFTER THIS COULD FAIL BECAUSE WE COULDN'T REPAIR HNC HERE")
+		GinkgoT().Log("------------------------------------------------------------------")
+		GinkgoT().FailNow()
+	}
+	// give HNC enough time to repair
+	time.Sleep(5 * time.Second)
 }
