@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -9,33 +8,19 @@ import (
 
 var _ = Describe("When deleting CRDs", func() {
 
-	hncRecoverPath := os.Getenv("HNC_REPAIR")
-
 	const (
 		nsParent = "delete-crd-parent"
 		nsChild = "delete-crd-child"
 	)
 
 	BeforeEach(func() {
-		// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
-		if hncRecoverPath == ""{
-			Skip("Environment variable HNC_REPAIR not set. Skipping reocovering HNC.")
-		}
+		checkHNCPath()
 		cleanupNamespaces(nsParent, nsChild)
 	})
 
 	AfterEach(func() {
 		cleanupNamespaces(nsParent, nsChild)
-		err := tryRun("kubectl apply -f", hncRecoverPath)
-		if err != nil {
-			GinkgoT().Log("-----------------------------WARNING------------------------------")
-			GinkgoT().Logf("WARNING: COULDN'T REPAIR HNC: %v", err)
-			GinkgoT().Log("ANY TEST AFTER THIS COULD FAIL BECAUSE WE COULDN'T REPAIR HNC HERE")
-			GinkgoT().Log("------------------------------------------------------------------")
-			GinkgoT().FailNow()
-		}
-		// give HNC enough time to repair
-		time.Sleep(5 * time.Second)
+		recoverHNC()
 	})
 
 	It("should not delete subnamespaces", func() {

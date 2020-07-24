@@ -210,7 +210,7 @@ var _ = Describe("Issues", func() {
 		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue 771", func(){
+	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue #771", func(){
 		// set up
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl create ns", nsChild)
@@ -235,5 +235,55 @@ var _ = Describe("Issues", func() {
 		mustRun("kubectl create rolebinding --clusterrole=admin --serviceaccount=default:default -n", nsParent, "foo")
 		// Object should exist in the child, and there should be no conditions
 		mustRun("kubectl get rolebinding foo -n", nsChild, "-oyaml")
+	})
+})
+
+var _ = Describe("Issues that require repairing HNC", func() {
+
+	const (
+		nsParent = "parent"
+		nsParent2 = "parent-2"
+		nsChild = "child"
+	)
+
+	BeforeEach(func() {
+		checkHNCPath()
+		cleanupNamespaces(nsParent, nsParent2, nsChild)
+
+		// Creating a race condition of two parents with the same leaf subns (anchor)
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsParent2)
+		// Disabling webhook to generate the race condition
+		mustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		// Creating subns (anchor) 'sub' in both parent and parent2
+		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		mustRun("kubectl hns create", nsChild, "-n", nsParent2)
+		// Subnamespace child should be created and have parent as the 'subnamespaceOf' annoation value:
+		runShouldContain("subnamespaceOf: " + nsParent, 1, "kubectl get ns", nsChild, "-o yaml")
+		// Creating a 'test-secret' in the subnamespace child
+		mustRun("kubectl create secret generic test-secret --from-literal=key=value -n", nsChild)
+		// subns (anchor) child in parent2 should have 'status: conflict' because it's a bad anchor:
+		runShouldContain("status: conflict", 1, "kubectl get subns", nsChild, "-n", nsParent2, "-o yaml")
+		// Enabling webhook again
+		mustRun("kubectl apply -f", hncRecoverPath)
+	})
+
+	AfterEach(func() {
+		cleanupNamespaces(nsParent, nsParent2, nsChild)
+		recoverHNC()
+	})
+
+	It("Should not delete child namespace when deleting a parent namespace with bad anchor - issue #797", func(){
+		// Test: remove subns (anchor) in the bad parent 'parent2'
+		// Expected: The bad subns (anchor) is deleted successfully but the child is not deleted (still contains the 'test-secret')
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent2)
+		mustRun("kubectl get secret -n", nsChild)
+	})
+
+	It("Should delete child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func(){
+		// Test: Remove subns (anchor) in the good parent 'parent'
+		// Expected: The subns (anchor) is deleted successfully and the 'child' is also deleted
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
+		mustNotRun("kubectl get ns", nsChild, "-o yaml")
 	})
 })
