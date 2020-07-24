@@ -225,4 +225,15 @@ var _ = Describe("Issues", func() {
 		runShouldNotContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
 		runShouldNotContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
 	})
+
+	It("Should propogate admin rolebindings - issue #772", func(){
+		// set up
+		mustRun("kubectl create ns", nsParent)
+		mustRun("kubectl create ns", nsChild)
+		mustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		// Creating admin rolebinding object
+		mustRun("kubectl create rolebinding --clusterrole=admin --serviceaccount=default:default -n", nsParent, "foo")
+		// Object should exist in the child, and there should be no conditions
+		mustRun("kubectl get rolebinding foo -n", nsChild, "-oyaml")
+	})
 })
