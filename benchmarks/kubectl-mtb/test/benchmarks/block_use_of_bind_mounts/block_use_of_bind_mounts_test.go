@@ -3,7 +3,6 @@ package blockuseofbindmounts
 import (
 	"fmt"
 
-	"log"
 	"os"
 	"strings"
 	"testing"
@@ -24,11 +23,11 @@ var (
 	tenantClient *kubernetes.Clientset
 	clusterExists bool
 	saNamespace = "default"
-	tenantName = "tenantA"
-	tenantAdminNamespaceName = "tenantAdmin"
-	tenantNamespaceName = "tenantnamespaceA"
-	actualTenantNamespaceName = "tA-nsA"
-	saName = "tenantA-admin"
+	tenantName = "tenant1"
+	tenantAdminNamespaceName = "tenant1admin"
+	tenantNamespaceName = "tenantnamespace1"
+	actualTenantNamespaceName = "t1-ns1"
+	saName = "tenant1-admin"
 	apiExtensions *apiextensionspkg.Clientset
 	g *gomega.GomegaWithT
 )
@@ -66,15 +65,16 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-
 		rest := k8sClient.CoreV1().RESTClient()
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
 		
 		// Initialize testclient
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
 		tenantConfig := testClient.Config
-		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + saNamespace + saName
+		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + saNamespace  + ":" + saName
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		testClient.Namespace = actualTenantNamespaceName
+		testClient.ServiceAccount = unittestutils.ServiceAccountObj(saName, saNamespace)
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func TestMain(m *testing.M) {
 	err := setUp()
 
 	if err != nil {
-		log.Print(err.Error())
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 		os.Exit(1)
 	}
 
@@ -93,15 +93,17 @@ func TestMain(m *testing.M) {
 		var err error
 		if !clusterExists {
 			err := kind.DeleteCluster()
-			return err
-			} 
+			if err != nil {
+				return err
+			}
+		} 
 		return err
 	}
 
 	// exec tearDown function
 	err = tearDown()
 	if err != nil {
-		log.Print(err.Error())
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
 	os.Exit(retCode)
@@ -110,10 +112,8 @@ func TestMain(m *testing.M) {
 func CreateTenants(t *testing.T, g *gomega.GomegaWithT) {
 	err := unittestutils.CreateCrds(testClient)
 	if err != nil {
-		t.Error(err.Error())
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
-	
-	fmt.Println("hello")
 
 	unittestutils.ServiceAccounts = append(unittestutils.ServiceAccounts, unittestutils.ServiceAccountObj(saName, saNamespace))
 	unittestutils.Tenants = append(unittestutils.Tenants, unittestutils.TenantObj(tenantName,  unittestutils.ServiceAccountObj(saName, saNamespace), tenantAdminNamespaceName))
@@ -136,6 +136,10 @@ func TestBenchmark(t *testing.T) {
 		CreateTenants(t, g)
 	}
 
+	if !unittestutils.CheckNamespaceExist(actualTenantNamespaceName, testClient.K8sClient) {
+		CreateTenants(t, g)
+	}
+	
 	tests := []struct {
 		testName     string
 		testFunction TestFunction
@@ -189,19 +193,18 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 		},
 	}
 
-	createdRole, err := testClient.CreateRole("pod-role-3", policies)
+	createdRole, err := testClient.CreateRole("pod-role", policies)
 	if err != nil {
-		fmt.Println(err.Error())
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
-	_, err = testClient.CreateRoleBinding("pod-role-binding-3", createdRole)
+	_, err = testClient.CreateRoleBinding("pod-role-binding", createdRole)
 	if err != nil {
-		fmt.Println(err.Error())
+		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
 	err = b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
-		t.Logf(err.Error())
 		return false, false
 	}
 	if err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient); err != nil {
@@ -216,19 +219,24 @@ func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
 	for _, p := range paths {
 		err := testClient.CreatePolicy(p)
 		if err != nil {
-			fmt.Println(err.Error())
 			return false, false
 		}
+
+		unittestutils.WaitForPolicy()
 	}
+
 
 	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
 		fmt.Println(err.Error())
 		return false, false
 	}
-	if err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient); err != nil {
+
+	err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient)
+	if err != nil {
 		fmt.Println(err.Error())
 		return true, false
 	}
+
 	return true, true
 }

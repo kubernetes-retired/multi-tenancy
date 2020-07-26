@@ -11,11 +11,14 @@ import (
 	tenancyv1alpha1 "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/apis/tenancy/v1alpha1"
 	tenant "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenant"
 	tenantnamespace "github.com/kubernetes-sigs/multi-tenancy/tenant/pkg/controller/tenantnamespace"
+	kyverno "github.com/nirmata/kyverno/pkg/api/kyverno/v1"
 	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -107,11 +110,13 @@ func CreateCrds(testClient *TestClient) error {
 	crdPath := filepath.Join(path, "kyverno.yaml")
 	err = testClient.CreatePolicy(crdPath)
 	if err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 
 	err := waitForKyvernoToReady(testClient.K8sClient)
 	if err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 
@@ -125,8 +130,8 @@ func waitForKyvernoToReady(k8sClient *kubernetes.Clientset) error {
 		if err != nil {
 			return err
 		}
+
 		time.Sleep(1 * time.Second)
-		fmt.Println(podsList)
 		if(len(podsList.Items) > 0) {
 			break
 		}
@@ -137,7 +142,51 @@ func waitForKyvernoToReady(k8sClient *kubernetes.Clientset) error {
 		if podutil.CheckPodsRunningReady(k8sClient, "kyverno", podNames, 200*time.Second) {
 			break
 		}
-		time.Sleep(1 * time.Second)
+	}
+	return nil
+}
+
+func WaitForPolicy() error {
+	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+
+	kyverno.AddToScheme(scheme.Scheme)
+
+	crdConfig := *config
+	crdConfig.ContentConfig.GroupVersion = &kyverno.SchemeGroupVersion
+	crdConfig.APIPath = "/apis"
+	crdConfig.NegotiatedSerializer = serializer.NewCodecFactory(scheme.Scheme)
+	crdConfig.UserAgent = rest.DefaultKubernetesUserAgent()
+
+	c, err := rest.RESTClientFor(&crdConfig)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	result := kyverno.ClusterPolicyList{}
+	for {
+		err = c.
+		Get().
+	    Namespace("").
+	    Resource("clusterpolicies").
+        Do(context.TODO()).
+        Into(&result)
+		if err != nil {
+			fmt.Println(err.Error())
+			return err
+			// continue
+		} else {
+			if(len(result.Items) < 0) {
+				continue
+			}
+			break;
+		}
 	}
 	return nil
 }
@@ -200,6 +249,7 @@ func CreateTenant(t *testing.T, g *gomega.WithT) {
 		tenantNs := &corev1.Namespace{}
 		g.Eventually(func() error { return c.Get(context.TODO(), nskey, tenantNs) }, timeout).
 			Should(gomega.Succeed())
+		// time.Sleep(5 * time.Second)
 	}
 
 }
