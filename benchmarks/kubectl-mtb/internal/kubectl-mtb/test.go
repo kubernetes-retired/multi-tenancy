@@ -112,7 +112,7 @@ func removeBenchmarksWithIDs(ids []string) {
 func validateFlags(cmd *cobra.Command) error {
 	tenant, _ = cmd.Flags().GetString("as")
 	if tenant == "" {
-		return fmt.Errorf("tenant-admin/user must be set via --as")
+		return fmt.Errorf("username must be set via --as")
 	}
 
 	tenantNamespace, _ = cmd.Flags().GetString("namespace")
