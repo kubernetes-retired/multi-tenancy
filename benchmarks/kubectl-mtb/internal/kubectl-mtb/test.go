@@ -214,10 +214,10 @@ func runTests(cmd *cobra.Command, args []string) error {
 }
 
 func newTestCmd() *cobra.Command {
-	testCmd.Flags().StringP("namespace", "n", "", "name of tenantnamespace")
-	testCmd.Flags().String("as", "", "Username to impersonate the tenant-admin/user")
-	testCmd.Flags().StringP("out", "o", "default", "output reporter format")
-	testCmd.Flags().StringP("skip", "s", "", "skips the benchmarks using ID")
+	testCmd.Flags().StringP("namespace", "n", "", "tenant namespace")
+	testCmd.Flags().String("as", "", "user name to impersonate")
+	testCmd.Flags().StringP("out", "o", "default", "output reporters (default, policyreport)")
+	testCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
 
 	return testCmd
 }
