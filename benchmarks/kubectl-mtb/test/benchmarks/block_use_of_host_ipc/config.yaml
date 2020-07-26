@@ -3,5 +3,5 @@ title: Block use of host IPC
 benchmarkType: Behavioral Check
 category: Host Isolation
 description: Tenants should not be allowed to share the host's inter-process communication (IPC) namespace.
-remediation: Define a `PodSecurityPolicy` with `hostIPC` set to `false` and map the policy to each tenant's namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `hostPID` cannot be set to `true`. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/benchmarks/kubectl-mtb/test/policies).
+remediation: Define a `PodSecurityPolicy` with `hostIPC` set to `false` and map the policy to each tenant's namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `hostPID` cannot be set to `true`. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 profileLevel: 1
