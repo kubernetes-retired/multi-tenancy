@@ -37,8 +37,8 @@ var (
 	tenantClient    *kubernetes.Clientset
 )
 
-var testCmd = &cobra.Command{
-	Use:   "test",
+var runCmd = &cobra.Command{
+	Use:   "run",
 	Short: "Run the Multi-Tenancy Benchmarks",
 
 	Run: func(cmd *cobra.Command, args []string) {
@@ -213,11 +213,11 @@ func runTests(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func newTestCmd() *cobra.Command {
-	testCmd.Flags().StringP("namespace", "n", "", "tenant namespace")
-	testCmd.Flags().String("as", "", "user name to impersonate")
-	testCmd.Flags().StringP("out", "o", "default", "output reporters (default, policyreport)")
-	testCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
+func newRunCmd() *cobra.Command {
+	runCmd.Flags().StringP("namespace", "n", "", "tenant namespace")
+	runCmd.Flags().String("as", "", "user name to impersonate")
+	runCmd.Flags().StringP("out", "o", "default", "output reporters (default, policyreport)")
+	runCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
 
-	return testCmd
+	return runCmd
 }

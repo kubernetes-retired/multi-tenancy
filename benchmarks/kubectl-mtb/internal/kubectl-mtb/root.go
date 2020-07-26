@@ -54,7 +54,7 @@ func init() {
 
 	// Commands
 	rootCmd.AddCommand(newGetCmd())
-	rootCmd.AddCommand(newTestCmd())
+	rootCmd.AddCommand(newRunCmd())
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
