@@ -22,7 +22,7 @@ type PolicyReporter struct {
 
 // NewPolicyReporter returns the pointer of PolicyReporter
 func NewPolicyReporter() *PolicyReporter {
-	policyName := "policy-" + string(uuid.NewUUID())
+	policyName := "policyreport-" + string(uuid.NewUUID())[0:4]
 	return &PolicyReporter{
 		policy: v1alpha1.PolicyReport{
 			TypeMeta: metav1.TypeMeta{
@@ -105,6 +105,7 @@ func CreatePolicy(namespace string, policy v1alpha1.PolicyReport) {
 	if err != nil {
 		fmt.Println(err.Error(), "\nTry installing the policyreport CRD following the link https://github.com/kubernetes-sigs/wg-policy-prototypes/tree/master/policy-report#installing")
 	} else {
+		writer.Println(0, writer.Colorize(boldStyle, "Policy Reporter"))
 		writer.PrintBanner(writer.Colorize(defaultStyle, "%s is Created in %s namespace.", result.ObjectMeta.Name, namespace), "=")
 	}
 }
