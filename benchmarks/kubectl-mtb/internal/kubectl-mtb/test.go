@@ -110,9 +110,9 @@ func removeBenchmarksWithIDs(ids []string) {
 
 // Validation of the flag inputs
 func validateFlags(cmd *cobra.Command) error {
-	tenant, _ = cmd.Flags().GetString("tenant-admin")
+	tenant, _ = cmd.Flags().GetString("as")
 	if tenant == "" {
-		return fmt.Errorf("tenant-admin must be set via --tenant-admin or -t")
+		return fmt.Errorf("tenant-admin/user must be set via --as")
 	}
 
 	tenantNamespace, _ = cmd.Flags().GetString("namespace")
@@ -214,8 +214,8 @@ func runTests(cmd *cobra.Command, args []string) error {
 }
 
 func newTestCmd() *cobra.Command {
-	testCmd.Flags().StringP("namespace", "n", "", "name of tenant-admin namespace")
-	testCmd.Flags().StringP("tenant-admin", "t", "", "name of tenant service account")
+	testCmd.Flags().StringP("namespace", "n", "", "name of tenantnamespace")
+	testCmd.Flags().String("as", "", "Username to impersonate the tenant-admin/user")
 	testCmd.Flags().StringP("out", "o", "default", "output reporter format")
 	testCmd.Flags().StringP("skip", "s", "", "skips the benchmarks using ID")
 
