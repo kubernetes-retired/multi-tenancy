@@ -63,7 +63,7 @@ var testClient *unittestutils.TestClient
 var tenantConfig *rest.Config
 var tenantClient *kubernetes.Clientset
 var tenantNamespace = "tenant1admin"
-var serviceAccount = "t1-admin1"
+var serviceAccount = "tenantA-admin"
 var g *gomega.GomegaWithT
 
 type TestFunction func(t *testing.T) (bool, bool)
@@ -101,16 +101,9 @@ func TestMain(m *testing.M) {
 		// Initialize testclient
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
 		tenantConfig := testClient.Config
-		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
-		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
-		// Install Kyverno
-		path := filepath.Join("..", "..", "assets")
-		crdPath := filepath.Join(path, "kyverno.yaml")
-		err = testClient.CreatePolicy(crdPath)
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		return err
+		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:tenantA-admin"
+tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		return nil
 	}
 	//exec setUp function
 	err := setUp()

@@ -1,10 +1,7 @@
 package blockuseofbindmounts
 
 import (
-	"context"
 	"fmt"
-	"path/filepath"
-	"time"
 
 	"log"
 	"os"
@@ -14,68 +11,73 @@ import (
 	"github.com/onsi/gomega"
 	v1 "k8s.io/api/rbac/v1"
 	apiextensionspkg "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	podutil "k8s.io/kubernetes/test/e2e/framework/pod"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 )
 
-var testClient *unittestutils.TestClient
-var tenantConfig *rest.Config
-var tenantClient *kubernetes.Clientset
-var tenantNamespace = "tenant1admin"
-var serviceAccount = "t1-admin1"
-var g *gomega.GomegaWithT
+var (
+	testClient *unittestutils.TestClient
+	tenantConfig *rest.Config
+	tenantClient *kubernetes.Clientset
+	clusterExists bool
+	saNamespace = "default"
+	tenantName = "tenantA"
+	tenantAdminNamespaceName = "tenantAdmin"
+	tenantNamespaceName = "tenantnamespaceA"
+	actualTenantNamespaceName = "tA-nsA"
+	saName = "tenantA-admin"
+	apiExtensions *apiextensionspkg.Clientset
+	g *gomega.GomegaWithT
+)
 
 type TestFunction func(t *testing.T) (bool, bool)
 
 func TestMain(m *testing.M) {
-	var clusterExists bool
+	// Create kind instance
 	kind := &unittestutils.KindCluster{}
+
+	// Tenant setup function
 	setUp := func() error {
 		provider := cluster.NewProvider()
+		
 		// List the clusters available
 		clusterList, err := provider.List()
 		clusters := strings.Join(clusterList, " ")
+
 		// Checks if the main cluster (test) is running
-		if !strings.Contains(clusters, "kubectl-mtb-suite") {
-			err := kind.CreateCluster()
+		if strings.Contains(clusters, "kubectl-mtb-suite") {
+			clusterExists = true
+		} else {
 			clusterExists = false
+			err := kind.CreateCluster()
 			if err != nil {
 				return err
 			}
-		} else {
-			clusterExists = true
 		}
+
 		kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
 		// Create the K8s clientSet
 		cfg, err := kubecfgFlags.ToRESTConfig()
 		k8sClient, err := kubernetes.NewForConfig(cfg)
-
 		if err != nil {
 			return err
 		}
+
 		rest := k8sClient.CoreV1().RESTClient()
-		var apiExtensions *apiextensionspkg.Clientset
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
+		
 		// Initialize testclient
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
 		tenantConfig := testClient.Config
-		tenantConfig.Impersonate.UserName = "system:serviceaccount:default:t1-admin1"
+		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + saNamespace + saName
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
-		// Install Kyverno
-		path := filepath.Join("..", "..", "assets")
-		crdPath := filepath.Join(path, "kyverno.yaml")
-		err = testClient.CreatePolicy(crdPath)
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		return err
+		return nil
 	}
+
 	//exec setUp function
 	err := setUp()
 
@@ -87,7 +89,7 @@ func TestMain(m *testing.M) {
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
 
-tearDown := func() error {
+	tearDown := func() error {
 		var err error
 		if !clusterExists {
 			err := kind.DeleteCluster()
@@ -105,27 +107,35 @@ tearDown := func() error {
 	os.Exit(retCode)
 }
 
-func testCreateTenants(t *testing.T, g *gomega.GomegaWithT, namespace string, serviceAcc string) {
-	err := unittestutils.CreateCrds()
-	fmt.Println("Creating tenants")
-	unittestutils.CreateTenant(t, g, namespace, serviceAcc)
+func CreateTenants(t *testing.T, g *gomega.GomegaWithT) {
+	err := unittestutils.CreateCrds(testClient)
 	if err != nil {
 		t.Error(err.Error())
 	}
+	
+	fmt.Println("hello")
+
+	unittestutils.ServiceAccounts = append(unittestutils.ServiceAccounts, unittestutils.ServiceAccountObj(saName, saNamespace))
+	unittestutils.Tenants = append(unittestutils.Tenants, unittestutils.TenantObj(tenantName,  unittestutils.ServiceAccountObj(saName, saNamespace), tenantAdminNamespaceName))
+	unittestutils.Tenantnamespaces = append(unittestutils.Tenantnamespaces, unittestutils.TenantNamespaceObj(tenantNamespaceName, tenantAdminNamespaceName, actualTenantNamespaceName))
+
+	fmt.Println("Creating tenants")
+	unittestutils.CreateTenant(t, g)
 }
 
 func TestBenchmark(t *testing.T) {
-
 	defer func() {
 		testClient.DeletePolicy()
 		testClient.DeleteRole()
 	}()
 
 	g = gomega.NewGomegaWithT(t)
-	testClient.Namespace = tenantNamespace
-	testClient.ServiceAccount = serviceAccount
 	// test to create tenants
-	testCreateTenants(t, g, tenantNamespace, serviceAccount)
+
+	if !clusterExists {
+		CreateTenants(t, g)
+	}
+
 	tests := []struct {
 		testName     string
 		testFunction TestFunction
@@ -211,19 +221,7 @@ func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
 		}
 	}
 
-	podsList, err := testClient.Kubernetes.CoreV1().Pods("kyverno").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	podNames := []string{podsList.Items[0].ObjectMeta.Name}
-	for {
-		if podutil.CheckPodsRunningReady(testClient.Kubernetes, "kyverno", podNames, 200*time.Second) {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	err = b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
+	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
 	if err != nil {
 		fmt.Println(err.Error())
 		return false, false
