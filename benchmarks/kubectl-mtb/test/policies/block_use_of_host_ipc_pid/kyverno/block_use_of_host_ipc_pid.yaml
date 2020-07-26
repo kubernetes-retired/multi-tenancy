@@ -1,0 +1,18 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-host-pid-ipc
+spec:
+  validationFailureAction: audit
+  rules:
+  - name: validate-hostPID-hostIPC
+    match:
+      resources:
+        kinds:
+        - Pod
+    validate:
+      message: "Use of host PID and IPC namespaces is not allowed"
+      pattern:
+        spec:
+          =(hostPID): "false"
+          =(hostIPC): "false"
