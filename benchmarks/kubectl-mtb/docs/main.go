@@ -33,18 +33,18 @@ type Doc struct {
 // README template
 const templ = `# {{.Title}} <small>[{{.ID}}] </small>
 **Profile Applicability:** 
-{{.ProfileLevel}}
+{{.ProfileLevel}} <br>
 **Type:** 
-{{.BenchmarkType}}
+{{.BenchmarkType}} <br>
 **Category:** 
-{{.Category}} 
+{{.Category}} <br>
 **Description:** 
-{{.Description}} 
+{{.Description}} <br>
 **Remediation:**
-{{.Remediation}}
+{{.Remediation}} <br>
 {{ range $key, $value := .AdditionalField }}
 **{{ $key }}:** 
-{{ $value }}
+{{ $value }} <br>
 {{ end }}
 `
 
@@ -148,4 +148,3 @@ func main() {
 
 	fmt.Printf("Successfully Created README files. \xE2\x9C\x94 \n")
 }
-
