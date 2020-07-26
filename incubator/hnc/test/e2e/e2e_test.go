@@ -1,9 +1,10 @@
-package test
+package e2e
 
 import (
 	"errors"
 	"testing"
 	"time"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -13,6 +14,8 @@ import (
 )
 
 const namspacePrefix = "e2e-test-"
+
+var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
 func TestE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -24,8 +27,9 @@ func TestE2e(t *testing.T) {
 }
 
 func mustRun(cmdln ...string) {
-	err := tryRun(cmdln...)
-	Expect(err).Should(BeNil())
+	Eventually(func() error {
+		return tryRun(cmdln...)
+	}, 2).Should(BeNil())
 }
 
 func mustNotRun(cmdln ...string) {
@@ -36,6 +40,11 @@ func mustNotRun(cmdln ...string) {
 func tryRun(cmdln ...string) error {
 	stdout, err := runCommand(cmdln...)
 	GinkgoT().Log("Output: ", stdout)
+	return err
+}
+
+func tryRunSuppressLog(cmdln ...string) error {
+	_, err := runCommand(cmdln...)
 	return err
 }
 
@@ -67,13 +76,26 @@ func runShouldContainMultiple(substrs []string, seconds float64, cmdln ...string
 }
 
 func runShouldNotContain(substr string, seconds float64, cmdln ...string) {
+	runShouldNotContainMultiple([]string{substr}, seconds, cmdln...)
+}
+
+func runShouldNotContainMultiple(substrs []string, seconds float64, cmdln ...string) {
 	Eventually(func() error {
 		stdout, err := runCommand(cmdln...)
 		if err != nil {
 			return err
 		}
-		if strings.Contains(stdout, substr) != false {
-			return errors.New("Not expecting: " + substr + " but get: " + stdout)
+
+		noneContained := true
+		for _, substr := range substrs {
+			if strings.Contains(stdout, substr) == true {
+				noneContained = false
+				break
+			}
+		}
+
+		if noneContained == false {
+			return errors.New("Not expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
 		}
 		return nil
 	}, seconds).Should(Succeed())
@@ -95,8 +117,28 @@ func cleanupNamespaces(nses ...string) {
 	// has cascading deletion so we can delete any of its subnamespace descendants, and 
 	// make sure that it's not a subnamespace itself so we can delete it directly.
 	for _, ns := range nses {
-		tryRun("kubectl hns set", ns, "-a")
-		tryRun("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
-		tryRun("kubectl delete ns", ns)
+		tryRunSuppressLog("kubectl hns set", ns, "-a")
+		tryRunSuppressLog("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
+		tryRunSuppressLog("kubectl delete ns", ns)
 	}
+}
+
+func checkHNCPath() {
+	// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
+	if hncRecoverPath == ""{
+		Skip("Environment variable HNC_REPAIR not set. Skipping tests that require repairing HNC.")
+	}
+}
+
+func recoverHNC() {
+	err := tryRun("kubectl apply -f", hncRecoverPath)
+	if err != nil {
+		GinkgoT().Log("-----------------------------WARNING------------------------------")
+		GinkgoT().Logf("WARNING: COULDN'T REPAIR HNC: %v", err)
+		GinkgoT().Log("ANY TEST AFTER THIS COULD FAIL BECAUSE WE COULDN'T REPAIR HNC HERE")
+		GinkgoT().Log("------------------------------------------------------------------")
+		GinkgoT().FailNow()
+	}
+	// give HNC enough time to repair
+	time.Sleep(5 * time.Second)
 }

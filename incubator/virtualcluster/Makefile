@@ -9,9 +9,10 @@ TEST_FLAGS ?= -v --race
 
 # COVERAGE_PACKAGES is the coverage we care about.
 COVERAGE_PACKAGES=$(shell go list ./... | \
-				  grep -v github.com/multi-tenancy/incubator/virtualcluster/pkg/client | \
-				  grep -v github.com/multi-tenancy/incubator/virtualcluster/pkg/apis | \
-				  grep -v github.com/multi-tenancy/incubator/virtualcluster/cmd)
+				  grep -v sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client | \
+				  grep -v sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis | \
+				  grep -v sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd | \
+				  grep -v sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e)
 
 # CRD_OPTIONS ?= "crd:trivialVersions=true"
 CRD_OPTIONS ?= "crd:trivialVersions=true,maxDescLen=0"
@@ -42,6 +43,7 @@ build:
 	hack/make-rules/build.sh $(WHAT)
 
 # Run tests
+.PHONY: test
 test: generate fmt vet manifests
 	@mkdir -p coverage
 	@( for pkg in ${COVERAGE_PACKAGES}; do \

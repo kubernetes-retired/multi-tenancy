@@ -2,6 +2,7 @@ package unittestutils
 
 import (
 	contextpkg "context"
+
 	"k8s.io/client-go/dynamic"
 
 	"github.com/op/go-logging"
@@ -17,6 +18,7 @@ type TestClient struct {
 	REST            restpkg.Interface
 	Config          *restpkg.Config
 	RoleName        string
+	RoleBindingName string
 	ResourcePath    string
 	DynamicResource dynamic.ResourceInterface
 	PolicyName      string

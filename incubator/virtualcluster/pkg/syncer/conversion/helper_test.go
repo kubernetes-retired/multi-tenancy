@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 func Test_mutateDownwardAPIField(t *testing.T) {
@@ -125,19 +124,11 @@ func Test_mutateDownwardAPIField(t *testing.T) {
 }
 
 func Test_mutateContainerSecret(t *testing.T) {
-	saSecret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "service-token-secret",
-			Annotations: map[string]string{
-				constants.LabelSecretName: "service-token-secret-tenant",
-			},
-		},
-		Type: v1.SecretTypeOpaque,
-	}
 	for _, tt := range []struct {
 		name              string
 		container         *v1.Container
-		saSecret          *v1.Secret
+		saSecretMap       map[string]string
+		vPod              *v1.Pod
 		expectedContainer *v1.Container
 	}{
 		{
@@ -156,7 +147,23 @@ func Test_mutateContainerSecret(t *testing.T) {
 					},
 				},
 			},
-			saSecret: saSecret,
+			saSecretMap: map[string]string{
+				"service-token-secret-tenant": "service-token-secret",
+			},
+			vPod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Volumes: []v1.Volume{
+						{
+							Name: "service-token-secret-tenant",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "service-token-secret-tenant",
+								},
+							},
+						},
+					},
+				},
+			},
 			expectedContainer: &v1.Container{
 				VolumeMounts: []v1.VolumeMount{
 					{
@@ -172,9 +179,65 @@ func Test_mutateContainerSecret(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "customized secret, no change",
+			container: &v1.Container{
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "local-token",
+						MountPath: "/path/to/mount",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "service-token-secret-tenant",
+						MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+						ReadOnly:  true,
+					},
+				},
+			},
+			saSecretMap: map[string]string{
+				"local-token": "service-token-secret",
+			},
+			vPod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Volumes: []v1.Volume{
+						{
+							Name: "service-token-secret-tenant",
+							VolumeSource: v1.VolumeSource{
+								Secret: &v1.SecretVolumeSource{
+									SecretName: "local-token",
+								},
+							},
+						},
+						{
+							Name: "local-token",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: "/path/to/mount",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedContainer: &v1.Container{
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "local-token",
+						MountPath: "/path/to/mount",
+						ReadOnly:  true,
+					},
+					{
+						Name:      "service-token-secret-tenant",
+						MountPath: "/var/run/secrets/kubernetes.io/serviceaccount",
+						ReadOnly:  true,
+					},
+				},
+			},
+		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			mutateContainerSecret(tt.container, tt.saSecret)
+			mutateContainerSecret(tt.container, tt.saSecretMap, tt.vPod)
 			if !equality.Semantic.DeepEqual(tt.container, tt.expectedContainer) {
 				tc.Errorf("expected container %+v, got %+v", tt.expectedContainer, tt.container)
 			}

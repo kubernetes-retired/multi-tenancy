@@ -31,7 +31,7 @@ func (r *DefaultReporter) SuiteWillBegin(suiteSummary *SuiteSummary) {
 // TestWillRun prints each test status
 func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 	if testSummary.Validation {
-		writer.Print(0, writer.Colorize(cyanColor, "[PL%d] [%s] ", testSummary.Benchmark.ProfileLevel, testSummary.Benchmark.Category))
+		writer.Print(0, writer.Colorize(cyanColor, "[%s] [%s] ", testSummary.Benchmark.ID, testSummary.Benchmark.Category))
 		writer.Println(0, testSummary.Benchmark.Title)
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
 		if testSummary.Test {
@@ -52,7 +52,7 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 	testResult[testSummary.Benchmark] = "Error"
 	preRunfmt := writer.Colorize(magentaColor, "[PreRun-Validation Error]")
 	errormsg := writer.Colorize(redColor, testSummary.ValidationError.Error())
-	bannerText := fmt.Sprintf("%s %s: %s %s", preRunfmt, testSummary.Benchmark.Title, errormsg, cross)
+	bannerText := fmt.Sprintf("%s [%s] %s: %s %s", preRunfmt, testSummary.Benchmark.ID, testSummary.Benchmark.Title, errormsg, cross)
 	writer.PrintBanner(bannerText, "-")
 	r.testSummaries = append(r.testSummaries, testSummary)
 }
@@ -77,34 +77,30 @@ func printScoreCard(testResult map[*benchmark.Benchmark]v1alpha1.PolicyStatus) {
 	for val, key := range testResult{
 		counter++
 		var status string
-		var symbol string
 		
 		switch key {
 		case "Error":
 			status = writer.Colorize(magentaColor, "Error")
-			symbol = cross
 		case "Pass":
 			status = writer.Colorize(greenColor, "Passed")
-			symbol = tick
 		case "Fail":
 			status = writer.Colorize(redColor, "Failed")
-			symbol = cross
 		case "Skip":
 			status = writer.Colorize(yellowColor, "Skipped")
-			symbol = skipped
 		}
 
-		testName := val.Title + " " + symbol
-		result := []string{strconv.Itoa(counter), strconv.Itoa(val.ProfileLevel), testName, status}
+		testName := val.Title
+		result := []string{strconv.Itoa(counter), val.ID, testName, status}
 		data = append(data, result)
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"No.", "PLevel", "Test", "Result"})
+	table.SetHeader([]string{"No.", "ID", "Test", "Result"})
 	table.SetAutoWrapText(false)
 
 	for _, v := range data {
 		table.Append(v)
 	}
 	table.Render() // Send output
+	writer.PrintBanner(writer.Colorize(defaultStyle, ""), "=")
 }

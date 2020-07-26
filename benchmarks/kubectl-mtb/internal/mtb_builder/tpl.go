@@ -128,9 +128,7 @@ func TestMain(m *testing.M) {
 		if !clusterExists {
 			err := kind.DeleteCluster()
 			return err
-		} else {
-			unittestutils.DestroyTenant(g)
-		}
+			} 
 		return err
 	}
 

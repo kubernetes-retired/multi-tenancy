@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
@@ -90,6 +91,23 @@ func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []rep
 	}
 }
 
+func removeBenchmarksWithIDs(ids []string) {
+	temp := []*benchmark.Benchmark{}
+		for _, benchmark := range benchmarks {
+			found := false
+			for _, id := range ids {
+				if(benchmark.ID == id) {
+					found = true
+				}
+			}
+
+			if !found {
+				temp = append(temp, benchmark)
+			}
+		}
+	benchmarks = temp
+}
+
 // Validation of the flag inputs
 func validateFlags(cmd *cobra.Command) error {
 	tenant, _ = cmd.Flags().GetString("tenant-admin")
@@ -127,12 +145,19 @@ func validateFlags(cmd *cobra.Command) error {
 
 func runTests(cmd *cobra.Command, args []string) error {
 
-	// Get reporter from the user
-	reporters, _ := cmd.Flags().GetString("out")
-	reportersArray, err := reporter.GetReporters(strings.Split(reporters, ","))
+	// Get reporters from the user
+	reporterFlag, _ := cmd.Flags().GetString("out")
+	reporters := strings.Split(reporterFlag, ",")
+	reportersArray, err := reporter.GetReporters(reporters)
 	if err != nil {
 		return err
 	}
+
+	// Get benchmark ids from the user to skip them
+	skipFlag, _ := cmd.Flags().GetString("skip")
+	skipIDs := strings.Split(skipFlag, ",")
+	removeBenchmarksWithIDs(skipIDs)
+
 
 	suiteSummary := &reporter.SuiteSummary{
 		Suite:                test.BenchmarkSuite,
@@ -192,6 +217,7 @@ func newTestCmd() *cobra.Command {
 	testCmd.Flags().StringP("namespace", "n", "", "name of tenant-admin namespace")
 	testCmd.Flags().StringP("tenant-admin", "t", "", "name of tenant service account")
 	testCmd.Flags().StringP("out", "o", "default", "output reporter format")
+	testCmd.Flags().StringP("skip", "s", "", "skips the benchmarks using ID")
 
 	return testCmd
 }

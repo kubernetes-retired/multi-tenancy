@@ -1,0 +1,7 @@
+id: MTB-PL2-BC-OPS-4
+title: Create Network Policies
+benchmarkType: Behavioral
+category: Self-Service Operations
+description: Tenants should be able to perform self-service operations by creating own network policies in their namespaces.
+remediation: 
+profileLevel: 2
