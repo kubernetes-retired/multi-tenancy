@@ -1,12 +1,12 @@
 # Block use of host networking and ports <small>[MTB-PL1-BC-HI-3] </small>
 **Profile Applicability:** 
-1
+1 <br>
 **Type:** 
-Behavioral Check
+Behavioral Check <br>
 **Category:** 
-Host Isolation 
+Host Isolation <br>
 **Description:** 
-Tenants should not be allowed to use host networking and host ports for their workloads. 
+Tenants should not be allowed to use host networking and host ports for their workloads. <br>
 **Remediation:**
-
+ <br>
 
