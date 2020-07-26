@@ -6,6 +6,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/op/go-logging"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionspkg "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/kubernetes"
 	restpkg "k8s.io/client-go/rest"
@@ -26,14 +27,14 @@ type TestClient struct {
 	K8sClient       *kubernetes.Clientset
 
 	Namespace      string
-	ServiceAccount string
+	ServiceAccount *corev1.ServiceAccount
 	Context        contextpkg.Context
 	Log            *logging.Logger
 }
 
-func TestNewClient(loggerName string, kubernetes kubernetes.Interface, apiExtensions apiextensionspkg.Interface, rest restpkg.Interface, config *restpkg.Config) *TestClient {
+func TestNewClient(loggerName string, k8sClient *kubernetes.Clientset, apiExtensions apiextensionspkg.Interface, rest restpkg.Interface, config *restpkg.Config) *TestClient {
 	return &TestClient{
-		Kubernetes:    kubernetes,
+		K8sClient:     k8sClient,
 		APIExtensions: apiExtensions,
 		REST:          rest,
 		Config:        config,

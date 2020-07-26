@@ -4,11 +4,10 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (self *TestClient) CreateRole(roleName string, policy []v1.PolicyRule) (*v1.Role, error) {
+func (client *TestClient) CreateRole(roleName string, policy []v1.PolicyRule) (*v1.Role, error) {
 	role := &v1.Role{
 		TypeMeta: meta.TypeMeta{
 			Kind:       "Role",
@@ -18,24 +17,22 @@ func (self *TestClient) CreateRole(roleName string, policy []v1.PolicyRule) (*v1
 		Rules:      policy,
 	}
 
-	self.RoleName = roleName
+	client.RoleName = roleName
 
-	if role, err := self.Kubernetes.RbacV1().Roles(self.Namespace).Create(self.Context, role, meta.CreateOptions{}); err == nil {
-		return role, err
-	} else if errors.IsAlreadyExists(err) {
-		fmt.Println(err.Error())
-		return self.Kubernetes.RbacV1().Roles(self.Namespace).Get(self.Context, roleName, meta.GetOptions{})
-	} else {
+	role, err := client.K8sClient.RbacV1().Roles(client.Namespace).Create(client.Context, role, meta.CreateOptions{})
+	if err != nil {
 		return nil, err
-	}
+	} 
+
+	return role, nil
 }
 
-func (self *TestClient) CreateRoleBinding(roleBindingName string, role *v1.Role) (*v1.RoleBinding, error) {
+func (client *TestClient) CreateRoleBinding(roleBindingName string, role *v1.Role) (*v1.RoleBinding, error) {
 	subject := v1.Subject{
 		Kind:      v1.ServiceAccountKind,
 		APIGroup:  "",
-		Name:      self.ServiceAccount,
-		Namespace: "default",
+		Name:      client.ServiceAccount.Name,
+		Namespace: client.ServiceAccount.Namespace,
 	}
 	roleref := v1.RoleRef{
 		APIGroup: "rbac.authorization.k8s.io",
@@ -53,32 +50,32 @@ func (self *TestClient) CreateRoleBinding(roleBindingName string, role *v1.Role)
 		RoleRef:    roleref,
 	}
 
-	self.RoleBindingName = roleBindingName
+	client.RoleBindingName = roleBindingName
 
-	if roleBinding, err := self.Kubernetes.RbacV1().RoleBindings(self.Namespace).Create(self.Context, roleBinding, meta.CreateOptions{}); err == nil {
-		return roleBinding, nil
-	} else if errors.IsAlreadyExists(err) {
-		fmt.Println(err.Error())
-		return self.Kubernetes.RbacV1().RoleBindings(self.Namespace).Get(self.Context, self.RoleBindingName, meta.GetOptions{})
-	} else {
+	_, err := client.K8sClient.RbacV1().RoleBindings(client.Namespace).Create(client.Context, roleBinding, meta.CreateOptions{})
+	if err != nil {
 		return nil, err
 	}
+
+	return nil, nil
 }
 
-func (self *TestClient) DeleteRole() error {
+func (client *TestClient) DeleteRole() error {
 	var gracePeriodSeconds int64 = 0
 	deleteOptions := meta.DeleteOptions{
 		GracePeriodSeconds: &gracePeriodSeconds,
 	}
 	// Delete Role binding
-	if err := self.Kubernetes.RbacV1().RoleBindings(self.Namespace).Delete(self.Context, self.RoleBindingName, deleteOptions); err != nil {
+	if err := client.K8sClient.RbacV1().RoleBindings(client.Namespace).Delete(client.Context, client.RoleBindingName, deleteOptions); err != nil {
 		fmt.Println(err.Error())
+		return err
 	}
 
 	// Delete Role
-	if err := self.Kubernetes.RbacV1().Roles(self.Namespace).Delete(self.Context, self.RoleName, deleteOptions); err != nil {
+	if err := client.K8sClient.RbacV1().Roles(client.Namespace).Delete(client.Context, client.RoleName, deleteOptions); err != nil {
 		fmt.Println(err.Error())
+		return err
 	}
 
-	return err
+	return nil
 }
