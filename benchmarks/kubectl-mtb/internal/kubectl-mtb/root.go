@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
-	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
@@ -39,9 +38,7 @@ func init() {
 		Use:   "kubectl-mtb",
 		Short: "Multi-Tenancy Benchmarks",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
-			cmdutil.CheckErr(validateResource(args))
-
+			
 			profileLevel, _ := cmd.Flags().GetInt("profile-level")
 			benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
 
@@ -49,7 +46,6 @@ func init() {
 		},
 	}
 
-	rootCmd.PersistentFlags().StringP("category", "c", "", "Category of the benchmarks.")
 	rootCmd.PersistentFlags().IntP("profile-level", "p", maxProfileLevel, "ProfileLevel of the benchmarks.")
 
 	// Commands
@@ -64,14 +60,4 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func validateResource(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Please specify any resource")
-	}
-	if !supportedResourceNames.Has(args[0]) {
-		return fmt.Errorf("Please specify any valid resource")
-	}
-	return nil
 }
