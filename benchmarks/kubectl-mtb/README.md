@@ -42,14 +42,14 @@ $ kubectl-mtb get benchmarks
 ### Run the available benchmarks:
 
 ```bash
-$ kubectl-mtb test benchmarks -n "name of tenant namespace" --as "name of user/service account"
+$ kubectl-mtb run benchmarks -n "name of tenant namespace" --as "name of user/service account"
 ```
 You can mention the profile level of the  benchmark using `-p` flag. 
 
 Example: 
 
 ```bash
-$ kubectl-mtb test benchmarks -n tenant0admin --as system:serviceaccount:tenant0admin:t0-admin0
+$ kubectl-mtb run benchmarks -n tenant0admin --as system:serviceaccount:tenant0admin:t0-admin0
 ```
 
 ### Create a tenant namespace
@@ -111,7 +111,7 @@ Then, you can run the benchmarks using the following command:
 Example:
 
 ```bash
-$ kubectl-mtb test benchmarks -n t1-ns1 --as divya-k8s-access
+$ kubectl-mtb run benchmarks -n t1-ns1 --as divya-k8s-access
 ```
 
 ### Install Kyverno or Gatekeeper to pass benchmarks
@@ -134,7 +134,7 @@ To install Gatekeeper, run following command:
 ### List Policy Reports:
 
 ```bash
-$ kubectl-mtb test benchmarks -n "name of tenant namespace" --as "name of user/service account" -o policyreport
+$ kubectl-mtb run benchmarks -n "name of tenant namespace" --as "name of user/service account" -o policyreport
 ``` 
 
 ### Generate README
@@ -149,7 +149,7 @@ make readme
 
 ### Run unittests
 
-- The unittests run on a separate kind cluster. To run all the unittest you can run the command `make kind-test-cluster` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
+- The unittests run on a separate kind cluster. To run all the unittest you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
 
 - If you want to run a particular unittest, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed. 
 
