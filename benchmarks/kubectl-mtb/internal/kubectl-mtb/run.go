@@ -43,10 +43,10 @@ var runCmd = &cobra.Command{
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("Please specify any resource")
+			return fmt.Errorf("Please specify a resource")
 		}
 		if !supportedResourceNames.Has(args[0]) {
-			return fmt.Errorf("Please specify any valid resource")
+			return fmt.Errorf("Please specify a valid resource")
 		}
 		err := validateFlags(cmd)
 		if err != nil {
