@@ -42,7 +42,7 @@ $ kubectl-mtb get benchmarks
 ### Run the available benchmarks:
 
 ```bash
-$ kubectl-mtb run benchmarks -n "name of tenant namespace" --as "name of user/service account"
+$ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation"
 ```
 You can mention the profile level of the  benchmark using `-p` flag. 
 
@@ -90,7 +90,7 @@ spec:
   tenantAdminNamespaceName: "tenant1admin"
   tenantAdmins:
     - kind: User
-      name: your-user
+      name: divya
       namespace: 
 ```
 User can do self service namespace creation by creating a tenantnamespace CR in tenant1admin namespace:
@@ -103,7 +103,7 @@ $ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenan
 This will create t1-ns1 namespace. If you want to run the benchmarks using this namespace, Make sure that the user can access the namespace using the following command. 
 
 ```
-kubectl auth can-i --list --namespace=created-namespace --as your-user
+kubectl auth can-i --list --namespace=tenantnamespace --as divya
 ```
 
 Then, you can run the benchmarks using the following command: 
@@ -134,7 +134,7 @@ To install Gatekeeper, run following command:
 ### List Policy Reports:
 
 ```bash
-$ kubectl-mtb run benchmarks -n "name of tenant namespace" --as "name of user/service account" -o policyreport
+$ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation" -o policyreport
 ``` 
 
 ### Generate README
