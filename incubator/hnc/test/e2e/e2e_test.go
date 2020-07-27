@@ -13,7 +13,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 )
 
-const namspacePrefix = "e2e-test-"
+const (
+	namspacePrefix = "e2e-test-"
+	// The time that Eventually() will keep retrying until timeout
+	// we use 5 seconds here because some tests require deleting a namespace, and shorter time period might not be enough
+	eventuallyTimeout = 5
+)
 
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
@@ -29,12 +34,13 @@ func TestE2e(t *testing.T) {
 func mustRun(cmdln ...string) {
 	Eventually(func() error {
 		return tryRun(cmdln...)
-	}, 2).Should(BeNil())
+	}, eventuallyTimeout).Should(BeNil())
 }
 
 func mustNotRun(cmdln ...string) {
-	err := tryRun(cmdln...)
-	Expect(err).Should(Not(BeNil()))
+	Eventually(func() error {
+		return tryRun(cmdln...)
+	}, eventuallyTimeout).Should(Not(BeNil()))
 }
 
 func tryRun(cmdln ...string) error {
