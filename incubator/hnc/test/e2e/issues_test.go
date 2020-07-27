@@ -244,11 +244,12 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		nsParent = "parent"
 		nsParent2 = "parent-2"
 		nsChild = "child"
+		nsSubChild = "sub-child"
 	)
 
 	BeforeEach(func() {
 		checkHNCPath()
-		cleanupNamespaces(nsParent, nsParent2, nsChild)
+		cleanupNamespaces(nsParent, nsParent2, nsChild, nsSubChild)
 
 		// Creating a race condition of two parents with the same leaf subns (anchor)
 		mustRun("kubectl create ns", nsParent)
@@ -269,7 +270,7 @@ var _ = Describe("Issues that require repairing HNC", func() {
 	})
 
 	AfterEach(func() {
-		cleanupNamespaces(nsParent, nsParent2, nsChild)
+		cleanupNamespaces(nsParent, nsParent2, nsChild, nsSubChild)
 		recoverHNC()
 	})
 
@@ -285,5 +286,23 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		// Expected: The subns (anchor) is deleted successfully and the 'child' is also deleted
 		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
 		mustNotRun("kubectl get ns", nsChild, "-o yaml")
+	})
+
+	It("Should not delete a non-leaf child namespace when deleting a parent namespace with bad anchor - issue #797", func() {
+		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		// Test: remove subns (anchor) in the bad parent 'parent2'
+		// Expected: The bad subns (anchor) is deleted successfully but the child is not deleted (still contains the 'test-secret')
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent2)
+		mustRun("kubectl get secret -n", nsChild)
+	})
+
+	It("Should delete a non-leaf child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func(){
+		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		mustRun("kubectl hns set", nsChild, "-a")
+		// Test: Remove subns (anchor) in the good parent 'parent'
+		// Expected: The subns (anchor) is deleted successfully and the 'child' is also deleted
+		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
+		mustNotRun("kubectl get ns", nsChild, "-o yaml")
+		mustNotRun("kubectl get ns", nsSubChild, "-o yaml")
 	})
 })
