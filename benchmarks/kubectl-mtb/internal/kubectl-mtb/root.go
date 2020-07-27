@@ -37,13 +37,6 @@ func init() {
 	rootCmd = &cobra.Command{
 		Use:   "kubectl-mtb",
 		Short: "Multi-Tenancy Benchmarks",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			
-			profileLevel, _ := cmd.Flags().GetInt("profile-level")
-			benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
-
-			return nil
-		},
 	}
 
 	rootCmd.PersistentFlags().IntP("profile-level", "p", maxProfileLevel, "ProfileLevel of the benchmarks.")
@@ -60,4 +53,9 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func filterBenchmarks(cmd *cobra.Command) {
+	profileLevel, _ := cmd.Flags().GetInt("profile-level")
+	benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
 }

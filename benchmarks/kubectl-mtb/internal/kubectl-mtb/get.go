@@ -38,6 +38,8 @@ var getCmd = &cobra.Command{
 			return fmt.Errorf("Please specify any valid resource")
 		}
 
+		filterBenchmarks(cmd)
+		
 		return nil
 	},
 

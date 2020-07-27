@@ -53,6 +53,8 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
+		filterBenchmarks(cmd)
+
 		return nil
 	},
 
