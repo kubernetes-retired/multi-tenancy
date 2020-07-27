@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg"
 )
 
 var _ = Describe("Subnamespaces", func() {
@@ -15,21 +16,21 @@ var _ = Describe("Subnamespaces", func() {
 	)
 
 	BeforeEach(func() {
-		cleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB)
 	})
 
 	AfterEach(func() {
-		cleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB)
 	})
 
 	It("should create and delete a subnamespace", func() {
 		// set up
-		mustRun("kubectl create ns", nsA)
-		mustRun("kubectl get ns", nsA)
-		mustRun("kubectl hns create", nsB, "-n", nsA)
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl get ns", nsA)
+		MustRun("kubectl hns create", nsB, "-n", nsA)
 
 		// verify
-		mustRun("kubectl get ns", nsB)
+		MustRun("kubectl get ns", nsB)
 
 		// The namespace "b" should have a "subnamespaceOf:a" annotation. The command to use:
 		// kubectl get ns b -o jsonpath='{.metadata.annotations.hnc\.x-k8s\.io/subnamespaceOf}'
