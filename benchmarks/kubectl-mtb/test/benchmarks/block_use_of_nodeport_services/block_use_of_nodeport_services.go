@@ -20,7 +20,7 @@ var b = &benchmark.Benchmark{
 
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
-		resources := []utils.GroupResource {
+		resources := []utils.GroupResource{
 			{
 				APIGroup: "",
 				APIResource: metav1.APIResource{
