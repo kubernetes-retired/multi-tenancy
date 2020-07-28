@@ -15,6 +15,7 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var (
@@ -37,12 +37,28 @@ var (
 	tenantClient    *kubernetes.Clientset
 )
 
-var testCmd = &cobra.Command{
-	Use:   "test",
+var runCmd = &cobra.Command{
+	Use:   "run <resource>",
 	Short: "Run the Multi-Tenancy Benchmarks",
 
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("Please specify a resource")
+		}
+		if !supportedResourceNames.Has(args[0]) {
+			return fmt.Errorf("Please specify a valid resource")
+		}
+		err := validateFlags(cmd)
+		if err != nil {
+			return err
+		}
+
+		filterBenchmarks(cmd)
+
+		return nil
+	},
+
 	Run: func(cmd *cobra.Command, args []string) {
-		cmdutil.CheckErr(validateFlags(cmd))
 		cmdutil.CheckErr(runTests(cmd, args))
 	},
 }
@@ -125,21 +141,11 @@ func validateFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	resource := utils.GroupResource{
-		APIGroup: "",
-		APIResource: metav1.APIResource{
-			Name: "namespaces",
-		},
-		ResourceName: tenantNamespace,
-	}
-	// checks if tenant-admin and tenant namespace are valid
-	access, _, err := utils.RunAccessCheck(tenantClient, "", resource, "get")
+	_, err = k8sClient.CoreV1().Namespaces().Get(context.TODO(), tenantNamespace, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("tenantnamespace is not a valid namespace")
 	}
-	if !access {
-		return fmt.Errorf("Make sure you have entered valid tenant-admin and tenant namespace. ")
-	}
+
 	return nil
 }
 
@@ -213,11 +219,11 @@ func runTests(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func newTestCmd() *cobra.Command {
-	testCmd.Flags().StringP("namespace", "n", "", "tenant namespace")
-	testCmd.Flags().String("as", "", "user name to impersonate")
-	testCmd.Flags().StringP("out", "o", "default", "output reporters (default, policyreport)")
-	testCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
+func newRunCmd() *cobra.Command {
+	runCmd.Flags().StringP("namespace", "n", "", "(required) tenant namespace")
+	runCmd.Flags().String("as", "", "(required) user name to impersonate")
+	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")
+	runCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
 
-	return testCmd
+	return runCmd
 }

@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
-	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
@@ -38,23 +37,13 @@ func init() {
 	rootCmd = &cobra.Command{
 		Use:   "kubectl-mtb",
 		Short: "Multi-Tenancy Benchmarks",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
-			cmdutil.CheckErr(validateResource(args))
-
-			profileLevel, _ := cmd.Flags().GetInt("profile-level")
-			benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
-
-			return nil
-		},
 	}
 
-	rootCmd.PersistentFlags().StringP("category", "c", "", "Category of the benchmarks.")
 	rootCmd.PersistentFlags().IntP("profile-level", "p", maxProfileLevel, "ProfileLevel of the benchmarks.")
 
 	// Commands
 	rootCmd.AddCommand(newGetCmd())
-	rootCmd.AddCommand(newTestCmd())
+	rootCmd.AddCommand(newRunCmd())
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -66,12 +55,7 @@ func Execute() {
 	}
 }
 
-func validateResource(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("Please specify any resource")
-	}
-	if !supportedResourceNames.Has(args[0]) {
-		return fmt.Errorf("Please specify any valid resource")
-	}
-	return nil
+func filterBenchmarks(cmd *cobra.Command) {
+	profileLevel, _ := cmd.Flags().GetInt("profile-level")
+	benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
 }
