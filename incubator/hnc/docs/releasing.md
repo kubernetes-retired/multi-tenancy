@@ -91,7 +91,7 @@ Get the release ID. Sadly, this isn't available through the UI, so get it by
 calling:
 
 ```bash
-curl -u "$HNC_USER:$HNC_PAT" $MT_ENDPOINT/releases | less`
+curl -u "$HNC_USER:$HNC_PAT" $MT_ENDPOINT/releases | less
 ```
 
 Finding your release, and noting it's ID. Save this as an env var:
@@ -112,9 +112,15 @@ this](https://cloud.google.com/cloud-build/docs/securing-builds/use-encrypted-se
 ## Test
 
 Test! At a minimum, install it onto a cluster, download the kubectl plugin, and
-ensure that you can create a subnamespace. Better yet, run through the demo and
-all the `hack/test-*.sh` scripts. _TODO: automate this
-[#785](https://github.com/kubernetes-sigs/multi-tenancy/issues/785)_
+run:
+
+```bash
+export HNC_REPAIR=<path to installable YAML; https is fine>
+make e2e-test
+```
+
+This will take around 15m or so. It might also be prudent to run through the
+demo (soon to be part of the e2e test as well).
 
 ## Update docs
 
