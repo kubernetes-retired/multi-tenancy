@@ -20,4 +20,4 @@ tenantB:
 # managed by the cluster administrator
 label:
   provider="eon.esp"
-  owner="cluster-admin"
+  owner="eon.esp"
