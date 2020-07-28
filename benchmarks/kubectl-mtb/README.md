@@ -31,7 +31,7 @@ $ make kubectl-mtb
 * [Install Kyverno or Gatekeeper to pass benchmarks](#install-kyverno-or-gatekeeper-to-pass-benchmarks)
 * [List Policy Reports](#list-policy-reports)
 * [Generate README](#generate-readme)
-* [Run unittests](#run-unittests)
+* [Run unit tests](#run-unit-tests)
 
 ### List available benchmarks :
 
@@ -147,11 +147,11 @@ repo.
 make readme
 ```
 
-### Run unittests
+### Run unit tests
 
-- The unittests run on a separate kind cluster. To run all the unittest you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
+- The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
 
-- If you want to run a particular unittest, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed. 
+- If you want to run a particular unit test, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed. 
 
 
 *If kind cannot be found on your system the target will try to install it using `go get`*
@@ -167,7 +167,7 @@ Run the following command to build mtb-builder.
 ```
 $ make builder
 ```
-The generated binary will create the relevant templates, needed to write the bechmark as well as associated unittest.
+The generated binary will create the relevant templates, needed to write the bechmark as well as associated unit test.
 
 **Example :**
 
