@@ -199,13 +199,28 @@ kind-deploy:
 	CONFIG=kind $(MAKE) deploy
 
 ###################### E2E TEST #########################
-# This test will run on the current cluster the user deployed (either kind or 
-# a kubernetes cluster).
+# This test will run on the current cluster the user deployed (either kind or a
+# kubernetes cluster).
+#
+# Note the `-timeout 0` that's passed to the `go test` command - by default, a
+# Go test suite has a 10m timeout, and the flag disables that timeout (as of
+# July 2020, these tests take ~15m and that number is expected to grow).
 .PHONY: e2e-test
-e2e-test: 
-	@echo "If these tests fail due to the webhook not being ready, wait 30s and try again. Note that webhooks can take up to 30s to become ready after HNC is first deployed in a cluster."
+e2e-test:
+	@echo
+	@echo "If these tests fail due to the webhook not being ready, wait 30s and try again. Note that webhooks can take up to 30s to become ready"
+	@echo "after HNC is first deployed in a cluster."
+	@echo
+ifndef HNC_REPAIR
+	@echo "******************************************************"
+	@echo "HNC_REPAIR IS NOT SET. CRITICAL TESTS WILL BE SKIPPED."
+	@echo "You have 5s to hit Ctrl-C to cancel and try again."
+	@echo "******************************************************"
+	@echo
+	@sleep 5
+endif
 	go clean -testcache
-	go test ./test/...
+	go test -v -timeout 0 ./test/...
 
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
