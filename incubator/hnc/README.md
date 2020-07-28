@@ -186,6 +186,18 @@ Within the `reconcilers` directory, there are four reconcilers:
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 
+### Test infrastructure
+
+HNC uses Prow to run tests, which is configured
+[here](https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/wg-multi-tenancy).
+The presubmits run `hack/ci-test.sh` in this repo.  Results are displayed on
+[testgrid](https://k8s-testgrid.appspot.com/wg-multi-tenancy-hnc) and are
+configured
+[here](https://github.com/kubernetes/test-infra/tree/master/config/testgrids/kubernetes/wg-multi-tenancy).
+
+These config files should be inspected periodically (e.g. about once a release)
+to make sure they're fully up-to-date.
+
 ### Releasing
 
 To release HNC, follow [this guide](docs/releasing.md).
