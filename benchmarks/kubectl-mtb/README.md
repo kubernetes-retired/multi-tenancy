@@ -1,6 +1,6 @@
-**[Installation](#setup-instructions)** |
-**[How to use](#how-to-use)** |
-**[How to include bechmarks](#how-to-include-benchmarks)**|
+**[Setup](#setup-instructions)** |
+**[Usage](#usage)** |
+**[Contributing](#contributing)**|
 
 # kubectl-mtb
 > kubectl plugin to validate the the multi-tenancy in the K8s cluster.
@@ -8,33 +8,30 @@
 clusters are set up correctly for multi-tenancy.
 
 ## Demo
-<a href="https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK?autoplay=1&preload=1"><img src="https://asciinema.org/a/5J0bA6AIIk8Y0mH8w3UYSRkxK.svg" width="836"/></a>
+[![asciicast](https://asciinema.org/a/YHqiNLWhpy596myFUCdghetwL.svg)](https://asciinema.org/a/YHqiNLWhpy596myFUCdghetwL)
 
 ## Setup Instructions
 
 **Prerequisites** : Make sure you have working GO environment in your system.
 
-kubectl-mtb can be installed by running
-
-```bash
-$ go get sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb
-```
-or by cloning this repository, and running
+kubectl-mtb can be installed by cloning this repository, and running
 
 ```bash 
 $ make kubectl-mtb
 ```
 <hr>
 
-## How to use
+## Usage
 
 ## Table of Contents
 =================
 * [List available benchmarks](#list-available-benchmarks)
 * [Run the available benchmarks](#run-the-available-benchmarks)
+* [Create a tenant namespace](#create-a-tenant-namespace)
+* [Install Kyverno or Gatekeeper to pass benchmarks](#install-kyverno-or-gatekeeper-to-pass-benchmarks)
 * [List Policy Reports](#list-policy-reports)
 * [Generate README](#generate-readme)
-* [Run unittests](#run-unittests)
+* [Run unit tests](#run-unit-tests)
 
 ### List available benchmarks :
 
@@ -45,20 +42,99 @@ $ kubectl-mtb get benchmarks
 ### Run the available benchmarks:
 
 ```bash
-$ kubectl-mtb test benchmarks -n "name of tenant-admin namespace" -t "name of tenant service account"
+$ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation"
 ```
 You can mention the profile level of the  benchmark using `-p` flag. 
 
 Example: 
 
 ```bash
-$ kubectl-mtb test benchmarks -n tenant0admin -t system:serviceaccount:tenant0admin:t0-admin0
+$ kubectl-mtb run benchmarks -n tenant0admin --as system:serviceaccount:tenant0admin:t0-admin0
 ```
+
+### Create a tenant namespace
+
+Install CRD 
+
+```
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenantnamespace.yaml
+```
+
+Install tenant controller 
+
+```bash
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/manager/all_in_one.yaml
+```
+Create a tenant CR 
+
+```bash
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
+```
+
+Edit the tenant CR and add your user or service account to the tenantAdmins list
+
+```bash
+$ kubectl edit tenant tenant-sample
+```
+
+```yaml
+apiVersion: tenancy.x-k8s.io/v1alpha1
+kind: Tenant
+metadata:
+  labels:
+    controller-tools.k8s.io: "1.0"
+  name: tenant-sample
+spec:
+  # Add fields here
+  tenantAdminNamespaceName: "tenant1admin"
+  tenantAdmins:
+    - kind: User
+      name: divya
+      namespace: 
+```
+User can do self service namespace creation by creating a tenantnamespace CR in tenant1admin namespace:
+
+Example:
+
+```
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
+```
+This will create t1-ns1 namespace. If you want to run the benchmarks using this namespace, Make sure that the user can access the namespace using the following command. 
+
+```
+kubectl auth can-i --list --namespace=tenantnamespace --as divya
+```
+
+Then, you can run the benchmarks using the following command: 
+
+Example:
+
+```bash
+$ kubectl-mtb run benchmarks -n t1-ns1 --as divya-k8s-access
+```
+
+### Install Kyverno or Gatekeeper to pass benchmarks
+
+You can use policies to pass the benchmarks. We are currently maintaining [Kyverno](https://github.com/nirmata/kyverno) and [Gatekeeper](https://github.com/open-policy-agent/gatekeeper) policies in this repo which are present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies)
+
+To install Kyverno, you can run the following command:
+
+```
+kubectl create -f https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml
+```
+
+To install Gatekeeper, run following command:
+
+```
+ $ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+```
+
 
 ### List Policy Reports:
 
 ```bash
-$ kubectl-mtb test benchmarks -n "name of tenant-admin namespace" -t "name of tenant service account" -o policyreport
+$ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation" -o policyreport
 ``` 
 
 ### Generate README
@@ -71,18 +147,18 @@ repo.
 make readme
 ```
 
-### Run unittests
+### Run unit tests
 
-- The unittests run on a separate kind cluster. To run all the unittest you can run the command `make kind-test-cluster` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
+- The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
 
-- If you want to run a particular unittest, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed. 
+- If you want to run a particular unit test, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed. 
 
 
 *If kind cannot be found on your system the target will try to install it using `go get`*
 
 <hr>
  
-## How to include bechmarks
+## Contributing
 
 You can use mtb-builder to include/write other benchmarks.
 
@@ -91,7 +167,7 @@ Run the following command to build mtb-builder.
 ```
 $ make builder
 ```
-The generated binary will create the relevant templates, needed to write the bechmark as well as associated unittest.
+The generated binary will create the relevant templates, needed to write the bechmark as well as associated unit test.
 
 **Example :**
 
