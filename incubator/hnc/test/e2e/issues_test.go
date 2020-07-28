@@ -175,6 +175,8 @@ var _ = Describe("Issues", func() {
 		// Setting up a 2-level tree 
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		// verify that the namespace has been created 
+		mustRun("kubectl get ns", nsChild)
 		// test
 		mustNotRun("kubectl delete ns", nsParent)
 	})
@@ -183,6 +185,8 @@ var _ = Describe("Issues", func() {
 		// Setting up a 2-level tree 
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl hns create", nsChild, "-n", nsParent)
+		// verify that the namespace has been created 
+		mustRun("kubectl get ns", nsChild)
 		// test
 		mustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
@@ -192,6 +196,8 @@ var _ = Describe("Issues", func() {
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl hns create", nsChild, "-n", nsParent)
 		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		// verify that the namespace has been created 
+		mustRun("kubectl get ns", nsSubChild)
 		// Test: remove non-leaf subnamespace with 'allowCascadingDelete' unset.
 		// Expected: forbidden because 'allowCascadingDelete'flag is not set
 		mustNotRun("kubectl delete subns", nsChild, "-n", nsParent)
@@ -202,6 +208,8 @@ var _ = Describe("Issues", func() {
 		mustRun("kubectl create ns", nsParent)
 		mustRun("kubectl hns create", nsChild, "-n", nsParent)
 		mustRun("kubectl hns create", nsSubChild, "-n", nsChild)
+		// verify that the namespace has been created 
+		mustRun("kubectl get ns", nsSubChild)
 		// Test: remove leaf subnamespaces with 'allowCascadingDelete' unset.
 		// Expected: delete successfully
 		mustRun("kubectl delete subns", nsSubChild, "-n", nsChild)
