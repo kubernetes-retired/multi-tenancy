@@ -15,6 +15,7 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 )
 
 var (
@@ -141,21 +141,11 @@ func validateFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	resource := utils.GroupResource{
-		APIGroup: "",
-		APIResource: metav1.APIResource{
-			Name: "namespaces",
-		},
-		ResourceName: tenantNamespace,
-	}
-	// checks if tenant-admin and tenant namespace are valid
-	access, _, err := utils.RunAccessCheck(tenantClient, "", resource, "get")
+	_, err = k8sClient.CoreV1().Namespaces().Get(context.TODO(), tenantNamespace, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("tenantnamespace is not a valid namespace")
 	}
-	if !access {
-		return fmt.Errorf("Make sure you have entered valid tenant-admin and tenant namespace. ")
-	}
+
 	return nil
 }
 
