@@ -114,7 +114,11 @@ func (c *controller) reconcileSecretCreate(clusterName, targetNamespace, request
 }
 
 func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetNamespace string, vSecret *v1.Secret) error {
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, vSecret)
+	vcName, _, _, err := c.multiClusterSecretController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, vSecret)
 	if err != nil {
 		return err
 	}
@@ -148,7 +152,11 @@ func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetName
 }
 
 func (c *controller) reconcileNormalSecretCreate(clusterName, targetNamespace, requestUID string, secret *v1.Secret) error {
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, secret)
+	vcName, _, _, err := c.multiClusterSecretController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, secret)
 	if err != nil {
 		return err
 	}

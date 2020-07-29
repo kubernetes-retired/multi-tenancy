@@ -109,7 +109,7 @@ func applyDeletionTimestampToPod(vPod *v1.Pod, t time.Time, gracePeriodSeconds i
 	return vPod
 }
 
-func superPod(clusterKey, name, namespace, uid string) *v1.Pod {
+func superPod(clusterKey, vcName, name, namespace, uid string) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
@@ -120,12 +120,14 @@ func superPod(clusterKey, name, namespace, uid string) *v1.Pod {
 			Namespace: conversion.ToSuperMasterNamespace(clusterKey, namespace),
 			Labels: map[string]string{
 				constants.LabelCluster: clusterKey,
+				constants.LabelVCName:  vcName,
 			},
 			Annotations: map[string]string{
 				constants.LabelCluster:         clusterKey,
 				constants.LabelNamespace:       namespace,
 				constants.LabelOwnerReferences: "null",
 				constants.LabelUID:             uid,
+				constants.LabelVCName:          vcName,
 			},
 		},
 		Spec: v1.PodSpec{
@@ -230,6 +232,7 @@ func TestDWPodCreation(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
+	defaultVCName := testTenant.Name
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -248,7 +251,7 @@ func TestDWPodCreation(t *testing.T) {
 				tenantSecret(testTenantServiceAccountTokenSecretName, "default", "s12345"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345")},
 		},
 		"load pod which under deletion": {
 			ExistingObjectInSuper: []runtime.Object{},
@@ -289,7 +292,7 @@ func TestDWPodCreation(t *testing.T) {
 				tenantSecret(testTenantServiceAccountTokenSecretName+"dup", "default", "s123456"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345")},
 		},
 		"multi service account token secret": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -303,7 +306,7 @@ func TestDWPodCreation(t *testing.T) {
 				tenantSecret(testTenantServiceAccountTokenSecretName+"dup", "default", "s123456"),
 				tenantServiceAccount("default", "default", "12345"),
 			},
-			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "default", "12345")},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345")},
 		},
 		"without any services": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -326,7 +329,7 @@ func TestDWPodCreation(t *testing.T) {
 				tenantSecret(testTenantServiceAccountTokenSecretName, "kube-system", "s12345"),
 				tenantServiceAccount("default", "kube-system", "12345"),
 			},
-			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, "pod-1", "kube-system", "12345")},
+			ExpectedCreatedPods: []*v1.Pod{superPod(defaultClusterKey, defaultVCName, "pod-1", "kube-system", "12345")},
 			ExpectedError:       "",
 		},
 		"new pod with nodeName": {
@@ -342,7 +345,7 @@ func TestDWPodCreation(t *testing.T) {
 		},
 		"new Pod but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod(defaultClusterKey, "pod-1", "default", "12345"),
+				superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
@@ -351,7 +354,7 @@ func TestDWPodCreation(t *testing.T) {
 		},
 		"new Pod but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod(defaultClusterKey, "pod-1", "default", "123456"),
+				superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "123456"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantPod("pod-1", "default", "12345"),
@@ -421,6 +424,7 @@ func TestDWPodDeletion(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
+	defaultVCName := testTenant.Name
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -432,14 +436,14 @@ func TestDWPodDeletion(t *testing.T) {
 	}{
 		"delete Pod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod(defaultClusterKey, "pod-1", "default", "12345"),
+				superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
 		},
 		"delete vPod and pPod is already running": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyNodeNameToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), "i-xxx"),
+				applyNodeNameToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), "i-xxx"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{superDefaultNSName + "/pod-1"},
@@ -452,7 +456,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"delete Pod but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod(defaultClusterKey, "pod-1", "default", "123456"),
+				superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "123456"),
 			},
 			EnqueueObject:       tenantPod("pod-1", "default", "12345"),
 			ExpectedDeletedPods: []string{},
@@ -460,7 +464,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"terminating vPod but running pPod": {
 			ExistingObjectInSuper: []runtime.Object{
-				superPod(defaultClusterKey, "pod-1", "default", "12345"),
+				superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
@@ -471,7 +475,7 @@ func TestDWPodDeletion(t *testing.T) {
 		},
 		"terminating vPod and terminating pPod": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDeletionTimestampToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), time.Now(), 30),
+				applyDeletionTimestampToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), time.Now(), 30),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDeletionTimestampToPod(tenantPod("pod-1", "default", "12345"), time.Now(), 30),
@@ -539,7 +543,7 @@ func TestDWPodUpdate(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-
+	defaultVCName := testTenant.Name
 	spec1 := &v1.PodSpec{
 		Containers: []v1.Container{
 			{
@@ -583,7 +587,7 @@ func TestDWPodUpdate(t *testing.T) {
 	}{
 		"no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
@@ -592,18 +596,18 @@ func TestDWPodUpdate(t *testing.T) {
 		},
 		"diff in container": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec2),
 			},
 			ExpectedUpdatedPods: []runtime.Object{
-				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec2),
+				applySpecToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), spec2),
 			},
 		},
 		"diff in container added by webhook": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec3),
+				applySpecToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), spec3),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "12345"), spec1),
@@ -612,7 +616,7 @@ func TestDWPodUpdate(t *testing.T) {
 		},
 		"diff exists but uid is wrong": {
 			ExistingObjectInSuper: []runtime.Object{
-				applySpecToPod(superPod(defaultClusterKey, "pod-1", "default", "12345"), spec1),
+				applySpecToPod(superPod(defaultClusterKey, defaultVCName, "pod-1", "default", "12345"), spec1),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applySpecToPod(tenantPod("pod-1", "default", "123456"), spec2),

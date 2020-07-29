@@ -149,7 +149,11 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 		return err
 	}
 
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, vPod)
+	vcName, _, _, err := c.multiClusterPodController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, vPod)
 	if err != nil {
 		return err
 	}

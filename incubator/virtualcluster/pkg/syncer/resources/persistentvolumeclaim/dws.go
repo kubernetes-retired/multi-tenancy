@@ -86,7 +86,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcilePVCCreate(clusterName, targetNamespace, requestUID string, pvc *v1.PersistentVolumeClaim) error {
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, pvc)
+	vcName, _, _, err := c.multiClusterPersistentVolumeClaimController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, pvc)
 	if err != nil {
 		return err
 	}

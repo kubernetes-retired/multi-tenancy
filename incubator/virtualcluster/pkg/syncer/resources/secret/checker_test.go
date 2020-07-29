@@ -49,6 +49,7 @@ func TestSecretPatrol(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
+	defaultVCName := testTenant.Name
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -69,13 +70,13 @@ func TestSecretPatrol(t *testing.T) {
 		},
 		"pSecret with service account type created by token controller": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeServiceAccountToken),
+				superSecret(defaultVCName, "secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeServiceAccountToken),
 			},
 			ExpectedNoOperation: true,
 		},
 		"pSecret exists, vSecret does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			ExpectedDeletedPObject: []string{
 				superDefaultNSName + "/normal-secret",
@@ -83,7 +84,7 @@ func TestSecretPatrol(t *testing.T) {
 		},
 		"pSecret exists, vSecret exists with different uid": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("normal-secret", "default", "123456", v1.SecretTypeOpaque),
@@ -94,7 +95,7 @@ func TestSecretPatrol(t *testing.T) {
 		},
 		"pSecret exists, vSecret exists with no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret("normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
@@ -103,7 +104,7 @@ func TestSecretPatrol(t *testing.T) {
 		},
 		"pSecret exists, vSecret exists but different in data": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superSecret("normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
+				applyDataToSecret(superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque), "data2"),
@@ -115,13 +116,13 @@ func TestSecretPatrol(t *testing.T) {
 				tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superSecret("normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			WaitDWS: true,
 		},
 		"pSecret exists, vSecret does not exists, service account token type": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyGeneratedNameToSecret(superServiceAccountSecret("sa-secret", superDefaultNSName, "12345", defaultClusterKey), "sa-secret-token-xxx"),
+				applyGeneratedNameToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "sa-secret-token-xxx"),
 			},
 			ExpectedDeletedPObject: []string{
 				superDefaultNSName + "/sa-secret-token-xxx",
@@ -132,13 +133,13 @@ func TestSecretPatrol(t *testing.T) {
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superServiceAccountSecret("sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 			WaitDWS: true,
 		},
 		"vSecret exists, pSecret exists with different data, service account token type": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superServiceAccountSecret("sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
+				applyDataToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken), "data2"),

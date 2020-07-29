@@ -105,7 +105,7 @@ func GetKubeConfigOfVC(c v1core.SecretsGetter, vc *v1alpha1.VirtualCluster) ([]b
 	return adminKubeConfigSecret.Data[constants.KubeconfigAdminSecretName], nil
 }
 
-func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime.Object, error) {
+func BuildMetadata(cluster, vcname, targetNamespace string, obj runtime.Object) (runtime.Object, error) {
 	target := obj.DeepCopyObject()
 	m, err := meta.Accessor(target)
 	if err != nil {
@@ -122,6 +122,7 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		constants.LabelUID:             string(m.GetUID()),
 		constants.LabelOwnerReferences: string(ownerReferencesStr),
 		constants.LabelNamespace:       m.GetNamespace(),
+		constants.LabelVCName:          vcname,
 	}
 
 	ResetMetadata(m)
@@ -137,6 +138,18 @@ func BuildMetadata(cluster, targetNamespace string, obj runtime.Object) (runtime
 		anno[k] = v
 	}
 	m.SetAnnotations(anno)
+
+	labels := m.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	var tenantScopeMetaInLabel = map[string]string{
+		constants.LabelVCName: vcname,
+	}
+	for k, v := range tenantScopeMetaInLabel {
+		labels[k] = v
+	}
+	m.SetLabels(labels)
 
 	return target, nil
 }
@@ -202,8 +215,8 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 	return vStorageClass
 }
 
-func BuildVirtualPersistentVolume(cluster string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {
-	vPVobj, _ := BuildMetadata(cluster, "", pPV)
+func BuildVirtualPersistentVolume(cluster, vcName string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {
+	vPVobj, _ := BuildMetadata(cluster, vcName, "", pPV)
 	vPV := vPVobj.(*v1.PersistentVolume)
 	// The pv needs to bind with the vPVC
 	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace

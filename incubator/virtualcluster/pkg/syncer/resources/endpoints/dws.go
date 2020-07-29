@@ -96,7 +96,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace, requestUID string, ep *v1.Endpoints) error {
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, ep)
+	vcName, _, _, err := c.multiClusterEndpointsController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, ep)
 	if err != nil {
 		return err
 	}
