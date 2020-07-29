@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg"
 )
 
 var _ = Describe("Namespace", func() {
@@ -15,31 +16,31 @@ var _ = Describe("Namespace", func() {
 	)
 
 	BeforeEach(func() {
-		cleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB)
 	})
 
 	AfterEach(func() {
-		cleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB)
 	})
 
 	It("should create and delete a namespace", func() {
 		// set up
-		mustRun("kubectl create ns", nsA)
-		mustRun("kubectl get ns", nsA)
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl get ns", nsA)
 
 		// test
-		mustRun("kubectl", "delete", "ns", nsA)
+		MustRun("kubectl", "delete", "ns", nsA)
 
 		// verify
-		mustNotRun("kubectl", "get", "ns", nsA)
+		MustNotRun("kubectl", "get", "ns", nsA)
 	})
 
 	It("should have 'CritParentMissing' condition on orphaned namespace", func() {
 		// set up
-		mustRun("kubectl create ns", nsA)
-		mustRun("kubectl create ns", nsB)
-		mustRun("kubectl hns set", nsB, "--parent", nsA)
-		mustRun("kubectl delete ns", nsA)
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl create ns", nsB)
+		MustRun("kubectl hns set", nsB, "--parent", nsA)
+		MustRun("kubectl delete ns", nsA)
 
 		// "b" should have 'CritParentMissing' condition. The command to use:
 		// kubectl get hierarchyconfigurations.hnc.x-k8s.io hierarchy -n b -o jsonpath='{.status.conditions..code}'
