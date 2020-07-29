@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: object-quota
+  name: resource-quota
 spec:
   hard:
-    cpu: "1" 
-    ephemeral-storage: "1" 
-    memory: "1" 
+    cpu: 1m
+    memory: 1Gi
+    ephemeral-storage: 1Gi
     persistentvolumeclaims: "1"
     services.loadbalancers: "1"
     services.nodeports: "1"
@@ -15,4 +15,5 @@ spec:
     resourcequotas: "1"
     configmaps: "1"
     secrets: "1"
-    services: "1"
+	services: "1"
+	
