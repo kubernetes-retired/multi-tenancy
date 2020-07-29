@@ -86,7 +86,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileConfigMapCreate(clusterName, targetNamespace, requestUID string, configMap *v1.ConfigMap) error {
-	newObj, err := conversion.BuildMetadata(clusterName, targetNamespace, configMap)
+	vcName, _, _, err := c.multiClusterConfigMapController.GetOwnerInfo(clusterName)
+	if err != nil {
+		return err
+	}
+	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, configMap)
 	if err != nil {
 		return err
 	}
