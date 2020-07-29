@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
@@ -12,15 +13,33 @@ import (
 )
 
 var b = &benchmark.Benchmark{
-	// Check if user can list nodes
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+
+		verbs := []string{"list", "get"}
+
+		for _, verb := range verbs {
+			resource := utils.GroupResource{
+				APIGroup: "",
+				APIResource: metav1.APIResource{
+					Name: "resourcequotas",
+				},
+			}
+
+			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+			if err != nil {
+				return err
+			}
+			if !access {
+				return fmt.Errorf(msg)
+			}
+		}
 
 		return nil
 	},
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
 
 		resourceNameList := [3]string{"cpu", "ephemeral-storage", "memory"}
-		tenantResourcequotas := utils.GetTenantResoureQuotas(tenantNamespace, kclient)
+		tenantResourcequotas := utils.GetTenantResoureQuotas(tenantNamespace, tclient)
 		expectedVal := strings.Join(tenantResourcequotas, " ")
 		for _, r := range resourceNameList {
 			if !strings.Contains(expectedVal, r) {
