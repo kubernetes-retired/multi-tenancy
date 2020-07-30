@@ -10,18 +10,23 @@ import (
 var _ = Describe("Demo", func() {
 	// Test for https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
 	const (
-		nsOrg = "acme-org"
-		nsTeamA = "team-a"
-		nsTeamB = "team-b"
-		nsService1 = "service-1"
+		nsOrg 		= "acme-org"
+		nsTeamA 	= "team-a"
+		nsTeamB 	= "team-b"
+		nsService1 	= "service-1"
+		nsService2 	= "service-2"
+		nsService3 	= "service-3"
+		nsService4 	= "service-4"
+		nsDev 		= "dev"
+		nsStaging 	= "staging"
 	)
 
 	BeforeEach(func(){
-		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1)
+		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1, nsService2, nsService3, nsService4, nsDev, nsStaging)
 	})
 
 	AfterEach(func(){
-		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1)
+		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1, nsService2, nsService3, nsService4, nsDev, nsStaging)
 	})
 
 	It("Should test basic functionalities in demo", func(){
@@ -86,5 +91,62 @@ var _ = Describe("Demo", func() {
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamA)
 		RunShouldContain(nsService1, 2, "kubectl hns describe", nsTeamA)
 		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
+	})
+
+	It("Should create and delete subnamespaces", func(){
+		// set up initial structure 
+		MustRun("kubectl create ns", nsOrg)
+		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
+		MustRun("kubectl hns create", nsService1, "-n", nsTeamA)
+		MustRun("kubectl hns create", nsService2, "-n", nsTeamA)
+		MustRun("kubectl hns create", nsService3, "-n", nsTeamA)
+		expected := "" + // empty string make go fmt happy
+			nsTeamA + "\n" +
+			"├── " + nsService1 + "\n" +
+			"├── " + nsService2 + "\n" +
+			"└── " + nsService3
+		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+
+		// show that you can't re-use a subns name
+		MustRun("kubectl hns create", nsDev, "-n", nsService1)
+		RunShouldContain("Children:\n  - " + nsDev, 2, "kubectl hns describe", nsService1)
+		MustNotRun("kubectl hns create", nsDev, "-n", nsService2)
+		RunShouldContain("Children:\n  - " + nsDev, 2, "kubectl hns describe", nsService1)
+
+		// show how to delete a subns correctly
+		MustNotRun("kubectl delete ns", nsService3)
+		MustRun("kubectl delete subns", nsService3, "-n", nsTeamA)
+		// This should not run because service-1 contains its own subnamespace that would be deleted with it,
+		MustNotRun("kubectl delete subns", nsService1, "-n", nsTeamA)
+
+		MustRun("kubectl hns set", nsService1, "--allowCascadingDelete")
+		MustRun("kubectl delete subns", nsService1, "-n", nsTeamA)
+		expected = "" +
+			nsTeamA + "\n" + 
+			"└── " + nsService2
+		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+
+		// Show the difference of a subns and regular child ns
+		MustRun("kubectl hns create", nsService4, "-n", nsTeamA)
+		expected = "" +
+			nsTeamA + "\n" + 
+			"├── " + nsService2 + "\n" + 
+			"└── " + nsService4
+		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+		MustRun("kubectl create ns", nsStaging)
+		MustRun("kubectl hns set", nsStaging, "--parent", nsService4)
+		expected = "" +
+			nsService4 + "\n" + 
+			"└── " + nsStaging
+		RunShouldContain(expected, 2, "kubectl hns tree", nsService4)
+
+		// delete subnamespace nsService4, namespace nsStaging won’t be deleted but it will have CritParentMissing condition
+		MustRun("kubectl hns set", nsService4, "--allowCascadingDelete")
+		MustRun("kubectl delete subns", nsService4, "-n", nsTeamA)
+		expected = "" +
+			nsTeamA + "\n" + 
+			"└── " + nsService2
+		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+		RunShouldContain("CritParentMissing: missing parent", 2, "kubectl hns describe", nsStaging)
 	})
 })
