@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
@@ -60,5 +62,29 @@ var _ = Describe("Demo", func() {
 		RunShouldContain(nsService1, 5, "kubectl hns describe", nsTeamB)
 		RunShouldContain(nsTeamB+"-wizard", 5, "kubectl -n", nsService1, "get roles")
 		RunShouldNotContain(nsTeamA+"-wizard", 5, "kubectl -n", nsService1, "get roles")
+	})
+
+	It("Should propagate different types", func(){
+		// ignore Secret in case this demo is run twice and the secret has been set to propagate 
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret ignore")
+		MustRun("kubectl create ns", nsOrg)
+		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
+		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
+		MustRun("kubectl create ns", nsService1)
+		MustRun("kubectl hns set", nsService1, "--parent", nsTeamB)
+		MustRun("kubectl -n", nsTeamB, "create secret generic my-creds --from-literal=password=iamteamb")
+		// wait 2 seconds to give time for secret to propogate if it was to
+		time.Sleep(2*time.Second)
+		// secret does not show up in service-1 because we haven’t configured HNC to propagate secrets in HNCConfiguration.
+		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret propagate")
+		// this command is not needed here, just to check that user can run it without error
+		MustRun("kubectl get hncconfiguration config -oyaml")
+		RunShouldContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
+
+		// if we move the service back to team-a, the secret disappears because we haven’t created it there:
+		MustRun("kubectl hns set", nsService1, "--parent", nsTeamA)
+		RunShouldContain(nsService1, 2, "kubectl hns describe", nsTeamA)
+		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
 	})
 })
