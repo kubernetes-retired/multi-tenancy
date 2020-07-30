@@ -93,10 +93,21 @@ func RunShouldNotContainMultiple(substrs []string, seconds float64, cmdln ...str
 	}, seconds).Should(Succeed())
 }
 
+// RunCommand passes all arguments to the OS to execute, and returns the combined stdout/stderr and
+// and error object. By default, each arg to this function may contain strings (e.g. "echo hello
+// world"), in which case we split the strings on the spaces (so this would be equivalent to calling
+// "echo", "hello", "world"). If you _actually_ need an OS argument with strings in it, pass it as
+// an argument to this function surrounded by double quotes (e.g. "echo", "\"hello world\"" will be
+// passed to the OS as two args, not three).
 func RunCommand(cmdln ...string) (string, error) {
 	var args []string
 	for _, subcmdln := range cmdln {
-		args = append(args, strings.Split(subcmdln, " ")...)
+		// Any arg that starts and ends in a double quote shouldn't be split further
+		if len(subcmdln)>2 && subcmdln[0]=='"' && subcmdln[len(subcmdln)-1]=='"' {
+			args = append(args, subcmdln[1:len(subcmdln)-1])
+		} else {
+			args = append(args, strings.Split(subcmdln, " ")...)
+		}
 	}
 	GinkgoT().Log("Running: ", args)
 	cmd := exec.Command(args[0], args[1:]...)
