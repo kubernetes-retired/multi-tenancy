@@ -10,8 +10,6 @@ spec:
       resources: 
         kinds: 
         - Pod
-        namespaces:
-        - t0-ns0
     validate: 
       message: "Host path volumes are not allowed"
       pattern: 
@@ -31,8 +29,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Privileged mode is not allowed. Set allowPrivilegeEscalation to false"
       pattern:
@@ -56,8 +52,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Running as root user is not allowed. Set runAsNonRoot to true"
       anyPattern:
@@ -81,8 +75,6 @@ spec:
         resources:
           kinds:
             - Pod
-          namespaces:
-            - t0-ns0
       validate:
         message: "Privileged mode is not allowed. Set privileged to false"
         pattern:
@@ -108,8 +100,6 @@ spec:
       resources:
         kinds:
         - Service
-        namespaces:
-        - t0-ns0
     validate:
       message: "Services of type NodePort are not allowed"
       pattern: 
@@ -128,8 +118,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Use of host PID namespaces is not allowed"
       pattern:
@@ -148,8 +136,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Use of hostNetwork is not allowed"
       pattern:
@@ -160,8 +146,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Use of hostPort is not allowed"
       pattern:
@@ -183,8 +167,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t0-ns0
     validate:
       message: "Use of host IPC namespaces is not allowed"
       pattern:
