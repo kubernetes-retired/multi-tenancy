@@ -93,7 +93,88 @@ var _ = Describe("Demo", func() {
 		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
 	})
 
-	It("Should create and delete subnamespaces", func() {
+	FIt("Should intergrate hierarchical network policy", func(){
+		MustRun("kubectl create ns", nsOrg)
+		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
+		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
+		MustRun("kubectl hns create", nsService1, "-n", nsTeamA)
+		MustRun("kubectl hns create", nsService2, "-n", nsTeamA)
+		// create a web service s2 in namespace service-2, and a client pod client-s1 in namespace service-1 that can access this web service
+		MustRun("kubectl run s2 -n", nsService2, "--image=nginx --restart=Never --expose --port 80")
+		clientArgs := "-i --image=alpine --restart=Never --rm -- sh -c"
+		cmdln := "\"wget -qO- --timeout 2 http://s2.service-2\""
+		// at least 20 seconds is needed here from experiments 
+		RunShouldContain("Welcome to nginx!", 20, 
+			"kubectl run client -n", nsService1, clientArgs, cmdln)
+		RunShouldContain("Welcome to nginx!", 10, 
+			"kubectl run client -n", nsTeamA, clientArgs, cmdln)
+		RunShouldContain("Welcome to nginx!", 10, 
+			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
+
+		// create a default network policy that blocks any ingress from other namespaces 
+		policy := `# temp file created by demo_test.go
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: deny-from-other-namespaces
+  namespace: acme-org
+spec:
+  podSelector:
+    matchLabels:
+  ingress:
+  - from:
+    - podSelector: {}`
+		
+		filename := WriteTempFile(policy)
+		defer RemoveFile(filename)
+		MustRun("kubectl apply -f", filename)
+		// ensure this policy can be propagated to its descendants
+		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy propagate")
+		expected := "deny-from-other-namespaces"
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsOrg)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamA)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamB)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService1)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService2)
+
+		// Now we’ll see that we can no longer access service-2 from the client in service-1:
+		RunErrorShouldContain("wget: download timed out", 10, 
+			"kubectl run client -n", nsService1, clientArgs, cmdln)
+		
+		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
+		policy = `# temp file created by demo_test.go
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-team-a
+  namespace: team-a
+spec:
+  podSelector:
+    matchLabels:
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchExpressions:
+          - key: 'team-a.tree.hnc.x-k8s.io/depth'
+            operator: Exists`
+
+		filename2 := WriteTempFile(policy)
+		defer RemoveFile(filename2)
+		MustRun("kubectl apply -f", filename2)
+
+		expected = "allow-team-a"
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamA)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService1)
+		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService2)
+
+		// Now, we can access the service from other namespaces in team-a, but not outside of it:
+		RunShouldContain("Welcome to nginx!", 10, 
+			"kubectl run client -n", nsService1, clientArgs, cmdln)
+		RunErrorShouldContain("wget: download timed out", 10, 
+			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
+	})
+
+	It("Should create and delete subnamespaces", func(){
 		// set up initial structure
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)

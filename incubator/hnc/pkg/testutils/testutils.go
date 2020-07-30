@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"errors"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -46,25 +47,48 @@ func RunShouldContain(substr string, seconds float64, cmdln ...string) {
 
 func RunShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
 	Eventually(func() error {
-		stdout, err := RunCommand(cmdln...)
+		missing, err := runShouldContainMultiple(substrs, cmdln...)
 		if err != nil {
 			return err
 		}
-
-		allContained := true
-		for _, substr := range substrs {
-			if strings.Contains(stdout, substr) == false {
-				allContained = false
-				break
-			}
+		if len(missing) > 0 {
+			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
 		}
-
-		if allContained == false {
-			return errors.New("Expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
-		}
-
 		return nil
 	}, seconds).Should(Succeed())
+}
+
+func RunErrorShouldContain(substr string, seconds float64, cmdln ...string) {
+	RunErrorShouldContainMultiple([]string{substr}, seconds, cmdln...)
+}
+
+func RunErrorShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
+	Eventually(func() error {
+		missing, err := runShouldContainMultiple(substrs, cmdln...)
+		if len(missing) > 0 {
+			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
+		}
+		if err == nil {
+			return errors.New("Expecting command to fail but get succeed.")
+		}
+		return nil
+	}, seconds).Should(Succeed())
+}
+
+func runShouldContainMultiple(substrs []string, cmdln ...string) ([]string, error) {
+		stdout, err := RunCommand(cmdln...)	
+		GinkgoT().Log("Output: ", stdout)
+		return missAny(substrs, stdout), err
+}
+
+func missAny(substrs []string, teststring string) []string {
+	var missing []string 
+	for _, substr := range substrs {
+		if strings.Contains(teststring, substr) == false {
+			missing = append(missing, substr)
+		}
+	}
+	return missing
 }
 
 func RunShouldNotContain(substr string, seconds float64, cmdln ...string) {
@@ -144,4 +168,16 @@ func RecoverHNC() {
 	}
 	// give HNC enough time to repair
 	time.Sleep(5 * time.Second)
+}
+
+func WriteTempFile(cxt string) string {
+	f, err := ioutil.TempFile(os.TempDir(), "e2e-test-*.yaml")
+	Expect(err).Should(BeNil())
+	defer f.Close()
+	f.WriteString(cxt)
+	return f.Name()
+}
+
+func RemoveFile(path string) {
+	Expect(os.Remove(path)).Should(BeNil())
 }
