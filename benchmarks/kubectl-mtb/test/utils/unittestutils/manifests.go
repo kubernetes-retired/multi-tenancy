@@ -13,8 +13,6 @@ spec:
         resources:
           kinds:
             - Pod
-          namespaces:
-            - t1-ns1
       validate:
         message: "Privileged mode is not allowed. Set privileged to false"
         pattern:
@@ -38,8 +36,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "New capabilities cannot be added"
       anyPattern:
@@ -64,8 +60,6 @@ spec:
       resources: 
         kinds: 
         - Pod
-        namespaces:
-        - t1-ns1
     validate: 
       message: "Host path volumes are not allowed"
       pattern: 
@@ -87,8 +81,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Use of host IPC namespaces is not allowed"
       pattern:
@@ -109,8 +101,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Use of host PID namespaces is not allowed"
       pattern:
@@ -131,8 +121,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Use of hostNetwork is not allowed"
       pattern:
@@ -143,8 +131,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Use of hostPort is not allowed"
       pattern:
@@ -160,6 +146,8 @@ apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: restrict-nodeport
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
 spec:
   validationFailureAction: enforce
   rules:
@@ -168,8 +156,6 @@ spec:
       resources:
         kinds:
         - Service
-        namespaces:
-        - t1-ns1
     validate:
       message: "Services of type NodePort are not allowed"
       pattern: 
@@ -190,8 +176,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Privileged mode is not allowed. Set allowPrivilegeEscalation to false"
       pattern:
@@ -207,6 +191,8 @@ apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: disallow-root-user
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
 spec:
   validationFailureAction: enforce
   rules:
@@ -215,8 +201,6 @@ spec:
       resources:
         kinds:
         - Pod
-        namespaces:
-        - t1-ns1
     validate:
       message: "Running as root user is not allowed. Set runAsNonRoot to true"
       anyPattern:
@@ -228,4 +212,3 @@ spec:
           - securityContext:
               runAsNonRoot: true
 `
-

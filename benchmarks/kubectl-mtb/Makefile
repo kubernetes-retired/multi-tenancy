@@ -47,7 +47,7 @@ endif
 	fi
 		
 kind-test:
-	go test ./test/benchmarks/... -p 1 -v		
+	go test ./test/benchmarks/... -v -count=1	
 
 kind-delete:
 	kind delete cluster --name $(KIND_PROFILE)
