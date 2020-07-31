@@ -5,6 +5,7 @@ import (
 
 	"github.com/creasty/defaults"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	imageutils "k8s.io/kubernetes/test/utils/image"
@@ -66,8 +67,18 @@ func (p PodSpec) MakeSecPod() *v1.Pod {
 			},
 			Containers: []v1.Container{
 				{
-					Name:    "write-pod",
-					Image:   imageutils.GetE2EImage(imageutils.BusyBox),
+					Name:  "write-pod",
+					Image: imageutils.GetE2EImage(imageutils.BusyBox),
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							"cpu":    resource.MustParse("0m"),
+							"memory": resource.MustParse("0Gi"),
+						},
+						Requests: v1.ResourceList{
+							"cpu":    resource.MustParse("0m"),
+							"memory": resource.MustParse("0Gi"),
+						},
+					},
 					Command: []string{"/bin/sh"},
 					Args:    []string{"-c", p.Command},
 					Ports:   p.Ports,

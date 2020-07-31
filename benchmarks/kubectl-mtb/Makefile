@@ -19,7 +19,7 @@ clean:
 
 # Install kubectl plugin
 kubectl-mtb: generate readme build
-	cp bin/kubectl/kubectl-mtb ${GOPATH}/bin/kubectl-mtb
+	cp bin/kubectl/kubectl-mtb ${GOBIN}/kubectl-mtb
 
 # Build the Mtb-builder
 builder:
