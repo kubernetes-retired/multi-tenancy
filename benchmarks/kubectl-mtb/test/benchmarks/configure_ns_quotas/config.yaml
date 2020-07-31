@@ -5,3 +5,7 @@ category:  Fairness
 description: Namespace resource quotas should be used to allocate, track, and limit a tenant's use of shared resources.
 remediation: Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml` 
 profileLevel: 1
+audit: "Run the following command to show configured quotas. Make sure that a quota is configured for CPU, memory, and storage resources.
+
+    kubectl --kubeconfig=tenant-a -n a1 describe quota"
+rationale: Resource quotas must be configured for each tenant namespace, to guarantee isolation and fairness across tenants. 

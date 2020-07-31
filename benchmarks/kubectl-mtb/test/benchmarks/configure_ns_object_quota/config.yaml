@@ -6,7 +6,6 @@ description: Namespace resource quotas should be used to allocate, track and lim
 remediation: Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml` 
 profileLevel: 1
 Rationale: Resource quotas must be configured for each tenant namespace, to guarantee fair number of objects across tenants.
-Audit:
-    Run the following command to show configured quotas. Make sure that a quota is configured for API objects(PersistentVolumeClaim, LoadBalancer, NodePort ,Pods etc).
+Audit: "Run the following command to show configured quotas. Make sure that a quota is configured for API objects(PersistentVolumeClaim, LoadBalancer, NodePort ,Pods etc).
     
-    kubectl --kubeconfig=tenant-a -n a1 describe resourcequota
+    kubectl --kubeconfig=tenant-a -n a1 describe resourcequota"

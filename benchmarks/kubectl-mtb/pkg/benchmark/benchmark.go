@@ -16,6 +16,8 @@ type Benchmark struct {
 	Description   string `yaml:"description"`
 	Remediation   string `yaml:"remediation"`
 	ProfileLevel  int    `yaml:"profileLevel"`
+	Rationale     string `yaml:"rationale"`
+	Audit         string `yaml:"audit"`
 	PreRun        func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
 	Run           func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
 }

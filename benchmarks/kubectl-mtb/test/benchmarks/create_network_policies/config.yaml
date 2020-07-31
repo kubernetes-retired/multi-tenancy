@@ -5,3 +5,9 @@ category: Self-Service Operations
 description: Tenants should be able to perform self-service operations by creating own network policies in their namespaces.
 remediation: 
 profileLevel: 2
+audit: "Run the following commands to check for permissions to manage `network-policy` for each verb(get, create, update, patch, delete, and deletecollection) in the tenant namespace:
+
+    kubectl --kubeconfig=tenant-a -n a1 auth can-i <verb> networkpolicy
+
+Each command must return 'yes'"
+rationale: Enables self-service management of network-policies.

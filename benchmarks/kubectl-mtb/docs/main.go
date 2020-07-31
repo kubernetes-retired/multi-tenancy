@@ -27,25 +27,47 @@ type Doc struct {
 	Description     string                 `yaml:"description"`
 	Remediation     string                 `yaml:"remediation"`
 	ProfileLevel    int                    `yaml:"profileLevel"`
+	Rationale       string                 `yaml:"rationale"`
+	Audit           string                 `yaml:"audit"`
 	AdditionalField map[string]interface{} `yaml:"additionalFields"`
 }
 
 // README template
 const templ = `# {{.Title}} <small>[{{.ID}}] </small>
-**Profile Applicability:** 
+
+**Profile Applicability:**
+
 {{.ProfileLevel}} <br>
-**Type:** 
+
+**Type:**
+
 {{.BenchmarkType}} <br>
-**Category:** 
+
+**Category:**
+
 {{.Category}} <br>
-**Description:** 
+
+**Description:**
+
 {{.Description}} <br>
-**Remediation:**
+
+**Rationale:**
+
+{{.Rationale}} <br>
+
+**Audit:**
+
+{{.Audit}} <br>
+
 {{.Remediation}} <br>
+
 {{ range $key, $value := .AdditionalField }}
 **{{ $key }}:** 
+
 {{ $value }} <br>
+
 {{ end }}
+
 `
 
 func exists(path string) (bool, error) {
