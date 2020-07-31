@@ -103,7 +103,7 @@ $ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenan
 This will create t1-ns1 namespace. If you want to run the benchmarks using this namespace, Make sure that the user can access the namespace using the following command. 
 
 ```
-kubectl auth can-i --list --namespace=tenantnamespace --as divya
+$ kubectl auth can-i --list --namespace=tenantnamespace --as divya
 ```
 
 Then, you can run the benchmarks using the following command: 
@@ -118,17 +118,30 @@ $ kubectl-mtb run benchmarks -n t1-ns1 --as divya-k8s-access
 
 You can use policies to pass the benchmarks. We are currently maintaining [Kyverno](https://github.com/nirmata/kyverno) and [Gatekeeper](https://github.com/open-policy-agent/gatekeeper) policies in this repo which are present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies)
 
+#### Kyverno
+
 To install Kyverno, you can run the following command:
 
 ```
-kubectl create -f https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml
+$ kubectl create -f https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml
 ```
+To apply all the Kyverno policies after installing , you can use the below command:
+
+```
+$ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies/kyverno/all_policies.yaml
+```
+You can learn more about Kyverno [here](https://github.com/nirmata/kyverno#quick-start).
+
+#### Gatekeeper
 
 To install Gatekeeper, run following command:
 
 ```
  $ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
 ```
+You can find the policies of Gatekeeper [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies/gatekeeper/)
+
+You can refer [here](https://github.com/open-policy-agent/gatekeeper#how-to-use-gatekeeper) to know how to use Gatekeeper. 
 
 
 ### List Policy Reports:
