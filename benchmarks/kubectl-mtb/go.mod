@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/creasty/defaults v1.3.0
+	github.com/google/uuid v1.1.1
 	github.com/kubernetes-sigs/multi-tenancy v0.0.0-20200707060558-ea14282f3be6
 	github.com/kubernetes-sigs/wg-policy-prototypes/policy-report v0.0.0-20200701192251-679efd0b105e
 	github.com/nirmata/kyverno v1.1.8

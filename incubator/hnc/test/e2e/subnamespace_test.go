@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg"
+	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
 
 var _ = Describe("Subnamespaces", func() {

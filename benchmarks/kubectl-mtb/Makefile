@@ -47,7 +47,7 @@ endif
 	fi
 		
 kind-test:
-	go test ./test/benchmarks/... -p 1 -v -coverprofile=coverage.out		
+	go test ./test/benchmarks/... -v -count=1 -coverprofile=coverage.out		
 
 kind-delete:
 	kind delete cluster --name $(KIND_PROFILE)
