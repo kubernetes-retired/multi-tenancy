@@ -2,6 +2,7 @@ package reconcilers_test
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -449,7 +450,7 @@ func hasChild(ctx context.Context, nm, cnm string) func() bool {
 func createNSes(ctx context.Context, num int) []string {
 	nms := []string{}
 	for i := 0; i < num; i++ {
-		nm := createNS(ctx, string('a'+i))
+		nm := createNS(ctx, fmt.Sprintf("%c", 'a'+i))
 		nms = append(nms, nm)
 	}
 	return nms
