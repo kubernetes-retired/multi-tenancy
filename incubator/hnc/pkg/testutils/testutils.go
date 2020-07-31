@@ -2,10 +2,10 @@ package testutils
 
 import (
 	"errors"
-	"time"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -103,7 +103,7 @@ func RunCommand(cmdln ...string) (string, error) {
 	var args []string
 	for _, subcmdln := range cmdln {
 		// Any arg that starts and ends in a double quote shouldn't be split further
-		if len(subcmdln)>2 && subcmdln[0]=='"' && subcmdln[len(subcmdln)-1]=='"' {
+		if len(subcmdln) > 2 && subcmdln[0] == '"' && subcmdln[len(subcmdln)-1] == '"' {
 			args = append(args, subcmdln[1:len(subcmdln)-1])
 		} else {
 			args = append(args, strings.Split(subcmdln, " ")...)
@@ -116,8 +116,8 @@ func RunCommand(cmdln ...string) (string, error) {
 }
 
 func CleanupNamespaces(nses ...string) {
-	// Remove all possible objections HNC might have to deleting a namesplace. Make sure it 
-	// has cascading deletion so we can delete any of its subnamespace descendants, and 
+	// Remove all possible objections HNC might have to deleting a namesplace. Make sure it
+	// has cascading deletion so we can delete any of its subnamespace descendants, and
 	// make sure that it's not a subnamespace itself so we can delete it directly.
 	for _, ns := range nses {
 		TryRunQuietly("kubectl hns set", ns, "-a")
@@ -128,7 +128,7 @@ func CleanupNamespaces(nses ...string) {
 
 func CheckHNCPath() {
 	// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
-	if hncRecoverPath == ""{
+	if hncRecoverPath == "" {
 		Skip("Environment variable HNC_REPAIR not set. Skipping tests that require repairing HNC.")
 	}
 }

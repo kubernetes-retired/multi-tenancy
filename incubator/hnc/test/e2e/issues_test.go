@@ -10,26 +10,26 @@ import (
 var _ = Describe("Issues", func() {
 
 	const (
-		nsParent = "parent"
-		nsChild = "child"
-		nsSub1 = "sub1"
-		nsSub2 = "sub2"
-		nsSub1Sub1 = "sub1-sub1"
-		nsSub2Sub1 = "sub2-sub1"
-		nsSubSub2 = "sub-sub2"
-		nsSubChild = "sub-child"
+		nsParent      = "parent"
+		nsChild       = "child"
+		nsSub1        = "sub1"
+		nsSub2        = "sub2"
+		nsSub1Sub1    = "sub1-sub1"
+		nsSub2Sub1    = "sub2-sub1"
+		nsSubSub2     = "sub-sub2"
+		nsSubChild    = "sub-child"
 		nsSubSubChild = "sub-sub-child"
 	)
 
 	BeforeEach(func() {
-		CleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, 
+		CleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1,
 			nsSubSub2, nsSubChild, nsSubSubChild)
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1, 
+		CleanupNamespaces(nsParent, nsChild, nsSub1, nsSub2, nsSub1Sub1, nsSub2Sub1,
 			nsSubSub2, nsSubChild, nsSubSubChild)
-	}) 
+	})
 
 	It("Should remove obsolete conditions CannotPropagateObject and CannotUpdateObject - issue #328", func() {
 		// Setting up hierarchy with rolebinding that HNC doesn't have permission to copy.
@@ -38,7 +38,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		// cluster-admin is the highest-powered ClusterRole and HNC is missing some of
 		// its permissions, so it cannot propagate it.
-		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent, 
+		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent,
 			"--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
 		// Tree should show CannotPropagateObject in nsParent and CannotUpdateObject in nsChild
 		RunShouldContainMultiple([]string{"1) CannotPropagateObject", "2) CannotUpdateObject"}, 1, "kubectl hns tree", nsParent)
@@ -52,22 +52,22 @@ var _ = Describe("Issues", func() {
 	It("Should set SubnamespaceAnchorMissing condition if the anchor is missing - issue #501", func() {
 		// Setting up a 3-level tree with 'parent' as the root
 		MustRun("kubectl create ns", nsParent)
-		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation 
+		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
-		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf=" + nsParent)
+		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf="+nsParent)
 		// If the subnamespace doesn't allow cascadingDelete and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
 		// Expected: 'sub1' namespace is not deleted and should have 'SubnamespaceAnchorMissing' condition; no other conditions."
 		RunShouldContain("SubnamespaceAnchorMissing", 1, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 	})
 
-	It("Should unset SubnamespaceAnchorMissing condition if the anchor is re-added - issue #501", func(){
+	It("Should unset SubnamespaceAnchorMissing condition if the anchor is re-added - issue #501", func() {
 		// set up
 		MustRun("kubectl create ns", nsParent)
-		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation 
+		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
-		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf=" + nsParent)
+		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf="+nsParent)
 		RunShouldContain("SubnamespaceAnchorMissing", 1, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 		// If the anchor is re-added, it should unset the 'SubnamespaceAnchorMissing' condition in the subnamespace.
 		// Operation: recreate the 'sub1' subns in 'parent' - kubectl hns create sub1 -n parent
@@ -89,7 +89,7 @@ var _ = Describe("Issues", func() {
 		// Expected: 'sub1', 'sub1-sub1', 'sub2-sub1' should all be gone
 		MustRun("kubectl hns set", nsSub1, "--allowCascadingDelete=true")
 		MustRun("kubectl delete subns", nsSub1, "-n", nsParent)
-		RunShouldNotContainMultiple([]string {nsSub1, nsSub1Sub1, nsSub2Sub1}, 1, "kubectl hns tree", nsParent)
+		RunShouldNotContainMultiple([]string{nsSub1, nsSub1Sub1, nsSub2Sub1}, 1, "kubectl hns tree", nsParent)
 	})
 
 	It("Should cascading delete all subnamespaces if the parent is deleted and allows cascadingDelete - issue #501", func() {
@@ -130,9 +130,9 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl hns set", nsSubSubChild, "--parent", nsSubChild)
 		// cluster-admin is the highest-powered ClusterRole and HNC is missing some of its permissions, so it cannot propagate it.
 		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent, "--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
-		// We put 30s sleep here because - before fixing issue #605, we should see the object gets reconciled after around 8s, 
+		// We put 30s sleep here because - before fixing issue #605, we should see the object gets reconciled after around 8s,
 		// triggered by controller-runtime, with this sleep time. After fixing this issue, the obsolete condition should be cleared
-		// immediately 
+		// immediately
 		time.Sleep(30 * time.Second)
 		// Tree should show CannotPropagateObject in parent and CannotUpdateObject in child and subchild
 		RunShouldContain("CannotPropagateObject", 1, "kubectl hns describe", nsParent)
@@ -149,7 +149,7 @@ var _ = Describe("Issues", func() {
 		RunShouldContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
 	})
 
-	It("Should have CritParentMissing condition when parent namespace is deleted - issue #716", func(){
+	It("Should have CritParentMissing condition when parent namespace is deleted - issue #716", func() {
 		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
@@ -160,7 +160,7 @@ var _ = Describe("Issues", func() {
 		RunShouldContain("CritParentMissing", 1, "kubectl hns describe", nsChild)
 	})
 
-	It("Should delete namespace with CritParentMissing condition - issue #716", func(){
+	It("Should delete namespace with CritParentMissing condition - issue #716", func() {
 		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
@@ -168,48 +168,48 @@ var _ = Describe("Issues", func() {
 		// create and verify CritParentMissing condition
 		MustRun("kubectl delete ns", nsParent)
 		RunShouldContain("CritParentMissing", 1, "kubectl hns describe", nsChild)
-		// test: delete namespace 
+		// test: delete namespace
 		MustRun("kubectl delete ns", nsChild)
 	})
 
-	It("Should not delete a parent of a subnamespace if allowCascadingDelete is not set -issue #716", func(){
-		// Setting up a 2-level tree 
+	It("Should not delete a parent of a subnamespace if allowCascadingDelete is not set -issue #716", func() {
+		// Setting up a 2-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
-		// verify that the namespace has been created 
+		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsChild)
 		// test
 		MustNotRun("kubectl delete ns", nsParent)
 	})
 
-	It("Should delete leaf subnamespace without setting allowCascadingDelete - issue #716", func(){
-		// Setting up a 2-level tree 
+	It("Should delete leaf subnamespace without setting allowCascadingDelete - issue #716", func() {
+		// Setting up a 2-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
-		// verify that the namespace has been created 
+		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsChild)
 		// test
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should not delete a non-leaf subnamespace if allowCascadingDelete is not set - issue #716", func(){
-		// Setting up a 3-level tree 
+	It("Should not delete a non-leaf subnamespace if allowCascadingDelete is not set - issue #716", func() {
+		// Setting up a 3-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
-		// verify that the namespace has been created 
+		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsSubChild)
 		// Test: remove non-leaf subnamespace with 'allowCascadingDelete' unset.
 		// Expected: forbidden because 'allowCascadingDelete'flag is not set
 		MustNotRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should delete a subnamespace if it's changed from non-leaf to leaf without setting allowCascadingDelete - issue #716", func(){
-		// Setting up a 3-level tree 
+	It("Should delete a subnamespace if it's changed from non-leaf to leaf without setting allowCascadingDelete - issue #716", func() {
+		// Setting up a 3-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
-		// verify that the namespace has been created 
+		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsSubChild)
 		// Test: remove leaf subnamespaces with 'allowCascadingDelete' unset.
 		// Expected: delete successfully
@@ -219,7 +219,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue #771", func(){
+	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue #771", func() {
 		// set up
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
@@ -235,7 +235,7 @@ var _ = Describe("Issues", func() {
 		RunShouldNotContain("CannotUpdateObject", 1, "kubectl hns describe", nsChild)
 	})
 
-	It("Should propogate admin rolebindings - issue #772", func(){
+	It("Should propogate admin rolebindings - issue #772", func() {
 		// set up
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
@@ -250,9 +250,9 @@ var _ = Describe("Issues", func() {
 var _ = Describe("Issues that require repairing HNC", func() {
 
 	const (
-		nsParent = "parent"
-		nsParent2 = "parent-2"
-		nsChild = "child"
+		nsParent   = "parent"
+		nsParent2  = "parent-2"
+		nsChild    = "child"
 		nsSubChild = "sub-child"
 	)
 
@@ -269,7 +269,7 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent2)
 		// Subnamespace child should be created and have parent as the 'subnamespaceOf' annoation value:
-		RunShouldContain("subnamespaceOf: " + nsParent, 1, "kubectl get ns", nsChild, "-o yaml")
+		RunShouldContain("subnamespaceOf: "+nsParent, 1, "kubectl get ns", nsChild, "-o yaml")
 		// Creating a 'test-secret' in the subnamespace child
 		MustRun("kubectl create secret generic test-secret --from-literal=key=value -n", nsChild)
 		// subns (anchor) child in parent2 should have 'status: conflict' because it's a bad anchor:
@@ -283,14 +283,14 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		RecoverHNC()
 	})
 
-	It("Should not delete child namespace when deleting a parent namespace with bad anchor - issue #797", func(){
+	It("Should not delete child namespace when deleting a parent namespace with bad anchor - issue #797", func() {
 		// Test: remove subns (anchor) in the bad parent 'parent2'
 		// Expected: The bad subns (anchor) is deleted successfully but the child is not deleted (still contains the 'test-secret')
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent2)
 		MustRun("kubectl get secret -n", nsChild)
 	})
 
-	It("Should delete child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func(){
+	It("Should delete child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func() {
 		// Test: Remove subns (anchor) in the good parent 'parent'
 		// Expected: The subns (anchor) is deleted successfully and the 'child' is also deleted
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
@@ -305,7 +305,7 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		MustRun("kubectl get secret -n", nsChild)
 	})
 
-	It("Should delete a non-leaf child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func(){
+	It("Should delete a non-leaf child namespace when deleting a parent namespace with good anchor under race condition - issue #797", func() {
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
 		MustRun("kubectl hns set", nsChild, "-a")
 		// Test: Remove subns (anchor) in the good parent 'parent'

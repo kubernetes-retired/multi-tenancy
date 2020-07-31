@@ -11,7 +11,7 @@ var _ = Describe("When deleting CRDs", func() {
 
 	const (
 		nsParent = "delete-crd-parent"
-		nsChild = "delete-crd-child"
+		nsChild  = "delete-crd-child"
 	)
 
 	BeforeEach(func() {
