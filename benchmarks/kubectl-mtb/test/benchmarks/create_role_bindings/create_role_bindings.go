@@ -45,7 +45,6 @@ var b = &benchmark.Benchmark{
 					return err
 				}
 				if !access {
-					fmt.Println(msg)
 					return fmt.Errorf(msg)
 				}
 			}
@@ -89,7 +88,16 @@ var b = &benchmark.Benchmark{
 			RoleRef:    roleref,
 		}
 
-		_, err = tclient.RbacV1().RoleBindings(tenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{})
+		_, err = tclient.RbacV1().RoleBindings(tenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	},
+
+	PostRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+		err := tclient.RbacV1().Roles(tenantNamespace).Delete(context.TODO(), "role-sample", metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}

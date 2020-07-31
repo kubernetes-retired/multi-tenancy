@@ -109,18 +109,18 @@ func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []rep
 
 func removeBenchmarksWithIDs(ids []string) {
 	temp := []*benchmark.Benchmark{}
-		for _, benchmark := range benchmarks {
-			found := false
-			for _, id := range ids {
-				if(benchmark.ID == id) {
-					found = true
-				}
-			}
-
-			if !found {
-				temp = append(temp, benchmark)
+	for _, benchmark := range benchmarks {
+		found := false
+		for _, id := range ids {
+			if benchmark.ID == id {
+				found = true
 			}
 		}
+
+		if !found {
+			temp = append(temp, benchmark)
+		}
+	}
 	benchmarks = temp
 }
 
@@ -164,7 +164,6 @@ func runTests(cmd *cobra.Command, args []string) error {
 	skipIDs := strings.Split(skipFlag, ",")
 	removeBenchmarksWithIDs(skipIDs)
 
-
 	suiteSummary := &reporter.SuiteSummary{
 		Suite:                test.BenchmarkSuite,
 		NumberOfTotalTests:   len(benchmarks),
@@ -204,6 +203,16 @@ func runTests(cmd *cobra.Command, args []string) error {
 				ts.TestError = err
 			} else {
 				suiteSummary.NumberOfPassedTests++
+			}
+		}
+
+		// Check Run status
+		if ts.Test {
+			if b.PostRun != nil {
+				err = b.PostRun(tenantNamespace, k8sClient, tenantClient)
+				if err != nil {
+					fmt.Print(err.Error())
+				}
 			}
 		}
 		elapsed := time.Since(startTest)

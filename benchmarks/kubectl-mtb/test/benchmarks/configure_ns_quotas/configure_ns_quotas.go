@@ -13,27 +13,27 @@ import (
 )
 
 var b = &benchmark.Benchmark{
-	// Check if user can list nodes
 	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
-		resources := []utils.GroupResource{
-			{
+
+		verbs := []string{"list", "get"}
+
+		for _, verb := range verbs {
+			resource := utils.GroupResource{
 				APIGroup: "",
 				APIResource: metav1.APIResource{
 					Name: "resourcequotas",
 				},
-			},
-		}
-		verb := "list"
-		for _, resource := range resources {
+			}
 
 			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
 			if err != nil {
-				fmt.Println(err.Error())
+				return err
 			}
 			if !access {
 				return fmt.Errorf(msg)
 			}
 		}
+
 		return nil
 	},
 	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {

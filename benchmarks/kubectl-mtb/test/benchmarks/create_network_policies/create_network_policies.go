@@ -47,6 +47,5 @@ func init() {
 		fmt.Println(err)
 	}
 
-	test.BenchmarkSuite.Add(b);
+	test.BenchmarkSuite.Add(b)
 }
-	
