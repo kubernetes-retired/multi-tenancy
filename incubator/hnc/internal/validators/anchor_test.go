@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"k8s.io/api/admission/v1beta1"
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
 

@@ -13,19 +13,19 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 // ConfigServingPath is where the validator will run. Must be kept in sync with the
 // kubebuilder markers below.
 const (
-	ConfigServingPath = "/validate-hnc-x-k8s-io-v1alpha1-hncconfigurations"
+	ConfigServingPath = "/validate-hnc-x-k8s-io-v1alpha2-hncconfigurations"
 )
 
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are denied.
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha1-hncconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hncconfigurations,verbs=create;update;delete,versions=v1alpha1,name=hncconfigurations.hnc.x-k8s.io
+// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha2-hncconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hncconfigurations,verbs=create;update;delete,versions=v1alpha2,name=hncconfigurations.hnc.x-k8s.io
 
 type HNCConfig struct {
 	Log       logr.Logger
