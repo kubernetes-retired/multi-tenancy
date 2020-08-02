@@ -131,6 +131,7 @@ func main() {
 				// during second unmarshalling
 				for _, i := range values {
 					deleteFields(i, d.AdditionalField)
+				}
 
 				// Get directory of the config file
 				dirPath := getDirectory(path, "/")
