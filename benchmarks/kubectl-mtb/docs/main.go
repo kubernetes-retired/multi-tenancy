@@ -32,43 +32,43 @@ type Doc struct {
 	AdditionalField map[string]interface{} `yaml:"additionalFields"`
 }
 
-// README template
-const templ = `# {{.Title}} <small>[{{.ID}}] </small>
+func ReadmeTemplate() []byte {
+	return []byte(
+		`# {{.Title}} <small>[{{.ID}}] </small>
 
 **Profile Applicability:**
 
-{{.ProfileLevel}} <br>
+{{.ProfileLevel}}
 
 **Type:**
 
-{{.BenchmarkType}} <br>
+{{.BenchmarkType}}
 
 **Category:**
 
-{{.Category}} <br>
+{{.Category}}
 
 **Description:**
 
-{{.Description}} <br>
+{{.Description}}
 
 **Rationale:**
 
-{{.Rationale}} <br>
+{{.Rationale}}
 
 **Audit:**
 
-{{.Audit}} <br>
+{{.Audit}}
 
-{{.Remediation}} <br>
+{{.Remediation}}
 
 {{ range $key, $value := .AdditionalField }}
 **{{ $key }}:** 
 
-{{ $value }} <br>
+{{ $value }}
 
-{{ end }}
-
-`
+{{ end }}`)
+}
 
 func exists(path string) (bool, error) {
 	_, err := os.Stat(path)
@@ -132,8 +132,8 @@ func main() {
 				for _, i := range values {
 					deleteFields(i, d.AdditionalField)
 				}
-				t := template.New("README template")
-				t, err = t.Parse(templ)
+				// t := template.New("README template")
+				// t, err = t.Parse(templ)
 
 				// Get directory of the config file
 				dirPath := getDirectory(path, "/")
@@ -144,18 +144,30 @@ func main() {
 					return err
 				}
 
-				f, err := os.Create(dirPath + "/README.md")
+				// f, err := os.Create(dirPath + "/README.md")
+				// if err != nil {
+				// 	return err
+				// }
+
+				// // Write the output to the README file
+				// err = t.Execute(f, d)
+				// if err != nil {
+				// 	return err
+				// }
+
+				// err = f.Close()
+				// if err != nil {
+				// 	return err
+				// }
+
+				mainFile, err := os.Create(fmt.Sprintf("%s/README.md", dirPath))
 				if err != nil {
 					return err
 				}
+				defer mainFile.Close()
 
-				// Write the output to the README file
-				err = t.Execute(f, d)
-				if err != nil {
-					return err
-				}
-
-				err = f.Close()
+				mainTemplate := template.Must(template.New("main").Parse(string(ReadmeTemplate())))
+				err = mainTemplate.Execute(mainFile, d)
 				if err != nil {
 					return err
 				}

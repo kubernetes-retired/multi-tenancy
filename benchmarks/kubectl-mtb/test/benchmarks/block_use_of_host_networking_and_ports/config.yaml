@@ -6,6 +6,7 @@ description: Tenants should not be allowed to use host networking and host ports
 remediation: 
 profileLevel: 1
 rationale: Using `hostPort` and `hostNetwork` allows tenants workloads to share the host networking stack allowing potential snooping of network traffic across application pods
-audit: "Create a pod defining a container using a host port. The pod creation must fail.
+audit: |
+ Create a pod defining a container using a host port. The pod creation must fail.
 
-Create a pod defining a container using a host network. The pod creation must fail."
+ Create a pod defining a container using a host network. The pod creation must fail."
