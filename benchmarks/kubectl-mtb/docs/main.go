@@ -131,9 +131,6 @@ func main() {
 				// during second unmarshalling
 				for _, i := range values {
 					deleteFields(i, d.AdditionalField)
-				}
-				// t := template.New("README template")
-				// t, err = t.Parse(templ)
 
 				// Get directory of the config file
 				dirPath := getDirectory(path, "/")
@@ -143,22 +140,6 @@ func main() {
 				if err != nil {
 					return err
 				}
-
-				// f, err := os.Create(dirPath + "/README.md")
-				// if err != nil {
-				// 	return err
-				// }
-
-				// // Write the output to the README file
-				// err = t.Execute(f, d)
-				// if err != nil {
-				// 	return err
-				// }
-
-				// err = f.Close()
-				// if err != nil {
-				// 	return err
-				// }
 
 				mainFile, err := os.Create(fmt.Sprintf("%s/README.md", dirPath))
 				if err != nil {
