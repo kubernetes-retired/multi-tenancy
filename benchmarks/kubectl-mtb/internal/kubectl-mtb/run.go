@@ -28,14 +28,10 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
-var (
-	tenant          string
-	tenantNamespace string
-	k8sClient       *kubernetes.Clientset
-	tenantClient    *kubernetes.Clientset
-)
+var benchmarkRunOptions = types.RunOptions{}
 
 var runCmd = &cobra.Command{
 	Use:   "run <resource>",
@@ -59,29 +55,30 @@ var runCmd = &cobra.Command{
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		benchmarkRunOptions.Cmd = cmd
+		benchmarkRunOptions.Args = args
 		cmdutil.CheckErr(runTests(cmd, args))
 	},
 }
 
 func initConfig() error {
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
-
 	config, err := kubecfgFlags.ToRESTConfig()
 	if err != nil {
 		return err
 	}
 
 	// create the K8s clientset
-	k8sClient, err = kubernetes.NewForConfig(config)
+	benchmarkRunOptions.KClient, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		return err
 	}
 
 	tenantConfig := config
-	tenantConfig.Impersonate.UserName = tenant
+	tenantConfig.Impersonate.UserName = benchmarkRunOptions.Tenant
 
 	// create the tenant clientset
-	tenantClient, err = kubernetes.NewForConfig(tenantConfig)
+	benchmarkRunOptions.TClient, err = kubernetes.NewForConfig(tenantConfig)
 	if err != nil {
 		return err
 	}
@@ -126,13 +123,13 @@ func removeBenchmarksWithIDs(ids []string) {
 
 // Validation of the flag inputs
 func validateFlags(cmd *cobra.Command) error {
-	tenant, _ = cmd.Flags().GetString("as")
-	if tenant == "" {
+	benchmarkRunOptions.Tenant, _ = cmd.Flags().GetString("as")
+	if benchmarkRunOptions.Tenant == "" {
 		return fmt.Errorf("username must be set via --as")
 	}
 
-	tenantNamespace, _ = cmd.Flags().GetString("namespace")
-	if tenantNamespace == "" {
+	benchmarkRunOptions.TenantNamespace, _ = cmd.Flags().GetString("namespace")
+	if benchmarkRunOptions.TenantNamespace == "" {
 		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
 	}
 
@@ -141,7 +138,7 @@ func validateFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	_, err = k8sClient.CoreV1().Namespaces().Get(context.TODO(), tenantNamespace, metav1.GetOptions{})
+	_, err = benchmarkRunOptions.KClient.CoreV1().Namespaces().Get(context.TODO(), benchmarkRunOptions.TenantNamespace, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("tenantnamespace is not a valid namespace")
 	}
@@ -167,7 +164,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 	suiteSummary := &reporter.SuiteSummary{
 		Suite:                test.BenchmarkSuite,
 		NumberOfTotalTests:   len(benchmarks),
-		TenantAdminNamespace: tenantNamespace,
+		TenantAdminNamespace: benchmarkRunOptions.TenantNamespace,
 	}
 
 	suiteStartTime := time.Now()
@@ -187,7 +184,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		startTest := time.Now()
 
 		//Run Prerun
-		err = b.PreRun(tenantNamespace, k8sClient, tenantClient)
+		err = b.PreRun(benchmarkRunOptions)
 		if err != nil {
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
@@ -196,7 +193,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		// Check PreRun status
 		if ts.Validation {
-			err = b.Run(tenantNamespace, k8sClient, tenantClient)
+			err = b.Run(benchmarkRunOptions)
 			if err != nil {
 				suiteSummary.NumberOfFailedTests++
 				ts.Test = false
@@ -209,7 +206,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		// Check Run status
 		if ts.Test {
 			if b.PostRun != nil {
-				err = b.PostRun(tenantNamespace, k8sClient, tenantClient)
+				err = b.PostRun(benchmarkRunOptions)
 				if err != nil {
 					fmt.Print(err.Error())
 				}
@@ -233,6 +230,7 @@ func newRunCmd() *cobra.Command {
 	runCmd.Flags().String("as", "", "(required) user name to impersonate")
 	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")
 	runCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
+	runCmd.Flags().StringP("labels", "l", "", "(optional) labels")
 
 	return runCmd
 }

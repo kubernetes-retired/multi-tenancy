@@ -15,11 +15,11 @@ import (
 
 var b = &benchmark.Benchmark{
 
-	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	PreRun: func(options types.RunOptions) error {
 
 		return nil
 	},
-	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	Run: func(options types.RunOptions) error {
 
 		return nil
 	},

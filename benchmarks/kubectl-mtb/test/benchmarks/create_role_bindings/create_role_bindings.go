@@ -6,20 +6,20 @@ import (
 
 	v1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{
 
-	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	PreRun: func(options types.RunOptions) error {
 
 		return nil
 	},
-	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	Run: func(options types.RunOptions) error {
 
 		// Check for rbac privileges of role and rolebinding
 		verbs := []string{"get", "list", "create", "update", "patch", "watch", "delete", "deletecollection"}
@@ -40,7 +40,7 @@ var b = &benchmark.Benchmark{
 
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
 				if err != nil {
 					return err
 				}
@@ -68,7 +68,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		role, err := tclient.RbacV1().Roles(tenantNamespace).Create(context.TODO(), role, metav1.CreateOptions{})
+		role, err := options.TClient.RbacV1().Roles(options.TenantNamespace).Create(context.TODO(), role, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ var b = &benchmark.Benchmark{
 			RoleRef:    roleref,
 		}
 
-		_, err = tclient.RbacV1().RoleBindings(tenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.TClient.RbacV1().RoleBindings(options.TenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			return err
 		}
@@ -96,8 +96,8 @@ var b = &benchmark.Benchmark{
 		return nil
 	},
 
-	PostRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
-		err := tclient.RbacV1().Roles(tenantNamespace).Delete(context.TODO(), "role-sample", metav1.DeleteOptions{})
+	PostRun: func(options types.RunOptions) error {
+		err := options.TClient.RbacV1().Roles(options.TenantNamespace).Delete(context.TODO(), "role-sample", metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}
