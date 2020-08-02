@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 )
 
 var verbs = []string{"get", "update"}
@@ -24,7 +24,7 @@ var b = &benchmark.Benchmark{
 
 		lists, err := options.KClient.Discovery().ServerPreferredResources()
 		if err != nil {
-			return nil
+			log.Logging.Debug(err.Error())
 		}
 
 		for _, list := range lists {
@@ -54,6 +54,7 @@ var b = &benchmark.Benchmark{
 			for _, verb := range verbs {
 				access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
 				if err != nil {
+					log.Logging.Debug(err.Error())
 					return err
 				}
 				if access {
@@ -69,7 +70,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("block_access_to_cluster_resources/config.yaml"))
 	if err != nil {
-		fmt.Println(err)
+		log.Logging.Error(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)
