@@ -14,18 +14,20 @@ kubectl delete all --all -n tenant-b-dev
 
 ## Preparing kubeconfig
 Generate and copy the following kubeconfig files into the ./custom directory:
-- kubeconfig_cluster-admin.yml
-- kubeconfig_tenant-a-dev-testrunner-tenant-admin.yml
-- kubeconfig_tenant-b-dev-testrunner-tenant-admin.yml
+- kubeconfig_${K8S_CLUSTER_ENV}-cluster-admin.yml
+- kubeconfig_${K8S_CLUSTER_ENV}-tenant-a-dev-testrunner-tenant-admin.yml
+- kubeconfig_${K8S_CLUSTER_ENV}-tenant-b-dev-testrunner-tenant-admin.yml
+> K8S_CLUSTER_ENV is the Managed K8S Cluster environment
 
 ## Running the test
 The testing description can be found in the [original](../benchmarks/documentation/run.md) project. For our multi-tenant environment we will only focus on PL1 as we will not implement additional CustomResourceDefinitions (CRD):
 ```
 cd ../benchmarks
-go test -v ./e2e/tests -config ../../../custom/config.yaml -ginkgo.focus PL1
+go test -v ./e2e/tests -config ../../../custom/config-${K8S_CLUSTER_ENV}.yaml -ginkgo.focus PL1
 ```
+> K8S_CLUSTER_ENV is the Managed K8S Cluster environment
 
 By default all tests will be executed. To make the set of tests more manageable during development the file ```./benchmarks/e2e/tests/e2e.go``` will control which set of tests will be executed. Just comments out all tests and comment in only the one that you need to focus on.
 
 # Cleanup
-After testing the tested namespaces should be left in a clean state to to consume resource un necessary.
+After testing the tested namespaces should be left in a clean state to to consume resource unnecessary.
