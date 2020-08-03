@@ -55,8 +55,6 @@ var runCmd = &cobra.Command{
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
-		benchmarkRunOptions.Cmd = cmd
-		benchmarkRunOptions.Args = args
 		cmdutil.CheckErr(runTests(cmd, args))
 	},
 }
@@ -147,6 +145,8 @@ func validateFlags(cmd *cobra.Command) error {
 }
 
 func runTests(cmd *cobra.Command, args []string) error {
+
+	benchmarkRunOptions.Label, _ = cmd.Flags().GetString("labels")
 
 	// Get reporters from the user
 	reporterFlag, _ := cmd.Flags().GetString("out")

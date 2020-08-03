@@ -1,7 +1,6 @@
 package types
 
 import (
-	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -9,8 +8,7 @@ import (
 type RunOptions struct {
 	Tenant          string
 	TenantNamespace string
-	Cmd             *cobra.Command
-	Args            []string
+	Label           string
 	KClient         *kubernetes.Clientset
 	TClient         *kubernetes.Clientset
 }

@@ -28,6 +28,10 @@ var b = &benchmark.Benchmark{
 
 	PreRun: func(options types.RunOptions) error {
 
+		if options.Label == "" {
+			return fmt.Errorf("Label must be set via -l or --label")
+		}
+
 		return nil
 	},
 	Run: func(options types.RunOptions) error {
@@ -82,22 +86,21 @@ var b = &benchmark.Benchmark{
 				return errClient
 			}
 
-			crdClient := dynClient.Resource(gvr)
+			client := dynClient.Resource(gvr)
 
-			labelFlag, _ := options.Cmd.Flags().GetString("labels")
-			labelArray := strings.Split(labelFlag, "=")
+			labelArray := strings.Split(options.Label, "=")
 			labelMap := map[string]string{labelArray[0]: labelArray[1]}
 			opts := metav1.ListOptions{
 				LabelSelector: labels.SelectorFromSet(labelMap).String(),
 			}
-			resourceList, err := crdClient.Namespace(options.TenantNamespace).List(context.TODO(), opts)
+			resourceList, err := client.Namespace(options.TenantNamespace).List(context.TODO(), opts)
 			if err != nil {
 				// fmt.Println(errC.Error())
 			} else {
 				for _, resourceObj := range resourceList.Items {
-					err := crdClient.Namespace(options.TenantNamespace).Delete(context.TODO(), resourceObj.GetName(), metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}})
+					err := client.Namespace(options.TenantNamespace).Delete(context.TODO(), resourceObj.GetName(), metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}})
 					if err == nil {
-						return fmt.Errorf("Tenant can delete ", gvr.Resource, resourceObj.GetName())
+						return fmt.Errorf("Tenant can delete %v %v", gvr.Resource, resourceObj.GetName())
 					}
 				}
 			}
