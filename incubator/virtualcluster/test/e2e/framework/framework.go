@@ -241,7 +241,7 @@ func deleteNS(c clientset.Interface, dynamicClient dynamic.Interface, namespace 
 		logNamespaces(c, namespace)
 
 		// if we can, check if there were pods remaining with no timestamp.
-		remainingPods, missingTimestamp, _ = e2epod.CountRemainingPods(c, namespace)
+		remainingPods, missingTimestamp, _ = countRemainingPods(c, namespace)
 	}
 
 	// a timeout waiting for namespace deletion happened!
@@ -265,6 +265,33 @@ func deleteNS(c clientset.Interface, dynamicClient dynamic.Interface, namespace 
 	}
 	Logf("namespace %v deletion completed in %s", namespace, time.Since(startTime))
 	return nil
+}
+
+// countRemainingPods queries the server to count number of remaining pods, and number of pods that had a missing deletion timestamp.
+func countRemainingPods(c clientset.Interface, namespace string) (int, int, error) {
+	// check for remaining pods
+	pods, err := c.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// nothing remains!
+	if len(pods.Items) == 0 {
+		return 0, 0, nil
+	}
+
+	// stuff remains, log about it
+	e2epod.LogPodStates(pods.Items)
+
+	// check if there were any pods with missing deletion timestamp
+	numPods := len(pods.Items)
+	missingTimestamp := 0
+	for _, pod := range pods.Items {
+		if pod.DeletionTimestamp == nil {
+			missingTimestamp++
+		}
+	}
+	return numPods, missingTimestamp, nil
 }
 
 // logNamespaces logs the number of namespaces by phase
