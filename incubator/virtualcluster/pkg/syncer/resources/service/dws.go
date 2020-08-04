@@ -17,6 +17,7 @@ limitations under the License.
 package service
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -96,7 +97,7 @@ func (c *controller) reconcileServiceCreate(clusterName, targetNamespace, reques
 	pService := newObj.(*v1.Service)
 	conversion.VC(nil, "").Service(pService).Mutate(service)
 
-	pService, err = c.serviceClient.Services(targetNamespace).Create(pService)
+	pService, err = c.serviceClient.Services(targetNamespace).Create(context.TODO(), pService, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pService.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("service %s/%s of cluster %s already exist in super master", targetNamespace, pService.Name, clusterName)
@@ -119,7 +120,7 @@ func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, reques
 	}
 	updated := conversion.Equality(c.config, spec).CheckServiceEquality(pService, vService)
 	if updated != nil {
-		_, err = c.serviceClient.Services(targetNamespace).Update(updated)
+		_, err = c.serviceClient.Services(targetNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -136,7 +137,7 @@ func (c *controller) reconcileServiceRemove(clusterName, targetNamespace, reques
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 		Preconditions:     metav1.NewUIDPreconditions(string(pService.UID)),
 	}
-	err := c.serviceClient.Services(targetNamespace).Delete(name, opts)
+	err := c.serviceClient.Services(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("To be deleted service %s/%s not found in super master", targetNamespace, name)
 		return nil

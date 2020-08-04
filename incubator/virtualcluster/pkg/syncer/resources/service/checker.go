@@ -17,6 +17,7 @@ limitations under the License.
 package service
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -94,7 +95,7 @@ func (c *controller) PatrollerDo() {
 		}
 		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pService.UID))
-			if err = c.serviceClient.Services(pService.Namespace).Delete(pService.Name, deleteOptions); err != nil {
+			if err = c.serviceClient.Services(pService.Namespace).Delete(context.TODO(), pService.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()

@@ -17,6 +17,7 @@ limitations under the License.
 package conversion
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -98,7 +99,7 @@ func GetKubeConfigOfVC(c v1core.SecretsGetter, vc *v1alpha1.VirtualCluster) ([]b
 	}
 
 	clusterName := ToClusterKey(vc)
-	adminKubeConfigSecret, err := c.Secrets(clusterName).Get(constants.KubeconfigAdminSecretName, metav1.GetOptions{})
+	adminKubeConfigSecret, err := c.Secrets(clusterName).Get(context.TODO(), constants.KubeconfigAdminSecretName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secret (%s) for virtual cluster in root namespace %s: %v", constants.KubeconfigAdminSecretName, clusterName, err)
 	}

@@ -14,6 +14,7 @@ limitations under the License.
 package framework
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -133,9 +134,9 @@ func (f *Framework) BeforeEach() {
 
 		crdClient, err := crdclient.NewForConfig(config)
 		ExpectNoError(err)
-		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("clusterversions.tenancy.x-k8s.io", metav1.GetOptions{})
+		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(context.TODO(), "clusterversions.tenancy.x-k8s.io", metav1.GetOptions{})
 		ExpectNoError(err, "clusterversions crd not installed")
-		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("virtualclusters.tenancy.x-k8s.io", metav1.GetOptions{})
+		_, err = crdClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(context.TODO(), "virtualclusters.tenancy.x-k8s.io", metav1.GetOptions{})
 		ExpectNoError(err, "virtualclusters crd not installed")
 	}
 
@@ -209,13 +210,13 @@ func (f *Framework) AfterEach() {
 // whether there are any pods remaining in a non-terminating state.
 func deleteNS(c clientset.Interface, dynamicClient dynamic.Interface, namespace string, timeout time.Duration) error {
 	startTime := time.Now()
-	if err := c.CoreV1().Namespaces().Delete(namespace, nil); err != nil {
+	if err := c.CoreV1().Namespaces().Delete(context.TODO(), namespace, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
 	// wait for namespace to delete or timeout.
 	err := wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
-		if _, err := c.CoreV1().Namespaces().Get(namespace, metav1.GetOptions{}); err != nil {
+		if _, err := c.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{}); err != nil {
 			if apierrs.IsNotFound(err) {
 				return true, nil
 			}
@@ -269,7 +270,7 @@ func deleteNS(c clientset.Interface, dynamicClient dynamic.Interface, namespace 
 // logNamespaces logs the number of namespaces by phase
 // namespace is the namespace the test was operating against that failed to delete so it can be grepped in logs
 func logNamespaces(c clientset.Interface, namespace string) {
-	namespaceList, err := c.CoreV1().Namespaces().List(metav1.ListOptions{})
+	namespaceList, err := c.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		Logf("namespace: %v, unable to list namespaces: %v", namespace, err)
 		return
@@ -289,7 +290,7 @@ func logNamespaces(c clientset.Interface, namespace string) {
 
 // logNamespace logs detail about a namespace
 func logNamespace(c clientset.Interface, namespace string) {
-	ns, err := c.CoreV1().Namespaces().Get(namespace, metav1.GetOptions{})
+	ns, err := c.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 	if err != nil {
 		if apierrs.IsNotFound(err) {
 			Logf("namespace: %v no longer exists", namespace)
@@ -366,7 +367,7 @@ func hasRemainingContent(c clientset.Interface, dynamicClient dynamic.Interface,
 			Logf("namespace: %s, resource: %s, ignored listing per whitelist", namespace, apiResource.Name)
 			continue
 		}
-		unstructuredList, err := dynamicClient.List(metav1.ListOptions{})
+		unstructuredList, err := dynamicClient.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			// not all resources support list, so we ignore those
 			if apierrs.IsMethodNotSupported(err) || apierrs.IsNotFound(err) || apierrs.IsForbidden(err) {

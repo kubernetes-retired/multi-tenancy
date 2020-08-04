@@ -17,6 +17,7 @@ limitations under the License.
 package persistentvolume
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -145,7 +146,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 				Preconditions:     metav1.NewUIDPreconditions(string(vPV.UID)),
 			}
-			if err := tenantClient.CoreV1().PersistentVolumes().Delete(vPV.Name, opts); err != nil {
+			if err := tenantClient.CoreV1().PersistentVolumes().Delete(context.TODO(), vPV.Name, *opts); err != nil {
 				klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantPVs").Inc()

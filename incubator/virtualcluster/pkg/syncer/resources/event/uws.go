@@ -17,6 +17,7 @@ limitations under the License.
 package event
 
 import (
+	"context"
 	"fmt"
 
 	pkgerr "github.com/pkg/errors"
@@ -89,7 +90,7 @@ func (c *controller) BackPopulate(key string) error {
 	_, err = c.multiClusterEventController.Get(clusterName, tenantNS, vEvent.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			_, err = tenantClient.CoreV1().Events(tenantNS).Create(vEvent)
+			_, err = tenantClient.CoreV1().Events(tenantNS).Create(context.TODO(), vEvent, metav1.CreateOptions{})
 			return err
 		}
 		return err

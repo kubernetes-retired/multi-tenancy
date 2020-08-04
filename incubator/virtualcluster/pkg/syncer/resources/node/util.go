@@ -17,6 +17,7 @@ limitations under the License.
 package node
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -141,7 +142,7 @@ func patchNodeStatus(nodes v1core.NodeInterface, nodeName types.NodeName, oldNod
 		return nil, nil, err
 	}
 
-	updatedNode, err := nodes.Patch(string(nodeName), types.StrategicMergePatchType, patchBytes, "status")
+	updatedNode, err := nodes.Patch(context.TODO(), string(nodeName), types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}, "status")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to patch status %q for node %q: %v", patchBytes, nodeName, err)
 	}

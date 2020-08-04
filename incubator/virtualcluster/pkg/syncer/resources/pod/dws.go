@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -145,7 +146,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 		}
 		event := createNotSupportEvent(vPod)
 		vEvent := conversion.BuildVirtualEvent(clusterName, event, vPod)
-		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(vEvent)
+		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(context.TODO(), vEvent, metav1.CreateOptions{})
 		return err
 	}
 
@@ -186,7 +187,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 	if err != nil {
 		return fmt.Errorf("failed to mutate pod: %v", err)
 	}
-	pPod, err = c.client.Pods(targetNamespace).Create(pPod)
+	pPod, err = c.client.Pods(targetNamespace).Create(context.TODO(), pPod, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pPod.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("pod %s/%s of cluster %s already exist in super master", targetNamespace, pPod.Name, clusterName)
@@ -277,7 +278,7 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 		}
 		deleteOptions := metav1.NewDeleteOptions(*vPod.DeletionGracePeriodSeconds)
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
-		err := c.client.Pods(targetNamespace).Delete(pPod.Name, deleteOptions)
+		err := c.client.Pods(targetNamespace).Delete(context.TODO(), pPod.Name, *deleteOptions)
 		if errors.IsNotFound(err) {
 			return nil
 		}
@@ -289,7 +290,7 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 	}
 	updatedPod := conversion.Equality(c.config, spec).CheckPodEquality(pPod, vPod)
 	if updatedPod != nil {
-		pPod, err = c.client.Pods(targetNamespace).Update(updatedPod)
+		pPod, err = c.client.Pods(targetNamespace).Update(context.TODO(), updatedPod, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -306,7 +307,7 @@ func (c *controller) reconcilePodRemove(clusterName, targetNamespace, requestUID
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 		Preconditions:     metav1.NewUIDPreconditions(string(pPod.UID)),
 	}
-	err := c.client.Pods(targetNamespace).Delete(name, opts)
+	err := c.client.Pods(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("To be deleted pod %s/%s of cluster (%s) is not found in super master", targetNamespace, name, clusterName)
 		return nil
