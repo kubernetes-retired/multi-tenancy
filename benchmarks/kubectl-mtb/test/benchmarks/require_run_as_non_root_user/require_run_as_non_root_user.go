@@ -51,9 +51,8 @@ var b = &benchmark.Benchmark{
 		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod with RunAsNonRoot set to false")
-		} else {
-			log.Logging.Debug("Test Passed: ", err.Error())
 		}
+		log.Logging.Debug("Test Passed: ", err.Error())
 		return nil
 	},
 }

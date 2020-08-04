@@ -61,9 +61,8 @@ var b = &benchmark.Benchmark{
 		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod with host-path volume")
-		} else {
-			log.Logging.Debug("Test passed: ", err.Error())
 		}
+		log.Logging.Debug("Test passed: ", err.Error())
 		return nil
 	},
 }

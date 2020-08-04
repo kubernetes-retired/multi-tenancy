@@ -69,9 +69,8 @@ var b = &benchmark.Benchmark{
 
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create service of type NodePort")
-		} else {
-			log.Logging.Debug("Test Passed: ", err.Error())
 		}
+		log.Logging.Debug("Test Passed: ", err.Error())
 		return nil
 	},
 }

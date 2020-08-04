@@ -25,6 +25,7 @@ var b = &benchmark.Benchmark{
 		lists, err := options.KClient.Discovery().ServerPreferredResources()
 		if err != nil {
 			log.Logging.Debug(err.Error())
+			return err
 		}
 
 		for _, list := range lists {
