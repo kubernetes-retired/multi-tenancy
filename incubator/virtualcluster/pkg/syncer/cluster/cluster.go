@@ -17,6 +17,7 @@ limitations under the License.
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -273,7 +274,7 @@ func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocac
 		return err
 	}
 
-	i, err := ca.GetInformer(objectType)
+	i, err := ca.GetInformer(context.TODO(), objectType)
 	if err != nil {
 		return err
 	}
