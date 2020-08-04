@@ -37,7 +37,7 @@ Lead developer: @adrianludwin (aludwin@google.com).
 ### Getting started and learning more
 
 The [latest version of HNC is
-v0.5.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.0).
+v0.5.1](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.1).
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
 workstation, follow the instructions on that page.
 
