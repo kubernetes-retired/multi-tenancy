@@ -15,6 +15,9 @@ type BenchmarkSuite struct {
 	Benchmarks []*benchmark.Benchmark
 }
 
+// SortedBenchmarks contains benchmarks sorted according to profile level, category and id
+var SortedBenchmarks []*benchmark.Benchmark
+
 // Totals returns count of benchmarks in Benchmark Suite
 func (bs *BenchmarkSuite) Totals() int {
 	return len(bs.Benchmarks)
@@ -33,8 +36,8 @@ func (bs *BenchmarkSuite) ProfileLevel(pl int) []*benchmark.Benchmark {
 			benchmarksArray = append(benchmarksArray, b)
 		}
 	}
-	sortedBenchmarks := sortBenchmarks(benchmarksArray)
-	return sortedBenchmarks
+	SortedBenchmarks = sortBenchmarks(benchmarksArray)
+	return SortedBenchmarks
 }
 
 // sortBenchmarks returns slice of Benchmarks sorted according to Profile level, category and id respectively

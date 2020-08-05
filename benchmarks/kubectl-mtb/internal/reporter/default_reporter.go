@@ -5,17 +5,15 @@ import (
 	"os"
 	"strconv"
 
-	v1alpha1 "github.com/kubernetes-sigs/wg-policy-prototypes/policy-report/api/v1alpha1"
 	"github.com/olekukonko/tablewriter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
+	benchmarksuite "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark_suite"
 )
 
 // DefaultReporter collects all the test summaries
 type DefaultReporter struct {
 	testSummaries []*TestSummary
 }
-
-var testResult = map[*benchmark.Benchmark]v1alpha1.PolicyStatus{}
 
 // NewDefaultReporter returns the pointer of DefaultReporter
 func NewDefaultReporter() *DefaultReporter {
@@ -35,11 +33,9 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 		writer.Println(0, testSummary.Benchmark.Title)
 		writer.Println(0, writer.Colorize(grayColor, "%s", testSummary.Benchmark.Description))
 		if testSummary.Test {
-			testResult[testSummary.Benchmark] = "Pass"
 			passed := "Passed " + tick
 			writer.Println(0, writer.Colorize(greenColor, passed))
 		} else {
-			testResult[testSummary.Benchmark] = "Fail"
 			failed := "Failed " + cross
 			writer.Println(0, writer.Colorize(redColor, failed))
 			writer.Print(0, writer.Colorize(lilac, "Remediation: "))
@@ -49,7 +45,6 @@ func (r *DefaultReporter) TestWillRun(testSummary *TestSummary) {
 		writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", testSummary.RunTime), "-")
 		return
 	}
-	testResult[testSummary.Benchmark] = "Error"
 	preRunfmt := writer.Colorize(magentaColor, "[PreRun-Validation Error]")
 	errormsg := writer.Colorize(redColor, testSummary.ValidationError.Error())
 	bannerText := fmt.Sprintf("%s [%s] %s: %s %s", preRunfmt, testSummary.Benchmark.ID, testSummary.Benchmark.Title, errormsg, cross)
@@ -66,31 +61,31 @@ func (r *DefaultReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
 	writer.PrintNewLine()
 	writer.PrintBanner(writer.Colorize(grayColor, "Completed in %v", suiteSummary.RunTime), "=")
 
-	printScoreCard(testResult)
+	printScoreCard(benchmarksuite.SortedBenchmarks)
 }
 
 // FullSummary prints end result of all the tests at one place.
-func printScoreCard(testResult map[*benchmark.Benchmark]v1alpha1.PolicyStatus) {
+func printScoreCard(benchmarks []*benchmark.Benchmark) {
 	data := [][]string{}
 	counter := 0
 
-	for val, key := range testResult{
+	for _, b := range benchmarks {
 		counter++
 		var status string
-		
-		switch key {
+
+		switch b.Status {
 		case "Error":
 			status = writer.Colorize(magentaColor, "Error")
 		case "Pass":
 			status = writer.Colorize(greenColor, "Passed")
 		case "Fail":
 			status = writer.Colorize(redColor, "Failed")
-		case "Skip":
+		default:
 			status = writer.Colorize(yellowColor, "Skipped")
 		}
 
-		testName := val.Title
-		result := []string{strconv.Itoa(counter), val.ID, testName, status}
+		testName := b.Title
+		result := []string{strconv.Itoa(counter), b.ID, testName, status}
 		data = append(data, result)
 	}
 

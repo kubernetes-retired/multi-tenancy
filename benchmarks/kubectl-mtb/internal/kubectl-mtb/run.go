@@ -189,6 +189,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
+			b.Status = "Error"
 		}
 
 		// Check PreRun status
@@ -198,8 +199,10 @@ func runTests(cmd *cobra.Command, args []string) error {
 				suiteSummary.NumberOfFailedTests++
 				ts.Test = false
 				ts.TestError = err
+				b.Status = "Fail"
 			} else {
 				suiteSummary.NumberOfPassedTests++
+				b.Status = "Pass"
 			}
 		}
 
