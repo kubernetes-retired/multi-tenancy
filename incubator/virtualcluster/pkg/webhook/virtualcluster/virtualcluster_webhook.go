@@ -29,6 +29,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	admv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	certapi "k8s.io/api/certificates/v1beta1"
@@ -394,8 +395,10 @@ func submitCSRAndWait(csrClient certificatesclient.CertificateSigningRequestInte
 	if err != nil {
 		return nil, err
 	}
-	log.Info("CSR request submitted", "CSR reqest", req.GetName())
-	crtPEM, err := csr.WaitForCertificate(context.TODO(), csrClient, req)
+	log.Info("CSR request submitted, will wait 2 seconds for it to be signed", "CSR reqest", req.GetName())
+	timeoutCtx, cancelFn := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelFn()
+	crtPEM, err := csr.WaitForCertificate(timeoutCtx, csrClient, req)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Certificate request was not signed: %v", err))
 		return nil, nil
