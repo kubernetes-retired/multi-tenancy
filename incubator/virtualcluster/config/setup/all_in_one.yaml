@@ -9,6 +9,15 @@ metadata:
   creationTimestamp: null
   name: vc-manager-role
 rules:
+- apiGroups: 
+  - certificates.k8s.io
+  resources:
+  - signers
+  resourceNames:
+  # Support legacy versions, before signerName was added
+  - kubernetes.io/legacy-unknown
+  verbs: 
+  - approve
 - apiGroups:
   - certificates.k8s.io
   resources:
