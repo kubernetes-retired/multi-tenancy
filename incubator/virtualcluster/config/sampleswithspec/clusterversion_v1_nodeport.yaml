@@ -10,6 +10,8 @@ spec:
     metadata:
       name: etcd 
     statefulset:
+      apiVersion: apps/v1
+      kind: StatefulSet
       metadata:
         name: etcd
       spec:
@@ -97,6 +99,8 @@ spec:
     # etcd will be accessed only by apiserver from inside the cluster, so we use a headless service to 
     # encapsulate it
     service:
+      apiVersion: v1
+      kind: Service
       metadata:
         name: etcd
         annotations:
@@ -111,6 +115,8 @@ spec:
     metadata:
       name: apiserver
     statefulset:
+      apiVersion: apps/v1
+      kind: StatefulSet
       metadata:
         name: apiserver
       spec:
@@ -209,6 +215,8 @@ spec:
                 defaultMode: 420
                 secretName: serviceaccount-rsa
     service:
+      apiVersion: apps/v1
+      kind: Service
       metadata:
         name: apiserver-svc
       spec:
@@ -221,10 +229,14 @@ spec:
           targetPort: api
   # a statefulset and service bundle for controller-manager
   controllerManager:
+    apiVersion: apps/v1
+    kind: StatefulSet
     metadata:
       name: controller-manager
     # statefuleset template for controller-manager
     statefulset:  
+      apiVersion: apps/v1
+      kind: StatefulSet
       metadata:
         name: controller-manager
       spec:
