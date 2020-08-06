@@ -93,7 +93,7 @@ var _ = Describe("Demo", func() {
 		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
 	})
 
-	FIt("Should intergrate hierarchical network policy", func(){
+	It("Should intergrate hierarchical network policy", func(){
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
