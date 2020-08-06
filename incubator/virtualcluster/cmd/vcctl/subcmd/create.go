@@ -30,6 +30,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
@@ -152,7 +153,7 @@ func createVirtualCluster(cli client.Client, vc *tenancyv1alpha1.VirtualCluster,
 	svcType := cv.Spec.APIServer.Service.Spec.Type
 	if svcType != v1.ServiceTypeNodePort &&
 		svcType != v1.ServiceTypeLoadBalancer &&
-		  svcType != v1.ServiceTypeClusterIP {
+		svcType != v1.ServiceTypeClusterIP {
 		return fmt.Errorf("unsupported apiserver service type: %s", svcType)
 	}
 
@@ -213,6 +214,11 @@ func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, svcType 
 		return err
 	}
 	kbCfgBytes, err := getVcKubeConfig(cli, clusterNamespace, "admin-kubeconfig")
+	if err != nil {
+		return err
+	}
+
+	kubecfg, err := clientcmd.NewClientConfigFromBytes(kbCfgBytes)
 	if err != nil {
 		return err
 	}

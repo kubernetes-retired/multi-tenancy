@@ -22,7 +22,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.16.6
 	k8s.io/apimachinery v0.16.6
 	k8s.io/apiserver v0.16.6
-	k8s.io/client-go v0.16.6
+	k8s.io/client-go v1.5.1
 	k8s.io/code-generator v0.16.6
 	k8s.io/component-base v0.16.6
 	k8s.io/cri-api v0.0.0
