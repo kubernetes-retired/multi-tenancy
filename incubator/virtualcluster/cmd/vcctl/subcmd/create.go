@@ -223,12 +223,19 @@ func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, svcType 
 		return err
 	}
 	// replace the server address in kubeconfig based on service type
-	kbCfgBytes, err = replaceServerAddr(kbCfgBytes, cli, clusterNamespace, svcType, apiSvcPort)
+	kubecfg, err = replaceServerAddr(kubecfg, cli, clusterNamespace, svcType, apiSvcPort)
 	if err != nil {
 		return err
 	}
-
-	n, err := fn.Write(kbCfgBytes)
+	rawConfig, err := kubecfg.RawConfig()
+	if err != nil {
+		return err
+	}
+	kubecfgBytes, err := clientcmd.Write(rawConfig)
+	if err != nil {
+		return err
+	}
+	n, err := fn.Write(kubecfgBytes)
 	if err != nil {
 		return err
 	}
@@ -240,7 +247,7 @@ func genKubeConfig(clusterNamespace, vcKbCfg string, cli client.Client, svcType 
 
 // replaceServerAddr replace api server IP with the minikube gateway IP, and
 // disable TLS varification by removing the server CA
-func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterNamespace string, svcType v1.ServiceType, apiSvcPort int) ([]byte, error) {
+func replaceServerAddr(kubecfg clientcmd.ClientConfig, cli client.Client, clusterNamespace string, svcType v1.ServiceType, apiSvcPort int) (clientcmd.ClientConfig, error) {
 	var newStr string
 	switch svcType {
 	case v1.ServiceTypeNodePort:
@@ -253,31 +260,27 @@ func replaceServerAddr(kubeCfgContent []byte, cli client.Client, clusterNamespac
 		if err != nil {
 			return nil, err
 		}
-		newStr = fmt.Sprintf("server: https://%s:%d", nodeIP, svcNodePort)
+		newStr = fmt.Sprintf("https://%s:%d", nodeIP, svcNodePort)
 	case v1.ServiceTypeLoadBalancer:
 		externalIP, err := netutil.GetLBIP(APIServerSvcName,
 			clusterNamespace, cli)
 		if err != nil {
 			return nil, err
 		}
-		newStr = fmt.Sprintf("server: https://%s:%d", externalIP, apiSvcPort)
+		newStr = fmt.Sprintf("https://%s:%d", externalIP, apiSvcPort)
 	}
 
-	lines := strings.Split(string(kubeCfgContent), "\n")
-	// remove server CA, disable TLS varification
-	for i := 0; i < len(lines); {
-		if strings.Contains(lines[i], "certificate-authority-data: ") {
-			lines = append(lines[:i], lines[i+1:]...)
-			continue
-		}
-		if strings.Contains(lines[i], "server: ") {
-			newSvrAddr, disableTLS := genNewLines(lines[i], newStr)
-			lines[i] = newSvrAddr
-			lines = insertStrAt(disableTLS, i+1, lines)
-		}
-		i++
+	rawConfig, err := kubecfg.RawConfig()
+	if err != nil {
+		return nil, err
 	}
-	return []byte(strings.Join(lines, "\n")), nil
+	for _, cluster := range rawConfig.Clusters {
+		cluster.InsecureSkipTLSVerify = true
+		cluster.CertificateAuthorityData = nil
+		cluster.Server = newStr
+	}
+
+	return clientcmd.NewDefaultClientConfig(rawConfig, &clientcmd.ConfigOverrides{}), nil
 }
 
 // getMinikubeIP gets the ip that is used for accessing minikube
@@ -293,31 +296,3 @@ func getMinikubeIP() (string, error) {
 	return strings.TrimSuffix(string(IP), "\n"), nil
 }
 
-// genNewLines generates new lines contain "insecure-skip-tls-verify: true"
-// and new server address
-func genNewLines(oldLine, newLine string) (string, string) {
-	numSpace := countHeadingSpace(oldLine)
-	disableTLS := "insecure-skip-tls-verify: true"
-
-	for i := 0; i < numSpace-1; i++ {
-		newLine = " " + newLine
-		disableTLS = " " + disableTLS
-	}
-	return newLine, disableTLS
-}
-
-// countHeadingSpace counts the number of indents
-func countHeadingSpace(inp string) int {
-	var count int
-	for _, c := range inp {
-		if c == ' ' {
-			count++
-		}
-	}
-	return count
-}
-
-// insertStrAt inserts str at i of strSlice
-func insertStrAt(str string, i int, strSlice []string) []string {
-	return append(strSlice[:i], append([]string{str}, strSlice[i:]...)...)
-}
