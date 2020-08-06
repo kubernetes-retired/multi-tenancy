@@ -350,7 +350,7 @@ func (*fakeKubelet) GetCgroupCPUAndMemoryStats(cgroupName string, updateStats bo
 type fakeAuth struct {
 	authenticateFunc func(*http.Request) (*authenticator.Response, bool, error)
 	attributesFunc   func(user.Info, *http.Request) authorizer.Attributes
-	authorizeFunc    func(authorizer.Attributes) (authorized authorizer.Decision, reason string, err error)
+	authorizeFunc    func(context.Context, authorizer.Attributes) (authorized authorizer.Decision, reason string, err error)
 }
 
 func (f *fakeAuth) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
@@ -359,8 +359,8 @@ func (f *fakeAuth) AuthenticateRequest(req *http.Request) (*authenticator.Respon
 func (f *fakeAuth) GetRequestAttributes(u user.Info, req *http.Request) authorizer.Attributes {
 	return f.attributesFunc(u, req)
 }
-func (f *fakeAuth) Authorize(a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
-	return f.authorizeFunc(a)
+func (f *fakeAuth) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
+	return f.authorizeFunc(ctx, a)
 }
 
 type kubletServerTestFramework struct {
@@ -398,7 +398,7 @@ func newKubeletServerTestWithDebug(enableDebugging, redirectContainerStreaming b
 		attributesFunc: func(u user.Info, req *http.Request) authorizer.Attributes {
 			return &authorizer.AttributesRecord{User: u}
 		},
-		authorizeFunc: func(a authorizer.Attributes) (decision authorizer.Decision, reason string, err error) {
+		authorizeFunc: func(_ context.Context, a authorizer.Attributes) (decision authorizer.Decision, reason string, err error) {
 			return authorizer.DecisionAllow, "", nil
 		},
 	}

@@ -17,6 +17,7 @@ limitations under the License.
 package endpoints
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -107,7 +108,7 @@ func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace, requ
 
 	pEndpoints := newObj.(*v1.Endpoints)
 
-	pEndpoints, err = c.endpointClient.Endpoints(targetNamespace).Create(pEndpoints)
+	pEndpoints, err = c.endpointClient.Endpoints(targetNamespace).Create(context.TODO(), pEndpoints, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pEndpoints.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("endpoints %s/%s of cluster %s already exist in super master", targetNamespace, pEndpoints.Name, clusterName)
@@ -129,7 +130,7 @@ func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace, requ
 	}
 	updatedEndpoints := conversion.Equality(c.config, spec).CheckEndpointsEquality(pEP, vEP)
 	if updatedEndpoints != nil {
-		pEP, err = c.endpointClient.Endpoints(targetNamespace).Update(updatedEndpoints)
+		pEP, err = c.endpointClient.Endpoints(targetNamespace).Update(context.TODO(), updatedEndpoints, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -144,7 +145,7 @@ func (c *controller) reconcileEndpointsRemove(clusterName, targetNamespace, requ
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.endpointClient.Endpoints(targetNamespace).Delete(name, opts)
+	err := c.endpointClient.Endpoints(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("endpoints %s/%s of %s cluster not found in super master", targetNamespace, name, clusterName)
 		return nil

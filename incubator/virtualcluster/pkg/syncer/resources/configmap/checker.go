@@ -16,6 +16,7 @@ limitations under the License.
 package configmap
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -94,7 +95,7 @@ func (c *controller) PatrollerDo() {
 			// vConfigMap not found and pConfigMap still exist, we need to delete pConfigMap manually
 			deleteOptions := &metav1.DeleteOptions{}
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pConfigMap.UID))
-			if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(pConfigMap.Name, deleteOptions); err != nil {
+			if err = c.configMapClient.ConfigMaps(pConfigMap.Namespace).Delete(context.TODO(), pConfigMap.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pConfigMap %v/%v in super master: %v", pConfigMap.Namespace, pConfigMap.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterConfigMaps").Inc()

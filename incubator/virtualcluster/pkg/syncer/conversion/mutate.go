@@ -17,6 +17,7 @@ limitations under the License.
 package conversion
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -364,7 +365,7 @@ func PodAddExtensionMeta(vPod *v1.Pod) PodMutator {
 		if err != nil {
 			return fmt.Errorf("vc %s failed to get client: %v", p.clusterName, err)
 		}
-		replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(replicaSetName, metav1.GetOptions{})
+		replicaSetObj, err := client.AppsV1().ReplicaSets(ns).Get(context.TODO(), replicaSetName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("vc %s failed to get replicaset object %s in %s: %v", p.clusterName, replicaSetName, ns, err)
 		}

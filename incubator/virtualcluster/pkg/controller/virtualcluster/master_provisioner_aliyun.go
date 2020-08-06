@@ -213,7 +213,7 @@ PollASK:
 	}
 	// delete if exist
 	if err = tenantCli.CoreV1().ServiceAccounts("kube-system").
-		Delete("node-controller", &metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		Delete(context.TODO(), "node-controller", metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	log.Info("the node selector service account is deleted", "vc", vc.GetName())

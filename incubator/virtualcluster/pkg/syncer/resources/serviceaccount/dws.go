@@ -17,6 +17,7 @@ limitations under the License.
 package serviceaccount
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -97,7 +98,7 @@ func (c *controller) reconcileServiceAccountCreate(clusterName, targetNamespace,
 	// set to empty and token controller will regenerate one.
 	pServiceAccount.Secrets = nil
 
-	pServiceAccount, err = c.saClient.ServiceAccounts(targetNamespace).Create(pServiceAccount)
+	pServiceAccount, err = c.saClient.ServiceAccounts(targetNamespace).Create(context.TODO(), pServiceAccount, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pServiceAccount.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("service account %s/%s of cluster %s already exist in super master", targetNamespace, pServiceAccount.Name, clusterName)
@@ -120,7 +121,7 @@ func (c *controller) reconcileServiceAccountUpdate(clusterName, targetNamespace,
 			pSa.Annotations[constants.LabelCluster] = clusterName
 			pSa.Annotations[constants.LabelUID] = string(vSa.UID)
 			pSa.Annotations[constants.LabelNamespace] = vSa.Namespace
-			_, err = c.saClient.ServiceAccounts(targetNamespace).Update(pSa)
+			_, err = c.saClient.ServiceAccounts(targetNamespace).Update(context.TODO(), pSa, metav1.UpdateOptions{})
 		}
 		return err
 	}
@@ -140,7 +141,7 @@ func (c *controller) reconcileServiceAccountRemove(clusterName, targetNamespace,
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.saClient.ServiceAccounts(targetNamespace).Delete(name, opts)
+	err := c.saClient.ServiceAccounts(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("service account %s/%s of cluster %s not found in super master", targetNamespace, name, clusterName)
 		return nil

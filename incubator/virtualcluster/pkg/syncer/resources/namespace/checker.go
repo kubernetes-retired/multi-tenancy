@@ -16,6 +16,7 @@ limitations under the License.
 package namespace
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -130,7 +131,7 @@ func (c *controller) PatrollerDo() {
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 				Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),
 			}
-			if err := c.namespaceClient.Namespaces().Delete(pNamespace.Name, opts); err != nil {
+			if err := c.namespaceClient.Namespaces().Delete(context.TODO(), pNamespace.Name, *opts); err != nil {
 				klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterNamespaces").Inc()

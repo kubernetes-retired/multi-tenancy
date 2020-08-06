@@ -17,6 +17,7 @@ limitations under the License.
 package namespace
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -95,7 +96,7 @@ func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requ
 		return err
 	}
 
-	_, err = c.namespaceClient.Namespaces().Create(newObj.(*v1.Namespace))
+	_, err = c.namespaceClient.Namespaces().Create(context.TODO(), newObj.(*v1.Namespace), metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		klog.Infof("namespace %s of cluster %s already exist in super master", targetNamespace, clusterName)
 		return nil
@@ -119,7 +120,7 @@ func (c *controller) reconcileNamespaceRemove(clusterName, targetNamespace, requ
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 		Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),
 	}
-	err := c.namespaceClient.Namespaces().Delete(targetNamespace, opts)
+	err := c.namespaceClient.Namespaces().Delete(context.TODO(), targetNamespace, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("namespace %s of cluster %s not found in super master", targetNamespace, clusterName)
 		return nil

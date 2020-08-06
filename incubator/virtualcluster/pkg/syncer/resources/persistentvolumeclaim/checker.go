@@ -17,6 +17,7 @@ limitations under the License.
 package persistentvolumeclaim
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -89,7 +90,7 @@ func (c *controller) PatrollerDo() {
 		}
 		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pPVC.UID))
-			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(pPVC.Name, deleteOptions); err != nil {
+			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(context.TODO(), pPVC.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pPVC %s/%s in super master: %v", pPVC.Namespace, pPVC.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPVCs").Inc()

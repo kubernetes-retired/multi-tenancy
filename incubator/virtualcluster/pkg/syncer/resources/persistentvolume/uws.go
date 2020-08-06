@@ -17,6 +17,7 @@ limitations under the License.
 package persistentvolume
 
 import (
+	"context"
 	"fmt"
 
 	pkgerr "github.com/pkg/errors"
@@ -76,7 +77,7 @@ func (c *controller) BackPopulate(key string) error {
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create a new pv with bound claim in tenant master
-			vPVC, err := tenantClient.CoreV1().PersistentVolumeClaims(vNamespace).Get(pPVC.Name, metav1.GetOptions{})
+			vPVC, err := tenantClient.CoreV1().PersistentVolumeClaims(vNamespace).Get(context.TODO(), pPVC.Name, metav1.GetOptions{})
 			if err != nil {
 				// If corresponding pvc does not exist in tenant, we'll let checker fix any possible race.
 				klog.Errorf("Cannot find the bound pvc %s/%s in tenant cluster %s for pv %v", vNamespace, pPVC.Name, clusterName, pPV)
@@ -87,7 +88,7 @@ func (c *controller) BackPopulate(key string) error {
 				return err
 			}
 			vPV := conversion.BuildVirtualPersistentVolume(clusterName, vcName, pPV, vPVC)
-			_, err = tenantClient.CoreV1().PersistentVolumes().Create(vPV)
+			_, err = tenantClient.CoreV1().PersistentVolumes().Create(context.TODO(), vPV, metav1.CreateOptions{})
 			if err != nil {
 				return err
 			}
@@ -106,7 +107,7 @@ func (c *controller) BackPopulate(key string) error {
 	if updatedPVSpec != nil {
 		newPV := vPV.DeepCopy()
 		newPV.Spec = *updatedPVSpec
-		_, err := tenantClient.CoreV1().PersistentVolumes().Update(newPV)
+		_, err := tenantClient.CoreV1().PersistentVolumes().Update(context.TODO(), newPV, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
