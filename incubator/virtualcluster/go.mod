@@ -15,15 +15,16 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
-	go.uber.org/zap v1.10.0
-	golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
-	k8s.io/api v0.18.6
-	k8s.io/apiextensions-apiserver v0.18.6
-	k8s.io/apimachinery v0.18.6
-	k8s.io/apiserver v0.18.6
-	k8s.io/client-go v0.18.6
-	k8s.io/code-generator v0.18.6
-	k8s.io/component-base v0.18.6
+	go.uber.org/zap v1.9.1
+	golang.org/x/crypto v0.0.0-20191206172530-e9b2fee46413 // indirect
+	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
+	k8s.io/api v0.16.6
+	k8s.io/apiextensions-apiserver v0.16.6
+	k8s.io/apimachinery v0.16.6
+	k8s.io/apiserver v0.16.6
+	k8s.io/client-go v1.5.1
+	k8s.io/code-generator v0.16.6
+	k8s.io/component-base v0.16.6
 	k8s.io/cri-api v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.18.6
