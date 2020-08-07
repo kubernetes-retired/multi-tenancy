@@ -224,7 +224,7 @@ func genCertificate(mgr manager.Manager, certDir string) error {
 
 // delVCWebhookCSRIfExist deletes the validatingwebhookconfiguration/<VCWebhookCfgName> if exist
 func delVCWebhookCSRIfExist(csrClient certificatesclient.CertificateSigningRequestInterface) error {
-	if err := csrClient.Delete(VCWebhookCSRName, &metav1.DeleteOptions{}); err != nil {
+	if err := csrClient.Delete(context.TODO(), VCWebhookCSRName, metav1.DeleteOptions{}); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return err
 		}
@@ -240,10 +240,10 @@ func approveVCWebhookCSR(csrClient certificatesclient.CertificateSigningRequestI
 		context.Background(),
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return csrClient.List(options)
+				return csrClient.List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return csrClient.Watch(options)
+				return csrClient.Watch(context.TODO(), options)
 			},
 		},
 		func(event watch.Event) (bool, error) {
@@ -275,7 +275,7 @@ func approveVCWebhookCSR(csrClient certificatesclient.CertificateSigningRequestI
 					Message: fmt.Sprintf("Approve the csr/%s", csr.GetName()),
 				})
 
-			result, err := csrClient.UpdateApproval(csr)
+			result, err := csrClient.UpdateApproval(context.TODO(), csr, metav1.UpdateOptions{})
 			if err != nil {
 				if result == nil {
 					log.Error(err, fmt.Sprintf("failed to approve virtualcluster csr, %v", err))
@@ -338,7 +338,7 @@ func getCertCondition(status *certificates.CertificateSigningRequestStatus) (boo
 // into the certificate
 func getSVCClusterIP(clientSet kubernetes.Interface) (net.IP, error) {
 	whSvc, err := clientSet.CoreV1().Services(VCWebhookServiceNs).
-		Get(VCWebhookServiceName, metav1.GetOptions{})
+		Get(context.TODO(), VCWebhookServiceName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func submitCSRAndWait(csrClient certificatesclient.CertificateSigningRequestInte
 	csrPEM []byte,
 	privateKey interface{}) ([]byte, error) {
 	req, err := csr.RequestCertificate(
-		csrClient, csrPEM, VCWebhookCSRName,
+		csrClient, csrPEM, VCWebhookCSRName, "kubernetes.io/legacy-unknown",
 		[]certificates.KeyUsage{certificates.UsageServerAuth},
 		privateKey)
 	if err != nil {
