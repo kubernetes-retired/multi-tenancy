@@ -91,7 +91,8 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = reconcilers.Create(k8sManager, forest.NewForest(), 100)
+	removeOldCRDVersion := false
+	err = reconcilers.Create(k8sManager, forest.NewForest(), 100, removeOldCRDVersion)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
