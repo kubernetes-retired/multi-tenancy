@@ -44,6 +44,9 @@ type SyncerConfiguration struct {
 	// ["aaa"]                  | ["foo=bar", "foo.kubernetes.io/foo=bar", "aaa/b=c"]
 	DefaultOpaqueMetaDomains []string
 
+	//ExtraSyncingResources defines additional resources that need to be synced for each Virtual CLuster
+	ExtraSyncingResources []string
+
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
 }
