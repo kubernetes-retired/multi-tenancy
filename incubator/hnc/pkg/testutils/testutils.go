@@ -18,10 +18,54 @@ const eventuallyTimeout = 5
 
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
+func FieldShouldContain(resource, ns, nm, field, want string){
+	FieldShouldContainMultiple(resource, ns, nm, field, []string{want})
+}
+
+func FieldShouldContainMultiple(resource, ns, nm, field string, want []string){
+	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+}
+
+func FieldShouldContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+}
+
+func FieldShouldContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	if ns != "" {
+		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+	} else {
+		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+	}
+}
+
+func FieldShouldNotContain(resource, ns, nm, field, want string){
+	FieldShouldNotContainMultiple(resource, ns, nm, field, []string{want})
+}
+
+func FieldShouldNotContainMultiple(resource, ns, nm, field string, want []string){
+	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+}
+
+func FieldShouldNotContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+}
+
+func FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	if ns != "" {
+		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+	} else {
+		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+	}
+}
+
 func MustRun(cmdln ...string) {
+	MustRunWithTimeout(eventuallyTimeout, cmdln...)
+}
+
+func MustRunWithTimeout(timeout float64, cmdln ...string) {
 	Eventually(func() error {
 		return TryRun(cmdln...)
-	}, eventuallyTimeout).Should(BeNil())
+	}, timeout).Should(BeNil())
 }
 
 func MustNotRun(cmdln ...string) {
@@ -117,6 +161,12 @@ func RunShouldNotContainMultiple(substrs []string, seconds float64, cmdln ...str
 	}, seconds).Should(Succeed())
 }
 
+func MustApplyYAML(s string){
+	filename := WriteTempFile(s)
+	defer RemoveFile(filename)
+	MustRun("kubectl apply -f", filename)
+}
+
 // RunCommand passes all arguments to the OS to execute, and returns the combined stdout/stderr and
 // and error object. By default, each arg to this function may contain strings (e.g. "echo hello
 // world"), in which case we split the strings on the spaces (so this would be equivalent to calling
@@ -148,6 +198,25 @@ func CleanupNamespaces(nses ...string) {
 		TryRunQuietly("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
 		TryRunQuietly("kubectl delete ns", ns)
 	}
+}
+
+// TearDownHNC removes CRDs first and then the entire manifest from the current
+// change. If a specific HNC version is provided, its manifest will also be
+// deleted. It will ensure HNC is cleared at the end.
+func TearDownHNC(hncVersion string) {
+	// Delete all CRDs first to ensure all finalizers are removed. Since we don't
+	// know the version of the current HNC in the cluster so we will try tearing
+	// it down twice with the specified version and what's in the HEAD.
+	TryRunQuietly("k delete crd subnamespaceanchors.hnc.x-k8s.io")
+	TryRunQuietly("k delete crd hierarchyconfigurations.hnc.x-k8s.io")
+	TryRunQuietly("k delete crd hncconfigurations.hnc.x-k8s.io")
+	TryRunQuietly("kubectl delete -f ../../manifests/hnc-manager.yaml")
+	if hncVersion != ""{
+		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-"+hncVersion+"/hnc-manager.yaml")
+	}
+	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
+	RunShouldNotContain("hnc-system", 10, "kubectl get ns")
+	RunShouldNotContain(".hnc.x-k8s.io", 10, "kubectl get crd")
 }
 
 func CheckHNCPath() {
