@@ -63,7 +63,6 @@ func (c *controller) PatrollerDo() {
 		}(clusterName)
 	}
 	wg.Wait()
-
 	pPriorityClassList, err := c.priorityclassLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("error listing priorityclass from super master informer cache: %v", err)
@@ -87,7 +86,6 @@ func (c *controller) PatrollerDo() {
 			}
 		}
 	}
-
 	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedPriorityClasses").Set(float64(numMissMatchedPriorityClasses))
 }
 
