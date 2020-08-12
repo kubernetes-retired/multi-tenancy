@@ -22,6 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	storageV1 "k8s.io/api/storage/v1"
+	priorityclassV1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
@@ -180,6 +181,8 @@ func getObjectInformer(informer informers.SharedInformerFactory, obj runtime.Obj
 		return informer.Core().V1().Events().Informer()
 	case *storageV1.StorageClass:
 		return informer.Storage().V1().StorageClasses().Informer()
+	case *priorityclassV1.PriorityClass:
+		return informer.Scheduling().V1().PriorityClasses().Informer()
 	default:
 		return nil
 	}

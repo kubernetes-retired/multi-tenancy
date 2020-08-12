@@ -19,6 +19,7 @@ package resources
 import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -36,6 +37,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/service"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/serviceaccount"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/priorityclass"
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
@@ -58,6 +60,16 @@ func init() {
 	}
 }
 
+// extraResourceToController maps extra resource name with extra resource controller
+func extraResourceToController(resource string) manager.ResourceSyncerNew {
+	switch resource {
+	case "priorityclass":
+		return priorityclass.NewPriorityClassController
+	default:
+		return nil
+	}
+}
+
 func Register(config *config.SyncerConfiguration,
 	client clientset.Interface,
 	informerFactory informers.SharedInformerFactory,
@@ -72,5 +84,17 @@ func Register(config *config.SyncerConfiguration,
 		}
 	}
 
+	for _, r := range config.ExtraSyncingResources {
+		klog.V(4).Infof("extra resource controllers that will be synced to virtual cluster are %v", r )
+		extraf := extraResourceToController(r)
+		if extraf != nil {
+			if c, _, _, err := extraf(config, client, informerFactory, vcClient, vcInformer, nil); err != nil {
+				klog.Errorf("cannot add extra resource %v for syncer", r)
+				return err
+			} else {
+				controllerManager.AddResourceSyncer(c)
+			}
+		}
+	}
 	return nil
 }
