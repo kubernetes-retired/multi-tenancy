@@ -1,15 +1,32 @@
 # Links
 
-This file contains links to files not stored in this repository.
-Many of them are drafts in Google docs for better collaboration experience.
+This file contains links to files **not stored in this repository**. See the
+individual [projects](../README.md#projects) for docs relevant to those
+projects.
 
-## Access to the docs
-
-Some documents listed are shared within limited google groups, 
-please at least join one of the following groups to access the docs:
+Many of files listed below are drafts in Google docs for better collaboration
+experience.  Some of these are shared within limited google groups, please at
+least join one of the following groups to access the docs:
 
 - [kubernetes-dev](https://groups.google.com/forum/#!forum/kubernetes-dev)
 - [kubernetes-wg-multitenancy](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+
+## Working Group Meeting Records
+
+- [YouTube Channel](https://www.youtube.com/playlist?list=PL69nYSiGNLP1tBA0W8zEe6UwPsabGQk-j&disable_polymer=true)
+- [Meeting Notes and Agenda](https://docs.google.com/document/d/1fj3yzmeU2eU8ZNBCUJG97dk_wC7228-e_MmdcmTNrZY/edit)
+
+## Presentations
+
+- Kubecon EU 2020 ("Amsterdam" or wherever COVID dropped you, August)
+  - Multi-tenant clusters with hierarchical namespaces (@adrianludwin, [Aug 19](https://sched.co/Zeuh))
+  - Virtual Cluster - A Practical Kubernetes Hard Multi-tenancy Solution (@Fei-Guo, [Aug 19](https://sched.co/Zek6))
+- Kubecon NA 2019 (San Diego, November)
+  - [Intro to wg-multitenancy (@tashimi)](https://www.youtube.com/watch?v=589ORHspowE)
+  - [Deep dive (@srampal and @adrianludwin)](https://www.youtube.com/watch?v=PA101KUDusY)
+  - [Panel: the tenets of multitenancy (tashimi@, @tashimi, @rjbez17, @Fei-Guo, @adrianludwin)](https://www.youtube.com/watch?v=WN8mmHU2HOU)
+- Kubecon EU 2019 (Barcelona)
+  - [Kubernetes Multitenancy WG Deep Dive](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
 
 ## WG Architecture Summaries & Presentations
 
@@ -17,15 +34,14 @@ please at least join one of the following groups to access the docs:
 - [Kubernetes Multitenancy WG Deep Dive KubeCon EU 2019 (last updated 5/22/2019)](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
 - [K8s Multi-tenancy WG Plan (last updated 3/1/2019)](https://docs.google.com/presentation/d/1dsAsVm8kCA9Dx9_gMEYeJL7pduAbnfnxT9lhbyCvHDg/edit#slide=id.p19)
 
-## Draft feature proposals  
+## Draft feature proposals
 
-- [Tenant Concept in Kubernetes](https://drive.google.com/open?id=1ddx7UAEPKFPldBh_diksYO4WZXSHDUhm-e6hyNNGYVU)
-- [Kubernetes Tenant CRD](https://drive.google.com/open?id=1hpJX5O_siMmNGMvIHvz8Pm7XOjJLz5g57XWrgwWarFw)
-- [A Virtual Cluster Based Multi-tenancy Solution](https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
+- [Tenant Concept in Kubernetes (Apr 2019)](https://drive.google.com/open?id=1ddx7UAEPKFPldBh_diksYO4WZXSHDUhm-e6hyNNGYVU)
+- [Kubernetes Tenant CRD (Mar 2019)](https://drive.google.com/open?id=1hpJX5O_siMmNGMvIHvz8Pm7XOjJLz5g57XWrgwWarFw)
+- [A Virtual Cluster Based Multi-tenancy Solution (Apr 2019)](https://docs.google.com/document/d/1EELeVaduYZ65j4AXg9bp3Kyn38GKDU5fAJ5LFcxt2ZU)
 
-## References
+## Other references
 
-- [Kubernetes Multitenancy WG Deep Dive KubeCon EU 2019](https://drive.google.com/open?id=1tYIjKga6zveyd5LnavbqS5tsxUplnZpL)
 - [Kubernetes Tenant Controller](https://docs.google.com/document/d/1auNOT2Hpguaxcqg8dX6JLLw5-RYQ0Abp6_-OcUP4pbI)
 - [Kubernetes Multi-Tenancy Design Scratch Space](https://docs.google.com/document/d/1PjlsBmZw6Jb3XZeVyZ0781m6PV7-nSUvQrwObkvz7jg/edit)
 - [Multi-tenancy Models for Kubernetes](https://docs.google.com/document/d/15w1_fesSUZHv-vwjiYa9vN_uyc--PySRoLKTuDhimjc/edit)
@@ -39,8 +55,3 @@ please at least join one of the following groups to access the docs:
 - [KEP: Security Profile](https://github.com/kubernetes/community/pull/2052)
 - [Multi-Tenancy in Kubernetes: Best Practices Today, and Future Directions](https://youtu.be/xygE8DbwJ7c)
 - [A Kubernetes Operator for managing multi-tenant workloads](https://github.com/lessor/lessor)
-
-## Working Group Meeting Records
-
-- [YouTube Channel](https://www.youtube.com/playlist?list=PL69nYSiGNLP1tBA0W8zEe6UwPsabGQk-j&disable_polymer=true)
-- [Meeting Notes and Agenda](https://docs.google.com/document/d/1fj3yzmeU2eU8ZNBCUJG97dk_wC7228-e_MmdcmTNrZY/edit)
