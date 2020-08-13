@@ -410,7 +410,7 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 		if statuses[i].APIVersion != statuses[j].APIVersion {
 			return statuses[i].APIVersion < statuses[j].APIVersion
 		}
-		return statuses[i].Kind < statuses[i].Kind
+		return statuses[i].Kind < statuses[j].Kind
 	})
 
 	// Record the final list
