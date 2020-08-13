@@ -21,7 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	v1storage "k8s.io/api/storage/v1"
-	v1priorityclass "k8s.io/api/scheduling/v1"
+	v1scheduling "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -490,7 +490,7 @@ func (e vcEquality) CheckStorageClassEquality(pObj, vObj *v1storage.StorageClass
 	}
 }
 
-func (e vcEquality) CheckPriorityClassEquality(pObj, vObj *v1priorityclass.PriorityClass) *v1priorityclass.PriorityClass {
+func (e vcEquality) CheckPriorityClassEquality(pObj, vObj *v1scheduling.PriorityClass) *v1scheduling.PriorityClass {
 	pObjCopy := pObj.DeepCopy()
 	pObjCopy.ObjectMeta = vObj.ObjectMeta
 	// pObj.TypeMeta is empty

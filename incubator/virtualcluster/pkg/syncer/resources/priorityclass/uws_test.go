@@ -34,7 +34,7 @@ import (
 )
 
 func makePriorityClass(name, uid string, mFuncs ...func(*v1.PriorityClass)) *v1.PriorityClass {
-	sc := &v1.PriorityClass{
+	pc := &v1.PriorityClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PriorityClass",
 			APIVersion: "priority.k8s.io/v1",
@@ -50,12 +50,12 @@ func makePriorityClass(name, uid string, mFuncs ...func(*v1.PriorityClass)) *v1.
 	}
 
 	for _, f := range mFuncs {
-		f(sc)
+		f(pc)
 	}
-	return sc
+	return pc 
 }
 
-func TestUWPVCreation(t *testing.T) {
+func TestUWPCCreation(t *testing.T) {
 	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -79,21 +79,21 @@ func TestUWPVCreation(t *testing.T) {
 	}{
 		"pSC exists but vSC not found": {
 			ExistingObjectInSuper: []runtime.Object{
-				makePriorityClass("sc", "12345"),
+				makePriorityClass("pc", "12345"),
 			},
-			EnqueuedKey: defaultClusterKey + "/sc",
+			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedCreatedObject: []string{
-				"sc",
+				"pc",
 			},
 		},
 		"pSC exists, vSC exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				makePriorityClass("sc", "12345"),
+				makePriorityClass("pc", "12345"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("sc", "123456"),
+				makePriorityClass("pc", "123456"),
 			},
-			EnqueuedKey:         defaultClusterKey + "/sc",
+			EnqueuedKey:         defaultClusterKey + "/pc",
 			ExpectedNoOperation: true,
 		},
 	}
@@ -134,20 +134,20 @@ func TestUWPVCreation(t *testing.T) {
 					}
 					created := action.(core.CreateAction).GetObject().(*v1.PriorityClass)
 					if created.Name != expectedName {
-						t.Errorf("%s: Expected created vPV %s, got %s", k, expectedName, created.Name)
+						t.Errorf("%s: Expected created vPC %s, got %s", k, expectedName, created.Name)
 					}
 					matched = true
 					break
 				}
 				if !matched {
-					t.Errorf("%s: Expect updated pv %+v but not found", k, expectedName)
+					t.Errorf("%s: Expect updated pc %+v but not found", k, expectedName)
 				}
 			}
 		})
 	}
 }
 
-func TestUWPVUpdate(t *testing.T) {
+func TestUWPCUpdate(t *testing.T) {
 	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -171,18 +171,18 @@ func TestUWPVUpdate(t *testing.T) {
 	}{
 		"pSC exists, vSC exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
-				makePriorityClass("sc", "12345", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
 					class.Provisioner = "a"
 				}),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
 					class.Provisioner = "b"
 				}),
 			},
-			EnqueuedKey: defaultClusterKey + "/sc",
+			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedUpdatedObject: []runtime.Object{
-				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
 					class.Provisioner = "a"
 				}),
 			},
@@ -240,7 +240,7 @@ func TestUWPVUpdate(t *testing.T) {
 	}
 }
 
-func TestUWPVDeletion(t *testing.T) {
+func TestUWPCDeletion(t *testing.T) {
 	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -264,11 +264,11 @@ func TestUWPVDeletion(t *testing.T) {
 	}{
 		"pSC not found, vSC exists": {
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("sc", "12345"),
+				makePriorityClass("pc", "12345"),
 			},
-			EnqueuedKey: defaultClusterKey + "/sc",
+			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedDeletedObject: []string{
-				"sc",
+				"pc",
 			},
 		},
 	}
@@ -309,13 +309,13 @@ func TestUWPVDeletion(t *testing.T) {
 					}
 					deleted := action.(core.DeleteAction).GetName()
 					if deleted != expectedName {
-						t.Errorf("%s: Expected created vPV %s, got %s", k, expectedName, deleted)
+						t.Errorf("%s: Expected created vPC %s, got %s", k, expectedName, deleted)
 					}
 					matched = true
 					break
 				}
 				if !matched {
-					t.Errorf("%s: Expect updated pv %+v but not found", k, expectedName)
+					t.Errorf("%s: Expect updated pc %+v but not found", k, expectedName)
 				}
 			}
 		})

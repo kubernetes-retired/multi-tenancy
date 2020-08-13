@@ -28,7 +28,7 @@ import (
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	priorityclassv1 "k8s.io/api/scheduling/v1"
+	v1scheduling "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -217,7 +217,7 @@ func BuildVirtualStorageClass(cluster string, pStorageClass *storagev1.StorageCl
 	return vStorageClass
 }
 
-func BuildVirtualPriorityClass(cluster string, pPriorityClass *priorityclassv1.PriorityClass) *priorityclassv1.PriorityClass {
+func BuildVirtualPriorityClass(cluster string, pPriorityClass *v1scheduling.PriorityClass) *v1scheduling.PriorityClass {
 	vPriorityClass := pPriorityClass.DeepCopy()
 	ResetMetadata(vPriorityClass)
 	return vPriorityClass
