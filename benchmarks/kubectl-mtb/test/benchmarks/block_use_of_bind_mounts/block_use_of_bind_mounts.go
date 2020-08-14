@@ -6,17 +6,17 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{
 
-	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	PreRun: func(options types.RunOptions) error {
 
 		resource := utils.GroupResource{
 			APIGroup: "",
@@ -25,7 +25,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, "create")
+		access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
 		if err != nil {
 			return err
 		}
@@ -36,7 +36,7 @@ var b = &benchmark.Benchmark{
 		return nil
 	},
 
-	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	Run: func(options types.RunOptions) error {
 
 		// Host path
 		inlineVolumeSources := []*v1.VolumeSource{
@@ -47,7 +47,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		podSpec := &podutil.PodSpec{NS: tenantNamespace, InlineVolumeSources: inlineVolumeSources}
+		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, InlineVolumeSources: inlineVolumeSources}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			return err
@@ -55,7 +55,7 @@ var b = &benchmark.Benchmark{
 
 		// Try to create a pod as tenant-admin impersonation
 		pod := podSpec.MakeSecPod()
-		_, err = tclient.CoreV1().Pods(tenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod with host-path volume")
 		}
