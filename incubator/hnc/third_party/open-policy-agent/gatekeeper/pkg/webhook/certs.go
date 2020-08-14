@@ -231,19 +231,19 @@ func injectCertToWebhook(vwh *unstructured.Unstructured, certPem []byte) error {
 	return nil
 }
 
-func injectCertToConversionWebhook(crd *unstructured.Unstructured, certPem []byte) (notFound bool, err error) {
+func injectCertToConversionWebhook(crd *unstructured.Unstructured, certPem []byte) error {
 	_, found, err := unstructured.NestedMap(crd.Object, "spec", "conversion", "webhookClientConfig")
 	if err != nil {
-		return false, err
+		return err
 	}
 	if !found {
-		return true, errors.New("`webhookClientConfig` field not found in CustomResourceDefinition")
+		return errors.New("`webhookClientConfig` field not found in CustomResourceDefinition")
 	}
 	if err := unstructured.SetNestedField(crd.Object, base64.StdEncoding.EncodeToString(certPem), "spec", "conversion", "webhookClientConfig", "caBundle"); err != nil {
-		return false, err
+		return err
 	}
 
-	return false, nil
+	return nil
 }
 
 func (cr *CertRotator) writeSecret(cert, key []byte, caArtifacts *KeyPairArtifacts, secret *corev1.Secret) error {
@@ -540,47 +540,62 @@ func (r *ReconcileWH) Reconcile(request reconcile.Request) (reconcile.Result, er
 		return reconcile.Result{Requeue: true}, err
 	}
 
-	vwh := &unstructured.Unstructured{}
-	vwh.SetGroupVersionKind(vwhGVK)
-	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			// Object not found, return.  Created objects are automatically garbage collected.
-			// For additional cleanup logic use finalizers.
-			return reconcile.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{Requeue: true}, err
-	}
-
 	if secret.GetDeletionTimestamp().IsZero() {
 		artifacts, err := buildArtifactsFromSecret(secret)
 		if err != nil {
-			crLog.Error(err, "secret is not well-formed, cannot update ValidatingWebhookConfiguration")
+			crLog.Error(err, "secret is not well-formed, cannot update webhook configurations")
 			return reconcile.Result{}, nil
 		}
-		crLog.Info("ensuring CA cert on ValidatingWebhookConfiguration")
-		if err = injectCertToWebhook(vwh, artifacts.CertPEM); err != nil {
-			crLog.Error(err, "unable to inject cert to webhook")
-			return reconcile.Result{}, err
-		}
-		if err := r.client.Update(r.ctx, vwh); err != nil {
-			return reconcile.Result{Requeue: true}, err
-		}
+
+		// Ensure certs on validating webhooks.
+		errVWH := r.ensureVWHCerts(artifacts.CertPEM)
 
 		// Ensure certs on CRD conversion webhooks if there's any.
-		if result, err := r.ensureCRDConvWHCerts(artifacts.CertPEM); err != nil {
-			return result, err
+		errCWH := r.ensureCRDConvWHCerts(artifacts.CertPEM)
+
+		// Return errors if there's any when trying to inject certs to all webhooks.
+		if errVWH != nil {
+			return reconcile.Result{}, errVWH
+		}
+		if errCWH != nil {
+			return reconcile.Result{}, errCWH
 		}
 
-		if !r.wasCAInjected.Load() {
-			r.wasCAInjected.Store(true)
-		}
+		// Set CAInjected if the reconciler has not exited early.
+		r.wasCAInjected.Store(true)
 	}
 
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) (reconcile.Result, error) {
+func (r *ReconcileWH) ensureVWHCerts(certPem []byte) error {
+	vwh := &unstructured.Unstructured{}
+	vwh.SetGroupVersionKind(vwhGVK)
+	if err := r.client.Get(r.ctx, r.vwhKey, vwh); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			crLog.Info("VWK " + r.vwhKey.Name + " is not found. No action is needed.")
+			return nil
+		}
+		// Error reading the object - requeue the request.
+		return err
+	}
+
+	crLog.Info("ensuring CA cert on ValidatingWebhookConfiguration")
+	if err := injectCertToWebhook(vwh, certPem); err != nil {
+		crLog.Error(err, "unable to inject cert to webhook")
+		return err
+	}
+	if err := r.client.Update(r.ctx, vwh); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ensureCRDConvWHCerts returns an arbitrary error if multiple errors are
+// encountered, while all the errors are logged.
+func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) error {
+	var anyError error = nil
 	for _, crdName := range r.crdNames {
 		crd := &unstructured.Unstructured{}
 		crd.SetGroupVersionKind(crdGVK)
@@ -591,7 +606,9 @@ func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) (reconcile.Result, er
 				continue
 			}
 			// Error reading the object - requeue the request.
-			return reconcile.Result{Requeue: true}, err
+			crLog.Error(err, "unable to get CRD")
+			anyError = err
+			continue
 		}
 
 		if !crd.GetDeletionTimestamp().IsZero() {
@@ -600,21 +617,18 @@ func (r *ReconcileWH) ensureCRDConvWHCerts(certPem []byte) (reconcile.Result, er
 		}
 
 		crLog.Info("ensuring CA cert on CRD conversion webhook")
-		if notFound, err := injectCertToConversionWebhook(crd, certPem); err != nil {
+		if err := injectCertToConversionWebhook(crd, certPem); err != nil {
 			crLog.Error(err, "unable to inject cert to CRD conversion webhook")
-			if notFound {
-				// Don't retry if the conversion webhook fields are not there.
-				continue
-			}
-			return reconcile.Result{Requeue: true}, err
+			anyError = err
+			continue
 		}
 		if err := r.client.Update(r.ctx, crd); err != nil {
-			crLog.Info("unable to update cert on CRD " + crdName)
-			return reconcile.Result{Requeue: true}, err
+			crLog.Error(err, "unable to update cert on CRD "+crdName)
+			anyError = err
 		}
 	}
 
-	return reconcile.Result{}, nil
+	return anyError
 }
 
 // ensureCertsMounted ensure the cert files exist.

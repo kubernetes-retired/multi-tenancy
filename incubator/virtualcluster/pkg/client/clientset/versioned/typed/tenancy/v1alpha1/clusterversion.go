@@ -18,6 +18,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,7 +68,7 @@ func (c *clusterVersions) Get(name string, options v1.GetOptions) (result *v1alp
 		Resource("clusterversions").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -83,7 +84,7 @@ func (c *clusterVersions) List(opts v1.ListOptions) (result *v1alpha1.ClusterVer
 		Resource("clusterversions").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -99,7 +100,7 @@ func (c *clusterVersions) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("clusterversions").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(context.TODO())
 }
 
 // Create takes the representation of a clusterVersion and creates it.  Returns the server's representation of the clusterVersion, and an error, if there is any.
@@ -108,7 +109,7 @@ func (c *clusterVersions) Create(clusterVersion *v1alpha1.ClusterVersion) (resul
 	err = c.client.Post().
 		Resource("clusterversions").
 		Body(clusterVersion).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -120,7 +121,7 @@ func (c *clusterVersions) Update(clusterVersion *v1alpha1.ClusterVersion) (resul
 		Resource("clusterversions").
 		Name(clusterVersion.Name).
 		Body(clusterVersion).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -135,7 +136,7 @@ func (c *clusterVersions) UpdateStatus(clusterVersion *v1alpha1.ClusterVersion) 
 		Name(clusterVersion.Name).
 		SubResource("status").
 		Body(clusterVersion).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }
@@ -146,7 +147,7 @@ func (c *clusterVersions) Delete(name string, options *v1.DeleteOptions) error {
 		Resource("clusterversions").
 		Name(name).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -161,7 +162,7 @@ func (c *clusterVersions) DeleteCollection(options *v1.DeleteOptions, listOption
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Timeout(timeout).
 		Body(options).
-		Do().
+		Do(context.TODO()).
 		Error()
 }
 
@@ -173,7 +174,7 @@ func (c *clusterVersions) Patch(name string, pt types.PatchType, data []byte, su
 		SubResource(subresources...).
 		Name(name).
 		Body(data).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	return
 }

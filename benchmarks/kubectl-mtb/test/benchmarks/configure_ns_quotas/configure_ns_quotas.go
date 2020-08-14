@@ -5,15 +5,15 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{
-	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	PreRun: func(options types.RunOptions) error {
 
 		verbs := []string{"list", "get"}
 
@@ -25,7 +25,7 @@ var b = &benchmark.Benchmark{
 				},
 			}
 
-			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+			access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
 			if err != nil {
 				return err
 			}
@@ -36,14 +36,14 @@ var b = &benchmark.Benchmark{
 
 		return nil
 	},
-	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	Run: func(options types.RunOptions) error {
 
 		resourceNameList := [3]string{"cpu", "ephemeral-storage", "memory"}
-		tenantResourcequotas := utils.GetTenantResoureQuotas(tenantNamespace, tclient)
+		tenantResourcequotas := utils.GetTenantResoureQuotas(options.TenantNamespace, options.TClient)
 		expectedVal := strings.Join(tenantResourcequotas, " ")
 		for _, r := range resourceNameList {
 			if !strings.Contains(expectedVal, r) {
-				return fmt.Errorf("%s must be configured in tenant %s namespace resource quotas", r, tenantNamespace)
+				return fmt.Errorf("%s must be configured in tenant %s namespace resource quotas", r, options.TenantNamespace)
 			}
 		}
 

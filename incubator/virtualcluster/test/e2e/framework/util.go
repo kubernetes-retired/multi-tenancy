@@ -14,6 +14,7 @@ limitations under the License.
 package framework
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -111,7 +112,7 @@ func DumpEventsInNamespace(eventsLister EventsLister, namespace string) {
 // DumpAllNamespaceInfo dumps events, pods and nodes information in the given namespace.
 func DumpAllNamespaceInfo(c clientset.Interface, namespace string) {
 	DumpEventsInNamespace(func(opts metav1.ListOptions, ns string) (*v1.EventList, error) {
-		return c.CoreV1().Events(ns).List(opts)
+		return c.CoreV1().Events(ns).List(context.TODO(), opts)
 	}, namespace)
 
 	e2epod.DumpAllPodInfoForNamespace(c, namespace)
@@ -193,7 +194,7 @@ func findAvailableNamespaceName(baseName string, c clientset.Interface) (string,
 	var name string
 	err := wait.PollImmediate(Poll, 30*time.Second, func() (bool, error) {
 		name = fmt.Sprintf("%v-%v", baseName, RandomSuffix())
-		_, err := c.CoreV1().Namespaces().Get(name, metav1.GetOptions{})
+		_, err := c.CoreV1().Namespaces().Get(context.TODO(), name, metav1.GetOptions{})
 		if err == nil {
 			// Already taken
 			return false, nil
@@ -235,7 +236,7 @@ func CreateTestingNS(baseName string, c clientset.Interface, labels map[string]s
 	var got *v1.Namespace
 	if err := wait.PollImmediate(Poll, 30*time.Second, func() (bool, error) {
 		var err error
-		got, err = c.CoreV1().Namespaces().Create(namespaceObj)
+		got, err = c.CoreV1().Namespaces().Create(context.TODO(), namespaceObj, metav1.CreateOptions{})
 		if err != nil {
 			Logf("Unexpected error while creating namespace: %v", err)
 			return false, nil

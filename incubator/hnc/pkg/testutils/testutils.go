@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"errors"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,10 +18,54 @@ const eventuallyTimeout = 5
 
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
+func FieldShouldContain(resource, ns, nm, field, want string){
+	FieldShouldContainMultiple(resource, ns, nm, field, []string{want})
+}
+
+func FieldShouldContainMultiple(resource, ns, nm, field string, want []string){
+	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+}
+
+func FieldShouldContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+}
+
+func FieldShouldContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	if ns != "" {
+		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+	} else {
+		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+	}
+}
+
+func FieldShouldNotContain(resource, ns, nm, field, want string){
+	FieldShouldNotContainMultiple(resource, ns, nm, field, []string{want})
+}
+
+func FieldShouldNotContainMultiple(resource, ns, nm, field string, want []string){
+	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+}
+
+func FieldShouldNotContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+}
+
+func FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	if ns != "" {
+		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+	} else {
+		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+	}
+}
+
 func MustRun(cmdln ...string) {
+	MustRunWithTimeout(eventuallyTimeout, cmdln...)
+}
+
+func MustRunWithTimeout(timeout float64, cmdln ...string) {
 	Eventually(func() error {
 		return TryRun(cmdln...)
-	}, eventuallyTimeout).Should(BeNil())
+	}, timeout).Should(BeNil())
 }
 
 func MustNotRun(cmdln ...string) {
@@ -46,25 +91,48 @@ func RunShouldContain(substr string, seconds float64, cmdln ...string) {
 
 func RunShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
 	Eventually(func() error {
-		stdout, err := RunCommand(cmdln...)
+		missing, err := runShouldContainMultiple(substrs, cmdln...)
 		if err != nil {
 			return err
 		}
-
-		allContained := true
-		for _, substr := range substrs {
-			if strings.Contains(stdout, substr) == false {
-				allContained = false
-				break
-			}
+		if len(missing) > 0 {
+			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
 		}
-
-		if allContained == false {
-			return errors.New("Expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
-		}
-
 		return nil
 	}, seconds).Should(Succeed())
+}
+
+func RunErrorShouldContain(substr string, seconds float64, cmdln ...string) {
+	RunErrorShouldContainMultiple([]string{substr}, seconds, cmdln...)
+}
+
+func RunErrorShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
+	Eventually(func() error {
+		missing, err := runShouldContainMultiple(substrs, cmdln...)
+		if len(missing) > 0 {
+			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
+		}
+		if err == nil {
+			return errors.New("Expecting command to fail but get succeed.")
+		}
+		return nil
+	}, seconds).Should(Succeed())
+}
+
+func runShouldContainMultiple(substrs []string, cmdln ...string) ([]string, error) {
+		stdout, err := RunCommand(cmdln...)	
+		GinkgoT().Log("Output: ", stdout)
+		return missAny(substrs, stdout), err
+}
+
+func missAny(substrs []string, teststring string) []string {
+	var missing []string 
+	for _, substr := range substrs {
+		if strings.Contains(teststring, substr) == false {
+			missing = append(missing, substr)
+		}
+	}
+	return missing
 }
 
 func RunShouldNotContain(substr string, seconds float64, cmdln ...string) {
@@ -91,6 +159,12 @@ func RunShouldNotContainMultiple(substrs []string, seconds float64, cmdln ...str
 		}
 		return nil
 	}, seconds).Should(Succeed())
+}
+
+func MustApplyYAML(s string){
+	filename := WriteTempFile(s)
+	defer RemoveFile(filename)
+	MustRun("kubectl apply -f", filename)
 }
 
 // RunCommand passes all arguments to the OS to execute, and returns the combined stdout/stderr and
@@ -126,6 +200,25 @@ func CleanupNamespaces(nses ...string) {
 	}
 }
 
+// TearDownHNC removes CRDs first and then the entire manifest from the current
+// change. If a specific HNC version is provided, its manifest will also be
+// deleted. It will ensure HNC is cleared at the end.
+func TearDownHNC(hncVersion string) {
+	// Delete all CRDs first to ensure all finalizers are removed. Since we don't
+	// know the version of the current HNC in the cluster so we will try tearing
+	// it down twice with the specified version and what's in the HEAD.
+	TryRunQuietly("k delete crd subnamespaceanchors.hnc.x-k8s.io")
+	TryRunQuietly("k delete crd hierarchyconfigurations.hnc.x-k8s.io")
+	TryRunQuietly("k delete crd hncconfigurations.hnc.x-k8s.io")
+	TryRunQuietly("kubectl delete -f ../../manifests/hnc-manager.yaml")
+	if hncVersion != ""{
+		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-"+hncVersion+"/hnc-manager.yaml")
+	}
+	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
+	RunShouldNotContain("hnc-system", 10, "kubectl get ns")
+	RunShouldNotContain(".hnc.x-k8s.io", 10, "kubectl get crd")
+}
+
 func CheckHNCPath() {
 	// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
 	if hncRecoverPath == "" {
@@ -144,4 +237,16 @@ func RecoverHNC() {
 	}
 	// give HNC enough time to repair
 	time.Sleep(5 * time.Second)
+}
+
+func WriteTempFile(cxt string) string {
+	f, err := ioutil.TempFile(os.TempDir(), "e2e-test-*.yaml")
+	Expect(err).Should(BeNil())
+	defer f.Close()
+	f.WriteString(cxt)
+	return f.Name()
+}
+
+func RemoveFile(path string) {
+	Expect(os.Remove(path)).Should(BeNil())
 }

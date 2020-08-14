@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var (
@@ -30,6 +31,7 @@ var (
 	apiExtensions *apiextensionspkg.Clientset
 	g             *gomega.GomegaWithT
 	namespace     = "ns-" + string(uuid.NewUUID())[0:4]
+	options       types.RunOptions
 )
 
 type TestFunction func(t *testing.T) (bool, bool)
@@ -65,6 +67,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
+		options.KClient = k8sClient
 		rest := k8sClient.CoreV1().RESTClient()
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
 
@@ -73,6 +76,9 @@ func TestMain(m *testing.M) {
 		tenantConfig := testClient.Config
 		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + namespace + ":" + saName
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
+		options.TClient = tenantClient
+		options.Tenant = "system:serviceaccount:" + namespace + ":" + saName
+		options.TenantNamespace = namespace
 		return nil
 	}
 
@@ -181,7 +187,7 @@ func TestBenchmark(t *testing.T) {
 }
 
 func testPreRunWithoutRole(t *testing.T) (preRun bool, run bool) {
-	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
+	err := b.PreRun(options)
 	if err != nil {
 		return false, false
 	}
@@ -209,11 +215,11 @@ func testPreRunWithRole(t *testing.T) (preRun bool, run bool) {
 		g.Expect(err).NotTo(gomega.HaveOccurred())
 	}
 
-	err = b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
+	err = b.PreRun(options)
 	if err != nil {
 		return false, false
 	}
-	if err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient); err != nil {
+	if err = b.Run(options); err != nil {
 		return true, false
 	}
 	return true, true
@@ -231,13 +237,13 @@ func testRunWithPolicy(t *testing.T) (preRun bool, run bool) {
 		unittestutils.WaitForPolicy()
 	}
 
-	err := b.PreRun(testClient.Namespace, testClient.K8sClient, tenantClient)
+	err := b.PreRun(options)
 	if err != nil {
 		fmt.Println(err.Error())
 		return false, false
 	}
 
-	err = b.Run(testClient.Namespace, testClient.K8sClient, tenantClient)
+	err = b.Run(options)
 	if err != nil {
 		fmt.Println(err.Error())
 		return true, false

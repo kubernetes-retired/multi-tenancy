@@ -76,10 +76,12 @@ func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.VirtualCluster, a
 		}
 	}
 
-	config := &cert.Config{
-		CommonName: conversion.ToClusterKey(vc),
-		AltNames:   *altNames,
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName: conversion.ToClusterKey(vc),
+			AltNames:   *altNames,
+			Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		},
 	}
 
 	apiCert, apiKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
@@ -98,10 +100,12 @@ func NewAPIServerCrtAndKey(ca *CrtKeyPair, vc *tenancyv1alpha1.VirtualCluster, a
 // NewAPIServerKubeletClientCertAndKey creates certificate for the apiservers to connect to the
 // kubelets securely, signed by the ca.
 func NewAPIServerKubeletClientCertAndKey(ca *CrtKeyPair) (*x509.Certificate, *rsa.PrivateKey, error) {
-	config := &cert.Config{
-		CommonName:   "kube-apiserver-kubelet-client",
-		Organization: []string{"system:masters"},
-		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName:   "kube-apiserver-kubelet-client",
+			Organization: []string{"system:masters"},
+			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		},
 	}
 	apiClientCert, apiClientKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
 	if err != nil {
@@ -124,11 +128,13 @@ func NewEtcdServerCrtAndKey(ca *CrtKeyPair, etcdDomains []string) (*CrtKeyPair, 
 		IPs:      []net.IP{net.ParseIP("127.0.0.1")},
 	}
 
-	config := &cert.Config{
-		CommonName: "kube-etcd",
-		AltNames:   *altNames,
-		// all peers will use this crt-key pair as well
-		Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName: "kube-etcd",
+			AltNames:   *altNames,
+			// all peers will use this crt-key pair as well
+			Usages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		},
 	}
 	etcdServerCert, etcdServerKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
 	if err != nil {
@@ -147,10 +153,12 @@ func NewEtcdServerCrtAndKey(ca *CrtKeyPair, etcdDomains []string) (*CrtKeyPair, 
 // signed by the given ca.
 func NewEtcdHealthcheckClientCertAndKey(ca *CrtKeyPair) (*x509.Certificate, *rsa.PrivateKey, error) {
 
-	config := &cert.Config{
-		CommonName:   "kube-etcd-healthcheck-client",
-		Organization: []string{"system:masters"},
-		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName:   "kube-etcd-healthcheck-client",
+			Organization: []string{"system:masters"},
+			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		},
 	}
 	etcdHealcheckClientCert, etcdHealcheckClientKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
 	if err != nil {
@@ -180,9 +188,11 @@ func NewServiceAccountSigningKey() (*rsa.PrivateKey, error) {
 // NewFrontProxyClientCertAndKey creates crt-key pair for proxy client using ca.
 func NewFrontProxyClientCertAndKey(ca *CrtKeyPair) (*CrtKeyPair, error) {
 
-	config := &cert.Config{
-		CommonName: "front-proxy-client",
-		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName: "front-proxy-client",
+			Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		},
 	}
 	frontProxyClientCert, frontProxyClientKey, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)
 	if err != nil {
@@ -197,10 +207,12 @@ func NewFrontProxyClientCertAndKey(ca *CrtKeyPair) (*CrtKeyPair, error) {
 
 // NewClientCrtAndKey creates crt-key pair for client
 func NewClientCrtAndKey(user string, ca *CrtKeyPair, groups []string) (*CrtKeyPair, error) {
-	config := &cert.Config{
-		CommonName:   user,
-		Organization: groups,
-		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	config := &pkiutil.CertConfig{
+		Config: cert.Config{
+			CommonName:   user,
+			Organization: groups,
+			Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		},
 	}
 
 	crt, key, err := pkiutil.NewCertAndKey(ca.Crt, ca.Key, config)

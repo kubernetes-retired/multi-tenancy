@@ -17,6 +17,7 @@ limitations under the License.
 package storageclass
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -108,7 +109,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			opts := &metav1.DeleteOptions{
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 			}
-			if err := tenantClient.StorageV1().StorageClasses().Delete(vStorageClass.Name, opts); err != nil {
+			if err := tenantClient.StorageV1().StorageClasses().Delete(context.TODO(), vStorageClass.Name, *opts); err != nil {
 				klog.Errorf("error deleting storageclass %v in cluster %s: %v", vStorageClass.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantStorageClasses").Inc()

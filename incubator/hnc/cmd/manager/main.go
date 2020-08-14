@@ -174,7 +174,8 @@ func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
+	removeOldCRDVersion := true
+	if err := reconcilers.Create(mgr, f, maxReconciles, removeOldCRDVersion); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}

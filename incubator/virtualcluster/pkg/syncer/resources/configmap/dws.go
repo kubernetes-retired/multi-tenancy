@@ -17,6 +17,7 @@ limitations under the License.
 package configmap
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -95,7 +96,7 @@ func (c *controller) reconcileConfigMapCreate(clusterName, targetNamespace, requ
 		return err
 	}
 
-	pConfigMap, err := c.configMapClient.ConfigMaps(targetNamespace).Create(newObj.(*v1.ConfigMap))
+	pConfigMap, err := c.configMapClient.ConfigMaps(targetNamespace).Create(context.TODO(), newObj.(*v1.ConfigMap), metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pConfigMap.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("configmap %s/%s of cluster %s already exist in super master", targetNamespace, configMap.Name, clusterName)
@@ -117,7 +118,7 @@ func (c *controller) reconcileConfigMapUpdate(clusterName, targetNamespace, requ
 	}
 	updatedConfigMap := conversion.Equality(c.config, spec).CheckConfigMapEquality(pConfigMap, vConfigMap)
 	if updatedConfigMap != nil {
-		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(updatedConfigMap)
+		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(context.TODO(), updatedConfigMap, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -132,7 +133,7 @@ func (c *controller) reconcileConfigMapRemove(clusterName, targetNamespace, requ
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.configMapClient.ConfigMaps(targetNamespace).Delete(name, opts)
+	err := c.configMapClient.ConfigMaps(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("configmap %s/%s of cluster %s not found in super master", targetNamespace, name, clusterName)
 		return nil

@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -110,9 +111,9 @@ func (c *controller) deleteClusterVNode(cluster, nodeName string) {
 	opts := metav1.NewDeleteOptions(0)
 	opts.PropagationPolicy = &constants.DefaultDeletionPolicy
 
-	tenantClient.CoreV1().Nodes().Delete(nodeName, opts)
+	tenantClient.CoreV1().Nodes().Delete(context.TODO(), nodeName, *opts)
 	// We need to double check here.
-	if _, err := tenantClient.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{}); err != nil {
+	if _, err := tenantClient.CoreV1().Nodes().Get(context.TODO(), nodeName, metav1.GetOptions{}); err != nil {
 		if !errors.IsNotFound(err) {
 			// If we cannot get the state from tenant apiserver, retry
 			return
@@ -193,7 +194,7 @@ func (c *controller) PatrollerDo() {
 			}
 			deleteOptions := metav1.NewDeleteOptions(gracePeriod)
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pPod.UID))
-			if err = c.client.Pods(pPod.Namespace).Delete(pPod.Name, deleteOptions); err != nil {
+			if err = c.client.Pods(pPod.Namespace).Delete(context.TODO(), pPod.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pPod %v/%v in super master: %v", pPod.Namespace, pPod.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPods").Inc()
@@ -225,7 +226,7 @@ func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod, graceful 
 			deleteOptions = metav1.NewDeleteOptions(0)
 		}
 		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
-		if err = client.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
+		if err = client.CoreV1().Pods(vPod.Namespace).Delete(context.TODO(), vPod.Name, *deleteOptions); err != nil {
 			klog.Errorf("error deleting pod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		} else if vPod.Spec.NodeName != "" {
 			c.updateClusterVNodePodMap(clusterName, vPod.Spec.NodeName, string(vPod.UID), reconciler.DeleteEvent)

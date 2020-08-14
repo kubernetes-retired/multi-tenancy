@@ -31,6 +31,7 @@ const (
 	// experiments, tests are flaky when setting the statusUpdateTime to 3 seconds and tests can
 	// always pass when setting the time to 4 seconds. We may need to increase the time in future if
 	// the config reconciler takes longer to update the status.
+	// This issue is logged at https://github.com/kubernetes-sigs/multi-tenancy/issues/871
 	statusUpdateTime = 4 * time.Second
 
 	// rbacAV is a nice short form of the RBAC APIVersion
@@ -87,7 +88,7 @@ var _ = Describe("HNCConfiguration", func() {
 	It("should set the mode of Roles to `propagate` if the mode is not `propagate`", func() {
 		updateHNCConfigSpec(ctx, rbacAV, "Role", api.Ignore)
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role"), statusUpdateTime).Should(Equal(api.Propagate))
 	})
 
 	It("should propagate RoleBindings by default", func() {
@@ -108,7 +109,7 @@ var _ = Describe("HNCConfiguration", func() {
 	It("should set the mode of RoleBindings to `propagate` if the mode is not `propagate`", func() {
 		updateHNCConfigSpec(ctx, rbacAV, "RoleBinding", api.Ignore)
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
+		Eventually(typeSpecHasMode(ctx, rbacAV, "Role"), statusUpdateTime).Should(Equal(api.Propagate))
 	})
 
 	It("should unset ObjectReconcilerCreationFailed condition if a bad type spec is removed", func() {
@@ -129,7 +130,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// The second configuration should be ignored.
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeTrue())
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeTrue())
 	})
 
 	It("should unset MultipleConfigurationsForOneType if extra configurations are later removed", func() {
@@ -138,12 +139,12 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
 
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeTrue())
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeTrue())
 
 		removeHNCConfigTypeWithMode(ctx, "v1", "Secret", api.Remove)
 
 		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))).Should(BeFalse())
+			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeFalse())
 	})
 
 	It("should not propagate objects if the type is not in HNCConfiguration", func() {
@@ -184,7 +185,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// Change to ignore and wait for reconciler
 		updateHNCConfigSpec(ctx, "v1", "Secret", api.Ignore)
-		Eventually(typeStatusHasMode(ctx, "v1", "Secret")).Should(Equal(api.Ignore))
+		Eventually(typeStatusHasMode(ctx, "v1", "Secret"), statusUpdateTime).Should(Equal(api.Ignore))
 
 		bazName := createNS(ctx, "baz")
 		setParent(ctx, bazName, fooName)
@@ -207,7 +208,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
 		// "foo-resource-quota" should now be propagated from foo to bar because the mode of ResourceQuota is set to "propagate".
-		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), statusUpdateTime).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 
@@ -225,9 +226,9 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// Foo should still have "foo-sec" because it is a source object, not propagated one.
 		// Therefore, we do not remove it.
-		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec"), statusUpdateTime).Should(BeTrue())
 		// "foo-sec" should be removed from bar.
-		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec"), statusUpdateTime).Should(BeFalse())
 	})
 
 	It("should propagate objects if the mode of a type is changed from remove to propagate", func() {
@@ -245,7 +246,7 @@ var _ = Describe("HNCConfiguration", func() {
 		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
 
 		// "foo-resource-quota" should be propagated from foo to bar.
-		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), statusUpdateTime).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 
@@ -260,7 +261,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// Remove from spec and wait for the reconciler to pick it up
 		removeHNCConfigType(ctx, "v1", "Secret")
-		Eventually(typeStatusHasMode(ctx, "v1", "Secret")).Should(Equal(testModeMisssing))
+		Eventually(typeStatusHasMode(ctx, "v1", "Secret"), statusUpdateTime).Should(Equal(testModeMisssing))
 
 		// Give foo another secret.
 		makeObject(ctx, "Secret", fooName, "foo-sec-2")
@@ -278,7 +279,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "stable.example.com/v1", "CronTab", api.Propagate)
 
 		// The corresponding object reconciler should not be created because the type does not exist.
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab")).Should(BeTrue())
+		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab"), statusUpdateTime).Should(BeTrue())
 
 		// Add the CRD for CronTab to the apiserver.
 		createCronTabCRD(ctx)

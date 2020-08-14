@@ -4,20 +4,20 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{
 
-	PreRun: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	PreRun: func(options types.RunOptions) error {
 
 		return nil
 	},
-	Run: func(tenantNamespace string, kclient, tclient *kubernetes.Clientset) error {
+	Run: func(options types.RunOptions) error {
 		verbs := []string{"get", "create", "update", "patch", "delete", "deletecollection"}
 
 		resource := utils.GroupResource{
@@ -28,7 +28,7 @@ var b = &benchmark.Benchmark{
 		}
 
 		for _, verb := range verbs {
-			access, msg, err := utils.RunAccessCheck(tclient, tenantNamespace, resource, verb)
+			access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
 			if err != nil {
 				return err
 			}
@@ -47,6 +47,5 @@ func init() {
 		fmt.Println(err)
 	}
 
-	test.BenchmarkSuite.Add(b);
+	test.BenchmarkSuite.Add(b)
 }
-	

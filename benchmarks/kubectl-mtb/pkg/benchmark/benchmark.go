@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"gopkg.in/yaml.v2"
-	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 // Benchmark consists the benchmark information like benchmark id, name, remediation etc.
@@ -19,6 +19,7 @@ type Benchmark struct {
 	Status        string `yaml:"status"`
 	PreRun        func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
 	Run           func(string, *kubernetes.Clientset, *kubernetes.Clientset) error
+	PostRun       func(types.RunOptions) error
 }
 
 // ReadConfig reads the yaml representation of struct from []file

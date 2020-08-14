@@ -17,6 +17,7 @@ limitations under the License.
 package secret
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -105,7 +106,7 @@ func (c *controller) PatrollerDo() {
 
 		if shouldDelete {
 			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pSecret.UID))
-			if err := c.secretClient.Secrets(pSecret.Namespace).Delete(pSecret.Name, deleteOptions); err != nil {
+			if err := c.secretClient.Secrets(pSecret.Namespace).Delete(context.TODO(), pSecret.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pSecret %s/%s in super master: %v", pSecret.Namespace, pSecret.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterSecrets").Inc()

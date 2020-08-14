@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextension "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -15,10 +16,16 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
 
+var crds = map[string]bool{
+	"hncconfigurations.hnc.x-k8s.io":       true,
+	"subnamespaceanchors.hnc.x-k8s.io":     true,
+	"hierarchyconfigurations.hnc.x-k8s.io": true,
+}
+
 // Create creates all reconcilers.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
+func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, removeOldCRDVersion bool) error {
 	hcChan := make(chan event.GenericEvent)
 	anchorChan := make(chan event.GenericEvent)
 
@@ -58,6 +65,33 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
 		return fmt.Errorf("cannot create Config reconciler: %s", err.Error())
 	}
 
+	if removeOldCRDVersion {
+		if err := createRemoveCRDVersionReconciler(mgr, "v1alpha1"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createRemoveCRDVersionReconciler(mgr ctrl.Manager, v string) error {
+	// Create a client to update CRD status sub-resource to remove a version from
+	// CRD status.storedVersions. Simply updating the CRD won't work. See examples
+	// and discussions at https://github.com/elastic/cloud-on-k8s/issues/2196.
+	client, err := apiextension.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("cannot create the client for CRDStoredVersions reconcile: %s", err.Error())
+	}
+	// Create the reconciler.
+	crdStoredVersions := &RemoveObsoleteCRDVersionReconciler{
+		Client:          client,
+		Log:             ctrl.Log.WithName("reconcilers").WithName("CRDStoredVersions"),
+		ObsoleteVersion: v,
+		CRDNames:        crds,
+	}
+	if err := crdStoredVersions.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("cannot create CRDStoredVersions reconciler: %s", err.Error())
+	}
 	return nil
 }
 

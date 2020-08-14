@@ -17,6 +17,7 @@ limitations under the License.
 package storageclass
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/storage/v1"
@@ -62,7 +63,7 @@ func (c *controller) BackPopulate(key string) error {
 			if op == reconciler.AddEvent {
 				// Available in super, hence create a new in tenant master
 				vStorageClass := conversion.BuildVirtualStorageClass(clusterName, pStorageClass)
-				_, err := tenantClient.StorageV1().StorageClasses().Create(vStorageClass)
+				_, err := tenantClient.StorageV1().StorageClasses().Create(context.TODO(), vStorageClass, metav1.CreateOptions{})
 				if err != nil {
 					return err
 				}
@@ -76,14 +77,14 @@ func (c *controller) BackPopulate(key string) error {
 		opts := &metav1.DeleteOptions{
 			PropagationPolicy: &constants.DefaultDeletionPolicy,
 		}
-		err := tenantClient.StorageV1().StorageClasses().Delete(scName, opts)
+		err := tenantClient.StorageV1().StorageClasses().Delete(context.TODO(), scName, *opts)
 		if err != nil {
 			return err
 		}
 	} else {
 		updatedStorageClass := conversion.Equality(c.config, nil).CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
 		if updatedStorageClass != nil {
-			_, err := tenantClient.StorageV1().StorageClasses().Update(updatedStorageClass)
+			_, err := tenantClient.StorageV1().StorageClasses().Update(context.TODO(), updatedStorageClass, metav1.UpdateOptions{})
 			if err != nil {
 				return err
 			}

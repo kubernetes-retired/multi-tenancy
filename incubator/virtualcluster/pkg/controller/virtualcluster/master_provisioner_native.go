@@ -259,9 +259,11 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster
 	caGroup := &vcpki.ClusterCAGroup{}
 	// create root ca, all components will share a single root ca
 	rootCACrt, rootKey, rootCAErr := pkiutil.NewCertificateAuthority(
-		&cert.Config{
-			CommonName:   "kubernetes",
-			Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
+		&pkiutil.CertConfig{
+			Config: cert.Config{
+				CommonName:   "kubernetes",
+				Organization: []string{"kubernetes-sig.kubernetes-sigs/multi-tenancy.virtualcluster"},
+			},
 		})
 	if rootCAErr != nil {
 		return rootCAErr

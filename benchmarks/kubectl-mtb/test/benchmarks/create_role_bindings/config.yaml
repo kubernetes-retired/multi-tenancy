@@ -1,0 +1,7 @@
+id: MTB-PL2-BC-OPS-3
+title: Create Role Bindings
+benchmarkType: Behavioral
+category:  Self-Service Operations
+description: Tenants should be able to create roles and role-bindings in their namespaces.
+remediation: 
+profileLevel: 2
