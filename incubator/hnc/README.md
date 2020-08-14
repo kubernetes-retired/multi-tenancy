@@ -1,32 +1,20 @@
 # The Hierarchical Namespace Controller (HNC)
 
 ```bash
-$ kubectl hns create child -n parent
-$ kubectl hns tree parent
-parent
-└── child
+$ kubectl hns create my-service -n my-team
+$ kubectl hns tree my-team
+my-team
+└── my-service
 ```
 
-Hierarchical namespaces make it easier for you to create and manage namespaces
-in your cluster. For example, you can create a hierarchical namespace under your
-team's namespace, even if you don't have cluster-level permission to create
-namespaces, and easily apply policies like RBAC and Network Policies across all
-namespaces in your team (e.g. a set of related microservices).
+Hierarchical namespaces make it easier to share your cluster by making
+namespaces more powerful. For example, you can create additional namespaces
+under your team's namespace, even if you don't have cluster-level permission to
+create namespaces, and easily apply policies like RBAC and Network Policies
+across all namespaces in your team (e.g. a set of related microservices).
 
-You can read more about hierarchical namespaces in the [HNC User
-Guide](docs/user-guide).
-
-The best way you can help contribute to bringing hierarchical namespaces to the
-Kubernetes ecosystem is to try out HNC and report the problems you have with
-either HNC itself or its documentation (see below). Or, if it's working well for
-you, let us know on the \#wg-multitenancy channel on Slack, or join a
-wg-multitenancy meeting. We'd love to hear from you!
-
-With that said, please be cautious - HNC is alpha software. While we will not
-break any _existing_ API without incrementing the API version, there may be bugs
-or missing features. HNC also requires very high privileges on your cluster and
-you should be cautious about installing it on clusters with configurations that
-you cannot afford to lose (e.g. that are not stored in a Git repository).
+Learn more in the [HNC User Guide](docs/user-guide) or get started with the
+instructions below!
 
 Lead developer: @adrianludwin (aludwin@google.com).
 
@@ -41,36 +29,57 @@ v0.5.1](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.1
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
 workstation, follow the instructions on that page.
 
+HNC is also supported by the following vendors:
+
+* GKE: [install via Config Sync](https://cloud.google.com/kubernetes-engine/docs/add-on/config-sync/how-to/installing-hierarchy-controller)
+* Anthos: [install via ACM](https://cloud.google.com/anthos-config-management/docs/how-to/installing-hierarchy-controller)
+
 Once HNC is installed, you can try out the [HNC
 demos](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
-to get an idea of what HNC can do. Or, feel free to dive right inot the [user
+to get an idea of what HNC can do. Or, feel free to dive right into the [user
 guide](docs/user-guide) instead.
 
-## Issues and project management
+### Roadmap and issues
+
+Please file issues - the more the merrier! Bugs will be investigated ASAP, while
+feature requests will be prioritized and assigned to a milestone or backlog.
+
+HNC is not yet GA, so please be cautious about using it on clusters with config
+objects you can't afford to lose (e.g. that aren't stored in a Git repository).
 
 All HNC issues are assigned to an HNC milestone. So far, the following
-milestones are defined:
+milestones are defined or planned:
 
+* v1.0 - likely late Q1 or early Q2 2021: HNC recommended for production use
+* v0.8 - likely early 2021, may introduce new critical features
+* v0.7 - likely late 2020, will likely introduce the v1beta1 API
+* [v0.6 - TARGET OCT 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/14):
+  introduce the v1alpha2 API and fully automated end-to-end testing.
+* [v0.5 - COMPLETE JUL 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/13):
+  feature simplification and improved testing and stability.
+* [v0.4 - COMPLETE JUN 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
+  stabilize the API and add productionization features.
+* [v0.3 - COMPLETE APR 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
+  type configuration and better self-service namespace UX.
+* [v0.2 - COMPLETE DEC 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
+  contains enough functionality to be suitable for non-production workloads.
 * [v0.1 - COMPLETE NOV 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
   an initial release with all basic functionality so you can play with it, but
   not suitable for any real workloads.
-* [v0.2 - COMPLETE DEC 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/8):
-  contains enough functionality to be suitable for non-production workloads.
-* [v0.3 - COMPLETE APR 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/10):
-  type configuration and better self-service namespace UX.
-* [v0.4 - COMPLETE JUN 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/11):
-  stabilize the API and add productionization features.
-* [v0.5 - COMPLETE JUL 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/13):
-  feature simplification and improved testing and stability.
-* [v0.6 - TARGET SEP 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/14):
-  introduce the v1alpha2 API and fully automated end-to-end testing.
 * [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
   all unscheduled work.
 
-Non-coding tasks are also tracked in the [HNC
-project](https://github.com/kubernetes-sigs/multi-tenancy/projects/4).
+## Contributing to HNC
 
-## Developing HNC
+The best way you can help contribute to bringing hierarchical namespaces to the
+Kubernetes ecosystem is to try out HNC and report the problems you have with
+either HNC itself or its documentation. Or, if it's working well for you, let us
+know on the \#wg-multitenancy channel on Slack, or join a wg-multitenancy
+meeting. We'd love to hear from you!
+
+But if you're looking for a deeper level of involvement, read on...
+
+### Developing HNC
 
 HNC is a small project, and we have limited abilities to help onboard
 developers. If you'd like to contribute to the core of HNC, it would be helpful
