@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 // HasLocalCritCondition returns if the namespace itself has any local critical conditions, ignoring

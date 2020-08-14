@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"fmt"
 
 	pkgerr "github.com/pkg/errors"
@@ -83,7 +84,7 @@ func (c *controller) BackPopulate(key string) error {
 
 	// If tenant Pod has not been assigned, bind to virtual Node.
 	if vPod.Spec.NodeName == "" {
-		n, err := c.client.Nodes().Get(pPod.Spec.NodeName, metav1.GetOptions{})
+		n, err := c.client.Nodes().Get(context.TODO(), pPod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get node %s from super master: %v", pPod.Spec.NodeName, err)
 		}
@@ -105,13 +106,13 @@ func (c *controller) BackPopulate(key string) error {
 			if !errors.IsNotFound(err) {
 				return err
 			}
-			_, err = tenantClient.CoreV1().Nodes().Create(node.NewVirtualNode(n))
+			_, err = tenantClient.CoreV1().Nodes().Create(context.TODO(), node.NewVirtualNode(n), metav1.CreateOptions{})
 			if err != nil && !errors.IsAlreadyExists(err) {
 				return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
 			}
 		}
 
-		err = tenantClient.CoreV1().Pods(vPod.Namespace).Bind(&v1.Binding{
+		err = tenantClient.CoreV1().Pods(vPod.Namespace).Bind(context.TODO(), &v1.Binding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      vPod.Name,
 				Namespace: vPod.Namespace,
@@ -121,12 +122,12 @@ func (c *controller) BackPopulate(key string) error {
 				Name:       pPod.Spec.NodeName,
 				APIVersion: "v1",
 			},
-		})
+		}, metav1.CreateOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to bind vPod %s/%s to node %s %v", vPod.Namespace, vPod.Name, pPod.Spec.NodeName, err)
 		}
 		// virtual pod has been updated, refetch the latest version
-		if vPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
+		if vPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(context.TODO(), vPod.Name, metav1.GetOptions{}); err != nil {
 			return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vNamespace, pName, clusterName, err)
 		}
 	} else {
@@ -149,7 +150,7 @@ func (c *controller) BackPopulate(key string) error {
 	if updatedMeta != nil {
 		newPod = vPod.DeepCopy()
 		newPod.ObjectMeta = *updatedMeta
-		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).Update(newPod); err != nil {
+		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).Update(context.TODO(), newPod, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s meta update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
 	}
@@ -159,12 +160,12 @@ func (c *controller) BackPopulate(key string) error {
 			newPod = vPod.DeepCopy()
 		} else {
 			// Pod has been updated, let us fetch the latest version.
-			if newPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(vPod.Name, metav1.GetOptions{}); err != nil {
+			if newPod, err = tenantClient.CoreV1().Pods(vPod.Namespace).Get(context.TODO(), vPod.Name, metav1.GetOptions{}); err != nil {
 				return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			}
 		}
 		newPod.Status = pPod.Status
-		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(newPod); err != nil {
+		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(context.TODO(), newPod, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}
 	}
@@ -178,14 +179,14 @@ func (c *controller) BackPopulate(key string) error {
 				gracePeriod = *vPod.Spec.TerminationGracePeriodSeconds
 			}
 			deleteOptions := metav1.NewDeleteOptions(gracePeriod)
-			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
+			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(context.TODO(), vPod.Name, *deleteOptions); err != nil {
 				return err
 			}
 		} else if *vPod.DeletionGracePeriodSeconds != *pPod.DeletionGracePeriodSeconds {
 			klog.V(4).Infof("delete virtual pPod %s/%s with grace period seconds %v", vPod.Namespace, vPod.Name, *pPod.DeletionGracePeriodSeconds)
 			deleteOptions := metav1.NewDeleteOptions(*pPod.DeletionGracePeriodSeconds)
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(vPod.UID))
-			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(vPod.Name, deleteOptions); err != nil {
+			if err = tenantClient.CoreV1().Pods(vPod.Namespace).Delete(context.TODO(), vPod.Name, *deleteOptions); err != nil {
 				return err
 			}
 			if vPod.Spec.NodeName != "" {

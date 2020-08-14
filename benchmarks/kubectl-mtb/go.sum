@@ -1490,6 +1490,7 @@ sigs.k8s.io/multi-tenancy v0.0.0-20200714035720-9254d886f1e8 h1:2jvDW9Ut25bjFIsV
 sigs.k8s.io/multi-tenancy v0.0.0-20200724204617-6364dbba69da h1:HOR9N89EJFKSyQmD3/x36+FxkYIGMEg/8a4N+IiCUG8=
 sigs.k8s.io/multi-tenancy v0.0.0-20200726013016-97a38fedf0b1 h1:y8ONNC+S0jkxria4hGCq+HXVxbSXK72kKkyR4WK2vfw=
 sigs.k8s.io/multi-tenancy v0.0.0-20200731200539-a59bb770c223 h1:3LVSAKupidlml1n/MbHPbJr5m48kpsOKFVAcsOhXgN0=
+sigs.k8s.io/multi-tenancy v0.0.0-20200801023540-26dab8a69fdf h1:dDCjPiT9NuwVCDq2vrolp4NuMXxxmHnTIL33gS+LgzQ=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200707060558-ea14282f3be6 h1:V4K5fPHAgNnYTFmhKlU4cp03o7/nuZbbVqFnEHvcyHk=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200710152148-20515322b4e5 h1:h21E7xB6JQ19Hy5ypObM90L4xScjwiNQxrOACXJ409w=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200713220920-829ca66edf83 h1:nmcpLotBZVRnlvDDd3q9b2J9VuW2rfkCRBl+1x/0rfk=
@@ -1497,6 +1498,7 @@ sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200714035720-9254d886f1e8 h1:tLrFy
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200724204617-6364dbba69da h1:sZgkCMXKgOF4Diom1+CeyUNmrtu+9BPV+CV3nMzAfJM=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200726013016-97a38fedf0b1 h1:6shszoTBt41BnJeg6gGyF5phNzfX0CMKJy/Mn71Oz/M=
 sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200731200539-a59bb770c223 h1:fVp4SgTf3sYqwf85QT5CFDblbEqmDgF0pJhHyFRjkCU=
+sigs.k8s.io/multi-tenancy/benchmarks v0.0.0-20200801023540-26dab8a69fdf h1:vcFCmxTMwNH1679Jpdb7Wir0mcMJKyzdaDr0q68nhR0=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0-20200116222232-67a7b8c61874/go.mod h1:PlARxl6Hbt/+BC80dRLi1qAmnMqwqDg62YvvVkZjemw=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0 h1:dOmIZBMfhcHS09XZkMyUgkq5trg3/jRyJYFZUiaOp8E=
 sigs.k8s.io/structured-merge-diff/v3 v3.0.0/go.mod h1:PlARxl6Hbt/+BC80dRLi1qAmnMqwqDg62YvvVkZjemw=

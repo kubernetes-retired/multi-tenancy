@@ -1,7 +1,7 @@
 package config
 
 import (
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 // The EX map is used by reconcilers and validators to exclude

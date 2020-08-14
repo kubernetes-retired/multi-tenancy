@@ -20,7 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 var configDeleteCmd = &cobra.Command{

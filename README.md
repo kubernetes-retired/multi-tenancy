@@ -1,36 +1,47 @@
-# Multi-tenancy
+# Kubernetes Working Group for Multi-Tenancy
 
-A working place for multi-tenancy related proposals and prototypes.
+This is a working place for multi-tenancy related proposals and prototypes. To
+join our biweekly meetings, Slack, mailing list, [please visit our community
+page](https://github.com/kubernetes/community/blob/master/wg-multitenancy/README.md).
 
-## Community, discussion, contribution, and support
+## Projects
 
-Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
+This repo contains the following projects:
 
-You can reach the maintainers of this project at:
+* **[Benchmarks](benchmarks/):** a set of benchmarks (i.e., compliance
+  tests) to determine if your clusters are well-configured for multitenancy.
+* **[Hierararchical namespaces (aka HNC)](incubator/hnc/):** allows
+  namespaces to own each other, policy propagation between related namespaces,
+  and delegated namespace creation.
+* **[Tenant Operator](tenant/):** an opinionated solution to manage tenants
+  within a cluster.
+* **[Virtual clusters](incubator/virtualcluster):** run multiple virtualized
+  cluster on a single underlying cluster, allowing for hard(er) multitenancy.
 
-- [Slack channel](https://kubernetes.slack.com/messages/wg-multitenancy)
-- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+As these projects mature, they may be adopted by a SIG and moved to their own
+repos.
 
-## Join this repo 
+## Resources
 
-File a request at https://github.com/kubernetes/org to be added to @kubernetes-sigs, using the [Template](https://github.com/kubernetes/org/issues/new?template=membership.md&title=REQUEST%3A%20New%20membership%20for%20%3Cyour-GH-handle%3E).
+The [docs](docs/)  directory contains any documents written in markdown. Some
+draft docs which need collaboration are Google docs for better collaboration
+experience. The [links](docs/links.md) file contains links to all presentations,
+wg-multitenancy minutes, and other docs not directly related to the projects
+above.
 
-Once you've been a member, when you are ready to become a reviewer of other people's code, file a PR on our [OWNERS file](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/OWNERS) and an approver will need to approve you.
+## Join this repo
 
-Once you've been a reviewer, you can request to become an approver by filling a PR on our OWNERS file and another approver will need to approve you.
+File a request at https://github.com/kubernetes/org to be added to
+@kubernetes-sigs, using the
+[Template](https://github.com/kubernetes/org/issues/new?template=membership.md&title=REQUEST%3A%20New%20membership%20for%20%3Cyour-GH-handle%3E).
 
-### Docs directory
+Once you've been a member, when you are ready to become a reviewer of other
+people's code, file a PR on our [OWNERS
+file](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/OWNERS) and
+an approver will need to approve you.
 
-The `docs` directory contains any documents written in markdown.
-Some draft docs which need collaboration are Google docs for better collaboration experience.
-The [Links](docs/links.md) file contains links to all relevant draft Google docs.
-
-### Incubator directory 
-
-The `incubator` directory includes several projects that are actively being incubated within the multi-tenancy working group. This includes the "Hierarchical Namespace" project and the "Virtual Cluster" Project. Additional projects may be added.
-
-- ["Hierarchical Namespace" project design doc](https://docs.google.com/document/d/10MZfFfbQMm33CBboMq2bfrEtXkJQQT4-UH4DDXZRrKY/edit)
-- ["Virtual Cluster" project design doc](https://docs.google.com/document/d/1QAWtYdRZGseSar_KgyfiIisL7JTGMHCfqB_Legfa39w/edit#)
+Once you've been a reviewer, you can request to become an approver by filling a
+PR on our OWNERS file and another approver will need to approve you.
 
 ### [Deprecated] PoC directory
 

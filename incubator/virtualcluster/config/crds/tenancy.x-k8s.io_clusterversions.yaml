@@ -66,6 +66,8 @@ spec:
                         ports:
                           items:
                             properties:
+                              appProtocol:
+                                type: string
                               name:
                                 type: string
                               nodePort:
@@ -106,6 +108,10 @@ spec:
                                   type: integer
                               type: object
                           type: object
+                        topologyKeys:
+                          items:
+                            type: string
+                          type: array
                         type:
                           type: string
                       type: object
@@ -2139,6 +2145,8 @@ spec:
                                     fsGroup:
                                       format: int64
                                       type: integer
+                                    fsGroupChangePolicy:
+                                      type: string
                                     runAsGroup:
                                       format: int64
                                       type: integer
@@ -3072,6 +3080,8 @@ spec:
                         ports:
                           items:
                             properties:
+                              appProtocol:
+                                type: string
                               name:
                                 type: string
                               nodePort:
@@ -3112,6 +3122,10 @@ spec:
                                   type: integer
                               type: object
                           type: object
+                        topologyKeys:
+                          items:
+                            type: string
+                          type: array
                         type:
                           type: string
                       type: object
@@ -5145,6 +5159,8 @@ spec:
                                     fsGroup:
                                       format: int64
                                       type: integer
+                                    fsGroupChangePolicy:
+                                      type: string
                                     runAsGroup:
                                       format: int64
                                       type: integer
@@ -6078,6 +6094,8 @@ spec:
                         ports:
                           items:
                             properties:
+                              appProtocol:
+                                type: string
                               name:
                                 type: string
                               nodePort:
@@ -6118,6 +6136,10 @@ spec:
                                   type: integer
                               type: object
                           type: object
+                        topologyKeys:
+                          items:
+                            type: string
+                          type: array
                         type:
                           type: string
                       type: object
@@ -8151,6 +8173,8 @@ spec:
                                     fsGroup:
                                       format: int64
                                       type: integer
+                                    fsGroupChangePolicy:
+                                      type: string
                                     runAsGroup:
                                       format: int64
                                       type: integer

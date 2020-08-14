@@ -57,8 +57,9 @@ type TypeSynchronizationSpec struct {
 	// Kind to be configured.
 	Kind string `json:"kind"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
-	// as "propagate". An unsupported mode will be treated as "ignore".
+	// as "propagate".
 	// +optional
+	// +kubebuilder:validation:Enum=propagate;ignore;remove
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }
 
@@ -95,7 +96,7 @@ type CodeAndAffectedNamespaces struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hncconfigurations,scope=Cluster
-// +kubebuilder:skipversion
+// +kubebuilder:storageversion
 
 // HNCConfiguration is a cluster-wide configuration for HNC as a whole. See details in http://bit.ly/hnc-type-configuration
 type HNCConfiguration struct {

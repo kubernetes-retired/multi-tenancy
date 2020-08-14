@@ -10,9 +10,9 @@ import (
 
 var _ = Describe("Subnamespaces", func() {
 	const (
-		prefix = namspacePrefix+"subnamespace-"
-		nsA = prefix+"a"
-		nsB = prefix+"b"
+		prefix = namspacePrefix + "subnamespace-"
+		nsA    = prefix + "a"
+		nsB    = prefix + "b"
 	)
 
 	BeforeEach(func() {
@@ -36,7 +36,7 @@ var _ = Describe("Subnamespaces", func() {
 		// kubectl get ns b -o jsonpath='{.metadata.annotations.hnc\.x-k8s\.io/subnamespaceOf}'
 		out, err := exec.Command("kubectl", "get", "ns", nsB, "-o", "jsonpath='{.metadata.annotations.hnc\\.x-k8s\\.io/subnamespaceOf}'").Output()
 		// Convert []byte to string and remove the quotes to get the "subnamesapceOf" annotation value.
-		pnm := string(out)[1:len(out)-1]
+		pnm := string(out)[1 : len(out)-1]
 		Expect(err).Should(BeNil())
 		Expect(pnm).Should(Equal(nsA))
 	})

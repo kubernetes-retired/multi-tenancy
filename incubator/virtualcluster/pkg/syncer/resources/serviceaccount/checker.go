@@ -16,6 +16,7 @@ limitations under the License.
 package serviceaccount
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -89,7 +90,7 @@ func (c *controller) PatrollerDo() {
 			// vSa not found and pSa still exist, we need to delete pSa manually
 			deleteOptions := &metav1.DeleteOptions{}
 			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pSa.UID))
-			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(pSa.Name, deleteOptions); err != nil {
+			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(context.TODO(), pSa.Name, *deleteOptions); err != nil {
 				klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServiceAccounts").Inc()

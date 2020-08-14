@@ -17,6 +17,7 @@ limitations under the License.
 package persistentvolumeclaim
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -97,7 +98,7 @@ func (c *controller) reconcilePVCCreate(clusterName, targetNamespace, requestUID
 
 	pPVC := newObj.(*v1.PersistentVolumeClaim)
 
-	pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Create(pPVC)
+	pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Create(context.TODO(), pPVC, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pPVC.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("pvc %s/%s of cluster %s already exist in super master", targetNamespace, pPVC.Name, clusterName)
@@ -119,7 +120,7 @@ func (c *controller) reconcilePVCUpdate(clusterName, targetNamespace, requestUID
 	}
 	updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, vPVC)
 	if updatedPVC != nil {
-		pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Update(updatedPVC)
+		pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Update(context.TODO(), updatedPVC, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -134,7 +135,7 @@ func (c *controller) reconcilePVCRemove(clusterName, targetNamespace, requestUID
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.pvcClient.PersistentVolumeClaims(targetNamespace).Delete(name, opts)
+	err := c.pvcClient.PersistentVolumeClaims(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("pvc %s/%s of cluster %s not found in super master", targetNamespace, name, clusterName)
 		return nil

@@ -52,7 +52,10 @@ func (c *controller) BackPopulate(nodeName string) error {
 	}
 	klog.V(4).Infof("back populate node %s/%s", node.Namespace, node.Name)
 	c.Lock()
-	clusterList := c.nodeNameToCluster[node.Name]
+	var clusterList []string
+	for clusterName := range c.nodeNameToCluster[node.Name] {
+		clusterList = append(clusterList, clusterName)
+	}
 	c.Unlock()
 
 	if len(clusterList) == 0 {
@@ -61,7 +64,7 @@ func (c *controller) BackPopulate(nodeName string) error {
 
 	var wg sync.WaitGroup
 	wg.Add(len(clusterList))
-	for clusterName, _ := range clusterList {
+	for _, clusterName := range clusterList {
 		go c.updateClusterNodeStatus(clusterName, node, &wg)
 	}
 	wg.Wait()

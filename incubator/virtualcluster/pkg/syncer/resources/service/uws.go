@@ -17,6 +17,7 @@ limitations under the License.
 package service
 
 import (
+	"context"
 	"fmt"
 
 	pkgerr "github.com/pkg/errors"
@@ -62,7 +63,7 @@ func (c *controller) BackPopulate(key string) error {
 			pService.Annotations = make(map[string]string)
 		}
 		pService.Annotations[constants.LabelSuperClusterIP] = pService.Spec.ClusterIP
-		_, err = c.serviceClient.Services(pNamespace).Update(pService)
+		_, err = c.serviceClient.Services(pNamespace).Update(context.TODO(), pService, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -103,7 +104,7 @@ func (c *controller) BackPopulate(key string) error {
 	if updatedMeta != nil {
 		newService = vService.DeepCopy()
 		newService.ObjectMeta = *updatedMeta
-		if _, err = tenantClient.CoreV1().Services(vService.Namespace).Update(newService); err != nil {
+		if _, err = tenantClient.CoreV1().Services(vService.Namespace).Update(context.TODO(), newService, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to back populate service %s/%s meta update for cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 		}
 	}
@@ -113,12 +114,12 @@ func (c *controller) BackPopulate(key string) error {
 			newService = vService.DeepCopy()
 		} else {
 			// vService has been updated, let us fetch the lastest version.
-			if newService, err = tenantClient.CoreV1().Services(vService.Namespace).Get(vService.Name, metav1.GetOptions{}); err != nil {
+			if newService, err = tenantClient.CoreV1().Services(vService.Namespace).Get(context.TODO(), vService.Name, metav1.GetOptions{}); err != nil {
 				return fmt.Errorf("failed to retrieve vService %s/%s from cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 			}
 		}
 		newService.Status = pService.Status
-		if _, err = tenantClient.CoreV1().Services(vService.Namespace).UpdateStatus(newService); err != nil {
+		if _, err = tenantClient.CoreV1().Services(vService.Namespace).UpdateStatus(context.TODO(), newService, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to back populate service %s/%s status update for cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
 		}
 	}

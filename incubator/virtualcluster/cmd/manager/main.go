@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/webhook"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/constants"
 	logrutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/logr"
 	vcmanager "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/vcmanager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
@@ -79,11 +80,14 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
-	mgr, err := vcmanager.NewVirtualClusterManager(cfg, manager.Options{
+	mgrOpt := manager.Options{
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     leaderElection,
 		LeaderElectionID:   leaderElectionCmName,
-	}, maxConcurrentReconciles)
+		CertDir:            constants.VirtualClusterWebhookCertDir,
+		Port:               constants.VirtualClusterWebhookPort,
+	}
+	mgr, err := vcmanager.NewVirtualClusterManager(cfg, mgrOpt, maxConcurrentReconciles)
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
 		os.Exit(1)
@@ -105,10 +109,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Info("setting up webhooks")
-	if err := webhook.AddToManager(mgr); err != nil {
-		log.Error(err, "unable to register webhooks to the manager")
-		os.Exit(1)
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		log.Info("setting up webhooks")
+		if err := webhook.AddToManager(mgr, mgrOpt.CertDir); err != nil {
+			log.Error(err, "unable to register webhooks to the manager")
+			os.Exit(1)
+		}
 	}
 
 	// Start the Cmd

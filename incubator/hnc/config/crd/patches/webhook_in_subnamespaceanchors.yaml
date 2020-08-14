@@ -3,8 +3,9 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: hierarchies.hnc.x-k8s.io
+  name: subnamespaceanchors.hnc.x-k8s.io
 spec:
+  preserveUnknownFields: false
   conversion:
     strategy: Webhook
     webhookClientConfig:
@@ -15,3 +16,12 @@ spec:
         namespace: system
         name: webhook-service
         path: /convert
+  versions:
+  - name: v1alpha1
+    # This is added in a patch because the unservedversion kubebuilder marker doesn't work.
+    # See issue - https://github.com/kubernetes-sigs/controller-tools/issues/462
+    served: false
+    storage: false
+  - name: v1alpha2
+    served: true
+    storage: true

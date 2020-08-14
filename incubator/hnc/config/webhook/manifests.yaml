@@ -11,14 +11,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-hnc-x-k8s-io-v1alpha1-subnamespaceanchors
+      path: /validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors
   failurePolicy: Fail
   name: subnamespaceanchors.hnc.x-k8s.io
   rules:
   - apiGroups:
     - hnc.x-k8s.io
     apiVersions:
-    - v1alpha1
+    - v1alpha2
     operations:
     - CREATE
     - DELETE
@@ -29,14 +29,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-hnc-x-k8s-io-v1alpha1-hierarchyconfigurations
+      path: /validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations
   failurePolicy: Fail
   name: hierarchyconfigurations.hnc.x-k8s.io
   rules:
   - apiGroups:
     - hnc.x-k8s.io
     apiVersions:
-    - v1alpha1
+    - v1alpha2
     operations:
     - CREATE
     - UPDATE
@@ -47,14 +47,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-hnc-x-k8s-io-v1alpha1-hncconfigurations
+      path: /validate-hnc-x-k8s-io-v1alpha2-hncconfigurations
   failurePolicy: Fail
   name: hncconfigurations.hnc.x-k8s.io
   rules:
   - apiGroups:
     - hnc.x-k8s.io
     apiVersions:
-    - v1alpha1
+    - v1alpha2
     operations:
     - CREATE
     - UPDATE

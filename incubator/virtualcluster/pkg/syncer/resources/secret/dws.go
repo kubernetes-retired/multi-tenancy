@@ -17,6 +17,7 @@ limitations under the License.
 package secret
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -126,7 +127,7 @@ func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetName
 	pSecret := newObj.(*v1.Secret)
 	conversion.VC(c.multiClusterSecretController, "").ServiceAccountTokenSecret(pSecret).Mutate(vSecret, clusterName)
 
-	_, err = c.secretClient.Secrets(targetNamespace).Create(pSecret)
+	_, err = c.secretClient.Secrets(targetNamespace).Create(context.TODO(), pSecret, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		klog.Infof("secret %s/%s of cluster %s already exist in super master", targetNamespace, pSecret.Name, clusterName)
 		return nil
@@ -143,7 +144,7 @@ func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetName
 
 	updatedSecret := pSecret.DeepCopy()
 	updatedSecret.Data = updatedBinaryData
-	_, err := c.secretClient.Secrets(targetNamespace).Update(updatedSecret)
+	_, err := c.secretClient.Secrets(targetNamespace).Update(context.TODO(), updatedSecret, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
@@ -161,7 +162,7 @@ func (c *controller) reconcileNormalSecretCreate(clusterName, targetNamespace, r
 		return err
 	}
 
-	pSecret, err := c.secretClient.Secrets(targetNamespace).Create(newObj.(*v1.Secret))
+	pSecret, err := c.secretClient.Secrets(targetNamespace).Create(context.TODO(), newObj.(*v1.Secret), metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pSecret.Annotations[constants.LabelUID] == requestUID {
 			klog.Infof("secret %s/%s of cluster %s already exist in super master", targetNamespace, secret.Name, clusterName)
@@ -193,7 +194,7 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	}
 	updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
-		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(updatedSecret)
+		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(context.TODO(), updatedSecret, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -216,7 +217,7 @@ func (c *controller) reconcileNormalSecretRemove(clusterName, targetNamespace, r
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.secretClient.Secrets(targetNamespace).Delete(name, opts)
+	err := c.secretClient.Secrets(targetNamespace).Delete(context.TODO(), name, *opts)
 	if errors.IsNotFound(err) {
 		klog.Warningf("secret %s/%s of cluster is not found in super master", targetNamespace, name)
 		return nil
@@ -228,7 +229,7 @@ func (c *controller) reconcileServiceAccountTokenSecretRemove(clusterName, targe
 	opts := &metav1.DeleteOptions{
 		PropagationPolicy: &constants.DefaultDeletionPolicy,
 	}
-	err := c.secretClient.Secrets(targetNamespace).DeleteCollection(opts, metav1.ListOptions{
+	err := c.secretClient.Secrets(targetNamespace).DeleteCollection(context.TODO(), *opts, metav1.ListOptions{
 		LabelSelector: labels.Set(map[string]string{
 			constants.LabelSecretUID: requestUID,
 		}).String(),

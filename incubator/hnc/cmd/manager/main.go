@@ -35,7 +35,8 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	v1a1 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
+	v1a2 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
@@ -65,7 +66,8 @@ func init() {
 	defer setupLog.Info("Finished main.go:init()")
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = api.AddToScheme(scheme)
+	_ = v1a1.AddToScheme(scheme)
+	_ = v1a2.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = v1beta1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -172,7 +174,8 @@ func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
 	// Create all reconciling controllers
 	f := forest.NewForest()
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
+	removeOldCRDVersion := true
+	if err := reconcilers.Create(mgr, f, maxReconciles, removeOldCRDVersion); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
@@ -181,6 +184,22 @@ func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
 	if !novalidation {
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
 		validators.Create(mgr, f)
+	}
+
+	// Create CRD conversion webhooks.
+	if err := (&v1a2.HNCConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.HNCConfigSingletons)
+		os.Exit(1)
+	}
+
+	if err := (&v1a2.HierarchyConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.HierarchyConfigurations)
+		os.Exit(1)
+	}
+
+	if err := (&v1a2.SubnamespaceAnchor{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.Anchors)
+		os.Exit(1)
 	}
 
 	setupLog.Info("All controllers started; setup complete")
