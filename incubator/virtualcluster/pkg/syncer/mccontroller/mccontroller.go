@@ -24,7 +24,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	priorityclassv1 "k8s.io/api/scheduling/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -445,8 +445,8 @@ func getTargetObject(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolume{}
 	case *v1.Endpoints:
 		return &v1.Endpoints{}
-	case *priorityclassv1.PriorityClass:
-		return &priorityclassv1.PriorityClass{}
+	case *schedulingv1.PriorityClass:
+		return &schedulingv1.PriorityClass{}
 	default:
 		return nil
 	}
@@ -478,8 +478,8 @@ func getTargetObjectList(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolumeList{}
 	case *v1.Endpoints:
 		return &v1.EndpointsList{}
-	case *priorityclassv1.PriorityClass:
-		return &priorityclassv1.PriorityClassList{}
+	case *schedulingv1.PriorityClass:
+		return &schedulingv1.PriorityClassList{}
 	default:
 		return nil
 	}

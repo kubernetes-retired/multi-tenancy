@@ -77,7 +77,7 @@ func TestUWPCCreation(t *testing.T) {
 		ExpectedError          string
 		ExpectedNoOperation    bool
 	}{
-		"pSC exists but vSC not found": {
+		"pPC exists but vPC not found": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("pc", "12345"),
 			},
@@ -86,7 +86,7 @@ func TestUWPCCreation(t *testing.T) {
 				"pc",
 			},
 		},
-		"pSC exists, vSC exists": {
+		"pPC exists, vPC exists": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("pc", "12345"),
 			},
@@ -169,7 +169,7 @@ func TestUWPCUpdate(t *testing.T) {
 		ExpectedError          string
 		ExpectedNoOperation    bool
 	}{
-		"pSC exists, vSC exists with different spec": {
+		"pPC exists, vPC exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
 					class.Provisioner = "a"
@@ -262,7 +262,7 @@ func TestUWPCDeletion(t *testing.T) {
 		ExpectedError          string
 		ExpectedNoOperation    bool
 	}{
-		"pSC not found, vSC exists": {
+		"pPC not found, vPC exists": {
 			ExistingObjectInTenant: []runtime.Object{
 				makePriorityClass("pc", "12345"),
 			},
