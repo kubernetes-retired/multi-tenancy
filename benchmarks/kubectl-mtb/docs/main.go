@@ -27,26 +27,48 @@ type Doc struct {
 	Description     string                 `yaml:"description"`
 	Remediation     string                 `yaml:"remediation"`
 	ProfileLevel    int                    `yaml:"profileLevel"`
+	Rationale       string                 `yaml:"rationale"`
+	Audit           string                 `yaml:"audit"`
 	AdditionalField map[string]interface{} `yaml:"additionalFields"`
 }
 
-// README template
-const templ = `# {{.Title}} <small>[{{.ID}}] </small>
-**Profile Applicability:** 
-{{.ProfileLevel}} <br>
-**Type:** 
-{{.BenchmarkType}} <br>
-**Category:** 
-{{.Category}} <br>
-**Description:** 
-{{.Description}} <br>
-**Remediation:**
-{{.Remediation}} <br>
+func ReadmeTemplate() []byte {
+	return []byte(
+		`# {{.Title}} <small>[{{.ID}}] </small>
+
+**Profile Applicability:**
+
+{{.ProfileLevel}}
+
+**Type:**
+
+{{.BenchmarkType}}
+
+**Category:**
+
+{{.Category}}
+
+**Description:**
+
+{{.Description}}
+
+**Rationale:**
+
+{{.Rationale}}
+
+**Audit:**
+
+{{.Audit}}
+
+{{.Remediation}}
+
 {{ range $key, $value := .AdditionalField }}
 **{{ $key }}:** 
-{{ $value }} <br>
-{{ end }}
-`
+
+{{ $value }}
+
+{{ end }}`)
+}
 
 func exists(path string) (bool, error) {
 	_, err := os.Stat(path)
@@ -110,8 +132,6 @@ func main() {
 				for _, i := range values {
 					deleteFields(i, d.AdditionalField)
 				}
-				t := template.New("README template")
-				t, err = t.Parse(templ)
 
 				// Get directory of the config file
 				dirPath := getDirectory(path, "/")
@@ -122,18 +142,14 @@ func main() {
 					return err
 				}
 
-				f, err := os.Create(dirPath + "/README.md")
+				mainFile, err := os.Create(fmt.Sprintf("%s/README.md", dirPath))
 				if err != nil {
 					return err
 				}
+				defer mainFile.Close()
 
-				// Write the output to the README file
-				err = t.Execute(f, d)
-				if err != nil {
-					return err
-				}
-
-				err = f.Close()
+				mainTemplate := template.Must(template.New("main").Parse(string(ReadmeTemplate())))
+				err = mainTemplate.Execute(mainFile, d)
 				if err != nil {
 					return err
 				}
