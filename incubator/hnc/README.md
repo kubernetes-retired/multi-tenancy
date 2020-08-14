@@ -16,7 +16,10 @@ across all namespaces in your team (e.g. a set of related microservices).
 Learn more in the [HNC User Guide](docs/user-guide) or get started with the
 instructions below!
 
-Lead developer: @adrianludwin (aludwin@google.com).
+Credits:
+* Lead developer: @adrianludwin (aludwin@google.com)
+* Current contributors: @yiqigao217, @rjbez17, @GinnyJI
+* Other contributors include @sophieliu15, @lafh, @shivi28, @danielSbastos and @entro-pi - thanks all!
 
 ## Using HNC
 
