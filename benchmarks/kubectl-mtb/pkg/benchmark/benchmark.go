@@ -16,6 +16,7 @@ type Benchmark struct {
 	Description   string `yaml:"description"`
 	Remediation   string `yaml:"remediation"`
 	ProfileLevel  int    `yaml:"profileLevel"`
+	Status        string `yaml:"status"`
 	Rationale     string `yaml:"rationale"`
 	Audit         string `yaml:"audit"`
 	PreRun        func(types.RunOptions) error
