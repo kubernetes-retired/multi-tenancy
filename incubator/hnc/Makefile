@@ -27,6 +27,8 @@ else
 endif
 endif
 
+# Override this to release from a different repo
+HNC_REPO_USER ?= "kubernetes-sigs"
 HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/${HNC_IMG_NAME}:${HNC_IMG_TAG}"
 
 CONTROLLER_GEN ?= "./bin/controller-gen"
@@ -245,7 +247,7 @@ release: check-release-env test
 	@echo "Invoking Cloud Build"
 	@echo "*********************************************"
 	@echo "*********************************************"
-	@gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=_HNC_IMG_TAG=${HNC_IMG_TAG},_HNC_USER=${HNC_USER},_HNC_PERSONAL_ACCESS_TOKEN=${HNC_PAT},_HNC_RELEASE_ID=${HNC_RELEASE_ID},_HNC_RELEASED_IMG=${HNC_RELEASED_IMG}
+	@gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=_HNC_REPO_USER=${HNC_REPO_USER},_HNC_IMG_NAME=${HNC_IMG_NAME},_HNC_IMG_TAG=${HNC_IMG_TAG},_HNC_USER=${HNC_USER},_HNC_PERSONAL_ACCESS_TOKEN=${HNC_PAT},_HNC_RELEASE_ID=${HNC_RELEASE_ID},_HNC_RELEASED_IMG=${HNC_RELEASED_IMG}
 	@echo Pushing image to K8s staging
 	@docker pull ${HNC_IMG}
 	@docker tag ${HNC_IMG} ${HNC_RELEASED_IMG}
