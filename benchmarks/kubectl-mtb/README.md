@@ -46,7 +46,7 @@ $ kubectl-mtb get benchmarks
 ```bash
 $ kubectl-mtb run benchmarks -n "namespace" --as "user impersonation"
 ```
-You can mention the profile level of the  benchmark using `-p` flag. Users can switch to development mode by passing **debug** arg to `-v` flag. 
+You can mention the profile level of the  benchmark using `-p` flag. Users can switch to development mode by passing `--debug` or `-d` flag. 
 
 Example: 
 
