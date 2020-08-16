@@ -149,9 +149,8 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 	benchmarkRunOptions.Label, _ = cmd.Flags().GetString("labels")
 	// Get log level
-	verbose, _ := cmd.Flags().GetString("verbose")
-	logLevel := strings.ToLower(verbose)
-	if logLevel == "debug" {
+	debug, _ := cmd.Flags().GetBool("debug")
+	if debug {
 		log.SetupLogger(true)
 	} else {
 		// default mode production
@@ -239,7 +238,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 }
 
 func newRunCmd() *cobra.Command {
-	runCmd.Flags().StringP("verbose", "v", "info", "Use default logging service")
+	runCmd.Flags().BoolP("debug", "d", false, "Use debugging mode")
 	runCmd.Flags().StringP("namespace", "n", "", "(required) tenant namespace")
 	runCmd.Flags().String("as", "", "(required) user name to impersonate")
 	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")

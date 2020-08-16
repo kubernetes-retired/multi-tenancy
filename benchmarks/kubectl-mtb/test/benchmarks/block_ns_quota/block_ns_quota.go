@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{

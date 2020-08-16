@@ -9,11 +9,8 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-<<<<<<< HEAD
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
-=======
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
->>>>>>> 269830b1... added log level
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var b = &benchmark.Benchmark{
