@@ -31,8 +31,9 @@ import (
 )
 
 var (
-	footnotesByMsg map[string]int
-	footnotes      []string
+	footnotesByMsg  map[string]int
+	footnotes       []string
+	hasSubnamespace bool
 )
 
 var treeCmd = &cobra.Command{
@@ -52,8 +53,6 @@ var treeCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		hasSubnamespace := false
-
 		for _, nnm := range nsList {
 			hier := client.getHierarchy(nnm)
 			// If we're showing the default list, skip all non-root namespaces since they'll be displayed
@@ -65,7 +64,7 @@ var treeCmd = &cobra.Command{
 				continue
 			}
 			fmt.Println(txt)
-			hasSubnamespace = hasSubnamespace || printSubtree("", hier, cycle)
+			printSubtree("", hier, cycle)
 		}
 
 		if hasSubnamespace {
@@ -82,8 +81,7 @@ var treeCmd = &cobra.Command{
 	},
 }
 
-func printSubtree(prefix string, hier *api.HierarchyConfiguration, inCycle bool) (hasSubnamespace bool) {
-	hasSubnamespace = false
+func printSubtree(prefix string, hier *api.HierarchyConfiguration, inCycle bool) {
 	for i, cn := range hier.Status.Children {
 		ch := client.getHierarchy(cn)
 		txt, cycle := nameAndFootnotes(ch)
@@ -107,13 +105,12 @@ func printSubtree(prefix string, hier *api.HierarchyConfiguration, inCycle bool)
 
 		if i < len(hier.Status.Children)-1 {
 			fmt.Printf("%s├── %s\n", prefix, txt)
-			hasSubnamespace = hasSubnamespace || printSubtree(prefix+"│   ", ch, cycle)
+			printSubtree(prefix+"│   ", ch, cycle)
 		} else {
 			fmt.Printf("%s└── %s\n", prefix, txt)
-			hasSubnamespace = hasSubnamespace || printSubtree(prefix+"    ", ch, cycle)
+			printSubtree(prefix+"    ", ch, cycle)
 		}
 	}
-	return
 }
 
 // nameAndFootnotes returns the text to print to describe the namespace, in the form of the
