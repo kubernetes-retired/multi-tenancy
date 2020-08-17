@@ -6,7 +6,7 @@ steps:
   args:
   - '-c'
   - |
-    git clone https://github.com/kubernetes-sigs/multi-tenancy
+    git clone https://github.com/$_HNC_REPO_USER/multi-tenancy
     cd multi-tenancy
     git checkout hnc-$_HNC_IMG_TAG
 # Build the manifests and the kubectl plugin
@@ -57,6 +57,6 @@ steps:
   - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns'
 # Build Docker image
 - name: gcr.io/cloud-builders/docker
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/hnc/controller:$_HNC_IMG_TAG', 'multi-tenancy/incubator/hnc']
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG', 'multi-tenancy/incubator/hnc']
 
-images: ['gcr.io/$PROJECT_ID/hnc/controller:$_HNC_IMG_TAG']
+images: ['gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG']
