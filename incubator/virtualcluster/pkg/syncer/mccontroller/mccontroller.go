@@ -19,18 +19,20 @@ package mccontroller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/client-go/kubernetes/scheme"
-
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -317,6 +319,45 @@ func (c *MultiClusterController) GetClusterNames() []string {
 	return names
 }
 
+// Eventf constructs an event from the given information and puts it in the queue for sending.
+// 'ref' is the object this event is about. Event will make a reference or you may also
+// pass a reference to the object directly.
+// 'eventtype' of this event, and can be one of Normal, Warning. New types could be added in future
+// 'reason' is the reason this event is generated. 'reason' should be short and unique; it
+// should be in UpperCamelCase format (starting with a capital letter). "reason" will be used
+// to automate handling of events, so imagine people writing switch statements to handle them.
+// You want to make that easy.
+// 'message' is intended to be human readable.
+//
+// The resulting event will be created in the same namespace as the reference object.
+// TODO(zhuangqh): consider maintain an event sink for each tenant.
+func (c *MultiClusterController) Eventf(clusterName string, ref *v1.ObjectReference, eventtype string, reason, messageFmt string, args ...interface{}) error {
+	tenantClient, err := c.GetClusterClient(clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
+	}
+	namespace := ref.Namespace
+	if namespace == "" {
+		namespace = metav1.NamespaceDefault
+	}
+	eventTime := metav1.Now()
+	event := &v1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%v.%x", ref.Name, eventTime.UnixNano()),
+			Namespace: namespace,
+		},
+		InvolvedObject:      *ref,
+		Type:                eventtype,
+		Reason:              reason,
+		Message:             fmt.Sprintf(messageFmt, args...),
+		FirstTimestamp:      eventTime,
+		LastTimestamp:       eventTime,
+		ReportingController: "vc-syncer",
+	}
+	_, err = tenantClient.CoreV1().Events(namespace).Create(context.TODO(), event, metav1.CreateOptions{})
+	return err
+}
+
 // RequeueObject requeues the cluster object, thus reconcileHandler can reconcile it again.
 func (c *MultiClusterController) RequeueObject(clusterName string, obj interface{}) error {
 	o, err := meta.Accessor(obj)
@@ -390,33 +431,43 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
 	// string of the resource to be synced.
-	if result, err := c.Reconciler.Reconcile(req); err != nil {
-		if c.Queue.NumRequeues(obj) >= constants.MaxReconcileRetryAttempts {
-			metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeExceedMaxRetryAttempts)
-			c.Queue.Forget(obj)
-			klog.Warningf("%s dws request is dropped due to reaching max retry limit: %+v", c.name, obj)
-			return true
+	result, err := c.Reconciler.Reconcile(req)
+	if err == nil {
+		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeOK)
+		if result.RequeueAfter > 0 {
+			c.Queue.AddAfter(req, result.RequeueAfter)
+		} else if result.Requeue {
+			c.Queue.AddRateLimited(req)
 		}
-		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeError)
-		c.Queue.AddRateLimited(req)
-		klog.Error(err)
-		return false
-	} else if result.RequeueAfter > 0 {
-		c.Queue.AddAfter(req, result.RequeueAfter)
-		return true
-	} else if result.Requeue {
-		c.Queue.AddRateLimited(req)
+		// if no error occurs we Forget this item so it does not
+		// get queued again until another change happens.
+		c.Queue.Forget(obj)
 		return true
 	}
 
-	metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeOK)
+	// rejected by apiserver(maybe rejected by webhook or other admission plugins)
+	// we take a negative attitude on this situation and fail fast.
+	if apierr, ok := err.(apierrors.APIStatus); ok {
+		if code := apierr.Status().Code; code == http.StatusBadRequest || code == http.StatusForbidden {
+			metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeBadRequest)
+			klog.Errorf("%s dws request is rejected: %v", c.name, err)
+			c.Queue.Forget(obj)
+			return true
+		}
+	}
 
-	// Finally, if no error occurs we Forget this item so it does not
-	// get queued again until another change happens.
-	c.Queue.Forget(obj)
+	// exceed max retry
+	if c.Queue.NumRequeues(obj) >= constants.MaxReconcileRetryAttempts {
+		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeExceedMaxRetryAttempts)
+		c.Queue.Forget(obj)
+		klog.Warningf("%s dws request is dropped due to reaching max retry limit: %+v", c.name, obj)
+		return true
+	}
 
-	// Return true, don't take a break
-	return true
+	metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeError)
+	c.Queue.AddRateLimited(req)
+	klog.Errorf("%s dws request reconcile failed: %v", req, err)
+	return false
 }
 
 func getTargetObject(objectType runtime.Object) runtime.Object {
