@@ -70,8 +70,8 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("Should propagate different types", func() {
-		// ignore Secret in case this demo is run twice and the secret has been set to propagate
-		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret ignore")
+		// ignore Secret in case this demo is run twice and the secret has been set to 'Propagate'
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Ignore")
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
@@ -82,7 +82,7 @@ var _ = Describe("Demo", func() {
 		time.Sleep(2 * time.Second)
 		// secret does not show up in service-1 because we haven’t configured HNC to propagate secrets in HNCConfiguration.
 		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
-		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret propagate")
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Propagate")
 		// this command is not needed here, just to check that user can run it without error
 		MustRun("kubectl get hncconfiguration config -oyaml")
 		RunShouldContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
@@ -129,7 +129,7 @@ spec:
 		defer RemoveFile(filename)
 		MustRun("kubectl apply -f", filename)
 		// ensure this policy can be propagated to its descendants
-		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy propagate")
+		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy Propagate")
 		expected := "deny-from-other-namespaces"
 		RunShouldContain(expected, 2, "kubectl get netpol -n", nsOrg)
 		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamA)
@@ -138,7 +138,7 @@ spec:
 		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService2)
 
 		// Now we’ll see that we can no longer access service-2 from the client in service-1:
-		RunErrorShouldContain("wget: download timed out", 10, 
+		RunErrorShouldContain("wget: download timed out", 10,
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
 		
 		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other

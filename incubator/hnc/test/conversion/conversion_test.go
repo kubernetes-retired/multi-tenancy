@@ -20,6 +20,7 @@ const (
 	// v1alpha1 from CRD status.storedVersions after CRD conversion because it can
 	// be removed only if all the v1alpha1 CRs are reconciled and converted to v1alpha2.
 	crdConversionTime = 7
+	propagationTime = 5
 
 	anchorCRD       = "subnamespaceanchors.hnc.x-k8s.io"
 	hierCRD         = "hierarchyconfigurations.hnc.x-k8s.io"
@@ -133,17 +134,7 @@ spec:
 		// Before conversion, create namespace B with a missing parent A (have to
 		// create A first and then delete it because otherwise the webhook will deny
 		// setting a non-existing namespace as parent).
-		MustRun("kubectl create ns", nsA)
-		MustRun("kubectl create ns", nsB)
-		hierB := `# temp file created by conversion_test.go
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: HierarchyConfiguration
-metadata:
-  name: hierarchy
-  namespace: e2e-conversion-test-b
-spec:
-  parent: e2e-conversion-test-a`
-		MustApplyYAML(hierB)
+		createSampleV1alpha1Tree()
 		MustRun("kubectl delete ns", nsA)
 		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
 
@@ -167,6 +158,56 @@ spec:
 		FieldShouldContainWithTimeout(configCRD, "", configSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
 		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.types", []string{"Role", "RoleBinding"})
 	})
+
+	It("should convert HNCConfig sync modes", func() {
+		// Create a tree with A as the root and B as the child
+		createSampleV1alpha1Tree()
+		// Delete the webhook to apply unsupported modes in v1alpha1.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		// Set 'propagate', 'remove', unknown ('ignore') modes in v1alpha1
+		cfg := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  types:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate
+  - apiVersion: v1
+    kind: Secret
+    mode: propagate
+  - apiVersion: v1
+    kind: ResourceQuota
+    mode: remove
+  - apiVersion: v1
+    kind: ConfigMap
+    mode: foobar`
+		MustApplyYAML(cfg)
+		// Create a secret in ns A and make sure it's propagated to ns B.
+		MustRun("kubectl -n", nsA, "create secret generic my-creds-1 --from-literal=password=iama")
+		RunShouldContain("my-creds-1", propagationTime, "kubectl get secrets -n", nsB)
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify CRD conversion.
+		verifyCRDConversion()
+		// Verify sync mode conversion.
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Propagate")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "propagate")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Ignore")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "ignore")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Remove")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "remove")
+		// Verify sync mode behavior.
+		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
+		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
+	})
 })
 
 // Install HNC and kubectl plugin with v1alpha1.
@@ -184,6 +225,10 @@ func setupV1alpha1(hncVersion string){
 // Install HNC and kubectl plugin with v1alpha2.
 func setupV1alpha2(){
 	GinkgoT().Log("Set up v1alpha2")
+	// Delete the deployment to force re-pulling the image. Without this line, a cached
+	// image may be used with the old IfNotPresent imagePullPolicy from 0.5 deployment.
+	// See https://github.com/kubernetes-sigs/multi-tenancy/issues/1025.
+	MustRun("kubectl -n hnc-system delete deployment hnc-controller-manager")
 	MustRun("kubectl apply -f ../../manifests/hnc-manager.yaml")
 	// Wait for the cert rotator to write caBundles in CRD conversion webhooks.
 	ensureCRDConvWHReady()
@@ -219,4 +264,19 @@ func ensureCRDConvWHReady(){
 	for _, crd := range crds {
 		RunShouldNotContain("caBundle: Cg==", certsReadyTime, "kubectl get crd "+crd+" -oyaml")
 	}
+}
+
+// createSampleV1alpha1Tree creates a tree with 'a' as the root, 'b' as the child.
+func createSampleV1alpha1Tree(){
+	MustRun("kubectl create ns e2e-conversion-test-a")
+	MustRun("kubectl create ns e2e-conversion-test-b")
+	hierB := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HierarchyConfiguration
+metadata:
+  name: hierarchy
+  namespace: e2e-conversion-test-b
+spec:
+  parent: e2e-conversion-test-a`
+	MustApplyYAML(hierB)
 }

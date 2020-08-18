@@ -56,10 +56,10 @@ func TestRBACTypes(t *testing.T) {
 		allow   bool
 	}{
 		{
-			name: "Correct RBAC config with propagate mode",
+			name: "Correct RBAC config with Propagate mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 			},
 			allow: true,
 		},
@@ -74,44 +74,44 @@ func TestRBACTypes(t *testing.T) {
 		{
 			name: "Missing Role",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Missing RoleBinding",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Incorrect Role mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "ignore"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Ignore"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Incorrect RoleBinding mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "ignore"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Ignore"},
 			},
 			allow: false,
 		}, {
 			name: "Duplicate RBAC types with different modes",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
 				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 			},
 			allow: false,
 		},
 		{
 			name: "Duplicate RBAC types with the same mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 			},
 			allow: false,
 		},
@@ -142,9 +142,9 @@ func TestNonRBACTypes(t *testing.T) {
 		{
 			name: "Correct Non-RBAC types config",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "ignore"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
 				{APIVersion: "v1", Kind: "ResourceQuota"},
 			},
 			validator: f,
@@ -153,30 +153,30 @@ func TestNonRBACTypes(t *testing.T) {
 		{
 			name: "Resource does not exist",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
 				// "CronTab" kind does not exist in "v1"
-				{APIVersion: "v1", Kind: "CronTab", Mode: "ignore"},
+				{APIVersion: "v1", Kind: "CronTab", Mode: "Ignore"},
 			},
 			validator: f,
 			allow:     false,
 		}, {
 			name: "Duplicate types with different modes",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "ignore"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Propagate"},
 			},
 			validator: f,
 			allow:     false,
 		}, {
 			name: "Duplicate types with the same mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "ignore"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "ignore"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
 			},
 			validator: f,
 			allow:     false,
