@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	v1 "k8s.io/api/priority/v1"
+	v1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,16 +43,12 @@ func makePriorityClass(name, uid string, mFuncs ...func(*v1.PriorityClass)) *v1.
 			Name: name,
 			UID:  types.UID(uid),
 		},
-		Parameters: map[string]string{
-			"type": "a",
-		},
-		Provisioner: "p1",
 	}
 
 	for _, f := range mFuncs {
 		f(pc)
 	}
-	return pc 
+	return pc
 }
 
 func TestUWPCCreation(t *testing.T) {
@@ -172,18 +168,15 @@ func TestUWPCUpdate(t *testing.T) {
 		"pPC exists, vPC exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
-					class.Provisioner = "a"
 				}),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
-					class.Provisioner = "b"
 				}),
 			},
 			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedUpdatedObject: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
-					class.Provisioner = "a"
 				}),
 			},
 		},
