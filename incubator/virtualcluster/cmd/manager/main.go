@@ -46,14 +46,19 @@ func main() {
 		leaderElectionCmName    string
 		maxConcurrentReconciles int
 		versionOpt              bool
+		disableStacktrace       bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
-	flag.StringVar(&masterProvisioner, "master-prov", "native", "The underlying platform that will provision master for virtualcluster.")
+	flag.StringVar(&masterProvisioner, "master-prov", "native",
+		"The underlying platform that will provision master for virtualcluster.")
 	flag.BoolVar(&leaderElection, "leader-election", true, "If enable leaderelection for vc-manager")
-	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock", "The name of the configmap that will be used as the resourcelook for leaderelection")
-	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 10, "The max number reconcilers of virtualcluster controller")
+	flag.StringVar(&leaderElectionCmName, "le-cm-name", "vc-manager-leaderelection-lock",
+		"The name of the configmap that will be used as the resourcelook for leaderelection")
+	flag.IntVar(&maxConcurrentReconciles, "num-reconciles", 10,
+		"The max number reconcilers of virtualcluster controller")
 	flag.StringVar(&logFile, "log-file", "", "The path of the logfile, if not set, only log to the stderr")
 	flag.BoolVar(&versionOpt, "version", false, "Print the version information")
+	flag.BoolVar(&disableStacktrace, "disable-stacktrace", false, "If set, the automatic stacktrace is disabled")
 
 	flag.Parse()
 
@@ -63,7 +68,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	loggr, err := logrutil.NewLoggerToFile(logFile)
+	loggr, err := logrutil.NewLogger(logFile, disableStacktrace)
 	if err != nil {
 		panic(fmt.Sprintf("fail to initialize logr: %s", err))
 	}

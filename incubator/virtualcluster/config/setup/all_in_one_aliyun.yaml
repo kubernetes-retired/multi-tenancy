@@ -211,6 +211,8 @@ spec:
       containers:
       - command:
         - manager
+        args:
+        - --disable-stacktrace=true
         image: registry.cn-hangzhou.aliyuncs.com/virtualcluster/manager-amd64 
         imagePullPolicy: Always
         name: vc-manager
