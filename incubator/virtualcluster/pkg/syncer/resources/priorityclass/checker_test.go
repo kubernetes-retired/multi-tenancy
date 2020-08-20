@@ -16,7 +16,7 @@ package priorityclass
 import (
 	"testing"
 
-	v1 "k8s.io/api/priority/v1"
+	v1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,17 +83,14 @@ func TestPriorityClassPatrol(t *testing.T) {
 					class.Labels = map[string]string{
 						constants.PublicObjectKey: "true",
 					}
-					class.Provisioner = "a"
 				}),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
-					class.Provisioner = "b"
 				}),
 			},
 			ExpectedUpdatedVObject: []runtime.Object{
 				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
-					class.Provisioner = "a"
 				}),
 			},
 			WaitUWS: true,
