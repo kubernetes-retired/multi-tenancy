@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
@@ -26,6 +27,7 @@ var b = &benchmark.Benchmark{
 
 		access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
 		if err != nil {
+			log.Logging.Debug(err.Error())
 			return err
 		}
 		if !access {
@@ -40,6 +42,7 @@ var b = &benchmark.Benchmark{
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, AllowPrivilegeEscalation: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
+			log.Logging.Debug(err.Error())
 			return err
 		}
 
@@ -49,6 +52,7 @@ var b = &benchmark.Benchmark{
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod that sets AllowPrivilegeEscalation to true")
 		}
+		log.Logging.Debug("Test passed: ", err.Error())
 
 		return nil
 	},
@@ -58,7 +62,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("block_privilege_escalation/config.yaml"))
 	if err != nil {
-		fmt.Println(err)
+		log.Logging.Error(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
@@ -147,6 +148,14 @@ func validateFlags(cmd *cobra.Command) error {
 func runTests(cmd *cobra.Command, args []string) error {
 
 	benchmarkRunOptions.Label, _ = cmd.Flags().GetString("labels")
+	// Get log level
+	debug, _ := cmd.Flags().GetBool("debug")
+	if debug {
+		log.SetupLogger(true)
+	} else {
+		// default mode production
+		log.SetupLogger(false)
+	}
 
 	// Get reporters from the user
 	reporterFlag, _ := cmd.Flags().GetString("out")
@@ -178,6 +187,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		err := ts.SetDefaults()
 		if err != nil {
+			log.Logging.Debug(err.Error())
 			return err
 		}
 
@@ -186,6 +196,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		//Run Prerun
 		err = b.PreRun(benchmarkRunOptions)
 		if err != nil {
+			log.Logging.Debug(err.Error())
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
@@ -196,6 +207,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		if ts.Validation {
 			err = b.Run(benchmarkRunOptions)
 			if err != nil {
+				log.Logging.Debug(err.Error())
 				suiteSummary.NumberOfFailedTests++
 				ts.Test = false
 				ts.TestError = err
@@ -229,6 +241,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 }
 
 func newRunCmd() *cobra.Command {
+	runCmd.Flags().BoolP("debug", "d", false, "Use debugging mode")
 	runCmd.Flags().StringP("namespace", "n", "", "(required) tenant namespace")
 	runCmd.Flags().String("as", "", "(required) user name to impersonate")
 	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")
