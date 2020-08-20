@@ -28,15 +28,15 @@ const (
 )
 
 // SubnamespaceAnchorState describes the state of the subnamespace. The state could be
-// "missing", "ok", "conflict" or "forbidden". The definitions will be described below.
+// "Missing", "Ok", "Conflict" or "Forbidden". The definitions will be described below.
 type SubnamespaceAnchorState string
 
 // Anchor states, which are documented in the comment to SubnamespaceAnchorStatus.State.
 const (
-	Missing   SubnamespaceAnchorState = "missing"
-	Ok        SubnamespaceAnchorState = "ok"
-	Conflict  SubnamespaceAnchorState = "conflict"
-	Forbidden SubnamespaceAnchorState = "forbidden"
+	Missing   SubnamespaceAnchorState = "Missing"
+	Ok        SubnamespaceAnchorState = "Ok"
+	Conflict  SubnamespaceAnchorState = "Conflict"
+	Forbidden SubnamespaceAnchorState = "Forbidden"
 )
 
 // SubnamespaceAnchorStatus defines the observed state of SubnamespaceAnchor.
@@ -45,15 +45,15 @@ type SubnamespaceAnchorStatus struct {
 	//
 	// Currently, the supported values are:
 	//
-	// - "missing": the subnamespace has not been created yet. This should be the default state when
+	// - "Missing": the subnamespace has not been created yet. This should be the default state when
 	// the anchor is just created.
 	//
-	// - "ok": the subnamespace exists.
+	// - "Ok": the subnamespace exists.
 	//
-	// - "conflict": a namespace of the same name already exists. The admission controller will
+	// - "Conflict": a namespace of the same name already exists. The admission controller will
 	// attempt to prevent this.
 	//
-	// - "forbidden": the anchor was created in a namespace that doesn't allow children, such as
+	// - "Forbidden": the anchor was created in a namespace that doesn't allow children, such as
 	// kube-system or hnc-system. The admission controller will attempt to prevent this.
 	State SubnamespaceAnchorState `json:"status,omitempty"`
 }
