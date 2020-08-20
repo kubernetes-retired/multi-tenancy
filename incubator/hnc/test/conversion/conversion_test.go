@@ -77,7 +77,7 @@ metadata:
 		verifyCRDConversion()
 		// Verify subnamespace anchor status in the new version.
 		FieldShouldContainWithTimeout(anchorCRD, nsA, nsB, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "ok")
+		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "Ok")
 	})
 
 	It("should convert HCs with parent", func() {
