@@ -8,7 +8,7 @@
 clusters are set up correctly for multi-tenancy.
 
 ## Demo
-[![asciicast](https://asciinema.org/a/YHqiNLWhpy596myFUCdghetwL.svg)](https://asciinema.org/a/YHqiNLWhpy596myFUCdghetwL)
+[![asciicast](https://asciinema.org/a/JKaCz2rZJSb0ubDFEVOfFWBjJ.svg)](https://asciinema.org/a/JKaCz2rZJSb0ubDFEVOfFWBjJ)
 
 ## Setup Instructions
 
@@ -27,8 +27,10 @@ $ make kubectl-mtb
 =================
 * [List available benchmarks](#list-available-benchmarks)
 * [Run the available benchmarks](#run-the-available-benchmarks)
-* [Create a tenant namespace](#create-a-tenant-namespace)
+* [Create a namespace](#create-a-namespace)
+* [Create a Role and RoleBinding](#create-a-role-and-rolebinding)
 * [Install Kyverno or Gatekeeper to pass benchmarks](#install-kyverno-or-gatekeeper-to-pass-benchmarks)
+* [Create ResourceQuota object](#create-resourcequota-object)
 * [List Policy Reports](#list-policy-reports)
 * [Generate README](#generate-readme)
 * [Run unit tests](#run-unit-tests)
@@ -42,77 +44,81 @@ $ kubectl-mtb get benchmarks
 ### Run the available benchmarks:
 
 ```bash
-$ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation"
+$ kubectl-mtb run benchmarks -n "namespace" --as "user impersonation"
 ```
-You can mention the profile level of the  benchmark using `-p` flag. 
+You can mention the profile level of the  benchmark using `-p` flag. Users can switch to development mode by passing `--debug` or `-d` flag. 
 
 Example: 
 
 ```bash
-$ kubectl-mtb run benchmarks -n tenant0admin --as system:serviceaccount:tenant0admin:t0-admin0
+$ kubectl-mtb run benchmarks -n testnamespace --as divya-k8s-access
 ```
 
-### Create a tenant namespace
-
-Install CRD 
+### Create a namespace
 
 ```
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenant.yaml
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/crds/tenancy_v1alpha1_tenantnamespace.yaml
+$ kubectl create ns "test"
 ```
 
-Install tenant controller 
+### Create a Role and RoleBinding
 
-```bash
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/manager/all_in_one.yaml
-```
-Create a tenant CR 
-
-```bash
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenant.yaml
-```
-
-Edit the tenant CR and add your user or service account to the tenantAdmins list
-
-```bash
-$ kubectl edit tenant tenant-sample
-```
+You can use the following template to create a rolebinding for the user. 
 
 ```yaml
-apiVersion: tenancy.x-k8s.io/v1alpha1
-kind: Tenant
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
 metadata:
-  labels:
-    controller-tools.k8s.io: "1.0"
-  name: tenant-sample
-spec:
-  # Add fields here
-  tenantAdminNamespaceName: "tenant1admin"
-  tenantAdmins:
-    - kind: User
-      name: divya
-      namespace: 
+  name: role0
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - resourcequotas
+  verbs:
+  - list
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: role0
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: role0
+subjects:
+- kind: User
+  name: divya-k8s-access
+  namespace: testnamespace
 ```
-User can do self service namespace creation by creating a tenantnamespace CR in tenant1admin namespace:
+You can try running the test after creating the rolebinding, but most of the benchmarks will fail.
 
-Example:
+<img width="577" alt="failed-tests" src="https://user-images.githubusercontent.com/21216969/89315233-3e7d6600-d698-11ea-9d3c-503521641840.png">
 
-```
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/tenant/config/samples/tenancy_v1alpha1_tenantnamespace.yaml
-```
-This will create t1-ns1 namespace. If you want to run the benchmarks using this namespace, Make sure that the user can access the namespace using the following command. 
-
-```
-$ kubectl auth can-i --list --namespace=tenantnamespace --as divya
-```
-
-Then, you can run the benchmarks using the following command: 
-
-Example:
-
-```bash
-$ kubectl-mtb run benchmarks -n t1-ns1 --as divya-k8s-access
-```
+*Some of the benchmarks passed because the user doesn't have cluster-admin privileges.*
 
 ### Install Kyverno or Gatekeeper to pass benchmarks
 
@@ -142,6 +148,18 @@ To install Gatekeeper, run following command:
 You can find the policies of Gatekeeper [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies/gatekeeper/)
 
 You can refer [here](https://github.com/open-policy-agent/gatekeeper#how-to-use-gatekeeper) to know how to use Gatekeeper. 
+
+## Create ResourceQuota object
+
+To pass some of the benchmarks like `Configure namespace resource quotas`, you also need to create a ResourceQuota object. 
+
+To create the object, run the following command:
+```
+$ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/quotas/ns_quota.yaml
+```
+After applying the policies and ResourceQuota object, all the benchmarks should pass. 
+
+<img width="570" alt="passed-tests" src="https://user-images.githubusercontent.com/21216969/89316882-42aa8300-d69a-11ea-997a-557708fa0da0.png">
 
 
 ### List Policy Reports:
