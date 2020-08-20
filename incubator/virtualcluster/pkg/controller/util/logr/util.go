@@ -20,22 +20,22 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
-// NewLoggerToFile creates a new logr.Logger based on the zap.Logger. If the
-// 'logFile' is not empty, log to stderr and the 'logFile', otherwise, log to
-// the stderr only
-func NewLoggerToFile(logFile string) (logr.Logger, error) {
-	if logFile == "" {
-		return logf.ZapLogger(false), nil
-	}
-	// logs to both stderr and 'logFile'
+// NewLogger creates a new logr.Logger based on the zap.Logger. If the 'logFile'
+// is not empty, log to stderr and the 'logFile', otherwise, log to the stderr
+// only. stacktrace indicates whether manager will disable the stacktrace
+func NewLogger(logFile string, disableStacktrace bool) (logr.Logger, error) {
 	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		"stderr",
-		logFile,
+	cfg.OutputPaths = []string{"stderr"}
+	// logs to both stderr and 'logFile'
+	if logFile != "" {
+		cfg.OutputPaths = append(cfg.OutputPaths, logFile)
 	}
+	// allow user to disable noisy stacktrace
+	cfg.DisableStacktrace = disableStacktrace
+	// the caller will always be zapr.go, which is useless
+	cfg.DisableCaller = true
 	zLogr, err := cfg.Build()
 	if err != nil {
 		return nil, err

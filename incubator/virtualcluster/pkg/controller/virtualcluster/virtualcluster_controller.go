@@ -180,7 +180,7 @@ func (r *ReconcileVirtualCluster) Reconcile(request reconcile.Request) (rncilRsl
 		if retryTimes > 0 {
 			err = r.mp.CreateVirtualCluster(vc)
 			if err != nil {
-				log.Info("fail to create virtualcluster", "vc", vc.GetName(), "error", err, "retrytimes", retryTimes)
+				log.Error(err, "fail to create virtualcluster", "vc", vc.GetName(), "retrytimes", retryTimes)
 				errReason := fmt.Sprintf("fail to create virtualcluster(%s): %s", vc.GetName(), err)
 				errMsg := fmt.Sprintf("retry: %d", retryTimes-1)
 				kubeutil.SetVCStatus(vc, tenancyv1alpha1.ClusterPending, errMsg, errReason)
