@@ -4,14 +4,9 @@
 GOBIN ?= $(shell go env GOPATH)/bin
 DIRS=./pkg/... ./cmd/... ./internal/... 
 
-###################### LOCAL ARTIFACTS #########################
-# Run tests
-test: build
-	go test ${DIRS} -coverprofile cover.out
-
 # Builds all binaries
 build:
-	go build -o bin/kubectl/kubectl-mtb ./cmd/kubectl-mtb/main.go
+	GOPROXY=https://proxy.golang.org,direct go build -o bin/kubectl/kubectl-mtb ./cmd/kubectl-mtb/main.go
 
 # Clean all binaries
 clean:
@@ -46,13 +41,13 @@ endif
 		kind create cluster --name $(KIND_PROFILE) --wait 5m;\
 	fi
 		
-kind-test:
-	go test ./test/benchmarks/... -v -count=1 -coverprofile=coverage.out		
+test:
+	GOPROXY=https://proxy.golang.org,direct go test ./test/benchmarks/... -v -count=1 -coverprofile=coverage.out		
 
 kind-delete:
 	kind delete cluster --name $(KIND_PROFILE)
 
-unit-tests: kind-create kind-test kind-delete
+unit-tests: kind-create test kind-delete
 
 coverage: 
 	go tool cover -html=coverage.out
