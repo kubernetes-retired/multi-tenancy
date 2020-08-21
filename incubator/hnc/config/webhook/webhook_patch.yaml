@@ -1,0 +1,8 @@
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- name: objects.hnc.x-k8s.io
+  timeoutSeconds: 2
