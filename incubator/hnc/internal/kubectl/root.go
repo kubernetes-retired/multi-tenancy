@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version"
 )
 
 var k8sClient *kubernetes.Clientset
@@ -64,8 +65,9 @@ func init() {
 		// However, since only the first word of the Use field will be displayed in the
 		// "Usage" section of a root command, we set it to "kubectl-hns" here so that both
 		// "kubectl" and "hns" will be shown in the "Usage" section.
-		Use:   "kubectl-hns",
-		Short: "Manipulates hierarchical namespaces provided by HNC",
+		Use:     "kubectl-hns",
+		Version: version.Version,
+		Short:   "Manipulates hierarchical namespaces provided by HNC",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			config, err := kubecfgFlags.ToRESTConfig()
 			if err != nil {
@@ -99,6 +101,7 @@ func init() {
 	rootCmd.AddCommand(newTreeCmd())
 	rootCmd.AddCommand(newCreateCmd())
 	rootCmd.AddCommand(newConfigCmd())
+	rootCmd.AddCommand(newVersionCmd())
 }
 
 func Execute() {

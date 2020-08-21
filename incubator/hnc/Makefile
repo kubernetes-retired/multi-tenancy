@@ -247,7 +247,7 @@ release: check-release-env test
 	@echo "Invoking Cloud Build"
 	@echo "*********************************************"
 	@echo "*********************************************"
-	@gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=_HNC_REPO_USER=${HNC_REPO_USER},_HNC_IMG_NAME=${HNC_IMG_NAME},_HNC_IMG_TAG=${HNC_IMG_TAG},_HNC_USER=${HNC_USER},_HNC_PERSONAL_ACCESS_TOKEN=${HNC_PAT},_HNC_RELEASE_ID=${HNC_RELEASE_ID},_HNC_RELEASED_IMG=${HNC_RELEASED_IMG}
+	@gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=_HNC_REPO_USER=${HNC_REPO_USER},_HNC_IMG_NAME=${HNC_IMG_NAME},_HNC_IMG_TAG=${HNC_IMG_TAG},_HNC_USER=${HNC_USER},_HNC_PERSONAL_ACCESS_TOKEN=${HNC_PAT},_HNC_RELEASE_ID=${HNC_RELEASE_ID},_HNC_RELEASED_IMG=${HNC_RELEASED_IMG},_HNC_VERSION=${HNC_IMG_TAG}
 	@echo Pushing image to K8s staging
 	@docker pull ${HNC_IMG}
 	@docker tag ${HNC_IMG} ${HNC_RELEASED_IMG}
