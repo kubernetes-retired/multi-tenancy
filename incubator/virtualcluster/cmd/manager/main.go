@@ -47,6 +47,7 @@ func main() {
 		maxConcurrentReconciles int
 		versionOpt              bool
 		disableStacktrace       bool
+		enableWebhook           bool
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":0", "The address the metric endpoint binds to.")
 	flag.StringVar(&masterProvisioner, "master-prov", "native",
@@ -59,6 +60,7 @@ func main() {
 	flag.StringVar(&logFile, "log-file", "", "The path of the logfile, if not set, only log to the stderr")
 	flag.BoolVar(&versionOpt, "version", false, "Print the version information")
 	flag.BoolVar(&disableStacktrace, "disable-stacktrace", false, "If set, the automatic stacktrace is disabled")
+	flag.BoolVar(&enableWebhook, "enable-webhook", false, "If set, the virtualcluster webhook is enabled")
 
 	flag.Parse()
 
@@ -114,7 +116,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if enableWebhook == true {
 		log.Info("setting up webhooks")
 		if err := webhook.AddToManager(mgr, mgrOpt.CertDir); err != nil {
 			log.Error(err, "unable to register webhooks to the manager")

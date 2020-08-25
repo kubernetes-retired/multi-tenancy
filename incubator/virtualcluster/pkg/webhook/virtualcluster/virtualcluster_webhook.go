@@ -54,39 +54,51 @@ import (
 
 	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/constants"
+	kubeutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 )
 
 const (
-	VCWebhookCertCommonName = "virtualcluster-webhook"
-	VCWebhookCertOrg        = "virtualcluster"
-	VCWebhookCertFileName   = "tls.crt"
-	VCWebhookKeyFileName    = "tls.key"
-	VCWebhookServiceName    = "virtualcluster-webhook-service"
-	VCWebhookServiceNs      = "vc-manager"
-	VCWebhookCfgName        = "virtualcluster-validating-webhook-configuration"
-	VCWebhookCfgNs          = "vc-manager"
-	VCWebhookCAFile         = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-	VCWebhookCSRName        = "virtualcluster-webhook-csr"
+	VCWebhookCertCommonName   = "virtualcluster-webhook"
+	VCWebhookCertOrg          = "virtualcluster"
+	VCWebhookCertFileName     = "tls.crt"
+	VCWebhookKeyFileName      = "tls.key"
+	VCWebhookServiceName      = "virtualcluster-webhook-service"
+	DefaultVCWebhookServiceNs = "vc-manager"
+	VCWebhookCfgName          = "virtualcluster-validating-webhook-configuration"
+	VCWebhookCAFile           = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	VCWebhookCSRName          = "virtualcluster-webhook-csr"
 )
 
-var log = logf.Log.WithName("virtualcluster-webhook")
+var (
+	VCWebhookServiceNs string
+	log                = logf.Log.WithName("virtualcluster-webhook")
+)
+
+func init() {
+	VCWebhookServiceNs, _ = kubeutil.GetPodNsFromInside()
+	if VCWebhookServiceNs == "" {
+		log.Info("setup virtualcluster webhook in default namespace",
+			"default-ns", DefaultVCWebhookServiceNs)
+		VCWebhookServiceNs = DefaultVCWebhookServiceNs
+	}
+}
 
 // Add adds the webhook server to the manager as a runnable
 func Add(mgr manager.Manager, certDir string) error {
 	// 1. create the webhook service
 	if err := createVirtualClusterWebhookService(mgr.GetClient()); err != nil {
-		return err
+		return fmt.Errorf("fail to create virtualcluster webhook service: %s", err)
 	}
 
 	// 2. generate the serving certificate for the webhook server
 	if err := genCertificate(mgr, certDir); err != nil {
-		return err
+		return fmt.Errorf("fail to generate certificates for webhook server: %s", err)
 	}
 
 	// 3. create the ValidatingWebhookConfiguration
 	log.Info(fmt.Sprintf("will create validatingwebhookconfiguration/%s", VCWebhookCfgName))
 	if err := createValidatingWebhookConfiguration(mgr.GetClient()); err != nil {
-		return err
+		return fmt.Errorf("fail to create validating webhook configuration: %s", err)
 	}
 	log.Info(fmt.Sprintf("successfully created validatingwebhookconfiguration/%s", VCWebhookCfgName))
 
@@ -136,7 +148,7 @@ func createValidatingWebhookConfiguration(client client.Client) error {
 	// use the serviceaccount ca file as the authority
 	CAPemByts, err := ioutil.ReadFile(VCWebhookCAFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to read ca file(%s): %s", VCWebhookCAFile, err)
 	}
 	vwhCfg := admv1beta1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -190,18 +202,18 @@ func genCertificate(mgr manager.Manager, certDir string) error {
 	// client-go client for generating certificate
 	clientSet, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to generate the clientset: %s", err)
 	}
 	csrClient := clientSet.CertificatesV1beta1().CertificateSigningRequests()
 
 	// 1. delete the VC CSR if exist
 	if err := delVCWebhookCSRIfExist(csrClient); err != nil {
-		return err
+		return fmt.Errorf("fail to delete existing webhook: %s", err)
 	}
 	// 2. generate csr
 	csrPEM, keyPEM, privateKey, err := generateCSR(clientSet)
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to geneate csr: %s", err)
 	}
 
 	// 3. approve the csr
@@ -211,12 +223,12 @@ func genCertificate(mgr manager.Manager, certDir string) error {
 	// NOTE this step will block until the CSR is issued
 	csrPEM, err = submitCSRAndWait(csrClient, csrPEM, privateKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to submit CSR: %s", err)
 	}
 
 	// 5. generate certificate files (i.e., tls.crt and tls.key)
 	if err := genCertAndKeyFile(csrPEM, keyPEM, certDir); err != nil {
-		return err
+		return fmt.Errorf("fail to generate certificate and key: %s", err)
 	}
 
 	return nil
@@ -340,7 +352,7 @@ func getSVCClusterIP(clientSet kubernetes.Interface) (net.IP, error) {
 	whSvc, err := clientSet.CoreV1().Services(VCWebhookServiceNs).
 		Get(context.TODO(), VCWebhookServiceName, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to get serivce clusterIP: %s", err)
 	}
 	if whSvc.Spec.ClusterIP == "" {
 		return nil, fmt.Errorf("ClusterIP of the service/%s is not set", VCWebhookServiceName)
@@ -352,7 +364,7 @@ func getSVCClusterIP(clientSet kubernetes.Interface) (net.IP, error) {
 func genCertAndKeyFile(certData, keyData []byte, certDir string) error {
 	// always remove first
 	if err := os.RemoveAll(certDir); err != nil {
-		return err
+		return fmt.Errorf("fail to remove certificates: %s", err)
 	}
 	if err := os.MkdirAll(certDir, 0755); err != nil {
 		return fmt.Errorf("could not create directory %q to store certificates: %v", certDir, err)
@@ -393,7 +405,7 @@ func submitCSRAndWait(csrClient certificatesclient.CertificateSigningRequestInte
 		[]certificates.KeyUsage{certificates.UsageServerAuth},
 		privateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to request certificate: %s", err)
 	}
 	log.Info("CSR request submitted, will wait 2 seconds for it to be signed", "CSR reqest", req.GetName())
 	timeoutCtx, cancelFn := context.WithTimeout(context.Background(), 2*time.Second)
