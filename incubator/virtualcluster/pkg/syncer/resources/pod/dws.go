@@ -45,42 +45,49 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	return c.multiClusterPodController.Start(stopCh)
 }
 
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
+func (c *controller) Reconcile(request reconciler.Request) (res reconciler.Result, retErr error) {
 	klog.V(4).Infof("reconcile pod %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
+
 	pPod, err := c.podLister.Pods(targetNamespace).Get(request.Name)
-	pExists := true
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconciler.Result{Requeue: true}, err
-		}
-		pExists = false
+	if err != nil && !errors.IsNotFound(err) {
+		return reconciler.Result{Requeue: true}, err
 	}
-	vExists := true
+
+	var vPod *v1.Pod
 	vPodObj, err := c.multiClusterPodController.Get(request.ClusterName, request.Namespace, request.Name)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconciler.Result{Requeue: true}, err
-		}
-		vExists = false
+	if err == nil {
+		vPod = vPodObj.(*v1.Pod)
+	} else if !errors.IsNotFound(err) {
+		return reconciler.Result{Requeue: true}, err
 	}
 
 	var operation string
-	if vExists && !pExists {
+	defer func() {
+		recordOperationDuration(operation, time.Now())
+		recordOperationStatus(operation, retErr)
+	}()
+
+	if vPod != nil && pPod == nil {
 		operation = "pod_add"
-		defer recordOperationDuration(operation, time.Now())
-		vPod := vPodObj.(*v1.Pod)
 		err := c.reconcilePodCreate(request.ClusterName, targetNamespace, request.UID, vPod)
-		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s CREATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
+
+			if parentRef := getParentRefFromPod(vPod); parentRef != nil {
+				c.multiClusterPodController.Eventf(request.ClusterName, parentRef, v1.EventTypeWarning, "FailedCreate", "Error creating: %v", err)
+			}
+			c.multiClusterPodController.Eventf(request.ClusterName, &v1.ObjectReference{
+				Kind:      "Pod",
+				Namespace: vPod.Namespace,
+				UID:       vPod.UID,
+			}, v1.EventTypeWarning, "FailedCreate", "Error creating: %v", err)
+
 			return reconciler.Result{Requeue: true}, err
 		}
-	} else if !vExists && pExists {
+	} else if vPod == nil && pPod != nil {
 		operation = "pod_delete"
-		defer recordOperationDuration(operation, time.Now())
 		err := c.reconcilePodRemove(request.ClusterName, targetNamespace, request.UID, request.Name, pPod)
-		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s DELETE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
@@ -88,12 +95,9 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		if pPod.Spec.NodeName != "" {
 			c.updateClusterVNodePodMap(request.ClusterName, pPod.Spec.NodeName, request.UID, reconciler.DeleteEvent)
 		}
-	} else if vExists && pExists {
+	} else if vPod != nil && pPod != nil {
 		operation = "pod_update"
-		defer recordOperationDuration(operation, time.Now())
-		vPod := vPodObj.(*v1.Pod)
 		err := c.reconcilePodUpdate(request.ClusterName, targetNamespace, request.UID, pPod, vPod)
-		recordOperationStatus(operation, err)
 		if err != nil {
 			klog.Errorf("failed reconcile Pod %s/%s UPDATE of cluster %s %v", request.Namespace, request.Name, request.ClusterName, err)
 			return reconciler.Result{Requeue: true}, err
@@ -112,23 +116,17 @@ func isPodScheduled(pod *v1.Pod) bool {
 	return cond != nil && cond.Status == v1.ConditionTrue
 }
 
-func createNotSupportEvent(pod *v1.Pod) *v1.Event {
-	eventTime := metav1.Now()
-	return &v1.Event{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "syncer",
-		},
-		InvolvedObject: v1.ObjectReference{
-			APIVersion: "v1",
-			Kind:       "Pod",
-			Name:       pod.Name,
-		},
-		Type:                "Warning",
-		Reason:              "NotSupported",
-		Message:             "The Pod has nodeName set in the spec which is not supported for now",
-		FirstTimestamp:      eventTime,
-		LastTimestamp:       eventTime,
-		ReportingController: "syncer",
+func getParentRefFromPod(vPod *v1.Pod) *v1.ObjectReference {
+	if len(vPod.OwnerReferences) == 0 {
+		return nil
+	}
+
+	owner := vPod.OwnerReferences[0]
+	return &v1.ObjectReference{
+		Kind:      owner.Kind,
+		Namespace: vPod.Namespace,
+		Name:      owner.Name,
+		UID:       owner.UID,
 	}
 }
 
@@ -140,13 +138,11 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 
 	if vPod.Spec.NodeName != "" {
 		// For now, we skip vPod that has NodeName set to prevent tenant from deploying DaemonSet or DaemonSet alike CRDs.
-		tenantClient, err := c.multiClusterPodController.GetClusterClient(clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
-		}
-		event := createNotSupportEvent(vPod)
-		vEvent := conversion.BuildVirtualEvent(clusterName, event, vPod)
-		_, err = tenantClient.CoreV1().Events(vPod.Namespace).Create(context.TODO(), vEvent, metav1.CreateOptions{})
+		err := c.multiClusterPodController.Eventf(clusterName, &v1.ObjectReference{
+			Kind:      "Pod",
+			Namespace: vPod.Namespace,
+			UID:       vPod.UID,
+		}, v1.EventTypeWarning, "NotSupported", "The Pod has nodeName set in the spec which is not supported for now")
 		return err
 	}
 
