@@ -35,7 +35,7 @@ Kubernetes tools such as `kubectl`. However, the `kubectl-hns`
 greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin as well.
 
-To install the plugin (Linux-only), first switch to a directory on your `PATH`
+To install the plugin, first switch to a directory on your `PATH`
 (e.g. `~/bin`), then run the following commands:
 
 ```
@@ -44,8 +44,14 @@ To install the plugin (Linux-only), first switch to a directory on your `PATH`
 # shown below, as of August 2020.
 HNC_VERSION=v0.5.1
 
-# Download the plugin
+# HNC v0.5.1 or earlier: download the plugin (Linux only)
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
+
+# HNC v0.5.2 or later: set the platform and download the plugin. The support platforms are:
+# * linux_amd64 (Linux on Intel/AMD)
+# * darwin_amd64 (MacOS on Intel)
+HNC_PLATFORM=linux_amd64
+curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns_${HNC_PLATFORM} -o ./kubectl-hns
 
 # Make the plugin executable.
 chmod +x ./kubectl-hns
@@ -342,16 +348,11 @@ HNC_VERSION=v0.5.1
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
 
-#### Download the kubectl plugin (Linux only)
+#### Download the kubectl plugin
 
 The `kubectl-hns` plugin makes most HNC use and administration much easier; we
-strongly recommend installing it. Run the following commands from any directory
-on your `PATH`.
-
-```bash
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
-chmod +x ./kubectl-hns
-```
+strongly recommend installing it. To install it, please follow the instruction 
+on [Prepare to use hierarchical namespaces](#use-prepare).
 
 #### Install from source
 
