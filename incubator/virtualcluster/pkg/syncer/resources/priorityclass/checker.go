@@ -63,6 +63,7 @@ func (c *controller) PatrollerDo() {
 		}(clusterName)
 	}
 	wg.Wait()
+
 	pPriorityClassList, err := c.priorityclassLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("error listing priorityclass from super master informer cache: %v", err)
@@ -71,14 +72,12 @@ func (c *controller) PatrollerDo() {
 
 	for _, pPriorityClass := range pPriorityClassList {
 		if !publicPriorityClass(pPriorityClass) {
-			klog.V(4).Infof("%v is not public priority class", pPriorityClass.Name)
 			continue
 		}
 		for _, clusterName := range clusterNames {
 			_, err := c.multiClusterPriorityClassController.Get(clusterName, "", pPriorityClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					klog.Infof("will add to upward controller queue +++++++++++")
 					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPriorityClasses").Inc()
 					c.upwardPriorityClassController.AddToQueue(clusterName + "/" + pPriorityClass.Name)
 				}
@@ -86,6 +85,7 @@ func (c *controller) PatrollerDo() {
 			}
 		}
 	}
+
 	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedPriorityClasses").Set(float64(numMissMatchedPriorityClasses))
 }
 
@@ -99,7 +99,6 @@ func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
 	scList := listObj.(*v1.PriorityClassList)
 	for i, vPriorityClass := range scList.Items {
 		pPriorityClass, err := c.priorityclassLister.Get(vPriorityClass.Name)
-		klog.V(4).Infof("get priority class %v from super cluster, virtual priority class%v", pPriorityClass.Name, pPriorityClass.Name)
 		if errors.IsNotFound(err) {
 			// super master is the source of the truth for sc object, delete tenant master obj
 			tenantClient, err := c.multiClusterPriorityClassController.GetClusterClient(clusterName)

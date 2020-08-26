@@ -18,16 +18,14 @@ package priorityclass
 
 import (
 	"fmt"
+
 	v1 "k8s.io/api/scheduling/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
-
 	priorityclassinformers "k8s.io/client-go/informers/scheduling/v1"
 	clientset "k8s.io/client-go/kubernetes"
-
 	v1priorityclass "k8s.io/client-go/kubernetes/typed/scheduling/v1"
 	listersv1 "k8s.io/client-go/listers/scheduling/v1"
-
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -77,7 +75,7 @@ func NewPriorityClassController(config *config.SyncerConfiguration,
 	} else {
 		mcOptions = options.MCOptions
 	}
-	mcOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow //DwsControllerWorkerLow
+	mcOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	multiClusterPriorityClassController, err := mc.NewMCController("tenant-masters-priorityclass-controller", &v1.PriorityClass{}, *mcOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create priorityClass mc controller: %v", err)
@@ -180,6 +178,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {
+	klog.Infof("tenant-masters-priorityclass-controller watch cluster %s for priorityclass resource", cluster.GetClusterName())
 	err := c.multiClusterPriorityClassController.WatchClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
 		klog.Errorf("failed to watch cluster %s priorityclass: %v", cluster.GetClusterName(), err)
@@ -187,5 +186,6 @@ func (c *controller) AddCluster(cluster mc.ClusterInterface) {
 }
 
 func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
+	klog.Infof("tenant-masters-priorityclass-controller stop watching cluster %s for priorityclass resource", cluster.GetClusterName())
 	c.multiClusterPriorityClassController.TeardownClusterResource(cluster)
 }

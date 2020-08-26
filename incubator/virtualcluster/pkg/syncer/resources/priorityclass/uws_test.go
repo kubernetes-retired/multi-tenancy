@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,16 +34,19 @@ import (
 	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
+var policy = corev1.PreemptNever
+
 func makePriorityClass(name, uid string, mFuncs ...func(*v1.PriorityClass)) *v1.PriorityClass {
 	pc := &v1.PriorityClass{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PriorityClass",
-			APIVersion: "priority.k8s.io/v1",
+			APIVersion: "scheduling.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			UID:  types.UID(uid),
 		},
+		PreemptionPolicy: &policy,
 	}
 
 	for _, f := range mFuncs {
@@ -168,15 +172,19 @@ func TestUWPCUpdate(t *testing.T) {
 		"pPC exists, vPC exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
+					class.Value = 10000
 				}),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Value = 20000
 				}),
 			},
 			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedUpdatedObject: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Value = 10000
+					class.PreemptionPolicy = &policy
 				}),
 			},
 		},

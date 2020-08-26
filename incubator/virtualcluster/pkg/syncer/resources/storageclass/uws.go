@@ -40,7 +40,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) BackPopulate(key string) error {
-	// The key format is clsutername/scName.
+	// The key format is clustername/scName.
 	clusterName, scName, _ := cache.SplitMetaNamespaceKey(key)
 
 	op := reconciler.AddEvent

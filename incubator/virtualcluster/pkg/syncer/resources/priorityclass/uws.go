@@ -19,7 +19,6 @@ package priorityclass
 import (
 	"context"
 	"fmt"
-	"k8s.io/klog"
 
 	v1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -41,9 +40,9 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) BackPopulate(key string) error {
-	// The key format is clsutername/scName.
+	// The key format is clustername/pcName.
 	clusterName, scName, _ := cache.SplitMetaNamespaceKey(key)
-	klog.V(4).Infof("backPopulate key %v for clusterName %v", key, clusterName)
+
 	op := reconciler.AddEvent
 	pPriorityClass, err := c.priorityclassLister.Get(scName)
 	if err != nil {

@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
-	v1storage "k8s.io/api/storage/v1"
 	v1scheduling "k8s.io/api/scheduling/v1"
+	v1storage "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -502,7 +502,6 @@ func (e vcEquality) CheckPriorityClassEquality(pObj, vObj *v1scheduling.Priority
 		return nil
 	}
 }
-
 
 func filterNodePort(svc *v1.Service) *v1.ServiceSpec {
 	specClone := svc.Spec.DeepCopy()
