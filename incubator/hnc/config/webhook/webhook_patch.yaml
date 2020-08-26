@@ -6,3 +6,12 @@ metadata:
 webhooks:
 - name: objects.hnc.x-k8s.io
   timeoutSeconds: 2
+  sideEffects: None
+- name: subnamespaceanchors.hnc.x-k8s.io
+  sideEffects: None
+- name: hierarchyconfigurations.hnc.x-k8s.io
+  sideEffects: None
+- name: hncconfigurations.hnc.x-k8s.io
+  sideEffects: None
+- name: namespaces.hnc.x-k8s.io
+  sideEffects: None
