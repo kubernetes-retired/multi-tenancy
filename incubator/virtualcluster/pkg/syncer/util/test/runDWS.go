@@ -21,8 +21,8 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	storageV1 "k8s.io/api/storage/v1"
 	schedulingV1 "k8s.io/api/scheduling/v1"
+	storageV1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"

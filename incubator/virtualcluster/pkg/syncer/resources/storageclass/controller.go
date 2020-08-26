@@ -75,7 +75,7 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 	} else {
 		mcOptions = options.MCOptions
 	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
+	mcOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
 	multiClusterStorageClassController, err := mc.NewMCController("tenant-masters-storageclass-controller", &v1.StorageClass{}, *mcOptions)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageClass mc controller: %v", err)

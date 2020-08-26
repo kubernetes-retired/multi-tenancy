@@ -33,16 +33,16 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/persistentvolume"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/persistentvolumeclaim"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/pod"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/priorityclass"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/secret"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/service"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/serviceaccount"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/storageclass"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/priorityclass"
 )
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []manager.ResourceSyncerNew
-var ExtraResourceController map[string] manager.ResourceSyncerNew
+var ExtraResourceController map[string]manager.ResourceSyncerNew
 
 func init() {
 	AddToManagerFuncs = []manager.ResourceSyncerNew{
@@ -59,9 +59,9 @@ func init() {
 		serviceaccount.NewServiceAccountController,
 		storageclass.NewStorageClassController,
 	}
-        ExtraResourceController = make(map[string]manager.ResourceSyncerNew)
-        // add extra resource syncer controller here
-        ExtraResourceController["priorityclass"] = priorityclass.NewPriorityClassController
+	ExtraResourceController = make(map[string]manager.ResourceSyncerNew)
+	// add extra resource syncer controller here
+	ExtraResourceController["priorityclass"] = priorityclass.NewPriorityClassController
 }
 
 func Register(config *config.SyncerConfiguration,
@@ -79,7 +79,7 @@ func Register(config *config.SyncerConfiguration,
 	}
 
 	for _, r := range config.ExtraSyncingResources {
-		klog.V(4).Infof("extra resource controllers that will be synced to virtual cluster are %v", r )
+		klog.V(4).Infof("extra resource controllers that will be synced to virtual cluster are %v", r)
 		extraf, exist := ExtraResourceController[r]
 		if exist {
 			if c, _, _, err := extraf(config, client, informerFactory, vcClient, vcInformer, nil); err != nil {
@@ -89,8 +89,8 @@ func Register(config *config.SyncerConfiguration,
 				controllerManager.AddResourceSyncer(c)
 			}
 		} else {
-                        klog.Errorf("resource %v does not have a syncer implemented", r)
-                }
+			klog.Errorf("resource %v does not have a syncer implemented", r)
+		}
 	}
 	return nil
 }

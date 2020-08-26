@@ -49,8 +49,8 @@ test: generate fmt vet manifests
 	@( for pkg in ${COVERAGE_PACKAGES}; do \
 		go test ${TEST_FLAGS} \
 			-coverprofile=coverage/unit-test-`echo $$pkg | tr "/" "_"`.out \
-			$$pkg ;\
-	done )
+			$$pkg || exit 1 ;\
+	done ) 
 
 .PHONY: coverage
 coverage: ## combine coverage after test

@@ -79,18 +79,22 @@ func TestPriorityClassPatrol(t *testing.T) {
 		},
 		"pPriorityClass exists, vPriorityClass exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
-				makePriorityClass("sc", "12345", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
 					class.Labels = map[string]string{
 						constants.PublicObjectKey: "true",
 					}
+					class.Value = 10000
 				}),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Value = 20000
 				}),
 			},
 			ExpectedUpdatedVObject: []runtime.Object{
-				makePriorityClass("sc", "123456", func(class *v1.PriorityClass) {
+				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Value = 10000
+					class.PreemptionPolicy = &policy
 				}),
 			},
 			WaitUWS: true,
