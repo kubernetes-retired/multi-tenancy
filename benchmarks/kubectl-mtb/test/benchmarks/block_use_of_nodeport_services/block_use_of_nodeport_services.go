@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	serviceutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/service"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
@@ -39,7 +38,7 @@ var b = &benchmark.Benchmark{
 		for _, resource := range resources {
 			access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
 			if err != nil {
-				log.Logging.Debug(err.Error())
+				options.Logger.Debug(err.Error())
 				return err
 			}
 			if !access {
@@ -59,7 +58,7 @@ var b = &benchmark.Benchmark{
 
 		_, err := options.TClient.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			options.Logger.Debug(err.Error())
 			return err
 		}
 
@@ -70,7 +69,7 @@ var b = &benchmark.Benchmark{
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create service of type NodePort")
 		}
-		log.Logging.Debug("Test Passed: ", err.Error())
+		options.Logger.Debug("Test Passed: ", err.Error())
 		return nil
 	},
 }
@@ -79,7 +78,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("block_use_of_nodeport_services/config.yaml"))
 	if err != nil {
-		log.Logging.Error(err.Error())
+		fmt.Println(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)

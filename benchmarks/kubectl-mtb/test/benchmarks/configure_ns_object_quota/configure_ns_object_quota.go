@@ -9,7 +9,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
@@ -28,7 +27,7 @@ var b = &benchmark.Benchmark{
 
 			access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
 			if err != nil {
-				log.Logging.Debug(err.Error())
+				options.Logger.Debug(err.Error())
 				return err
 			}
 			if !access {
@@ -56,7 +55,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("configure_ns_object_quota/config.yaml"))
 	if err != nil {
-		log.Logging.Error(err.Error())
+		fmt.Println(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)

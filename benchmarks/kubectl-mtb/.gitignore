@@ -3,4 +3,5 @@
 
 blob.go
 import.go
+coverage.out
 mtb-builder
