@@ -54,7 +54,7 @@ var b = &benchmark.Benchmark{
 
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(options.TClient, "", resource, verb)
 				if err != nil {
 					log.Logging.Debug(err.Error())
 					return err
