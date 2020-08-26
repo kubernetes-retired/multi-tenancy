@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -76,7 +77,14 @@ func MustNotRun(cmdln ...string) {
 
 func TryRun(cmdln ...string) error {
 	stdout, err := RunCommand(cmdln...)
-	GinkgoT().Log("Output: ", stdout)
+	if err != nil {
+		// Add stdout to the error, since it's the error that gets displayed when a test fails and it
+		// can be very hard looking at the log to see which failures are intended and which are not.
+		err = fmt.Errorf("Error: %s\nOutput: %s", err, stdout)
+		GinkgoT().Log("Output (failed): ", err)
+	} else {
+		GinkgoT().Log("Output (passed): ", stdout)
+	}
 	return err
 }
 
@@ -95,8 +103,8 @@ func RunShouldContainMultiple(substrs []string, seconds float64, cmdln ...string
 		if err != nil {
 			return err
 		}
-		if len(missing) > 0 {
-			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
+		if missing != "" {
+			return errors.New(missing)
 		}
 		return nil
 	}, seconds).Should(Succeed())
@@ -109,8 +117,8 @@ func RunErrorShouldContain(substr string, seconds float64, cmdln ...string) {
 func RunErrorShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
 	Eventually(func() error {
 		missing, err := runShouldContainMultiple(substrs, cmdln...)
-		if len(missing) > 0 {
-			return errors.New("Missing the expected strings: " + strings.Join(missing, ", "))
+		if missing != "" {
+			return errors.New(missing)
 		}
 		if err == nil {
 			return errors.New("Expecting command to fail but get succeed.")
@@ -119,20 +127,32 @@ func RunErrorShouldContainMultiple(substrs []string, seconds float64, cmdln ...s
 	}, seconds).Should(Succeed())
 }
 
-func runShouldContainMultiple(substrs []string, cmdln ...string) ([]string, error) {
-		stdout, err := RunCommand(cmdln...)	
+func runShouldContainMultiple(substrs []string, cmdln ...string) (string, error) {
+		stdout, err := RunCommand(cmdln...)
 		GinkgoT().Log("Output: ", stdout)
 		return missAny(substrs, stdout), err
 }
 
-func missAny(substrs []string, teststring string) []string {
-	var missing []string 
+// If any of the substrs are missing from teststring, returns a string of the form:
+//   Missing: <string1>, <string2>, ...
+//   Got: teststring
+// Otherwise returns the empty string.
+func missAny(substrs []string, teststring string) string {
+	var missing []string
 	for _, substr := range substrs {
 		if strings.Contains(teststring, substr) == false {
 			missing = append(missing, substr)
 		}
 	}
-	return missing
+	if len(missing) == 0 {
+		return ""
+	}
+	// This looks *ok* if we're only missing a single multiline string, and ok if we're missing
+	// multiple single-line strings. It would look awful if we were missing multiple multiline strings
+	// but I think that's pretty rare.
+	msg := "Missing: "+strings.Join(missing, ", ")+"\n\n"
+	msg += "Got: "+teststring
+	return msg
 }
 
 func RunShouldNotContain(substr string, seconds float64, cmdln ...string) {
