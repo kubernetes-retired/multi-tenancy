@@ -13,6 +13,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Select namespaces based on their hierarchies](#use-select)
   * [Delete a subnamespace](#use-subns-delete)
   * [Organize full namespaces into a hierarchy](#use-full)
+  * [Move a subnamespace](#move-subnamespace)
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
@@ -314,6 +315,69 @@ changes the permissions you require to change the parent of `ns-bar` to `ns-foo`
 Similarly, if you want to make `ns-bar` a root again, you must be an
 administrator of the root namespace that is an ancestor of `ns-bar`, since the
 admins of that namespace will lose access to `ns-bar` once it becomes a root.
+
+
+<a name="move-subnamespace"/>
+
+### Move a Subnamespace
+
+Changing the parent of a subnamespace is not yet permitted in HNC, though there may be times
+where you want to move a subnamespace from one parent to another. 
+
+Consider the following tree:
+
+```
+org
+ - ns-team1 (full namespace)
+   - ns-product-1 (subnamespace)
+   - ns-product-2 (subnamespace)
+ - ns-team2 (full namespace)
+   - ns-product-3 (subnamespace)
+```
+
+We now want to move `ns-product-2` from `ns-team-1` to `ns-team-2`.
+
+To achieve this, we need to:
+ - Remove the `hnc.x-k8s.io/subnamespaceOf` annotation from the `ns-product-2` subnamespace
+ ```
+ kubectl annotate namespace ns-product-2 hnc.x-k8s.io/subnamespaceOf-
+ ```
+
+ - Change the parent from `ns-team-1` to `ns-team-2`
+ ```
+ kubectl hns set ns-product-2 --parent ns-team-2
+ ```
+
+ - Delete the subnamespaceanchor in the `ns-team-1` namespace
+ ```
+ kubectl delete subnamespaceanchor ns-product-2 -n ns-team-1
+ ```
+
+ - Add the `hnc.x-k8s.io/subnamespaceOf` annotation back to `ns-product-2`, but with a parent of `ns-team-2`
+ ```
+  kubectl annotate namespace myns hnc.x-k8s.io/subnamespaceOf=ns-team-2
+ ```
+
+ - Create a new subnamespaceanchor in the `ns-team-2` namespace
+ ```
+ cat <<EOF | kubectl apply -n ns-team-2 -f -
+  apiVersion: hnc.x-k8s.io/v1alpha1
+  kind: SubnamespaceAnchor
+  metadata:
+    name: ns-product-2
+  EOF
+ ```
+
+The tree now looks like this:
+
+```
+org
+ - ns-team1 (full namespace)
+   - ns-product-1 (subnamespace)
+ - ns-team2 (full namespace)
+   - ns-product-2 (subnamespace)
+   - ns-product-3 (subnamespace)
+```
 
 <a name="admin"/>
 
