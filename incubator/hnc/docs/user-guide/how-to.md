@@ -328,10 +328,10 @@ Consider the following tree:
 
 ```
 org
- - ns-team1 (full namespace)
+ - ns-team-1 (full namespace)
    - ns-product-1 (subnamespace)
    - ns-product-2 (subnamespace)
- - ns-team2 (full namespace)
+ - ns-team-2 (full namespace)
    - ns-product-3 (subnamespace)
 ```
 
@@ -372,9 +372,9 @@ The tree now looks like this:
 
 ```
 org
- - ns-team1 (full namespace)
+ - ns-team-1 (full namespace)
    - ns-product-1 (subnamespace)
- - ns-team2 (full namespace)
+ - ns-team-2 (full namespace)
    - ns-product-2 (subnamespace)
    - ns-product-3 (subnamespace)
 ```
