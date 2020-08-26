@@ -30,8 +30,10 @@ steps:
     kustomize build . -o ./hnc-manager.yaml
 
     # Build plugin
-    GOOS=linux GOARCH=amd64 go build -o kubectl-hns_linux_amd64 ../cmd/kubectl/main.go
-    GOOS=darwin GOARCH=amd64 go build -o kubectl-hns_darwin_amd64 ../cmd/kubectl/main.go
+    GOOS=linux GOARCH=amd64 go build -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=$_HNC_VERSION"\
+                                     -o kubectl-hns_linux_amd64 ../cmd/kubectl/main.go
+    GOOS=darwin GOARCH=amd64 go build -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=$_HNC_VERSION"\
+                                     -o kubectl-darwin_amd64 ../cmd/kubectl/main.go
 # Upload manifest
 - name: gcr.io/cloud-builders/curl
   args:
