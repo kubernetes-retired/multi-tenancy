@@ -355,7 +355,7 @@ To achieve this, we need to:
 
  - Add the `hnc.x-k8s.io/subnamespaceOf` annotation back to `ns-product-2`, but with a parent of `ns-team-2`
  ```
-  kubectl annotate namespace myns hnc.x-k8s.io/subnamespaceOf=ns-team-2
+  kubectl annotate namespace ns-product-2 hnc.x-k8s.io/subnamespaceOf=ns-team-2
  ```
 
  - Create a new subnamespaceanchor in the `ns-team-2` namespace
