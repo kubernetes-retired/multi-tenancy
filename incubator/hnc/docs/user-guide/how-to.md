@@ -42,7 +42,7 @@ To install the plugin, first switch to a directory on your `PATH`
 # Select the HNC version that matches the version installed on your cluster.
 # Ask your cluster administrator if you're not sure. The latest version is
 # shown below, as of August 2020.
-HNC_VERSION=v0.5.1
+HNC_VERSION=v0.5.2
 
 # HNC v0.5.1 or earlier: download the plugin (Linux only)
 curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
@@ -339,11 +339,11 @@ release notes for that version.
 
 #### Install an official release
 
-As of August 2020, the most recent official release is v0.5.1.
+As of August 2020, the most recent official release is v0.5.2.
 
 ```bash
 # Set the desired release:
-HNC_VERSION=v0.5.1
+HNC_VERSION=v0.5.2
 
 kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
