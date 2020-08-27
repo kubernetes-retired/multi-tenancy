@@ -92,7 +92,7 @@ func printSubtree(prefix string, hier *api.HierarchyConfiguration, inCycle bool)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		ns, err := k8sClient.CoreV1().Namespaces().Get(ctx, txt, metav1.GetOptions{})
+		ns, err := k8sClient.CoreV1().Namespaces().Get(ctx, cn, metav1.GetOptions{})
 		if err != nil {
 			fmt.Printf("Could not get namespaces: %s\n", err)
 			os.Exit(1)

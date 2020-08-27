@@ -183,9 +183,9 @@ spec:
 		MustRun("kubectl hns create", nsService3, "-n", nsTeamA)
 		expected := "" + // empty string make go fmt happy
 			nsTeamA + "\n" +
-			"├── " + nsService1 + "\n" +
-			"├── " + nsService2 + "\n" +
-			"└── " + nsService3
+			"├── [s] " + nsService1 + "\n" +
+			"├── [s] " + nsService2 + "\n" +
+			"└── [s] " + nsService3
 		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
 
 		// show that you can't re-use a subns name
@@ -204,15 +204,15 @@ spec:
 		MustRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"└── " + nsService2
+			"└── [s] " + nsService2
 		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
 
 		// Show the difference of a subns and regular child ns
 		MustRun("kubectl hns create", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"├── " + nsService2 + "\n" +
-			"└── " + nsService4
+			"├── [s] " + nsService2 + "\n" +
+			"└── [s] " + nsService4
 		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
 		MustRun("kubectl create ns", nsStaging)
 		MustRun("kubectl hns set", nsStaging, "--parent", nsService4)
@@ -226,7 +226,7 @@ spec:
 		MustRun("kubectl delete subns", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"└── " + nsService2
+			"└── [s] " + nsService2
 		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
 		RunShouldContain("CritParentMissing: missing parent", 2, "kubectl hns describe", nsStaging)
 	})
