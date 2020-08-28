@@ -42,11 +42,11 @@ spec:
                     description: Kind to be configured.
                     type: string
                   mode:
-                    description: Synchronization mode of the kind. If the field is empty, it will be treated as "propagate".
+                    description: Synchronization mode of the kind. If the field is empty, it will be treated as "Propagate".
                     enum:
-                    - propagate
-                    - ignore
-                    - remove
+                    - Propagate
+                    - Ignore
+                    - Remove
                     type: string
                 required:
                 - apiVersion

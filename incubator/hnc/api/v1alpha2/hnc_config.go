@@ -26,21 +26,21 @@ const (
 )
 
 // SynchronizationMode describes propagation mode of objects of the same kind.
-// The only three modes currently supported are "propagate", "ignore", and "remove".
+// The only three modes currently supported are "Propagate", "Ignore", and "Remove".
 // See detailed definition below. An unsupported mode will be treated as "ignore".
 type SynchronizationMode string
 
 const (
 	// Propagate objects from ancestors to descendants and deletes obsolete descendants.
-	Propagate SynchronizationMode = "propagate"
+	Propagate SynchronizationMode = "Propagate"
 
 	// Ignore the modification of this type. New or changed objects will not be propagated,
 	// and obsolete objects will not be deleted. The inheritedFrom label is not removed.
-	// Any unknown mode is treated as ignore.
-	Ignore SynchronizationMode = "ignore"
+	// Any unknown mode is treated as Ignore.
+	Ignore SynchronizationMode = "Ignore"
 
 	// Remove all existing propagated copies.
-	Remove SynchronizationMode = "remove"
+	Remove SynchronizationMode = "Remove"
 )
 
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
@@ -57,9 +57,9 @@ type TypeSynchronizationSpec struct {
 	// Kind to be configured.
 	Kind string `json:"kind"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
-	// as "propagate".
+	// as "Propagate".
 	// +optional
-	// +kubebuilder:validation:Enum=propagate;ignore;remove
+	// +kubebuilder:validation:Enum=Propagate;Ignore;Remove
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }
 
