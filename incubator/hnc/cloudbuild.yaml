@@ -6,34 +6,25 @@ steps:
   args:
   - '-c'
   - |
-    git clone https://github.com/$_HNC_REPO_USER/multi-tenancy
+    set -e
+    echo Cloning from https://github.com/$_HNC_REPO_OWNER/multi-tenancy
+    git clone https://github.com/$_HNC_REPO_OWNER/multi-tenancy
     cd multi-tenancy
+    echo Checking out hnc-$_HNC_IMG_TAG
     git checkout hnc-$_HNC_IMG_TAG
 # Build the manifests and the kubectl plugin
-- name: mirror.gcr.io/library/golang
+- name: golang:1.14
   entrypoint: 'bash'
   args:
   - '-c'
   - |
-    # Get kustomize
-    export PATH=$$(go env GOPATH)/bin:$$PATH
-    mkdir -p $$(go env GOPATH)/bin
-    GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4
-
-    # Build manifests
+    set -e
     cd multi-tenancy/incubator/hnc
-    mkdir out
-    cd out
-    touch kustomization.yaml
-    kustomize edit add resource ../config/default
-    kustomize edit set image controller=$_HNC_RELEASED_IMG
-    kustomize build . -o ./hnc-manager.yaml
-
-    # Build plugin
-    GOOS=linux GOARCH=amd64 go build -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=$_HNC_VERSION"\
-                                     -o kubectl-hns_linux_amd64 ../cmd/kubectl/main.go
-    GOOS=darwin GOARCH=amd64 go build -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=$_HNC_VERSION"\
-                                     -o kubectl-darwin_amd64 ../cmd/kubectl/main.go
+    export HNC_REGISTRY=$_HNC_REGISTRY
+    export HNC_IMG_NAME=$_HNC_IMG_NAME
+    export HNC_IMG_TAG=$_HNC_IMG_TAG
+    echo "Building HNC manifests and plugin for $$HNC_REGISTRY/$$HNC_IMG_NAME:$$HNC_IMG_TAG"
+    make build
 # Upload manifest
 - name: gcr.io/cloud-builders/curl
   args:
@@ -42,10 +33,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/out/hnc-manager.yaml'
+  - '@multi-tenancy/incubator/hnc/manifests/hnc-manager.yaml'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=hnc-manager.yaml'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=hnc-manager.yaml'
 # Upload plugin (Linux)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -54,10 +45,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/out/kubectl-hns_linux_amd64'
+  - '@multi-tenancy/incubator/hnc/bin/kubectl/kubectl-hns_linux_amd64'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_linux_amd64'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_linux_amd64'
 # Upload plugin (Darwin)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -66,10 +57,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/out/kubectl-hns_darwin_amd64'
+  - '@multi-tenancy/incubator/hnc/bin/kubectl/kubectl-hns_darwin_amd64'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/kubernetes-sigs/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_amd64'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_amd64'
 # Build Docker image
 - name: gcr.io/cloud-builders/docker
   args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG', 'multi-tenancy/incubator/hnc']

@@ -27,15 +27,14 @@ set -e
 export PATH=$(go env GOPATH)/bin:$PATH
 mkdir -p $(go env GOPATH)/bin
 
-echo "Installing 'kubebuilder'"
-wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v2.0.0-alpha.1/kubebuilder_2.0.0-alpha.1_linux_amd64.tar.gz
-tar -zxvf kubebuilder_2.0.0-alpha.1_linux_amd64.tar.gz
-mv kubebuilder_2.0.0-alpha.1_linux_amd64 /usr/local/kubebuilder
-
-echo "Installing 'kustomize'"
-GO111MODULE=on go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4
+echo "Installing 'kubebuilder' to include the Ginkgo test suite requirements"
+kb=2.3.1
+wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${kb}/kubebuilder_${kb}_linux_amd64.tar.gz
+tar -zxvf kubebuilder_${kb}_linux_amd64.tar.gz
+mv kubebuilder_${kb}_linux_amd64 /usr/local/kubebuilder
 
 hack_dir=$(dirname ${BASH_SOURCE})
 
 echo "Running 'make tests'"
-make test -C "$hack_dir/.."
+cd "$hack_dir/.."
+make test
