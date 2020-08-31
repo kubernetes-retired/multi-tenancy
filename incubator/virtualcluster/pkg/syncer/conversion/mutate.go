@@ -120,6 +120,7 @@ func PodMutateDefault(vPod *v1.Pod, saSecretMap map[string]string, services []*v
 		})
 
 		for i := range p.pPod.Spec.Containers {
+			setK8sServiceHost(&p.pPod.Spec.Containers[i])
 			mutateContainerEnv(&p.pPod.Spec.Containers[i], vPod, serviceEnv)
 			mutateContainerSecret(&p.pPod.Spec.Containers[i], saSecretMap, vPod)
 		}
@@ -191,6 +192,20 @@ func mutateContainerEnv(c *v1.Container, vPod *v1.Pod, serviceEnvMap map[string]
 			c.Env = append(c.Env, v1.EnvVar{Name: k, Value: v})
 		}
 	}
+}
+
+func setK8sServiceHost(container *v1.Container) {
+	for i := range container.Env {
+		if container.Env[i].Name == "KUBERNETES_SERVICE_HOST" {
+			container.Env[i].Value = "kubernetes"
+			return
+		}
+	}
+	envVar := v1.EnvVar{
+		Name:  "KUBERNETES_SERVICE_HOST",
+		Value: "kubernetes",
+	}
+	container.Env = append(container.Env, envVar)
 }
 
 func mutateContainerSecret(c *v1.Container, SASecretMap map[string]string, vPod *v1.Pod) {
