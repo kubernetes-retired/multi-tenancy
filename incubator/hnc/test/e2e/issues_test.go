@@ -7,12 +7,6 @@ import (
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
 
-const (
-	// A 1s timeout was too short; 2s *seems* stable and also matches the Ginkgo default
-	defTimeout = 2
-)
-
-
 var _ = Describe("Issues", func() {
 
 	const (
@@ -95,7 +89,7 @@ var _ = Describe("Issues", func() {
 		// Expected: 'sub1', 'sub1-sub1', 'sub2-sub1' should all be gone
 		MustRun("kubectl hns set", nsSub1, "--allowCascadingDelete=true")
 		MustRun("kubectl delete subns", nsSub1, "-n", nsParent)
-		RunShouldNotContainMultiple([]string{nsSub1, nsSub1Sub1, nsSub2Sub1}, defTimeout, "kubectl hns tree", nsParent)
+		RunShouldNotContainMultiple([]string{nsSub1, nsSub1Sub1, nsSub2Sub1}, propogationTimeout, "kubectl hns tree", nsParent)
 	})
 
 	It("Should cascading delete all subnamespaces if the parent is deleted and allows cascadingDelete - issue #501", func() {
@@ -220,6 +214,8 @@ var _ = Describe("Issues", func() {
 		// Test: remove leaf subnamespaces with 'allowCascadingDelete' unset.
 		// Expected: delete successfully
 		MustRun("kubectl delete subns", nsSubChild, "-n", nsChild)
+		// make sure the previous operantion is finished, otherwise the next command will fail
+		RunShouldNotContain(nsSubChild, propogationTimeout, "kubectl hns tree", nsChild)
 		// Test: delete child subns in parent
 		// Expected: delete successfully
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
