@@ -49,7 +49,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, InlineVolumeSources: inlineVolumeSources}
+		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, InlineVolumeSources: inlineVolumeSources, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			log.Logging.Debug(err.Error())

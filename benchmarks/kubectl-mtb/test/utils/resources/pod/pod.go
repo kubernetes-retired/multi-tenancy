@@ -16,7 +16,7 @@ type PodSpec struct {
 	NS                       string                      `default:""`
 	Pvclaims                 []*v1.PersistentVolumeClaim `default:"-"`
 	InlineVolumeSources      []*v1.VolumeSource          `default:"-"`
-	HostNetwork              bool                        `default:"false"`
+	HostNetwork              bool                        `default:"-"`
 	Command                  string                      `default:""`
 	HostIPC                  bool                        `default:"false"`
 	HostPID                  bool                        `default:"false"`
