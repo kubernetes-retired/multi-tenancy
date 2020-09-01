@@ -60,6 +60,7 @@ type SubnamespaceAnchorStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=subnamespaceanchors,shortName=subns,scope=Namespaced
+// +kubebuilder:unservedversion
 
 // SubnamespaceAnchor is the Schema for the subnamespace API.
 // See details at http://bit.ly/hnc-self-serve-ux.
