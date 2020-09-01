@@ -2,6 +2,8 @@ apiVersion: v1
 kind: ResourceQuota
 metadata:
   name: resource-quota
+  labels:
+    hello: world
 spec:
   hard:
     cpu: 1m
