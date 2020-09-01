@@ -24,7 +24,7 @@ var b = &benchmark.Benchmark{
 		resource := utils.GroupResource{
 			APIGroup: "networking.k8s.io",
 			APIResource: metav1.APIResource{
-				Name: "networkpolicy",
+				Name: "networkpolicies",
 			},
 		}
 
