@@ -134,7 +134,7 @@ $ kubectl create -f https://github.com/nirmata/kyverno/raw/master/definitions/in
 To apply all the Kyverno policies after installing , you can use the below command:
 
 ```
-$ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies/kyverno/all_policies.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/benchmarks/kubectl-mtb/test/policies/kyverno/all_policies.yaml
 ```
 You can learn more about Kyverno [here](https://github.com/nirmata/kyverno#quick-start).
 
@@ -155,7 +155,7 @@ To pass some of the benchmarks like `Configure namespace resource quotas`, you a
 
 To create the object, run the following command:
 ```
-$ kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/quotas/ns_quota.yaml
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/benchmarks/kubectl-mtb/test/quotas/ns_quota.yaml
 ```
 After applying the policies and ResourceQuota object, all the benchmarks should pass. 
 
