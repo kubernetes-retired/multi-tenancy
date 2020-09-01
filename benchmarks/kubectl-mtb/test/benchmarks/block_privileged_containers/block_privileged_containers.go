@@ -39,7 +39,7 @@ var b = &benchmark.Benchmark{
 	Run: func(options types.RunOptions) error {
 
 		// IsPrivileged set to true so that pod creation would fail
-		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, IsPrivileged: true, AllowPrivilegeEscalation: true}
+		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, IsPrivileged: true, AllowPrivilegeEscalation: true, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			log.Logging.Debug(err.Error())

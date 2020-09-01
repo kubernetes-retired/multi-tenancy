@@ -173,3 +173,27 @@ spec:
         spec:
           =(hostIPC): "false"
 ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-new-capabilities
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+spec:
+  validationFailureAction: enforce
+  rules:
+  - name: validate-add-capabilities
+    match:
+      resources:
+        kinds:
+        - Pod
+    validate:
+      message: "New capabilities cannot be added"
+      pattern:
+        spec:
+          containers:
+            - name: "*"
+              =(securityContext):
+                =(capabilities):
+                  X(add): null
+---

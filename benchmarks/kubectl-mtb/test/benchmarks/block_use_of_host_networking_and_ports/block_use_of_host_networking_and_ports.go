@@ -42,7 +42,7 @@ var b = &benchmark.Benchmark{
 	Run: func(options types.RunOptions) error {
 
 		//Tenant containers cannot use host networking
-		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, HostNetwork: true, Ports: nil}
+		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, HostNetwork: true, Ports: nil, RunAsNonRoot: false}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			log.Logging.Debug(err.Error())
@@ -64,7 +64,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		podSpec = &podutil.PodSpec{NS: options.TenantNamespace, HostNetwork: false, Ports: ports}
+		podSpec1 := &podutil.PodSpec{NS: options.TenantNamespace, HostNetwork: false, Ports: ports, RunAsNonRoot: true}
 		err = podSpec.SetDefaults()
 		if err != nil {
 			log.Logging.Debug(err.Error())
@@ -72,8 +72,8 @@ var b = &benchmark.Benchmark{
 		}
 
 		// Try to create a pod as tenant-admin impersonation
-		pod = podSpec.MakeSecPod()
-		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		pod1 := podSpec1.MakeSecPod()
+		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod1, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create pod with defined host ports")
 		}

@@ -39,7 +39,7 @@ var b = &benchmark.Benchmark{
 
 	Run: func(options types.RunOptions) error {
 
-		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, HostPID: true}
+		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, HostPID: true, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
 			log.Logging.Debug(err.Error())
