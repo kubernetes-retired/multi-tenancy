@@ -5,8 +5,8 @@
 **[Contributing](#contributing)**|
 
 > kubectl plugin to validate the the multi-tenancy in the K8s cluster.
-> This tool automates behavioral and configuration checks on existing clusters which will help K8s users validate whether their
-clusters are set up correctly for multi-tenancy.
+
+This tool automates behavioral and configuration checks on existing clusters to help Kubernetes users validate whether their clusters are set up correctly for multi-tenancy.
 
 ## Demo
 
@@ -19,6 +19,8 @@ clusters are set up correctly for multi-tenancy.
 kubectl-mtb can be installed by cloning this repository, and running
 
 ```bash
+git clone https://github.com/kubernetes-sigs/multi-tenancy
+cd benchmarks/kubectl-mtb
 make kubectl-mtb
 ```
 
@@ -45,8 +47,9 @@ kubectl-mtb get benchmarks
 ### Run the available benchmarks
 
 ```bash
-$ kubectl-mtb run benchmarks -n "namespace" --as "user impersonation"
+kubectl-mtb run benchmarks -n "namespace" --as "user impersonation"
 ```
+
 You can mention the profile level of the  benchmark using `-p` flag. Users can switch to development mode by passing `--debug` or `-d` flag.
 
 Example:
@@ -55,15 +58,15 @@ Example:
 kubectl-mtb run benchmarks -n testnamespace --as divya-k8s-access
 ```
 
-### Create a namespace
+#### Create a namespace
 
-```
+```bash
 kubectl create ns "test"
 ```
 
-### Create a namespaced user role
+#### Create a namespaced user role
 
-You can use the following template to create a role binding for a user (allie):
+You can use the following template to create a role binding for a user (allie) in the namespace you want to test:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -74,7 +77,7 @@ subjects:
 - kind: User
   name: allie # "name" is case sensitive
 roleRef:
-  kind: ClusterRole 
+  kind: ClusterRole
   name: admin
   apiGroup: rbac.authorization.k8s.io
 ```
