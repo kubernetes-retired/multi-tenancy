@@ -1,4 +1,4 @@
-# Block use of bind mounts <small>[MTB-PL1-BC-HI-1] </small>
+# Block use of host path volumes <small>[MTB-PL1-BC-HI-1] </small>
 
 **Profile Applicability:**
 
@@ -14,7 +14,7 @@ Host Protection
 
 **Description:**
 
-Tenants should not be able to mount host volumes and folders (bind mounts).
+Tenants should not be able to mount host volumes and directories
 
 **Rationale:**
 

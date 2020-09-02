@@ -28,18 +28,14 @@ import (
 
 var getCmd = &cobra.Command{
 	Use:   "get <resource>",
-	Short: "Display one or many benchmarks.",
+	Short: "display one or many benchmarks.",
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			return fmt.Errorf("Please specify a resource")
-		}
-		if !supportedResourceNames.Has(args[0]) {
-			return fmt.Errorf("Please specify a valid resource")
+		if _, err := getResource(args); err != nil {
+			return err
 		}
 
-		filterBenchmarks(cmd)
-
+		filterBenchmarks(cmd, args)
 		return nil
 	},
 

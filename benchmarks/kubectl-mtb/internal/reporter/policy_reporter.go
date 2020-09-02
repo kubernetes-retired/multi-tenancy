@@ -69,7 +69,7 @@ func (p *PolicyReporter) SuiteDidEnd(suiteSummary *SuiteSummary) {
 		Error: suiteSummary.NumberOfFailedValidations,
 	}
 
-	CreatePolicy(suiteSummary.TenantAdminNamespace, p.policy)
+	CreatePolicy(suiteSummary.Namespace, p.policy)
 }
 
 // CreatePolicy creates the policy object
