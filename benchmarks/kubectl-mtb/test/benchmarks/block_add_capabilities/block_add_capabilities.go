@@ -31,6 +31,7 @@ var b = &benchmark.Benchmark{
 			log.Logging.Debug(err.Error())
 			return err
 		}
+
 		if !access {
 			return fmt.Errorf(msg)
 		}
@@ -43,7 +44,7 @@ var b = &benchmark.Benchmark{
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, Capability: []v1.Capability{"SETPCAP"}, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			log.Logging.Debug("Failed to create pod", err.Error())
 			return err
 		}
 
@@ -51,10 +52,11 @@ var b = &benchmark.Benchmark{
 		pod := podSpec.MakeSecPod()
 		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
-			return fmt.Errorf("Tenant must be unable to create pod with add capabilities")
+			log.Logging.Debug("Created pod with Spec: ", pod.Spec)
+			return fmt.Errorf("Tenant should not be able to create pods with add capabilities")
 		}
-		log.Logging.Debug("Test passed: ", err.Error())
 
+		log.Logging.Debug("Test passed: ", err.Error())
 		return nil
 	},
 }

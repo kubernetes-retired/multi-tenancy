@@ -23,7 +23,8 @@ func NewDefaultReporter() *DefaultReporter {
 // SuiteWillBegin prints banner and total benchmarks to be run
 func (r *DefaultReporter) SuiteWillBegin(suiteSummary *SuiteSummary) {
 	writer.PrintBanner(writer.Colorize(boldStyle, "%s", suiteSummary.Suite.Title), "=")
-	writer.Println(0, writer.Colorize(lightGrayColor, "Will run %d of %d", suiteSummary.NumberOfTotalTests, suiteSummary.Suite.Totals()))
+	writer.Println(0, writer.Colorize(lightGrayColor, "Running %d of %d as %s in namespace %s",
+		suiteSummary.NumberOfTotalTests, suiteSummary.Suite.Totals(), suiteSummary.User, suiteSummary.Namespace))
 }
 
 // TestWillRun prints each test status

@@ -11,7 +11,8 @@ import (
 
 // SuiteSummary summaries the result of benchmark suite
 type SuiteSummary struct {
-	TenantAdminNamespace      string
+	Namespace                 string
+	User                      string
 	NumberOfTotalTests        int
 	NumberOfPassedTests       int
 	NumberOfFailedTests       int

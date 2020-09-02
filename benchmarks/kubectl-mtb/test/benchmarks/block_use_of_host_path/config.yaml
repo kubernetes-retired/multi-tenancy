@@ -1,8 +1,8 @@
 id: MTB-PL1-BC-HI-1
-title: Block use of bind mounts 
+title: Block use of host path volumes
 benchmarkType: Behavioral Check
 category: Host Protection
-description: Tenants should not be able to mount host volumes and folders (bind mounts).
+description: Tenants should not be able to mount host volumes and directories
 remediation: Define a `PodSecurityPolicy` that restricts hostPath volumes and map the policy to each tenant namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that a `hostPath` volume cannot be used. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 profileLevel: 1
 rationale: The use of host volumes and directories can be used to access shared data or escalate priviliges and also creates a tight coupling between a tenant workload and a host.

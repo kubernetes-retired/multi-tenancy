@@ -52,24 +52,25 @@ var b = &benchmark.Benchmark{
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, InlineVolumeSources: inlineVolumeSources, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			log.Logging.Debug("Failed to create pod: ", err.Error())
 			return err
 		}
 
-		// Try to create a pod as tenant-admin impersonation
+		// Try to create a pod using tenant-admin impersonation
 		pod := podSpec.MakeSecPod()
 		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
-			return fmt.Errorf("Tenant must be unable to create pod with host-path volume")
+			return fmt.Errorf("Tenant must not be allowed to create a pod with host path volumes")
 		}
-		log.Logging.Debug("Test passed: ", err.Error())
+
+		log.Logging.Debug("Test passed")
 		return nil
 	},
 }
 
 func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
-	err := b.ReadConfig(box.Get("block_use_of_bind_mounts/config.yaml"))
+	err := b.ReadConfig(box.Get("block_use_of_host_path/config.yaml"))
 	if err != nil {
 		log.Logging.Error(err.Error())
 	}
