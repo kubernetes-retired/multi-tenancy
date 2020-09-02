@@ -61,7 +61,7 @@ kubectl-mtb run benchmarks -n testnamespace --as divya-k8s-access
 kubectl create ns "test"
 ```
 
-### Create a Role and RoleBinding
+### Create a namespaced user role
 
 You can use the following template to create a role binding for a user (allie):
 
