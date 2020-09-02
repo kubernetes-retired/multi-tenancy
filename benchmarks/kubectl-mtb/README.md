@@ -24,7 +24,7 @@ cd benchmarks/kubectl-mtb
 make kubectl-mtb
 ```
 
-The `kubectl-mtb` binary will be copied to your $GGPATH/bin directory.
+The `kubectl-mtb` binary will be copied to your $GOPATH/bin directory.
 
 ## Usage
 
