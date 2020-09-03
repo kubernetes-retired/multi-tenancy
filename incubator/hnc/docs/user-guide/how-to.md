@@ -109,7 +109,7 @@ $ kubectl get ns child
 NAME   STATUS   AGE
 child  Active   1m
 
-$ kubectl get -oyaml -nparent hns child
+$ kubectl get -oyaml -nparent subns child
 # Output:
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: SubnamespaceAnchor
