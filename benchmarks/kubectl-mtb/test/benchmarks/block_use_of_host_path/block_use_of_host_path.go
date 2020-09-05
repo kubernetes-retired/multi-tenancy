@@ -61,7 +61,7 @@ var b = &benchmark.Benchmark{
 		if err == nil {
 			return fmt.Errorf("Tenant must not be allowed to create a pod with host path volumes")
 		}
-		log.Logging.Debug("Test passed")
+		options.Logger.Debug("Test passed")
 		return nil
 	},
 }
