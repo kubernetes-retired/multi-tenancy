@@ -28,6 +28,17 @@ func (bs *BenchmarkSuite) Add(benchmark *benchmark.Benchmark) {
 	bs.Benchmarks = append(bs.Benchmarks, benchmark)
 }
 
+// ID returns a Benchmark with the supplied id or nil
+func (bs *BenchmarkSuite) ID(id string) *benchmark.Benchmark {
+	for _, b := range bs.Benchmarks {
+		if b.ID == id {
+			return b
+		}
+	}
+
+	return nil
+}
+
 // ProfileLevel return slice of Benchmarks of Profile level given in input
 func (bs *BenchmarkSuite) ProfileLevel(pl int) []*benchmark.Benchmark {
 	benchmarksArray := []*benchmark.Benchmark{}

@@ -21,7 +21,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
 var rootCmd *cobra.Command
@@ -53,9 +52,4 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func filterBenchmarks(cmd *cobra.Command) {
-	profileLevel, _ := cmd.Flags().GetInt("profile-level")
-	benchmarks = test.BenchmarkSuite.ProfileLevel(profileLevel)
 }

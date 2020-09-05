@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	expectedVal = "Host path volumes are not allowed"
+	// expectedVal = "Host path volumes are not allowed"
+	expectedVal = "hostPath volumes are not allowed"
 )
 
 var _ = framework.KubeDescribe("[PL1] [PL2] [PL3] Tenants should not be able to mount host volumes and folders", func() {

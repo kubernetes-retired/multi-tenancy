@@ -36,23 +36,21 @@ var benchmarkRunOptions = types.RunOptions{}
 
 var runCmd = &cobra.Command{
 	Use:   "run <resource>",
-	Short: "Run the Multi-Tenancy Benchmarks",
+	Short: "run one or more multi-tenancy benchmarks",
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) == 0 {
-			return fmt.Errorf("Please specify a resource")
+		if _, err := getResource(args); err != nil {
+			return err
 		}
-		if !supportedResourceNames.Has(args[0]) {
-			return fmt.Errorf("Please specify a valid resource")
-		}
+
 		err := validateFlags(cmd)
 		if err != nil {
 			return err
 		}
 
-		filterBenchmarks(cmd)
-
+		filterBenchmarks(cmd, args)
 		return nil
+
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
@@ -139,7 +137,7 @@ func validateFlags(cmd *cobra.Command) error {
 
 	_, err = benchmarkRunOptions.KClient.CoreV1().Namespaces().Get(context.TODO(), benchmarkRunOptions.TenantNamespace, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("tenantnamespace is not a valid namespace")
+		return fmt.Errorf("invalid namespace")
 	}
 
 	return nil
@@ -171,9 +169,10 @@ func runTests(cmd *cobra.Command, args []string) error {
 	removeBenchmarksWithIDs(skipIDs)
 
 	suiteSummary := &reporter.SuiteSummary{
-		Suite:                test.BenchmarkSuite,
-		NumberOfTotalTests:   len(benchmarks),
-		TenantAdminNamespace: benchmarkRunOptions.TenantNamespace,
+		Suite:              test.BenchmarkSuite,
+		NumberOfTotalTests: len(benchmarks),
+		Namespace:          benchmarkRunOptions.TenantNamespace,
+		User:               benchmarkRunOptions.Tenant,
 	}
 
 	suiteStartTime := time.Now()

@@ -38,7 +38,7 @@ var _ = Describe("Demo", func() {
 		MustRun("kubectl -n", nsOrg, "create role", nsOrg+"-sre", "--verb=update --resource=deployments")
 		MustRun("kubectl -n", nsOrg, "create rolebinding", nsOrg+"-sres", "--role", nsOrg+"-sre", "--serviceaccount="+nsOrg+":default")
 		// none of this affects service-1
-		RunShouldContain("No resources found in "+nsService1, 1, "kubectl -n", nsService1, "get rolebindings")
+		RunShouldContain("No resources found in "+nsService1, defTimeout, "kubectl -n", nsService1, "get rolebindings")
 
 		// make acme-org the parent of team-a, and team-a the parent of service-1.
 		MustRun("kubectl hns set", nsTeamA, "--parent", nsOrg)
@@ -46,32 +46,32 @@ var _ = Describe("Demo", func() {
 		// This won't work, will be rejected since it would cause a cycle
 		MustNotRun("kubectl hns set", nsOrg, "--parent", nsTeamA)
 		// verify the tree
-		RunShouldContain(nsTeamA, 5, "kubectl hns describe", nsOrg)
-		RunShouldContain(nsService1, 5, "kubectl hns describe", nsTeamA)
+		RunShouldContain(nsTeamA, propogationTimeout, "kubectl hns describe", nsOrg)
+		RunShouldContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamA)
 
 		// Now, if we check service-1 again, we’ll see all the rolebindings we expect:
 		RunShouldContainMultiple([]string{"hnc.x-k8s.io/inheritedFrom=acme-org", "hnc.x-k8s.io/inheritedFrom=team-a"},
-			5, "kubectl -n", nsService1, "describe roles")
-		RunShouldContainMultiple([]string{"Role/acme-org-sre", "Role/team-a-sre"}, 5, "kubectl -n", nsService1, "get rolebindings")
+			propogationTimeout, "kubectl -n", nsService1, "describe roles")
+		RunShouldContainMultiple([]string{"Role/acme-org-sre", "Role/team-a-sre"}, propogationTimeout, "kubectl -n", nsService1, "get rolebindings")
 
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
 		MustRun("kubectl get ns", nsTeamB)
-		RunShouldContainMultiple([]string{nsTeamA, nsTeamB, nsService1}, 5, "kubectl hns tree", nsOrg)
+		RunShouldContainMultiple([]string{nsTeamA, nsTeamB, nsService1}, propogationTimeout, "kubectl hns tree", nsOrg)
 
 		// set up roles in team-b
 		MustRun("kubectl -n", nsTeamB, "create role", nsTeamB+"-wizard", "--verb=update --resource=deployments")
 		MustRun("kubectl -n", nsTeamB, "create rolebinding", nsTeamB+"-wizards", "--role", nsTeamB+"-wizard", "--serviceaccount="+nsTeamB+":default")
 		// assign the service to the new team, and check that all the RBAC roles get updated
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamB)
-		RunShouldNotContain(nsService1, 5, "kubectl hns describe", nsTeamA)
-		RunShouldContain(nsService1, 5, "kubectl hns describe", nsTeamB)
-		RunShouldContain(nsTeamB+"-wizard", 5, "kubectl -n", nsService1, "get roles")
-		RunShouldNotContain(nsTeamA+"-wizard", 5, "kubectl -n", nsService1, "get roles")
+		RunShouldNotContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamA)
+		RunShouldContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamB)
+		RunShouldContain(nsTeamB+"-wizard", propogationTimeout, "kubectl -n", nsService1, "get roles")
+		RunShouldNotContain(nsTeamA+"-wizard", propogationTimeout, "kubectl -n", nsService1, "get roles")
 	})
 
 	It("Should propagate different types", func() {
-		// ignore Secret in case this demo is run twice and the secret has been set to propagate
-		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret ignore")
+		// ignore Secret in case this demo is run twice and the secret has been set to 'Propagate'
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Ignore")
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
@@ -81,19 +81,21 @@ var _ = Describe("Demo", func() {
 		// wait 2 seconds to give time for secret to propogate if it was to
 		time.Sleep(2 * time.Second)
 		// secret does not show up in service-1 because we haven’t configured HNC to propagate secrets in HNCConfiguration.
-		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
-		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret propagate")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Propagate")
 		// this command is not needed here, just to check that user can run it without error
 		MustRun("kubectl get hncconfiguration config -oyaml")
-		RunShouldContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
+		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
 
 		// if we move the service back to team-a, the secret disappears because we haven’t created it there:
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamA)
-		RunShouldContain(nsService1, 2, "kubectl hns describe", nsTeamA)
-		RunShouldNotContain("my-creds", 2, "kubectl -n", nsService1, "get secrets")
+		RunShouldContain(nsService1, defTimeout, "kubectl hns describe", nsTeamA)
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
 	})
 
 	It("Should intergrate hierarchical network policy", func(){
+		GinkgoT().Log("WARNING: IF THIS TEST FAILS, PLEASE CHECK THAT THE NETWORK POLICY IS ENABLED ON THE TEST CLUSTER")
+
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
@@ -106,9 +108,9 @@ var _ = Describe("Demo", func() {
 		// at least 20 seconds is needed here from experiments 
 		RunShouldContain("Welcome to nginx!", 20, 
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", 10, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
 			"kubectl run client -n", nsTeamA, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", 10, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
 			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 
 		// create a default network policy that blocks any ingress from other namespaces 
@@ -129,16 +131,16 @@ spec:
 		defer RemoveFile(filename)
 		MustRun("kubectl apply -f", filename)
 		// ensure this policy can be propagated to its descendants
-		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy propagate")
+		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy Propagate")
 		expected := "deny-from-other-namespaces"
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsOrg)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamA)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamB)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService1)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService2)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsOrg)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamB)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService1)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
 
 		// Now we’ll see that we can no longer access service-2 from the client in service-1:
-		RunErrorShouldContain("wget: download timed out", 10, 
+		RunErrorShouldContain("wget: download timed out", cleanupTimeout,
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
 		
 		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
@@ -163,14 +165,14 @@ spec:
 		MustRun("kubectl apply -f", filename2)
 
 		expected = "allow-team-a"
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsTeamA)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService1)
-		RunShouldContain(expected, 2, "kubectl get netpol -n", nsService2)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService1)
+		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
 
 		// Now, we can access the service from other namespaces in team-a, but not outside of it:
-		RunShouldContain("Welcome to nginx!", 10, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunErrorShouldContain("wget: download timed out", 10, 
+		RunErrorShouldContain("wget: download timed out", cleanupTimeout, 
 			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 	})
 
@@ -183,16 +185,17 @@ spec:
 		MustRun("kubectl hns create", nsService3, "-n", nsTeamA)
 		expected := "" + // empty string make go fmt happy
 			nsTeamA + "\n" +
-			"├── " + nsService1 + "\n" +
-			"├── " + nsService2 + "\n" +
-			"└── " + nsService3
-		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+			"├── [s] " + nsService1 + "\n" +
+			"├── [s] " + nsService2 + "\n" +
+			"└── [s] " + nsService3
+		// The subnamespaces takes a bit of time to show up
+		RunShouldContain(expected, propogationTimeout, "kubectl hns tree", nsTeamA)
 
 		// show that you can't re-use a subns name
 		MustRun("kubectl hns create", nsDev, "-n", nsService1)
-		RunShouldContain("Children:\n  - "+nsDev, 2, "kubectl hns describe", nsService1)
+		RunShouldContain("Children:\n  - "+nsDev, defTimeout, "kubectl hns describe", nsService1)
 		MustNotRun("kubectl hns create", nsDev, "-n", nsService2)
-		RunShouldContain("Children:\n  - "+nsDev, 2, "kubectl hns describe", nsService1)
+		RunShouldContain("Children:\n  - "+nsDev, defTimeout, "kubectl hns describe", nsService1)
 
 		// show how to delete a subns correctly
 		MustNotRun("kubectl delete ns", nsService3)
@@ -204,30 +207,30 @@ spec:
 		MustRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"└── " + nsService2
-		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+			"└── [s] " + nsService2
+		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
 
 		// Show the difference of a subns and regular child ns
 		MustRun("kubectl hns create", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"├── " + nsService2 + "\n" +
-			"└── " + nsService4
-		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
+			"├── [s] " + nsService2 + "\n" +
+			"└── [s] " + nsService4
+		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
 		MustRun("kubectl create ns", nsStaging)
 		MustRun("kubectl hns set", nsStaging, "--parent", nsService4)
 		expected = "" +
 			nsService4 + "\n" +
 			"└── " + nsStaging
-		RunShouldContain(expected, 2, "kubectl hns tree", nsService4)
+		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsService4)
 
 		// delete subnamespace nsService4, namespace nsStaging won’t be deleted but it will have CritParentMissing condition
 		MustRun("kubectl hns set", nsService4, "--allowCascadingDelete")
 		MustRun("kubectl delete subns", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
-			"└── " + nsService2
-		RunShouldContain(expected, 2, "kubectl hns tree", nsTeamA)
-		RunShouldContain("CritParentMissing: missing parent", 2, "kubectl hns describe", nsStaging)
+			"└── [s] " + nsService2
+		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
+		RunShouldContain("CritParentMissing: missing parent", defTimeout, "kubectl hns describe", nsStaging)
 	})
 })

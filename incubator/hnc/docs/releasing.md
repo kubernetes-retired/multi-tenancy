@@ -25,11 +25,14 @@ You must have permission to write to this repo, and create a [personal access
 token](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token)
 that includes that permission.
 
-You also need the ability to push to `gcr.io/k8s-staging-multitenancy`.
+You also need the ability to push to `gcr.io/k8s-staging-multitenancy`. You can
+get this by joining the k8s-infra-staging-multitenancy@kubernetes.io Google
+Group, which also gives you access to the `k8s-staging-multitenancy` GCP project
+(this is a standalone project and isn't in a GCP Organization).
 
 Finally, you must have a GCP project with Cloud Build enabled, and `gcloud` must
 be configured with this as your default project. _TODO: create a central project
-that anyone can use._
+that anyone can use, but without leaking personal access tokens._
 
 ## Document new/changed features
 
@@ -145,3 +148,18 @@ We may revise this guidance as HNC matures.
 
 After the release, you can run the same command you used to find the release ID
 to see how many times each asset has been downloaded.
+
+## Updating and testing the release process
+
+You can test the release process by pushing everything to your own Github repo,
+creating a release, tag etc in *your* repo, and then setting the following env
+vars:
+
+* `HNC_RELEASE_REPO_OWNER`: this is the Github repo owner - default is
+  `kubernetes-sigs`, replace with your name (e.g. `adrianludwin`). The
+  `multi-tenancy` repo name is hardcoded and can't be changed.
+* `HNC_RELEASE_REGISTRY`: default is `gcr.io/k8s-staging-multitenancy`, replace
+  with your own registry (eg `gcr.io/adrians-project`).
+
+This will build from the specified repo and release the image to the specified
+registry.
