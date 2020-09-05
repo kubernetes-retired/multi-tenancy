@@ -25,15 +25,11 @@ in the node. It ensures each tenant can only access its own Pods in the node.
 
 With all above, from the tenant’s perspective, each tenant master behaves like an intact Kubernetes with nearly full API capabilities.
 
-## Live Demos
+## Live Demos/Presentations
 
-Below are two demos that illustrate the use of a VirtualCluster.
-The short demo is created by [@zhuangqh](https://github.com/zhuangqh) for an introduction. A
-detailed in-depth demo is also provided which is a video recording from a WG bi-weekly meeting.
-
-Short (~5 mins) | Long (~50 mins) 
+Kubecon EU 2020 talk (~25 mins) | WG meeting demo (~50 mins)
 --- | --- 
-[![](http://img.youtube.com/vi/QvpNehTNRyk/0.jpg)](http://www.youtube.com/watch?v=QvpNehTNRyk "vc-demo-short") | [![](http://img.youtube.com/vi/Kow00IEUbAA/0.jpg)](http://www.youtube.com/watch?v=Kow00IEUbAA "vc-demo-long")
+[![](http://img.youtube.com/vi/5RgF_dYyvEY/0.jpg)](https://www.youtube.com/watch?v=5RgF_dYyvEY "vc-kubecon-eu-2020") | [![](http://img.youtube.com/vi/Kow00IEUbAA/0.jpg)](http://www.youtube.com/watch?v=Kow00IEUbAA "vc-demo-long")
 
 ## Quick Start
 
