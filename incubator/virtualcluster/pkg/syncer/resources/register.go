@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/configmap"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/endpoints"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/event"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/ingress"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/namespace"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/node"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/persistentvolume"
@@ -49,6 +50,7 @@ func init() {
 		configmap.NewConfigMapController,
 		endpoints.NewEndpointsController,
 		event.NewEventController,
+		ingress.NewIngressController,
 		namespace.NewNamespaceController,
 		node.NewNodeController,
 		persistentvolume.NewPVController,
@@ -59,9 +61,11 @@ func init() {
 		serviceaccount.NewServiceAccountController,
 		storageclass.NewStorageClassController,
 	}
+
 	ExtraResourceController = make(map[string]manager.ResourceSyncerNew)
 	// add extra resource syncer controller here
 	ExtraResourceController["priorityclass"] = priorityclass.NewPriorityClassController
+	ExtraResourceController["ingress"] = ingress.NewIngressController
 }
 
 func Register(config *config.SyncerConfiguration,
