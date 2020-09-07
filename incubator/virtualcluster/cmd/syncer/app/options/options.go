@@ -142,7 +142,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	c.ComponentConfig = o.ComponentConfig
 
 	// Prepare kube clients
-	leaderElectionClient, virtualClusterClient, superMasterClient, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
+	leaderElectionClient, virtualClusterClient, superMasterClient, restConfig, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		return nil, err
 	}
-
+	c.ComponentConfig.RestConfig = restConfig
 	c.SecretClient = superMasterClient.CoreV1()
 	c.VirtualClusterClient = virtualClusterClient
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().VirtualClusters()
@@ -246,7 +246,7 @@ func getInClusterNamespace() (string, error) {
 
 // createClients creates a meta cluster kube client and a super master custer client from the given config and masterOverride.
 func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface,
-	vcclient.Interface, clientset.Interface, error) {
+	vcclient.Interface, clientset.Interface, *restclient.Config, error) {
 	// This creates a client, first loading any specified kubeconfig
 	// file, and then overriding the Master flag, if non-empty.
 	var (
@@ -265,7 +265,7 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 	}
 
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if restConfig.Timeout == 0 {
@@ -284,12 +284,12 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 
 	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, constants.ResourceSyncerUserAgent))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	virtualClusterClient, err := vcclient.NewForConfig(restConfig)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// shallow copy, do not modify the kubeConfig.Timeout.
@@ -297,8 +297,8 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 	restConfig.Timeout = timeout
 	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&leaderElectionRestConfig, "leader-election"))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return leaderElectionClient, virtualClusterClient, superMasterClient, nil
+	return leaderElectionClient, virtualClusterClient, superMasterClient, restConfig, nil
 }

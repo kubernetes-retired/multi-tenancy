@@ -18,6 +18,7 @@ package config
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
 	componentbaseconfig "k8s.io/component-base/config"
 )
 
@@ -49,6 +50,9 @@ type SyncerConfiguration struct {
 
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
+
+	// Super master rest config
+	RestConfig *rest.Config
 }
 
 // SyncerLeaderElectionConfiguration expands LeaderElectionConfiguration
