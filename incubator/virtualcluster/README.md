@@ -11,7 +11,7 @@ As a result, most of the isolation problems due to sharing one apiserver disappe
 The Kubernetes cluster that manages the actual physical nodes is called a super master, which now
 becomes a Pod resource provider. VirtualCluster is composed of the following components:
 
-- **vc-manager**: A new CRD [VirtualCluster](pkg/apis/tenancy/v1alpha1/VirtualCluster_types.go) is introduced
+- **vc-manager**: A new CRD [VirtualCluster](pkg/apis/tenancy/v1alpha1/virtualcluster_types.go) is introduced
 to model the tenant master. `vc-manager` manages the lifecycle of each `VirtualCluster` custom resource.
 Based on the specification, it either creates `apiserver`, `etcd` and `controller-manager` Pods in local K8s cluster,
 or imports an existing cluster if a valid `kubeconfig` is provided.
@@ -28,7 +28,7 @@ With all above, from the tenant’s perspective, each tenant master behaves like
 ## Live Demos/Presentations
 
 Kubecon EU 2020 talk (~25 mins) | WG meeting demo (~50 mins)
---- | --- 
+--- | ---
 [![](http://img.youtube.com/vi/5RgF_dYyvEY/0.jpg)](https://www.youtube.com/watch?v=5RgF_dYyvEY "vc-kubecon-eu-2020") | [![](http://img.youtube.com/vi/Kow00IEUbAA/0.jpg)](http://www.youtube.com/watch?v=Kow00IEUbAA "vc-demo-long")
 
 ## Quick Start
@@ -38,7 +38,7 @@ Please follow the [instructions](./doc/demo.md) to install VirtualCluster in you
 ## Supported/Not Supported
 
 VirtualCluster passes most of the Kubernetes conformance tests. One failing test asks for supporting
-`subdomain` which cannot be easily done in the VirtualCluster architecture. 
+`subdomain` which cannot be easily done in the VirtualCluster architecture.
 
 **Here are other considerations that users should be aware of:**
 
@@ -52,7 +52,7 @@ rejects a newly created tenant Pod if its `nodename` has been set in the spec.
 The syncer controller does not update the node lease objects in tenant master,
 hence the default grace period is too small.
 
-- Coredns is not tenant-aware. Hence, tenant should install coredns in tenant master if DNS is required. 
+- Coredns is not tenant-aware. Hence, tenant should install coredns in tenant master if DNS is required.
 The DNS service should be created in `kube-system` namespace using name `kube-dns`. The syncer controller can then
 recognize the DNS service cluster IP in super master and inject it into Pod spec `dnsConfig`.
 
