@@ -149,10 +149,10 @@ func runTests(cmd *cobra.Command, args []string) error {
 	// Get log level
 	debug, _ := cmd.Flags().GetBool("debug")
 	if debug {
-		log.SetupLogger(true)
+		benchmarkRunOptions.Logger = log.GetLogger(true)
 	} else {
 		// default mode production
-		log.SetupLogger(false)
+		benchmarkRunOptions.Logger = log.GetLogger(false)
 	}
 
 	// Get reporters from the user
@@ -186,7 +186,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		err := ts.SetDefaults()
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			benchmarkRunOptions.Logger.Debug(err.Error())
 			return err
 		}
 
@@ -195,7 +195,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		//Run Prerun
 		err = b.PreRun(benchmarkRunOptions)
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			benchmarkRunOptions.Logger.Debug(err.Error())
 			suiteSummary.NumberOfFailedValidations++
 			ts.Validation = false
 			ts.ValidationError = err
@@ -206,7 +206,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 		if ts.Validation {
 			err = b.Run(benchmarkRunOptions)
 			if err != nil {
-				log.Logging.Debug(err.Error())
+				benchmarkRunOptions.Logger.Debug(err.Error())
 				suiteSummary.NumberOfFailedTests++
 				ts.Test = false
 				ts.TestError = err

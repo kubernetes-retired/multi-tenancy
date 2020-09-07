@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/cluster"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
@@ -68,6 +69,7 @@ func TestMain(m *testing.M) {
 			return err
 		}
 		options.KClient = k8sClient
+		options.Logger = log.GetLogger(true)
 		rest := k8sClient.CoreV1().RESTClient()
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
 

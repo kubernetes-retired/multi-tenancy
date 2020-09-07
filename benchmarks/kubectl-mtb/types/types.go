@@ -1,6 +1,7 @@
 package types
 
 import (
+	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -11,4 +12,5 @@ type RunOptions struct {
 	Label           string
 	KClient         *kubernetes.Clientset
 	TClient         *kubernetes.Clientset
+	Logger          *zap.SugaredLogger
 }

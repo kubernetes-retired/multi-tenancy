@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
@@ -28,7 +27,7 @@ var b = &benchmark.Benchmark{
 
 		access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			options.Logger.Debug(err.Error())
 			return err
 		}
 		if !access {
@@ -52,7 +51,7 @@ var b = &benchmark.Benchmark{
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, InlineVolumeSources: inlineVolumeSources, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
-			log.Logging.Debug("Failed to create pod: ", err.Error())
+			options.Logger.Debug("Failed to create pod: ", err.Error())
 			return err
 		}
 
@@ -62,8 +61,7 @@ var b = &benchmark.Benchmark{
 		if err == nil {
 			return fmt.Errorf("Tenant must not be allowed to create a pod with host path volumes")
 		}
-
-		log.Logging.Debug("Test passed")
+		options.Logger.Debug("Test passed")
 		return nil
 	},
 }
@@ -72,7 +70,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("block_use_of_host_path/config.yaml"))
 	if err != nil {
-		log.Logging.Error(err.Error())
+		fmt.Println(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)

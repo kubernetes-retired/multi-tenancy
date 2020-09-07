@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	podutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
@@ -28,7 +27,7 @@ var b = &benchmark.Benchmark{
 
 		access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
 		if err != nil {
-			log.Logging.Debug(err.Error())
+			options.Logger.Debug(err.Error())
 			return err
 		}
 
@@ -44,7 +43,7 @@ var b = &benchmark.Benchmark{
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, Capability: []v1.Capability{"SETPCAP"}, RunAsNonRoot: true}
 		err := podSpec.SetDefaults()
 		if err != nil {
-			log.Logging.Debug("Failed to create pod", err.Error())
+			options.Logger.Debug("Failed to create pod", err.Error())
 			return err
 		}
 
@@ -52,11 +51,11 @@ var b = &benchmark.Benchmark{
 		pod := podSpec.MakeSecPod()
 		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
-			log.Logging.Debug("Created pod with Spec: ", pod.Spec)
+			options.Logger.Debug("Created pod with Spec: ", pod.Spec)
 			return fmt.Errorf("Tenant should not be able to create pods with add capabilities")
 		}
+		options.Logger.Debug("Test passed: ", err.Error())
 
-		log.Logging.Debug("Test passed: ", err.Error())
 		return nil
 	},
 }
@@ -65,7 +64,7 @@ func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
 	err := b.ReadConfig(box.Get("block_add_capabilities/config.yaml"))
 	if err != nil {
-		log.Logging.Error(err.Error())
+		fmt.Println(err.Error())
 	}
 
 	test.BenchmarkSuite.Add(b)

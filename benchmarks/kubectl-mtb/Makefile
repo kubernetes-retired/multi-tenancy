@@ -41,13 +41,13 @@ endif
 		kind create cluster --name $(KIND_PROFILE) --wait 5m;\
 	fi
 		
-test:
+tests:
 	GOPROXY=https://proxy.golang.org,direct go test ./test/benchmarks/... -v -count=1 -coverprofile=coverage.out		
 
 kind-delete:
 	kind delete cluster --name $(KIND_PROFILE)
 
-unit-tests: kind-create test kind-delete
+unit-tests: kind-create tests kind-delete
 
 coverage: 
 	go tool cover -html=coverage.out
