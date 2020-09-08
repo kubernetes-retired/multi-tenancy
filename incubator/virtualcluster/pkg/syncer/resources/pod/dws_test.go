@@ -146,6 +146,12 @@ func superPod(clusterKey, vcName, name, namespace, uid string) *v1.Pod {
 							MountPath: "/path",
 						},
 					},
+					Env: []v1.EnvVar{
+						{
+							Name:  "KUBERNETES_SERVICE_HOST",
+							Value: "kubernetes",
+						},
+					},
 				},
 			},
 			Volumes: []v1.Volume{

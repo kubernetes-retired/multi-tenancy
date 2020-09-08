@@ -275,6 +275,8 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services 
 	for _, e := range envvars.FromServices(mappedServices) {
 		m[e.Name] = e.Value
 	}
+	// ensure that tenant pods can reach the API server
+	m["KUBERNETES_SERVICE_HOST"] = "kubernetes"
 	return apiServerService, m
 }
 
