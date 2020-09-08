@@ -21,6 +21,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	extensionsV1beta1 "k8s.io/api/extensions/v1beta1"
 	schedulingV1 "k8s.io/api/scheduling/v1"
 	storageV1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -183,6 +184,8 @@ func getObjectInformer(informer informers.SharedInformerFactory, obj runtime.Obj
 		return informer.Storage().V1().StorageClasses().Informer()
 	case *schedulingV1.PriorityClass:
 		return informer.Scheduling().V1().PriorityClasses().Informer()
+	case *extensionsV1beta1.Ingress:
+		return informer.Extensions().V1beta1().Ingresses().Informer()
 	default:
 		return nil
 	}

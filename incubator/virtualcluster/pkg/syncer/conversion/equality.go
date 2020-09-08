@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
+	v1beta1extensions "k8s.io/api/extensions/v1beta1"
 	v1scheduling "k8s.io/api/scheduling/v1"
 	v1storage "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -491,6 +492,19 @@ func (e vcEquality) CheckStorageClassEquality(pObj, vObj *v1storage.StorageClass
 }
 
 func (e vcEquality) CheckPriorityClassEquality(pObj, vObj *v1scheduling.PriorityClass) *v1scheduling.PriorityClass {
+	pObjCopy := pObj.DeepCopy()
+	pObjCopy.ObjectMeta = vObj.ObjectMeta
+	// pObj.TypeMeta is empty
+	pObjCopy.TypeMeta = vObj.TypeMeta
+
+	if !equality.Semantic.DeepEqual(vObj, pObjCopy) {
+		return pObjCopy
+	} else {
+		return nil
+	}
+}
+
+func (e vcEquality) CheckIngressEquality(pObj, vObj *v1beta1extensions.Ingress) *v1beta1extensions.Ingress {
 	pObjCopy := pObj.DeepCopy()
 	pObjCopy.ObjectMeta = vObj.ObjectMeta
 	// pObj.TypeMeta is empty
