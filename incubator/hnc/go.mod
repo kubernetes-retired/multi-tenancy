@@ -18,11 +18,12 @@ require (
 	github.com/prometheus/client_golang v1.5.0
 	github.com/spf13/cobra v0.0.5
 	go.opencensus.io v0.22.3
+	go.uber.org/atomic v1.4.0
 	k8s.io/api v0.18.5
 	k8s.io/apiextensions-apiserver v0.18.5
 	k8s.io/apimachinery v0.18.5
 	k8s.io/cli-runtime v0.18.5
 	k8s.io/client-go v0.18.5
 	sigs.k8s.io/controller-runtime v0.6.1
-	sigs.k8s.io/controller-tools v0.2.5
+	sigs.k8s.io/controller-tools v0.2.8
 )
