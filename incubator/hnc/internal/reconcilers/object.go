@@ -540,21 +540,21 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	if exist {
 		log.Info("Updating object")
 		err = r.Update(ctx, inst)
-		// RoleBindings can't have their Roles changed after they're created 
+		// RoleBindings can't have their Roles changed after they're created
 		// (see  https://github.com/kubernetes-sigs/multi-tenancy/issues/798).
 		// If an RB was quickly delete and re-created in an ancestor namespace
-		// - fast enough that by the time that HNC notices, the new RB exists; or 
-		// if there's a change to the RBs when HNC isn't running - HNC could see 
+		// - fast enough that by the time that HNC notices, the new RB exists; or
+		// if there's a change to the RBs when HNC isn't running - HNC could see
 		// it as an update (not a delete + create) and attempt to update the RBs in
-		// all descendant namespaces, and this will fail. In order to handle this 
+		// all descendant namespaces, and this will fail. In order to handle this
 		// case, we try to delete and re-create the rolebinding here
-		
-		// We only found this issue with the RoleBinding object, but we *think* this 
+
+		// We only found this issue with the RoleBinding object, but we *think* this
 		// will also be helpful for other similar objects that end up with the same error
 		// type. If we find out later that this assumption is not true, we can update the
 		// logic here to only deal with RoleBinding.
 
-		// The error type is 'Invalid' after I tested it out with different error types 
+		// The error type is 'Invalid' after I tested it out with different error types
 		// from https://godoc.org/k8s.io/apimachinery/pkg/api/errors
 		if err != nil && errors.IsInvalid(err) {
 			if err = r.Delete(ctx, inst); err == nil {

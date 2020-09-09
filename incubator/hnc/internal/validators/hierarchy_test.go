@@ -7,7 +7,9 @@ import (
 	. "github.com/onsi/gomega"
 	authn "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
@@ -76,6 +78,56 @@ func TestChangeParentOnManagedBy(t *testing.T) {
 		{name: "not ok: change external namespace parent from none to existing", nnm: "c", pnm: "a", fail: true},
 		{name: "not ok: change external namespace existing parent", nnm: "d", pnm: "a", fail: true},
 		{name: "ok: change external namespace parent from existing to none", nnm: "d", pnm: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewGomegaWithT(t)
+			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
+			hc.ObjectMeta.Name = api.Singleton
+			hc.ObjectMeta.Namespace = tc.nnm
+			req := &request{hc: hc}
+
+			// Test
+			got := h.handle(context.Background(), l, req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+}
+
+func TestChangeParentWithConflict(t *testing.T) {
+	f := foresttest.Create("-a-c") // a <- b; c <- d
+
+	// Set secret to "Propagate" mode. (Use Secret in this test because the test
+	// forest doesn't have Role or RoleBinding by default either. We can also create
+	// secret by existing `createSecret()` function.)
+	or := &reconcilers.ObjectReconciler{
+		GVK:  schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+		Mode: api.Propagate,
+	}
+	f.AddTypeSyncer(or)
+
+	// Create secrets with the same name in namespace 'a' and 'd'.
+	createSecret("conflict", "a", f)
+	createSecret("conflict", "d", f)
+
+	h := &Hierarchy{Forest: f}
+	l := zap.Logger(false)
+
+	tests := []struct {
+		name string
+		nnm  string
+		pnm  string
+		fail bool
+	}{
+		{name: "conflict in itself and the new parent", nnm: "a", pnm: "d", fail: true},
+		{name: "conflict in itself and a new ancestor (not the parent)", nnm: "d", pnm: "b", fail: true},
+		{name: "ok: no conflict in ancestors", nnm: "a", pnm: "c"},
+		{name: "conflict in subtree leaf and the new parent", nnm: "c", pnm: "a", fail: true},
+		{name: "conflict in subtree leaf and a new ancestor (not the parent)", nnm: "c", pnm: "b", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
