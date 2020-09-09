@@ -153,32 +153,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	go startControllers(mgr, setupFinished)
-
-	setupLog.Info("Starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
-}
-
-func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
-	setupLog.Info("Waiting for certificate generation to complete")
-	// Block until the setup finishes.
-	<-setupFinished
-
-	if testLog {
-		stats.StartLoggingActivity()
-	}
-
-	// Create all reconciling controllers
+	// Register webhooks before manager start to avoid potential race conditions.
+	// See https://github.com/kubernetes-sigs/controller-runtime/issues/1148.
 	f := forest.NewForest()
-	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	removeOldCRDVersion := true
-	if err := reconcilers.Create(mgr, f, maxReconciles, removeOldCRDVersion); err != nil {
-		setupLog.Error(err, "cannot create controllers")
-		os.Exit(1)
-	}
 
 	// Create all validating admission controllers.
 	if !novalidation {
@@ -199,6 +176,32 @@ func startControllers(mgr ctrl.Manager, setupFinished chan struct{}) {
 
 	if err := (&v1a2.SubnamespaceAnchor{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.Anchors)
+		os.Exit(1)
+	}
+
+	go startControllers(mgr, f, setupFinished)
+
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func startControllers(mgr ctrl.Manager, f *forest.Forest, setupFinished chan struct{}) {
+	setupLog.Info("Waiting for certificate generation to complete")
+	// Block until the setup finishes.
+	<-setupFinished
+
+	if testLog {
+		stats.StartLoggingActivity()
+	}
+
+	// Create all reconciling controllers
+	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
+	removeOldCRDVersion := true
+	if err := reconcilers.Create(mgr, f, maxReconciles, removeOldCRDVersion); err != nil {
+		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
 
