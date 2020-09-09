@@ -142,11 +142,11 @@ var _ = Describe("Secret", func() {
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
 
 		makeObject(ctx, "Role", fooName, "bar-role")
-		// Add a 5-millisecond gap here to allow updating the cached bar-roles in bar
+		// Add a 500-millisecond gap here to allow updating the cached bar-roles in bar
 		// and baz namespaces. Without this, even having 20 seconds in the "Eventually()"
 		// funcs below, the test failed with timeout. Guess the reason is that it's
 		// constantly getting the cached object.
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
 		Eventually(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(fooName))
 		Eventually(hasObject(ctx, "Role", barName, "bar-role")).Should(BeTrue())
