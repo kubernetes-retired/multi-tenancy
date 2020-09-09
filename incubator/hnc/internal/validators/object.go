@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -110,8 +111,9 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	// If the object wasn't and isn't inherited, we will check to see if the
 	// source can be created without causing any conflict.
 	if !oldInherited && !newInherited {
-		if yes, cnses := o.hasConflict(inst); yes {
-			msg := fmt.Sprintf("Cannot create %s '%s' in namespace '%s' because it would overwrite objects in the following descendant namespace(s): %v. Choose a different name for the object, or remove the conflicting objects from these namespaces.", inst.GroupVersionKind(), inst.GetName(), inst.GetNamespace(), cnses)
+		if yes, dnses := o.hasConflict(inst); yes {
+			dnsesStr := strings.Join(dnses, "\n  * ")
+			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)
 			return deny(metav1.StatusReasonConflict, msg)
 		}
 		return allow("source object")
