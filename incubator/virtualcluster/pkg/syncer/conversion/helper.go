@@ -189,7 +189,6 @@ func ResetMetadata(obj metav1.Object) {
 	obj.SetUID("")
 	obj.SetResourceVersion("")
 	obj.SetGeneration(0)
-	obj.SetCreationTimestamp(metav1.Time{})
 	obj.SetDeletionTimestamp(nil)
 	obj.SetDeletionGracePeriodSeconds(nil)
 	obj.SetOwnerReferences(nil)
