@@ -374,6 +374,17 @@ func (UniqueItems) Help() *markers.DefinitionHelp {
 	}
 }
 
+func (UnservedVersion) Help() *markers.DefinitionHelp {
+	return &markers.DefinitionHelp{
+		Category: "CRD",
+		DetailedHelp: markers.DetailedHelp{
+			Summary: "does not serve this version. ",
+			Details: "This is useful if you need to drop support for a version in favor of a newer version.",
+		},
+		FieldHelp: map[string]markers.DetailedHelp{},
+	}
+}
+
 func (XEmbeddedResource) Help() *markers.DefinitionHelp {
 	return &markers.DefinitionHelp{
 		Category: "CRD validation",
