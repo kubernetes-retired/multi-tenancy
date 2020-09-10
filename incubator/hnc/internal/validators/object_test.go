@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
@@ -331,4 +332,71 @@ func TestUserChanges(t *testing.T) {
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
 		})
 	}
+}
+
+func TestCreatingConflictSource(t *testing.T) {
+	tests := []struct {
+		name              string
+		forest            string
+		conflictInstName  string
+		conflictNamespace string
+		newInstName       string
+		newInstNamespace  string
+		fail              bool
+	}{{
+		name:              "Deny creation of source objects with conflict in child",
+		forest:            "-a",
+		conflictInstName:  "secret-b",
+		conflictNamespace: "b",
+		newInstName:       "secret-b",
+		newInstNamespace:  "a",
+		fail:              true,
+	}, {
+		name:              "Deny creation of source objects with conflict in grandchild",
+		forest:            "-ab",
+		conflictInstName:  "secret-c",
+		conflictNamespace: "c",
+		newInstName:       "secret-c",
+		newInstNamespace:  "a",
+		fail:              true,
+	}, {
+		name:             "Allow creation of source objects with no conflict",
+		newInstName:      "secret-a",
+		newInstNamespace: "a",
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewGomegaWithT(t)
+			f := foresttest.Create(tc.forest)
+			createSecret(tc.conflictInstName, tc.conflictNamespace, f)
+			o := &Object{Forest: f}
+			l := zap.Logger(false)
+			op := admissionv1beta1.Create
+			inst := &unstructured.Unstructured{}
+			inst.SetName(tc.newInstName)
+			inst.SetNamespace(tc.newInstNamespace)
+			inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+			// Test
+			got := o.handle(context.Background(), l, op, inst, &unstructured.Unstructured{})
+			// Report
+			code := got.AdmissionResponse.Result.Code
+			reason := got.AdmissionResponse.Result.Reason
+			msg := got.AdmissionResponse.Result.Message
+			t.Logf("Got code %d, reason %q, message %q", code, reason, msg)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+}
+
+func createSecret(nm, nsn string, f *forest.Forest) {
+	if nm == "" || nsn == "" {
+		return
+	}
+	inst := &unstructured.Unstructured{}
+	inst.SetName(nm)
+	inst.SetNamespace(nsn)
+	inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	f.Get(nsn).SetOriginalObject(inst)
 }
