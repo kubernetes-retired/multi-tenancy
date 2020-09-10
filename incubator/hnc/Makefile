@@ -22,7 +22,9 @@ PROJECT_ID := ${shell gcloud config get-value project 2>/dev/null}
 # By default, we use the Container Registry in the current GCP project, but you
 # can set it to anything, UNLESS you are calling 'make release' since the image
 # needs to be built in the same project as the GCB instance that builds it.
-HNC_REGISTRY ?= gcr.io/${PROJECT_ID}
+ifdef PROJECT_ID
+  HNC_REGISTRY ?= gcr.io/${PROJECT_ID}
+endif
 
 # The image name is the *base* name - excluding the registry and the tag.
 HNC_IMG_NAME ?= hnc-manager
@@ -44,7 +46,11 @@ endif
 #
 # Note that if you're using Kind, this image will never actually be pushed to
 # the registry.
-HNC_IMG = ${HNC_REGISTRY}/${HNC_IMG_NAME}:${HNC_IMG_TAG}
+ifdef HNC_REGISTRY
+	HNC_IMG = ${HNC_REGISTRY}/${HNC_IMG_NAME}:${HNC_IMG_TAG}
+else
+	HNC_IMG = ${HNC_IMG_NAME}:${HNC_IMG_TAG}
+endif
 
 # `make` must be called from the HNC root, or all kinds of things will break
 # (starting with this).
