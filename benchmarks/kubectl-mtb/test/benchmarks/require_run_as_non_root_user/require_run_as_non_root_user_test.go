@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/onsi/gomega"
@@ -17,7 +16,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/kind/pkg/cluster"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/unittestutils"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
@@ -38,27 +36,9 @@ var (
 type TestFunction func(t *testing.T) (bool, bool)
 
 func TestMain(m *testing.M) {
-	// Create kind instance
-	kind := &unittestutils.KindCluster{}
 
 	// Tenant setup function
 	setUp := func() error {
-		provider := cluster.NewProvider()
-
-		// List the clusters available
-		clusterList, err := provider.List()
-		clusters := strings.Join(clusterList, " ")
-
-		// Checks if the main cluster (test) is running
-		if strings.Contains(clusters, "kubectl-mtb-suite") {
-			clusterExists = true
-		} else {
-			clusterExists = false
-			err := kind.CreateCluster()
-			if err != nil {
-				return err
-			}
-		}
 
 		kubecfgFlags := genericclioptions.NewConfigFlags(false)
 
@@ -94,23 +74,6 @@ func TestMain(m *testing.M) {
 
 	// exec test and this returns an exit code to pass to os
 	retCode := m.Run()
-
-	tearDown := func() error {
-		var err error
-		if !clusterExists {
-			err := kind.DeleteCluster()
-			if err != nil {
-				return err
-			}
-		}
-		return err
-	}
-
-	// exec tearDown function
-	err = tearDown()
-	if err != nil {
-		g.Expect(err).NotTo(gomega.HaveOccurred())
-	}
 
 	os.Exit(retCode)
 }

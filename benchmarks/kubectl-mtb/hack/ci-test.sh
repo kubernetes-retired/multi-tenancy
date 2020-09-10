@@ -17,5 +17,12 @@ export PATH=$(go env GOPATH)/bin:$PATH
 mkdir -p $(go env GOPATH)/bin
 hack_dir=$(dirname ${BASH_SOURCE})
 
-echo "Running 'make test'"
-make test -C "$hack_dir/.."
+# install and setup kind according to https://kind.sigs.k8s.io/docs/user/quick-start/
+echo "Setting up Kind"
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.8.1/kind-linux-amd64
+chmod +x ./kind
+mv ./kind /usr/local/bin/kind
+kind create cluster --name kubectl-mtb-suite
+
+echo "Running 'make tests'"
+make tests -C "$hack_dir/.."
