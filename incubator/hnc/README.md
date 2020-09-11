@@ -117,59 +117,118 @@ is configured to use the project containing the registry you want to use, and
 that you've previously run `gcloud auth configure-docker` so that Docker can use
 your GCP credentials.
 
-### Building and deploying to a test cluster
+### Development Workflow
+
+Once HNC is installed via `make deploy` (see next sections), the development
+cycle looks like the following:
+
+  - Start a new branch and make all your changes there (this is just the
+    standard Github flow).
+  - Make changes locally and write new unit and e2e tests as necessary
+    - Unit tests are located in the same directory as the code, and either test
+      the code directly (e.g. in `internal/object`) or use the K8s test env,
+      which is basically just an apiserver (e.g. in `internal/reconcilers`).
+    - End-to-end (e2e) tests are located in `test/e2e/`, or other more
+      special-purpose directories in `test/`. These are basically glorified
+      `bash` scripts with better error checking, and directly invoke `kubectl`.
+  - Ensure `make test` passes - this runs unit tests only.
+  - Deploy to your cluster with `make deploy`
+  - Test your changes by hand and verify that your changes are working
+    correctly. Some ways you can do that are:
+    - Look at logging with `make deploy-watch`
+    - Look at the result of the structure of your namespaces with `kubectl-hns tree -A` or `kubectl-hns tree NAMESPACE`
+    - See the resultant conditions or labels on namespaces by using `kubectl describe namespace NAMESPACE`
+  - Run the e2e tests via `make test-e2e`. This will take about 10-20m, so go
+    get a coffee or walk around your house if you're quarantined.
+    - Note that the deployment must be ready _before_ you start the tests.
+    - You need to set the `HNC_REPAIR` env var to point to the absolute path of
+      the manifests used to deploy HNC - either the released versions (e.g.
+      stored on Github) or the _full_ path to the local manifests. If these are
+      not set, we'll skip any tests that include modifying the HNC deployement,
+      e.g. to bypass webhooks.
+    - If you deploy to Kind, the tests that use Network Policies may fail. See
+      https://github.com/kubernetes-sigs/multi-tenancy/issues/1098.
+  - Once you're ready to make a pull request, please follow the following
+    instructions:
+    - Each PR should contain _one commit_. If you have multiple commits (either
+      introduced during your development or as a result of comments during the
+      PR review process), please squash them into a single commit. Force-push
+      any changes to your fork of this repo.
+    - Ensure your commit message includes a "Tested:" section explaining in
+      reasonable detail what you did to test your change.
+      [Here](https://github.com/kubernetes-sigs/multi-tenancy/commit/ce983662e87264c76f92dbfbab7cef7bd6128837)
+      is a good example. A minimal message might be something like "Added new
+      test; verified that the test failed before my change and passed after it;
+      ran e2e tests."
+    - Create the PR. We'll try to reply fairly quickly!
+    - Make any requested changes (using `git commit --amend` and `git push -f`
+      to ensure you only have one commit).
+    - Profit! Or at least, enjoy your feeling of accomplishment.
+
+If you need to make a larger change, please write your plan down somewhere - for
+example, either in a Github issue or in a short Google doc
+[example](https://docs.google.com/document/d/17J8icBEDvLLoPT4kQ4ArZcCerRweDY-TpJ48DJKpHJ0).
+
+#### Building and deploying to a test cluster
 
 To build from source and deploy to a cluster:
   - Ensure your `kubeconfig` is configured to point at your cluster
-    - For example, if you're using GKE, run `gcloud container clusters
-      get-credentials <cluster-name> --zone <cluster-zone>`
+    - On GKE, run `gcloud container clusters get-credentials <cluster-name>
+      --zone <cluster-zone>`. Also ensure you run `gcloud auth configure-docker`
+      so that `docker-push` works correctly.
     - To deploy to KIND, see below instead.
+    - On other platforms... do whatever it is you're supposed to do (and update
+      this documentation with more useful guidance!).
   - Use `make deploy` to deploy to your cluster.
-    - Ensure you run `gcloud auth configure-docker` so that `docker-push` works
-      correctly.
     - This will also install the `kubectl-hns` plugin into `$GOPATH/bin`. Ensure
       that this is in your `PATH` env var if you want to use it by saying `kubectl
       hns`, as described in the user guide.
     - The manifests that get deployed will be output to
-      `/manifests/hnc-controller.yaml` if you want to check them out.
+      `/manifests/hnc-controller.yaml` if you want to see exactly what gets
+      deployed.
     - Note that `make deploy` can respond to env vars in your environment; see
       the Makefile for more information.
   - To view logs, say `make deploy-watch`
 
-### Development Workflow
-
-Once HNC is installed via `make deploy`, the development cycle looks like the following:
-  - Make changes locally and write new unit and integration tests as necessary
-  - Ensure `make test` passes
-  - Deploy to your cluster with `make deploy`
-  - Monitor changes. Some ways you can do that are:
-    - Look at logging with `make deploy-watch`
-    - Look at the result of the structure of your namespaces with `kubectl-hns tree -A` or `kubectl-hns tree NAMESPACE`
-    - See the resultant conditions or labels on namespaces by using `kubectl describe namespace NAMESPACE`
-
-### Developing with KIND
+#### Special considerations for developing with KIND
 
 While developing the HNC, it's usually faster to deploy locally to
-[KIND](https://kind.sigs.k8s.io):
+[KIND](https://kind.sigs.k8s.io). But be aware of the following gotchas:
 
-* Run `. devenv` (or `source devenv`) to setup your `KUBECONFIG` env var to
-  point to the local Kind cluster.
+* When you install KIND, make sure you're _not_ in the HNC directory, otherwise
+  all kinds of Go module stuff will get messed up (this is a general KIND
+  issue).
+* Instead of `make deploy`, say `make kind-deploy` (or, equivalently,
+  `CONFIG=kind make deploy` or `make deploy CONFIG=kind`). This bypasses the
+  steps where you try to push the image to a Docker registry like Docker Hub or
+  GCP Container Registry (`gcr.io`).
+* It's up to you to ensure that your kubectl context is pointed to your KIND
+  cluster (use `kubectl config get-contexts` to see if it is).
 * Run `make kind-reset` to stop any existing KIND cluster and setup a new one.
   You don't need to run this every time, only when you're first starting
   development or you think your KIND cluster is in a bad state.
-* Run `CONFIG=kind make deploy` or `make kind-deploy` to build the image, load
-  it into KIND, and deploy to KIND. See the notes above for caveats on `make
-  deploy`, though you don't need to set `IMG` yourself.
-* Alternatively, you can also run the controller locally (ie, not on the
-  cluster) by saying `make run`. Webhooks don't work in this mode because I
-  haven't bothered to find an easy way to make them work yet.
 
-KIND doesn't integrate with any identity providers - that is, you can't add
-"sara@foo.com" as a "regular user." So you'll have to use service accounts and
-impersonate them to test things like RBAC rules. Use `kubectl --as
+In addition, KIND doesn't integrate with any identity providers - that is, you
+can't add "sara@foo.com" as a "regular user." So you'll have to use service
+accounts and impersonate them to test things like RBAC rules. Use `kubectl --as
 system:serviceaccount:<namespace>:<sa-name>` to impersonate a service account
 from the command line, [as documented
 here](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#referring-to-subjects).
+
+I *think* you can also use client certificate requests but I haven't tried that
+out. If you don't know what I'm talking about, you probably don't want to try it
+out either. If you do, please update these docs when you get the chance!j
+
+#### Testing changes without a test cluster
+
+Alternatively, you can also run the controller locally (ie, not on the cluster)
+by saying `make run`. You still need _a_ cluster to exist (and your kubeconfig
+must be pointing to it) but it's sometimes nice to have everything running on
+your machine - e.g., if you want to run a debugger.
+
+Webhooks don't work in this mode because I haven't bothered to find an easy way
+to make them work yet. We don't really use this method ourselves anymore so it
+may not always work.
 
 ### Code structure
 
@@ -185,6 +244,7 @@ interesting directories are probably:
 * `/internal/forest`: the in-memory data structure, shared between the reconcilers
   and validators
 * `/internal/kubectl`: implementation of the `kubectl-hns` plugin
+* `/test`: various end-to-end tests
 
 Within the `reconcilers` directory, there are four reconcilers:
 
@@ -198,7 +258,7 @@ Within the `reconcilers` directory, there are four reconcilers:
   from parents to children. Instantiated once for every supported object GVK
   (group/version/kind) - e.g., `Role`, `Secret`, etc.
 
-### Test infrastructure
+### CI infrastructure
 
 HNC uses Prow to run tests, which is configured
 [here](https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/wg-multi-tenancy).
