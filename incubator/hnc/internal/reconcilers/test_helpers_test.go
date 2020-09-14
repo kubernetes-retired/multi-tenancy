@@ -182,6 +182,19 @@ func makeObject(ctx context.Context, kind string, nsName, name string) {
 	createdObjects = append(createdObjects, inst)
 }
 
+// makeObjectWithAnnotation creates an empty object with annotation given kind in a specific
+// namespace. The kind and its corresponding GVK should be included in the GVKs map.
+func makeObjectWithAnnotation(ctx context.Context, kind string, nsName,
+	name string, a map[string]string) {
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetNamespace(nsName)
+	inst.SetName(name)
+	inst.SetAnnotations(a)
+	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
+	createdObjects = append(createdObjects, inst)
+}
+
 // deleteObject deletes an object of the given kind in a specific namespace. The kind and
 // its corresponding GVK should be included in the GVKs map.
 func deleteObject(ctx context.Context, kind string, nsName, name string) {
