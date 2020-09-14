@@ -3,6 +3,7 @@ package validators
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/api/admission/v1beta1"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -29,6 +31,7 @@ const (
 
 type HNCConfig struct {
 	Log       logr.Logger
+	Forest    *forest.Forest
 	validator gvkValidator
 	decoder   *admission.Decoder
 }
@@ -103,7 +106,10 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 	if !roleBindingExist {
 		return deny(metav1.StatusReasonInvalid, "Configuration for RoleBinding is missing")
 	}
-	return allow("")
+
+	// Lastly, check if changing a type to "Propagate" mode would cause
+	// overwriting user-created objects.
+	return c.checkForest(inst)
 }
 
 // Validate if the configuration of a type already exists. Each type should only have one configuration.
@@ -139,6 +145,160 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 	}
 
 	return allow("")
+}
+
+// objSet is a set of namespaced objects. It also stores if the object has been
+// checked for naming conflict.
+type objSet map[string]inNamespace
+type inNamespace struct {
+	namespace string
+	checked   bool
+}
+
+// conflicts stores object naming conflicts by GVK, object name and groups of
+// conflicting namespaces. The namespaces are grouped by the first ancestor.
+type conflicts map[schema.GroupVersionKind]map[string]affectedNamespaces
+type affectedNamespaces map[string][]string
+
+func (c *HNCConfig) checkForest(inst *api.HNCConfiguration) admission.Response {
+	c.Forest.Lock()
+	defer c.Forest.Unlock()
+
+	// Get types that are changed from other modes to "Propagate" mode.
+	gvks := c.getNewPropagateTypes(inst)
+
+	// Check if user-created objects would be overwritten by these mode changes.
+	confs := conflicts{}
+	for gvk, _ := range gvks {
+		// We will keep one object set for each type, because objects with the same
+		// name but different types won't affect each other.
+		obs := objSet{}
+
+		// Traverse all the namespaces.
+		for _, nnm := range c.Forest.GetNamespaceNames() {
+			ns := c.Forest.Get(nnm)
+
+			// Traverse all the original objects in each namespace. Please note that
+			// if there's no object reconciler for this type (the type has never changed
+			// to any mode other than "Ignore"), we will get nothing from the forest.
+			// TODO update the conflictingAnsName() func to reflect the HNC exceptions
+			//  (still under implementation) specified by the object labels. See
+			//  https://docs.google.com/document/d/17J8icBEDvLLoPT4kQ4ArZcCerRweDY-TpJ48DJKpHJ0/edit#heading=h.wyw4gg116rw7
+			for _, obnm := range ns.GetObjectNames(gvk) {
+				// Check if an object of the same name exists. If not, add it to the set,
+				// but we don't check if there's any conflict yet since we can leave it
+				// until we detect there are more than just one object with the same name.
+				if exObj, exist := obs[obnm]; !exist {
+					obs[obnm] = inNamespace{namespace: nnm}
+				} else {
+					// If the object name already exists, let's check if there's any
+					// conflict in the ancestors for both objects. We only check ancestors
+					// because if there's a conflict, one must be the other's ancestor.
+					if !exObj.checked {
+						// If we haven't checked conflicts in ancestors for the existing one,
+						// check it and record it, so we don't need to do it again if we find
+						// more objects with the same name later.
+						exnnm := exObj.namespace
+						obs[obnm] = inNamespace{namespace: exnnm, checked: true}
+						addConflictIfAny(confs, gvk, obnm, c.conflictingAnsName(obnm, exnnm, gvk), exnnm)
+					}
+
+					// Check naming conflict for this object too.
+					addConflictIfAny(confs, gvk, obnm, c.conflictingAnsName(obnm, nnm, gvk), nnm)
+				}
+			}
+		}
+	}
+
+	if len(confs) != 0 {
+		return deny(metav1.StatusReasonConflict, printMsgWithConflicts(confs))
+	}
+	return allow("")
+}
+
+// getNewPropagateTypes returns a set of types that are changed from other modes
+// to `Propagate` mode.
+func (c *HNCConfig) getNewPropagateTypes(inst *api.HNCConfiguration) gvkSet {
+	// Get all "Propagate" mode types in the new configuration.
+	newPts := gvkSet{}
+	for _, t := range inst.Spec.Types {
+		if t.Mode == api.Propagate {
+			gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
+			newPts[gvk] = true
+		}
+	}
+
+	// Remove all existing "Propagate" mode types in the forest (current configuration).
+	for _, t := range c.Forest.GetTypeSyncers() {
+		if t.GetMode() == api.Propagate && newPts[t.GetGVK()] {
+			delete(newPts, t.GetGVK())
+		}
+	}
+
+	return newPts
+}
+
+// conflictingAnsName returns the ancestor namespace name if there's any conflict.
+func (c *HNCConfig) conflictingAnsName(obnm, nnm string, gvk schema.GroupVersionKind) string {
+	ns := c.Forest.Get(nnm)
+	for _, n := range ns.AncestryNames() {
+		// Exclude the original objects in this namespace
+		if n == nnm {
+			continue
+		}
+		for _, aobnm := range c.Forest.Get(n).GetObjectNames(gvk) {
+			if aobnm == obnm {
+				return n
+			}
+		}
+	}
+	return ""
+}
+
+// addConflictIfAny adds a new conflict if there is one.
+func addConflictIfAny(confs conflicts, gvk schema.GroupVersionKind, obnm, canm, nnm string) {
+	// If there's no conflicting ancestor, do nothing.
+	if canm == "" {
+		return
+	}
+
+	if _, ok := confs[gvk]; !ok {
+		confs[gvk] = make(map[string]affectedNamespaces)
+	}
+	if _, ok := confs[gvk][obnm]; !ok {
+		confs[gvk][obnm] = affectedNamespaces{}
+	}
+	// If the descendant namespace is already in the list, do not add it again.
+	ls := confs[gvk][obnm][canm]
+	for _, nm := range ls {
+		if nm == nnm {
+			return
+		}
+	}
+	confs[gvk][obnm][canm] = append(ls, nnm)
+}
+
+// printMsgWithConflicts prints conflicts into something like this:
+// Cannot update configuration because setting types to 'Propagate' mode would overwrite user-created object(s):
+// * Type: "/v1, Kind=Secret", Conflict(s):
+//   - "my-creds2" in namespace "acme-org" would overwrite the one(s) in [team-b].
+//   - "my-creds" in namespace "acme-org" would overwrite the one(s) in [team-a, team-b].
+//   - "my-creds" in namespace "bcme-org" would overwrite the one(s) in [team-c].
+//To fix this, please rename or remove the conflicting objects first.
+func printMsgWithConflicts(conflicts conflicts) string {
+	msg := "Cannot update configuration because setting types to 'Propagate' mode would overwrite user-created object(s):\n"
+	for t, tconfs := range conflicts {
+		msg += fmt.Sprintf(" * Type: %q, Conflict(s):\n", t)
+		for obnm, affnms := range tconfs {
+			for anm, dnms := range affnms {
+				msg += fmt.Sprintf("   - %q in namespace %q would overwrite the one(s) in [", obnm, anm)
+				msg += strings.Join(dnms, ", ")
+				msg += "].\n"
+			}
+		}
+	}
+	msg += "To fix this, please rename or remove the conflicting objects first."
+	return msg
 }
 
 // realGVKValidator implements gvkValidator, and is not used during unit tests.

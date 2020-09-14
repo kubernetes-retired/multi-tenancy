@@ -9,6 +9,8 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -48,7 +50,8 @@ func TestDeletingOtherObject(t *testing.T) {
 }
 
 func TestRBACTypes(t *testing.T) {
-	config := &HNCConfig{}
+	f := forest.NewForest()
+	config := &HNCConfig{Forest: f}
 
 	tests := []struct {
 		name    string
@@ -187,9 +190,58 @@ func TestNonRBACTypes(t *testing.T) {
 			g := NewGomegaWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
 			c.Name = api.HNCConfigSingleton
-			config := &HNCConfig{validator: tc.validator}
+			config := &HNCConfig{validator: tc.validator, Forest: forest.NewForest()}
 
 			got := config.handle(context.Background(), c)
+
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))
+		})
+	}
+}
+
+func TestPropagateConflict(t *testing.T) {
+	// Create a forest with "a" as the parent and "b" and "c" as the children.
+	f := foresttest.Create("-aa")
+
+	tests := []struct {
+		name         string
+		inNamespaces []string
+		allow        bool
+	}{
+		{
+			name:         "Objects with the same name existing in namespaces that one is not an ancestor of the other would not cause overwriting conflict",
+			inNamespaces: []string{"b", "c"},
+			allow:        true,
+		},
+		{
+			name:         "Objects with the same name existing in namespaces that one is an ancestor of the other would have overwriting conflict",
+			inNamespaces: []string{"a", "b"},
+			allow:        false,
+		}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewGomegaWithT(t)
+			configs := []api.TypeSynchronizationSpec{
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{APIVersion: "v1", Kind: "Secret", Mode: "Propagate"}}
+			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: configs}}
+			c.Name = api.HNCConfigSingleton
+			v := fakeGVKValidator{"CronTab"}
+			config := &HNCConfig{validator: v, Forest: f}
+
+			// Add object names to the forest.
+			for _, nsn := range tc.inNamespaces {
+				f.Get(nsn).AddObjectName(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}, "my-creds")
+			}
+			got := config.handle(context.Background(), c)
+
+			// Clean up object names before next test case.
+			for _, nsn := range tc.inNamespaces {
+				f.Get(nsn).RemoveObjectName(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}, "my-creds")
+			}
 
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))

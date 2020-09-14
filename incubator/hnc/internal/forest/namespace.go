@@ -12,6 +12,7 @@ import (
 // with the API server. Since we need the V to work with the API server anyways anyways, we will choose to
 // use the GVK as the key in this map.
 type objects map[schema.GroupVersionKind]map[string]*unstructured.Unstructured
+type objectNames map[schema.GroupVersionKind]map[string]bool
 
 // conditions stores the conditions for a single namespace, in the form obj -> code -> msg. Note
 // that only one message can be stored per obj and code.
@@ -30,6 +31,10 @@ type Namespace struct {
 	// originalObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
 	originalObjects objects
+
+	// objectNames store all the names of the original objects by GVK as long as
+	// there's an object reconciler for the GVK.
+	objectNames objectNames
 
 	// conditions store conditions so that object propagation can be disabled if there's a problem
 	// on this namespace.

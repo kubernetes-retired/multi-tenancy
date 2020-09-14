@@ -74,3 +74,35 @@ func (ns *Namespace) GetSource(gvk schema.GroupVersionKind, name string) *unstru
 	}
 	return nil
 }
+
+// AddObjectName adds object to the objectNames set.
+func (ns *Namespace) AddObjectName(gvk schema.GroupVersionKind, nm string) {
+	_, ok := ns.objectNames[gvk]
+	if !ok {
+		ns.objectNames[gvk] = make(map[string]bool)
+	}
+	ns.objectNames[gvk][nm] = true
+}
+
+// HasObjectName returns if the namespace has an object with that name.
+func (ns *Namespace) HasObjectName(gvk schema.GroupVersionKind, nm string) bool {
+	return ns.GetOriginalObject(gvk, nm) != nil
+}
+
+// RemoveObjectName removes the object from the objectNames set.
+func (ns *Namespace) RemoveObjectName(gvk schema.GroupVersionKind, nm string) {
+	delete(ns.objectNames[gvk], nm)
+	// Garbage collection
+	if len(ns.objectNames[gvk]) == 0 {
+		delete(ns.objectNames, gvk)
+	}
+}
+
+// GetObjectNames returns all the original object names by GVK.
+func (ns *Namespace) GetObjectNames(gvk schema.GroupVersionKind) []string {
+	o := []string{}
+	for nm, _ := range ns.objectNames[gvk] {
+		o = append(o, nm)
+	}
+	return o
+}

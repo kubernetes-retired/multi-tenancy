@@ -279,6 +279,9 @@ func (r *ObjectReconciler) syncMissingObject(ctx context.Context, log logr.Logge
 		return actionUnknown
 	}
 
+	// Remove the object name from the forest objectNames set (if it exists).
+	r.Forest.Get(inst.GetNamespace()).RemoveObjectName(inst.GroupVersionKind(), inst.GetName())
+
 	// If it's a source, it must have been deleted. Update the forest and enqueue all its
 	// descendants, but there's nothing else to do.
 	if r.forestHasSource(inst) {
@@ -385,6 +388,13 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 // syncSource syncs the copy in the forest with the current source object. If there's a change,
 // enqueue all the descendants to propagate the new source.
 func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+	nnm := src.GetNamespace()
+	nm := src.GetName()
+	ns := r.Forest.Get(nnm)
+
+	// Add the source object name to the objectNames set in namespace in the forest.
+	ns.AddObjectName(src.GroupVersionKind(), src.GetName())
+
 	if !r.shouldPropagateSource(log, src) {
 		// If an object was *previously* propagated by HNC, it will already be in the forest, and all
 		// the propagated copies will think they can stick around too. If, for some reason, we _now_
@@ -396,9 +406,6 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 		return
 	}
 
-	nnm := src.GetNamespace()
-	nm := src.GetName()
-	ns := r.Forest.Get(nnm)
 	origCopy := ns.GetOriginalObject(r.GVK, nm)
 
 	// Early exit if the source object exists and remains unchanged.
