@@ -51,3 +51,11 @@ unit-tests: kind-create tests kind-delete
 
 coverage: 
 	go tool cover -html=coverage.out
+
+release: generate readme 
+	GOOS=linux GOARCH=amd64 go build \
+	     -o ./releases/kubectl-mtb_linux_amd64 \
+	     ./cmd/kubectl-mtb/main.go
+	GOOS=darwin GOARCH=amd64 go build \
+	     -o ./releases/kubectl-mtb_darwin_amd64 \
+	     ./cmd/kubectl-mtb/main.go
