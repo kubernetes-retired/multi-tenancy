@@ -21,6 +21,8 @@ type TestClient struct {
 	RoleName        string
 	RoleBindingName string
 	ResourcePath    string
+	ClusterRoleBindingName string
+	ClusterRoleName string
 	DynamicResource dynamic.ResourceInterface
 	PolicyName      string
 	TenantClient    *kubernetes.Clientset
