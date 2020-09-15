@@ -32,10 +32,5 @@ This profile extends the "Level 1" profile. Items in this profile:
 - enable self-service creation of tenant namespaces
 - enable self-service management of other namespace resources like network policies, roles, and role bindings
 
-## Level 3
-This profile extends the "Level 2" profile. Items in this profile:
-- are intended for use where a higher-level of multi-tenancy is paramount
-- allow usage of all Kubernetes features. For example, a tenant may install their own CRD versions.
-
 <br/><br/>
 *Read Next >> [Benchmark Types](types.md)*

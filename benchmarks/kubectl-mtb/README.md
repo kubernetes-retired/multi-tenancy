@@ -4,19 +4,19 @@
 **[Usage](#usage)** |
 **[Contributing](#contributing)**|
 
-> kubectl plugin to validate the the multi-tenancy in the K8s cluster.
+> kubectl plugin to validate multi-tenancy configuration for a Kubernetes cluster.
 
-This tool automates behavioral and configuration checks on existing clusters to help Kubernetes users validate whether their clusters are set up correctly for multi-tenancy.
+The `mtb` kubectl plugin provides behavioral and configuration checks to help validate if a cluster is properly configured for multi-tenant use. 
 
 ## Demo
 
 [![asciicast](https://asciinema.org/a/JKaCz2rZJSb0ubDFEVOfFWBjJ.svg)](https://asciinema.org/a/JKaCz2rZJSb0ubDFEVOfFWBjJ)
 
-## Setup Instructions
+## Setup
 
-**Prerequisites** : Make sure you have working GO environment in your system.
+**Prerequisites** : Make sure you have working [Golang environment](https://golang.org/doc/#getting-started).
 
-kubectl-mtb can be installed by cloning this repository, and running
+kubectl-mtb can be installed by cloning and building this repository:
 
 ```bash
 git clone https://github.com/kubernetes-sigs/multi-tenancy
@@ -28,47 +28,29 @@ The `kubectl-mtb` binary will be copied to your $GOPATH/bin directory.
 
 ## Usage
 
-## Table of Contents
-
-* [List available benchmarks](#list-available-benchmarks)
-* [Run the available benchmarks](#run-the-available-benchmarks)
-* [Create a namespace](#create-a-namespace)
-* [Create a Role and RoleBinding](#create-a-role-and-rolebinding)
-* [Install Kyverno or Gatekeeper to pass benchmarks](#install-kyverno-or-gatekeeper-to-pass-benchmarks)
-* [Create ResourceQuota object](#create-resourcequota-object)
-* [List Policy Reports](#list-policy-reports)
-* [Generate README](#generate-readme)
-* [Run unit tests](#run-unit-tests)
-
-### List available benchmarks
+List benchmarks:
 
 ```bash
 kubectl-mtb get benchmarks
 ```
 
-### Run the available benchmarks
+Run benchmarks:
 
 ```bash
-kubectl-mtb run benchmarks -n "namespace" --as "user impersonation"
+kubectl-mtb run benchmarks -n "namespace" --as "user"
 ```
 
-You can mention the profile level of the  benchmark using `-p` flag. Users can switch to development mode by passing `--debug` or `-d` flag.
+## Complete example
 
-Example:
-
-```bash
-kubectl-mtb run benchmarks -n testnamespace --as divya-k8s-access
-```
-
-#### Create a namespace
+### Create a namespace
 
 ```bash
 kubectl create ns "test"
 ```
 
-#### Create a namespaced user role
+### Create a namespaced user role
 
-You can use the following template to create a role binding for a user (allie) in the namespace you want to test:
+You can use the following template to create a namespace admin role binding for a user (allie) in the namespace you want to test:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -84,15 +66,24 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-You can try running the test after creating the rolebinding, but most of the benchmarks will fail.
+```bash
+kubectl create -n "test" -f allie.yaml
+```
+
+### Run benchmarks
+
+```bash
+kubectl-mtb run benchmarks -n "test" --as "allie"
+```
+
+Most of the benchmarks will fail, a few will pass as the user cannot access cluster resources:
 
 <img width="577" alt="failed-tests" src="https://user-images.githubusercontent.com/21216969/89315233-3e7d6600-d698-11ea-9d3c-503521641840.png">
 
-*Some of the benchmarks passed because the user doesn't have cluster-admin privileges.*
 
-### Install Kyverno or Gatekeeper to pass benchmarks
+### Install Kyverno or Gatekeeper to secure the cluster
 
-You can use policies to pass the benchmarks. We are currently maintaining [Kyverno](https://github.com/nirmata/kyverno) and [Gatekeeper](https://github.com/open-policy-agent/gatekeeper) policies in this repo which are present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies)
+You can use a policy engine like [Kyverno](https://github.com/nirmata/kyverno) or [Gatekeeper](https://github.com/open-policy-agent/gatekeeper) for conformance with the benchmarks. We are currently maintaining and policies for both [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 
 #### Kyverno
 
@@ -102,7 +93,7 @@ To install Kyverno, you can run the following command:
 kubectl create -f https://github.com/nirmata/kyverno/raw/master/definitions/install.yaml
 ```
 
-To apply all the Kyverno policies after installing , you can use the below command:
+To apply all the Kyverno policies after installing, you can use the following command:
 
 ```console
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/benchmarks/kubectl-mtb/test/policies/kyverno/all_policies.yaml
@@ -122,49 +113,48 @@ You can find the policies of Gatekeeper [here](https://github.com/kubernetes-sig
 
 You can refer [here](https://github.com/open-policy-agent/gatekeeper#how-to-use-gatekeeper) to know how to use Gatekeeper.
 
-## Create ResourceQuota object
+### Configure Quotas and Limits
 
-To pass some of the benchmarks like `Configure namespace resource quotas`, you also need to create a ResourceQuota object.
-
-To create the object, run the following command:
+For conformance with benchmarks like `Configure namespace resource quotas`, the namespace will also need a ResourceQuota object. To create the quota, run the following command:
 
 ```console
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/benchmarks/kubectl-mtb/test/quotas/ns_quota.yaml
 ```
 
-After applying the policies and ResourceQuota object, all the benchmarks should pass. 
+After applying the policies and ResourceQuota object, run the benchmarks again. All benchmarks should pass. 
 
 <img width="570" alt="passed-tests" src="https://user-images.githubusercontent.com/21216969/89316882-42aa8300-d69a-11ea-997a-557708fa0da0.png">
 
+
 ### List Policy Reports
+
+You can output the benchmark results as a [Policy Report](https://github.com/kubernetes-sigs/wg-policy-prototypes/blob/master/policy-report/README.md)
+
+
+Install the Policy Report CR:
+
+```bash
+kubectl create -f https://github.com/kubernetes-sigs/wg-policy-prototypes/raw/master/policy-report/crd/policy.kubernetes.io_policyreports.yaml
+```
+
+Run the benchmarks with the `-o policyreport` flag:
 
 ```bash
 kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation" -o policyreport
 ```
 
-### Generate README
-
-README can be dynamically generated for the benchmarks from `config.yaml` (present inside each benchmark folder).
-Users can add additional fields too and it will be reflected in the README after running the following command from cloned
-repo.
-
-```bash
-make readme
-```
-
-### Run unit tests
-
-* The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
-
-* If you want to run a particular unit test, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed.
-
-*If kind cannot be found on your system the target will try to install it using `go get`*
-
 ## Contributing
 
-You can use mtb-builder to include/write other benchmarks.
+You can use mtb-builder to add new benchmarks.
 
-Run the following command to build mtb-builder.
+Clone the repo:
+
+```bash
+git clone https://github.com/kubernetes-sigs/multi-tenancy
+cd benchmarks/kubectl-mtb
+```
+
+Run the following command to build mtb-builder:
 
 ```bash
 make builder
@@ -183,3 +173,20 @@ Here,  `create block multitenant resources` is name of the benchmark and `-p` fl
 * config.yaml
 * create_block_multitenant_resources_test.go
 * create_block_multitenant_resources.go
+
+
+### Generate README
+
+A README.md can be dynamically generated for the benchmarks from `config.yaml` (present inside each benchmark folder). You can add additional fields in the `config.yaml`, and they will be reflected in the README.md after running the following command from cloned repo.
+
+```bash
+make readme
+```
+
+### Run unit tests
+
+* The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
+
+* If you want to run a particular unit test, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed.
+
+*If kind cannot be found on your system the target will try to install it using `go get`*
