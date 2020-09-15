@@ -147,7 +147,14 @@ kubectl-mtb run benchmarks -n "tenantnamespace" --as "user impersonation" -o pol
 
 You can use mtb-builder to add new benchmarks.
 
-Run the following command to build mtb-builder.
+Clone the repo:
+
+```bash
+git clone https://github.com/kubernetes-sigs/multi-tenancy
+cd benchmarks/kubectl-mtb
+```
+
+Run the following command to build mtb-builder:
 
 ```bash
 make builder
