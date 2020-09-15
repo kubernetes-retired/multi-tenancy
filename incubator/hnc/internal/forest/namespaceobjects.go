@@ -63,6 +63,14 @@ func (ns *Namespace) GetPropagatedObjects(gvk schema.GroupVersionKind) []*unstru
 	return o
 }
 
+// GetPropagatingObjects returns all the source objects to be propagated into the
+// descendants of this namespace.
+// TODO update this function to reflect the changes introduced by the future HNC
+//  exceptions implementation.
+func (ns *Namespace) GetPropagatingObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
+	return append(ns.GetPropagatedObjects(gvk), ns.GetOriginalObjects(gvk)...)
+}
+
 // GetSource returns the original copy in the ancestors if it exists.
 // Otherwise, return nil.
 func (ns *Namespace) GetSource(gvk schema.GroupVersionKind, name string) *unstructured.Unstructured {
