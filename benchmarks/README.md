@@ -17,8 +17,8 @@ For background, see: [Multi-Tenancy Benchmarks Proposal](https://docs.google.com
 - [Multi-Tenancy Definitions](documentation/definitions.md)
 - [Benchmark Types](documentation/types.md)
 - [Benchmark Categories](documentation/categories.md)
-- [Running Validation Tests](kubectl-mtb/README.md)
-- [Contributing](documentation/contributing.md)
+- [Executing the benchmarks with kubectl-mtb](kubectl-mtb/README.md)
+- [Contributing to the benchmarks](kubectl-mtb/README.md#contributing)
 
 ## Benchmarks
 
