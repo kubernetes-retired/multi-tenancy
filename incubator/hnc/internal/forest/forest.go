@@ -96,6 +96,19 @@ func (f *Forest) GetNamespaceNames() []string {
 	return names
 }
 
+// GetRoots returns all the root namespaces in the cluster. Any possible cycles
+// are omitted since we look for namespaces with no parent and cycles must
+// always be at roots.
+func (f *Forest) GetRoots() []*Namespace {
+	nses := []*Namespace{}
+	for _, ns := range f.namespaces {
+		if ns.parent == nil {
+			nses = append(nses, ns)
+		}
+	}
+	return nses
+}
+
 // AddTypeSyncer adds a reconciler to the types list.
 func (f *Forest) AddTypeSyncer(nss TypeSyncer) {
 	f.types = append(f.types, nss)

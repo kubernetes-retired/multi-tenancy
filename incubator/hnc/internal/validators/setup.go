@@ -65,7 +65,8 @@ func Create(mgr ctrl.Manager, f *forest.Forest) {
 
 	// Create webhook for the config
 	mgr.GetWebhookServer().Register(ConfigServingPath, &webhook.Admission{Handler: &HNCConfig{
-		Log: ctrl.Log.WithName("validators").WithName("HNCConfig"),
+		Log:    ctrl.Log.WithName("validators").WithName("HNCConfig"),
+		Forest: f,
 	}})
 
 	// Create webhook for the subnamespace anchors.
