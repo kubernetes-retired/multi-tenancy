@@ -246,7 +246,10 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	// Get all the source objects in the new ancestors that would be propagated
 	// into the descendants.
 	newAnsSrcObjs := make(map[string]bool)
-	for _, o := range newParent.GetPropagatingObjects(gvk) {
+	// TODO additionally check if the ancestor source objects obey the
+	//  'shouldPropagateSource()' rules from the reconcilers/object.go. Only
+	//  propagatable ancestor source would cause overwriting conflict.
+	for _, o := range newParent.GetAncestorSourceObjects(gvk, "") {
 		newAnsSrcObjs[o.GetName()] = true
 	}
 
@@ -254,7 +257,7 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	cos := []string{}
 	dnses := append(ns.DescendantNames(), ns.Name())
 	for _, dns := range dnses {
-		for _, o := range v.Forest.Get(dns).GetOriginalObjects(gvk) {
+		for _, o := range v.Forest.Get(dns).GetSourceObjects(gvk) {
 			if newAnsSrcObjs[o.GetName()] {
 				co := fmt.Sprintf("Namespace %q: %s (%v)", dns, o.GetName(), gvk)
 				cos = append(cos, co)

@@ -77,11 +77,11 @@ func (f *Forest) Get(nm string) *Namespace {
 		return ns
 	}
 	ns = &Namespace{
-		forest:          f,
-		name:            nm,
-		children:        namedNamespaces{},
-		conditions:      conditions{},
-		originalObjects: objects{},
+		forest:        f,
+		name:          nm,
+		children:      namedNamespaces{},
+		conditions:    conditions{},
+		sourceObjects: objects{},
 	}
 	f.namespaces[nm] = ns
 	return ns

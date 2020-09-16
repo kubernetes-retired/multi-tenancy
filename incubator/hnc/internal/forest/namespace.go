@@ -27,9 +27,9 @@ type Namespace struct {
 	exists               bool
 	allowCascadingDelete bool
 
-	// originalObjects store the objects created by users, identified by GVK and name.
+	// sourceObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
-	originalObjects objects
+	sourceObjects objects
 
 	// conditions store conditions so that object propagation can be disabled if there's a problem
 	// on this namespace.

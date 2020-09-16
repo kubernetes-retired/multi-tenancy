@@ -398,5 +398,5 @@ func createSecret(nm, nsn string, f *forest.Forest) {
 	inst.SetName(nm)
 	inst.SetNamespace(nsn)
 	inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
-	f.Get(nsn).SetOriginalObject(inst)
+	f.Get(nsn).SetSourceObject(inst)
 }

@@ -396,7 +396,7 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 			nms := r.Forest.GetNamespaceNames()
 			for _, nm := range nms {
 				ns := r.Forest.Get(nm)
-				numSrc += ns.GetNumOriginalObjects(gvk)
+				numSrc += ns.GetNumSourceObjects(gvk)
 			}
 			status.NumSourceObjects = &numSrc
 		}
