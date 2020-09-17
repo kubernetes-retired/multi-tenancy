@@ -29,10 +29,11 @@ The following tests are currently defined (tests marked `pending` are planned fo
 * [Block access to cluster resources](kubectl-mtb/test/benchmarks/block_access_to_cluster_resources)
 * [Block Multitenant Resources](kubectl-mtb/test/benchmarks/block_multitenant_resources)
 * [Block add capabilities](kubectl-mtb/test/benchmarks/block_add_capabilities)
-* Require run as non-root user (**pending**)
-* [Require image pull `always`](kubectl-mtb/test/benchmarks/require_always_pull_image) (**pending**)
-* Require PVC reclaim policy `delete` (**pending**)
-* Require CAP_DROP_ALL (**pending**)
+* [Require image pull `always`](kubectl-mtb/test/benchmarks/require_always_pull_image)
+* [Require run as non-root user](kubectl-mtb/test/benchmarks/require_run_as_non_root_user)
+* Require image pull `always`
+* Require PVC reclaim policy `delete`
+* Require CAP_DROP_ALL
 * [Block privileged containers](kubectl-mtb/test/benchmarks/block_privileged_containers)
 * [Block privilege escalation](kubectl-mtb/test/benchmarks/block_privilege_escalation)
 * [Configure namespace resource quotas](kubectl-mtb/test/benchmarks/configure_ns_quotas)
