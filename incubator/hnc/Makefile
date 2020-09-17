@@ -68,7 +68,7 @@ GOBIN ?= $(shell go env GOPATH)/bin
 KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 # The directories to run Go command on (excludes /vendor)
-DIRS=./api/... ./cmd/... ./internal/... ./third_party/...
+DIRS=./api/... ./cmd/... ./internal/...
 
 all: test docker-build
 
@@ -138,7 +138,7 @@ krew-uninstall:
 manifests: controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
 	@# See the comment above about the 'paths' arguments
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." paths="./third_party/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." output:crd:artifacts:config=config/crd/bases
 	-rm -rf manifests/
 	mkdir manifests
 	cd manifests && \

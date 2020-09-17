@@ -7,8 +7,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	cert "github.com/open-policy-agent/cert-controller/pkg/rotator"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	cert "sigs.k8s.io/multi-tenancy/incubator/hnc/third_party/open-policy-agent/gatekeeper/pkg/webhook"
 )
 
 const (
@@ -41,7 +41,7 @@ func CreateCertsIfNeeded(mgr ctrl.Manager, novalidation, internalCert bool) (cha
 		},
 		CertDir:        certDir,
 		CAName:         caName,
-		CaOrganization: caOrganization,
+		CAOrganization: caOrganization,
 		DNSName:        dnsName,
 		IsReady:        setupFinished,
 		VWHName:        vwhName,

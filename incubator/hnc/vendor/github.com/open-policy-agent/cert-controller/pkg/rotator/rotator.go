@@ -1,4 +1,4 @@
-package webhook
+package rotator
 
 import (
 	"bytes"
@@ -90,7 +90,7 @@ type CertRotator struct {
 	SecretKey       types.NamespacedName
 	CertDir         string
 	CAName          string
-	CaOrganization  string
+	CAOrganization  string
 	DNSName         string
 	IsReady         chan struct{}
 	certsMounted    chan struct{}
@@ -166,6 +166,10 @@ func (cr *CertRotator) refreshCertIfNeeded() error {
 				return false, nil
 			}
 			crLog.Info("server certs refreshed")
+			if restartOnSecretRefresh {
+				crLog.Info("Secrets have been updated; exiting so pod can be restarted (omit --cert-restart-on-secret-refresh to wait instead of restarting")
+				os.Exit(0)
+			}
 			return true, nil
 		}
 		crLog.Info("no cert refresh needed")
@@ -312,7 +316,10 @@ func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
 		SerialNumber: big.NewInt(0),
 		Subject: pkix.Name{
 			CommonName:   cr.CAName,
-			Organization: []string{cr.CaOrganization},
+			Organization: []string{cr.CAOrganization},
+		},
+		DNSNames: []string{
+			cr.CAName,
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
@@ -350,6 +357,9 @@ func (cr *CertRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, erro
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
 			CommonName: cr.DNSName,
+		},
+		DNSNames: []string{
+			cr.DNSName,
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
