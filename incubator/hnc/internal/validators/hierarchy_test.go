@@ -128,6 +128,7 @@ func TestChangeParentWithConflict(t *testing.T) {
 		{name: "ok: no conflict in ancestors", nnm: "a", pnm: "c"},
 		{name: "conflict in subtree leaf and the new parent", nnm: "c", pnm: "a", fail: true},
 		{name: "conflict in subtree leaf and a new ancestor (not the parent)", nnm: "c", pnm: "b", fail: true},
+		{name: "ok: set a namespace as root", nnm: "d", pnm: ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
