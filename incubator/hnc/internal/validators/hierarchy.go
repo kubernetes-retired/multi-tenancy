@@ -225,6 +225,11 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 
 // getConflictingObjects returns a list of namespaced objects if there's any conflict.
 func (v *Hierarchy) getConflictingObjects(newParent, ns *forest.Namespace) []string {
+	// If the new parent is nil,  early exit since it's impossible to introduce
+	// new naming conflicts.
+	if newParent == nil {
+		return nil
+	}
 	// Traverse all the types with 'Propagate' mode to find any conflicts.
 	conflicts := []string{}
 	for _, t := range v.Forest.GetTypeSyncers() {
