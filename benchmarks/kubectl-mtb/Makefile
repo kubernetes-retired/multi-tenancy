@@ -34,12 +34,9 @@ HAS_KIND := $(shell command -v kind;)
 KIND_PROFILE := "kubectl-mtb-suite"
 kind-create:
 ifndef HAS_KIND
-	go get -u sigs.k8s.io/kind
+	GOPROXY=https://proxy.golang.org,direct go get -u sigs.k8s.io/kind
 endif
-	@if [ -z $$(kind get clusters | grep $(KIND_PROFILE)) ]; then\
-		echo "Could not find $(KIND_PROFILE) cluster. Creating...";\
-		kind create cluster --name $(KIND_PROFILE) --wait 5m;\
-	fi
+	kind create cluster --name $(KIND_PROFILE) 
 		
 tests:
 	GOPROXY=https://proxy.golang.org,direct go test ./test/benchmarks/... -v -count=1 -coverprofile=coverage.out		
