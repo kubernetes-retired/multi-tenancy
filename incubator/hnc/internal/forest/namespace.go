@@ -27,6 +27,9 @@ type Namespace struct {
 	exists               bool
 	allowCascadingDelete bool
 
+	// labels store the original namespaces' labels
+	labels map[string]string
+
 	// originalObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
 	originalObjects objects
@@ -86,6 +89,17 @@ func (ns *Namespace) UnsetExists() bool {
 	ns.exists = false
 	ns.clean() // clean up if this is a useless data structure
 	return changed
+}
+
+func (ns *Namespace) GetLabels() map[string]string {
+	return ns.labels
+}
+
+func (ns *Namespace) SetLabels(labels map[string]string) {
+	ns.labels = make(map[string]string)
+	for key, val := range labels {
+		ns.labels[key] = val
+	}
 }
 
 // clean garbage collects this namespace if it has a zero value.

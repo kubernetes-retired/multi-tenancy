@@ -398,6 +398,7 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 		anc = anc.Parent()
 		depth++
 	}
+	ns.SetLabels(nsInst.Labels)
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {

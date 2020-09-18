@@ -17,18 +17,13 @@ spec:
   scope: Cluster
   validation:
     openAPIV3Schema:
-      description: HNCConfiguration is a cluster-wide configuration for HNC as a whole.
-        See details in http://bit.ly/hnc-type-configuration
+      description: HNCConfiguration is a cluster-wide configuration for HNC as a whole. See details in http://bit.ly/hnc-type-configuration
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation
-            of an object. Servers should convert recognized schemas to the latest
-            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this
-            object represents. Servers may infer this from the endpoint the client
-            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -36,22 +31,18 @@ spec:
           description: HNCConfigurationSpec defines the desired state of HNC configuration.
           properties:
             types:
-              description: Types indicates the desired synchronization states of kinds,
-                if any.
+              description: Types indicates the desired synchronization states of kinds, if any.
               items:
-                description: TypeSynchronizationSpec defines the desired synchronization
-                  state of a specific kind.
+                description: TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
                 properties:
                   apiVersion:
-                    description: API version of the kind defined below. This is used
-                      to unambiguously identifies the kind.
+                    description: API version of the kind defined below. This is used to unambiguously identifies the kind.
                     type: string
                   kind:
                     description: Kind to be configured.
                     type: string
                   mode:
-                    description: Synchronization mode of the kind. If the field is
-                      empty, it will be treated as "Propagate".
+                    description: Synchronization mode of the kind. If the field is empty, it will be treated as "Propagate".
                     enum:
                     - Propagate
                     - Ignore
@@ -69,48 +60,27 @@ spec:
             conditions:
               description: Conditions describes the errors, if any.
               items:
-                description: HNCConfigurationCondition specifies the code and the
-                  description of an error condition.
+                description: HNCConfigurationCondition specifies the code and the description of an error condition.
                 properties:
                   code:
-                    description: "Describes the condition in a machine-readable string
-                      value. The currently valid values are shown below, but new values
-                      may be added over time. This field is always present in a condition.
-                      \n Conditions typically indicate some kinds of error that HNC
-                      itself can ignore. However, the behaviors of some types might
-                      be out-of-sync with the users' expectations. \n Currently, the
-                      supported values are: \n - \"objectReconcilerCreationFailed\":
-                      an error exists when creating the object reconciler for the
-                      type specified in Msg. \n - \"multipleConfigurationsForOneType\":
-                      Multiple configurations exist for the type specified in the
-                      Msg. One type should only have one configuration."
+                    description: "Describes the condition in a machine-readable string value. The currently valid values are shown below, but new values may be added over time. This field is always present in a condition. \n Conditions typically indicate some kinds of error that HNC itself can ignore. However, the behaviors of some types might be out-of-sync with the users' expectations. \n Currently, the supported values are: \n - \"objectReconcilerCreationFailed\": an error exists when creating the object reconciler for the type specified in Msg. \n - \"multipleConfigurationsForOneType\": Multiple configurations exist for the type specified in the Msg. One type should only have one configuration."
                     type: string
                   msg:
-                    description: A human-readable description of the condition, if
-                      the `code` field is not sufficiently clear on their own. If
-                      the condition is only for specific types, Msg will include information
-                      about the types (e.g., GVK).
+                    description: A human-readable description of the condition, if the `code` field is not sufficiently clear on their own. If the condition is only for specific types, Msg will include information about the types (e.g., GVK).
                     type: string
                 required:
                 - code
                 type: object
               type: array
             namespaceConditions:
-              description: NamespaceConditions is a map of namespace condition codes
-                to the namespaces affected by those codes. If HNC is operating normally,
-                no conditions will be present; if there are any conditions beginning
-                with the "Crit" (critical) prefix, this means that HNC cannot function
-                in the affected namespaces. The HierarchyConfiguration object in each
-                of the affected namespaces will have more information. To learn more
-                about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
+              description: NamespaceConditions is a map of namespace condition codes to the namespaces affected by those codes. If HNC is operating normally, no conditions will be present; if there are any conditions beginning with the "Crit" (critical) prefix, this means that HNC cannot function in the affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will have more information. To learn more about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
               items:
                 properties:
                   code:
                     description: Code is a namespace condition code
                     type: string
                   namespaces:
-                    description: Namespaces is the list of namespaces affected by
-                      this code
+                    description: Namespaces is the list of namespaces affected by this code
                     items:
                       type: string
                     type: array
@@ -120,34 +90,25 @@ spec:
                 type: object
               type: array
             types:
-              description: Types indicates the observed synchronization states of
-                kinds, if any.
+              description: Types indicates the observed synchronization states of kinds, if any.
               items:
-                description: TypeSynchronizationStatus defines the observed synchronization
-                  state of a specific kind.
+                description: TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
                 properties:
                   apiVersion:
-                    description: API version of the kind defined below. This is used
-                      to unambiguously identifies the kind.
+                    description: API version of the kind defined below. This is used to unambiguously identifies the kind.
                     type: string
                   kind:
                     description: Kind to be configured.
                     type: string
                   mode:
-                    description: Mode describes the synchronization mode of the kind.
-                      Typically, it will be the same as the mode in the spec, except
-                      when the reconciler has fallen behind or when the mode is omitted
-                      from the spec and the default is chosen.
+                    description: Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode in the spec, except when the reconciler has fallen behind or when the mode is omitted from the spec and the default is chosen.
                     type: string
                   numPropagatedObjects:
-                    description: Tracks the number of objects that are being propagated
-                      to descendant namespaces. The propagated objects are created
-                      by HNC.
+                    description: Tracks the number of objects that are being propagated to descendant namespaces. The propagated objects are created by HNC.
                     minimum: 0
                     type: integer
                   numSourceObjects:
-                    description: Tracks the number of objects that are created by
-                      users.
+                    description: Tracks the number of objects that are created by users.
                     minimum: 0
                     type: integer
                 required:

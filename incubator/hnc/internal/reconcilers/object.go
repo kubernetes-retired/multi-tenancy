@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -359,9 +360,29 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 	if srcInst == nil {
 		return actionRemove, nil
 	}
-
 	// If an object doesn't exist, assume it's been deleted or not yet created.
 	exists := inst.GetCreationTimestamp() != v1.Time{}
+	selector := r.getSelector(ctx, log, srcInst)
+	log.Info("JI:", "Selector", selector)
+
+	nsLabels := labels.Set(r.Forest.Get(inst.GetNamespace()).GetLabels())
+	if selector != nil && !selector.Matches(nsLabels) {
+		log.Info("JI: Selector label does not match")
+		if exists {
+			log.Info("JI: Removing object")
+			// The object already exists but it shouldn't be here according to the updated selector, so we remove it
+			r.deleteObject(ctx, log, inst)
+			return actionRemove, nil
+		} else {
+			// The object already exists and doesn't need to be updated. This will typically happen when HNC
+			// is restarted - all the propagated objects already exist on the apiserver. Record that it exists
+			// for our statistics.
+			r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
+
+			// Nothing more needs to be done.
+			return actionNop, nil
+		}
+	}
 
 	// If the copy does not exist, or is different from the source, return the write action and the
 	// source instance. Note that DeepEqual could return `true` even if the object doesn't exist if
@@ -373,13 +394,27 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 		return actionWrite, srcInst
 	}
 
-	// The object already exists and doesn't need to be updated. This will typically happen when HNC
-	// is restarted - all the propagated objects already exist on the apiserver. Record that it exists
-	// for our statistics.
-	r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
-
 	// Nothing more needs to be done.
 	return actionNop, nil
+}
+
+func (r *ObjectReconciler) getSelector(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
+	annot := inst.GetAnnotations()
+	selectorStr, ok := annot[api.AnnotationSelector]
+	if !ok {
+		return nil
+	}
+	labelSelector, err := v1.ParseToLabelSelector(selectorStr)
+	// TODO: surface the error messages here
+	if err != nil {
+		log.Error(err, "Could not parse selector annotation to labelSelector")
+		return nil
+	}
+	selector, err := v1.LabelSelectorAsSelector(labelSelector)
+	if err != nil {
+		log.Error(err, "Could not convert labelSelector to selector")
+	}
+	return selector
 }
 
 // syncSource syncs the copy in the forest with the current source object. If there's a change,

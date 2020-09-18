@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
+	. "github.com/onsi/ginkgo"bgv
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -193,6 +194,22 @@ func makeObjectWithAnnotation(ctx context.Context, kind string, nsName,
 	inst.SetAnnotations(a)
 	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
 	createdObjects = append(createdObjects, inst)
+}
+
+func updateObjectWithAnnotation(ctx context.Context, kind string, nsName,
+	name string, a map[string]string) error {
+	nnm := types.NamespacedName{Namespace: nsName, Name: name}
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	err := k8sClient.Get(ctx, nnm, inst)
+	if err != nil {
+		return err
+	}
+	inst.SetAnnotations(a)
+	err = k8sClient.Update(ctx, inst)
+	_ = k8sClient.Get(ctx, nnm, inst)
+	GinkgoT().Logf("JI: %v", inst)
+	return err
 }
 
 // deleteObject deletes an object of the given kind in a specific namespace. The kind and
