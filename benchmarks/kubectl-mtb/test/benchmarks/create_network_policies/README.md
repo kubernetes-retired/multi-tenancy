@@ -29,5 +29,3 @@ kubectl --kubeconfig=tenant-a -n a1 auth can-i verb networkpolicy
 Each command must return &#39;yes&#39;
 
 
-
-

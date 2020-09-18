@@ -32,5 +32,3 @@ kubectl --kubeconfig=tenant-a -n a1 auth can-i deletecollection quota
 ```
 Each command must return &#39;no&#39;&#34;
 
-
-

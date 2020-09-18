@@ -16,13 +16,7 @@ Fairness
 
 Namespace resource quotas should be used to allocate, track and limit the number of objects, of a particular type, that can be created within a namespace.
 
-**Rationale:**
-
-
-
-**Audit:**
-
-
+**Remediation:**
 
 Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml`
 

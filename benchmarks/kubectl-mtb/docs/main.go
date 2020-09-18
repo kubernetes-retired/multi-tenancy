@@ -48,19 +48,33 @@ func ReadmeTemplate() []byte {
 
 {{.Category}}
 
+{{- if ne .Description ""}}
+
 **Description:**
 
 {{.Description}}
+{{- end}}
+
+{{- if ne .Rationale ""}}
 
 **Rationale:**
 
 {{.Rationale}}
+{{- end}}
+
+{{- if ne .Audit ""}}
 
 **Audit:**
 
 {{.Audit}}
+{{- end}}
+
+{{- if ne .Remediation ""}}
+
+**Remediation:**
 
 {{.Remediation}}
+{{- end}}
 
 {{ range $key, $value := .AdditionalField }}
 **{{ $key }}:** 

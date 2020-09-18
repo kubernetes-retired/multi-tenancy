@@ -33,5 +33,3 @@ kubectl --kubeconfig tenant-a auth can-i verb resource
 Each command must return &#39;no&#39;
 
 
-
-

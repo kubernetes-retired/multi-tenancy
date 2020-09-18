@@ -24,5 +24,7 @@ The `hostIPC` setting allows pods to share the host&#39;s inter-process communic
 
 Create a pod or container that sets new `hostIPC` to `true`. The pod creation must fail.
 
+**Remediation:**
+
 Define a `PodSecurityPolicy` with `hostIPC` set to `false` and map the policy to each tenant&#39;s namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `hostPID` cannot be set to `true`. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 
