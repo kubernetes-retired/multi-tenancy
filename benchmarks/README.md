@@ -30,7 +30,7 @@ The following tests are currently defined (tests marked `pending` are planned fo
 * [Block Multitenant Resources](kubectl-mtb/test/benchmarks/block_multitenant_resources)
 * [Block add capabilities](kubectl-mtb/test/benchmarks/block_add_capabilities)
 * Require run as non-root user (**pending**)
-* Require image pull `always` (**pending**)
+* [Require image pull `always`](kubectl-mtb/test/benchmarks/require_always_pull_image) (**pending**)
 * Require PVC reclaim policy `delete` (**pending**)
 * Require CAP_DROP_ALL (**pending**)
 * [Block privileged containers](kubectl-mtb/test/benchmarks/block_privileged_containers)

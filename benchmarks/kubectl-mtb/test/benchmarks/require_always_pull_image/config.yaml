@@ -1,0 +1,7 @@
+id: MTB-PL1-CC-DI-1
+title: Require always imagePullPolicy
+benchmarkType: Configuration Check
+category: Data Isolation
+description: Set the image pull policy to `Always` so that the users an be assured that their private images can only be used by those who have the credentials to pull them.
+remediation: Set `imagePullPolicy` to `always` for the container.
+profileLevel: 1
