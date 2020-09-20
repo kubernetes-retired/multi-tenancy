@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"time"
 	. "github.com/onsi/ginkgo"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
@@ -23,7 +22,7 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 		RecoverHNC()
 	})
 
-	FIt("Should delete and create a Rolebinding when HNC is undeployed - issue #798", func() {
+	It("Should delete and create a Rolebinding when HNC is undeployed - issue #798", func() {
 		// NOTE: THERE IS ONE CASE THAT THIS TEST WILL ALWAYS PASS EVEN IF CODE IS BROKEN:
 		// After recovering HNC, if nsChild gets reconciled first, the 'admin' rolebinding will
 		// be deleted, and the 'edit' rolebinding will be created when nsParent gets reconciled.
