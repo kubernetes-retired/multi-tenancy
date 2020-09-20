@@ -20,10 +20,14 @@ spec:
       description: Hierarchy is the Schema for the hierarchies API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -31,7 +35,8 @@ spec:
           description: HierarchySpec defines the desired state of Hierarchy
           properties:
             allowCascadingDelete:
-              description: AllowCascadingDelete indicates if the subnamespaces of this namespace are allowed to cascading delete.
+              description: AllowCascadingDelete indicates if the subnamespaces of
+                this namespace are allowed to cascading delete.
               type: boolean
             parent:
               description: Parent indicates the parent of this namespace, if any.
@@ -41,17 +46,20 @@ spec:
           description: HierarchyStatus defines the observed state of Hierarchy
           properties:
             children:
-              description: Children indicates the direct children of this namespace, if any.
+              description: Children indicates the direct children of this namespace,
+                if any.
               items:
                 type: string
               type: array
             conditions:
-              description: Conditions describes the errors and the affected objects, if any.
+              description: Conditions describes the errors and the affected objects,
+                if any.
               items:
                 description: Condition specifies the condition and the affected objects.
                 properties:
                   affects:
-                    description: Affects is a list of group-version-kind-namespace-name that uniquely identifies the object(s) affected by the condition.
+                    description: Affects is a list of group-version-kind-namespace-name
+                      that uniquely identifies the object(s) affected by the condition.
                     items:
                       description: AffectedObject defines uniquely identifiable objects.
                       properties:
@@ -68,10 +76,56 @@ spec:
                       type: object
                     type: array
                   code:
-                    description: "Describes the condition in a machine-readable string value. The currently valid values are shown below, but new values may be added over time. This field is always present in a condition. \n All codes that begin with the prefix `Crit` indicate that all HNC activities (e.g. propagating objects, updating labels) have been paused in this namespaces. HNC will resume updating the namespace once the condition has been resolved. Non-critical conditions typically indicate some kind of error that HNC itself can ignore, but likely indicates that the hierarchical structure is out-of-sync with the users' expectations. \n If the validation webhooks are working properly, there should typically not be any conditions on any namespaces, although some may appear transiently when the HNC controller is restarted. These should quickly resolve themselves (<30s). However, validation webhooks are not perfect, especially if multiple users are modifying the same namespace trees quickly, so it's important to monitor for critical conditions and resolve them if they arise. See the user guide for more information. \n Currently, the supported values are: \n - \"CritParentMissing\": the specified parent is missing and the namespace is an orphan. \n - \"CritCycle\": the namespace is a member of a cycle. For example, if namespace B says that its parent is namespace A, but namespace A says that its parent is namespace B, then A and B are in a cycle with each other and both of them will have the CritCycle condition. \n - \"CritDeletingCRD\": The HierarchyConfiguration CRD is being deleted. No more objects will be propagated into or out of this namespace. It is expected that the HNC controller will be stopped soon after the CRDs are fully deleted. \n - \"CritAncestor\": a critical error exists in an ancestor namespace, so this namespace is no longer being updated either. \n - \"SubnamespaceAnchorMissing\": this namespace is a subnamespace, but the anchor referenced in its `subnamespaceOf` annotation does not exist in the parent. \n - \"CannotPropagateObject\": this namespace contains an object that couldn't be propagated *out* of this namespace, to one or more of this namespace's descendants. If the object couldn't be propagated to *any* descendants - for example, because it has a finalizer on it (HNC can't propagate objects with finalizers), the `Affects` field will point to the object in this namespace. Otherwise, if it couldn't be propagated to *some* descendants, `Affects` will contain a list of the objects in those descendants that couldn't be created or updated. \n - \"CannotUpdateObject\": this namespace has an object that couldn't be propagated *into* this namespace - that is, it couldn't be created in the first place, or it couldn't be updated. The `Affects` field will point to the source object, which will always be in a namespace that's an ancestor of this namespace."
+                    description: "Describes the condition in a machine-readable string
+                      value. The currently valid values are shown below, but new values
+                      may be added over time. This field is always present in a condition.
+                      \n All codes that begin with the prefix `Crit` indicate that
+                      all HNC activities (e.g. propagating objects, updating labels)
+                      have been paused in this namespaces. HNC will resume updating
+                      the namespace once the condition has been resolved. Non-critical
+                      conditions typically indicate some kind of error that HNC itself
+                      can ignore, but likely indicates that the hierarchical structure
+                      is out-of-sync with the users' expectations. \n If the validation
+                      webhooks are working properly, there should typically not be
+                      any conditions on any namespaces, although some may appear transiently
+                      when the HNC controller is restarted. These should quickly resolve
+                      themselves (<30s). However, validation webhooks are not perfect,
+                      especially if multiple users are modifying the same namespace
+                      trees quickly, so it's important to monitor for critical conditions
+                      and resolve them if they arise. See the user guide for more
+                      information. \n Currently, the supported values are: \n - \"CritParentMissing\":
+                      the specified parent is missing and the namespace is an orphan.
+                      \n - \"CritCycle\": the namespace is a member of a cycle. For
+                      example, if namespace B says that its parent is namespace A,
+                      but namespace A says that its parent is namespace B, then A
+                      and B are in a cycle with each other and both of them will have
+                      the CritCycle condition. \n - \"CritDeletingCRD\": The HierarchyConfiguration
+                      CRD is being deleted. No more objects will be propagated into
+                      or out of this namespace. It is expected that the HNC controller
+                      will be stopped soon after the CRDs are fully deleted. \n -
+                      \"CritAncestor\": a critical error exists in an ancestor namespace,
+                      so this namespace is no longer being updated either. \n - \"SubnamespaceAnchorMissing\":
+                      this namespace is a subnamespace, but the anchor referenced
+                      in its `subnamespaceOf` annotation does not exist in the parent.
+                      \n - \"CannotPropagateObject\": this namespace contains an object
+                      that couldn't be propagated *out* of this namespace, to one
+                      or more of this namespace's descendants. If the object couldn't
+                      be propagated to *any* descendants - for example, because it
+                      has a finalizer on it (HNC can't propagate objects with finalizers),
+                      the `Affects` field will point to the object in this namespace.
+                      Otherwise, if it couldn't be propagated to *some* descendants,
+                      `Affects` will contain a list of the objects in those descendants
+                      that couldn't be created or updated. \n - \"CannotUpdateObject\":
+                      this namespace has an object that couldn't be propagated *into*
+                      this namespace - that is, it couldn't be created in the first
+                      place, or it couldn't be updated. The `Affects` field will point
+                      to the source object, which will always be in a namespace that's
+                      an ancestor of this namespace."
                     type: string
                   msg:
-                    description: A human-readable description of the condition, if the `code` and `affects` fields are not sufficiently clear on their own.
+                    description: A human-readable description of the condition, if
+                      the `code` and `affects` fields are not sufficiently clear on
+                      their own.
                     type: string
                 required:
                 - code
