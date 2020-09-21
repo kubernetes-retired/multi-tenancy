@@ -283,6 +283,9 @@ func (cr *CertRotator) createCACert() (*KeyPairArtifacts, error) {
 			CommonName:   cr.CAName,
 			Organization: []string{cr.CaOrganization},
 		},
+		DNSNames: []string{
+			cr.CAName,
+		},
 		NotBefore:             begin,
 		NotAfter:              end,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
@@ -319,6 +322,9 @@ func (cr *CertRotator) createCertPEM(ca *KeyPairArtifacts) ([]byte, []byte, erro
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
 			CommonName: cr.DNSName,
+		},
+		DNSNames: []string{
+			cr.DNSName,
 		},
 		NotBefore:             begin,
 		NotAfter:              end,
