@@ -27,3 +27,5 @@ require (
 	sigs.k8s.io/controller-runtime v0.6.3
 	sigs.k8s.io/controller-tools v0.2.8
 )
+
+replace sigs.k8s.io/controller-runtime => github.com/adrianludwin/controller-runtime v0.6.3-ts-fix

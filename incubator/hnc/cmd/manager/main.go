@@ -147,14 +147,33 @@ func main() {
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
 	setupLog.Info("Starting certificate generation")
-	setupFinished, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert)
+	certsCreated, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert)
 	if err != nil {
 		setupLog.Error(err, "unable to set up cert rotation")
 		os.Exit(1)
 	}
 
-	// Register webhooks before manager start to avoid potential race conditions.
-	// See https://github.com/kubernetes-sigs/controller-runtime/issues/1148.
+	go startControllers(mgr, certsCreated)
+
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
+	// The controllers won't work until the webhooks are operating, and those won't work until the
+	// certs are all in place.
+	setupLog.Info("Waiting for certificate generation to complete")
+	<-certsCreated
+
+	if testLog {
+		stats.StartLoggingActivity()
+	}
+
+	// Create the central in-memory data structure for HNC, since it needs to be shared among all
+	// other components.
 	f := forest.NewForest()
 
 	// Create all validating admission controllers.
@@ -177,24 +196,6 @@ func main() {
 	if err := (&v1a2.SubnamespaceAnchor{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.Anchors)
 		os.Exit(1)
-	}
-
-	go startControllers(mgr, f, setupFinished)
-
-	setupLog.Info("Starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
-}
-
-func startControllers(mgr ctrl.Manager, f *forest.Forest, setupFinished chan struct{}) {
-	setupLog.Info("Waiting for certificate generation to complete")
-	// Block until the setup finishes.
-	<-setupFinished
-
-	if testLog {
-		stats.StartLoggingActivity()
 	}
 
 	// Create all reconciling controllers
