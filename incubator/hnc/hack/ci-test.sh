@@ -35,6 +35,6 @@ mv kubebuilder_${kb}_linux_amd64 /usr/local/kubebuilder
 
 hack_dir=$(dirname ${BASH_SOURCE})
 
-echo "Running 'make tests'"
+echo "Running 'make check-fmt test'"
 cd "$hack_dir/.."
-make test
+make check-fmt test
