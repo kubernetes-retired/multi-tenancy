@@ -30,10 +30,12 @@ endif
 HNC_IMG_NAME ?= hnc-manager
 
 # By default, the image tag is "latest" but you should override this when
-# creating a release. If you're using Kind, the tag is 'kind-local' since K8s
-# always attempts to re-pull an image the 'latest' tag, and this doesn't work
-# when we're testing locally (we rely on the docker-push target, below, to push
-# the image into Kind).
+# creating a release in the form vX.Y.Z (e.g. v0.5.1).
+#
+# If you're using Kind, the tag is 'kind-local' since K8s always attempts to
+# re-pull an image the 'latest' tag, and this doesn't work when we're testing
+# locally (we rely on the docker-push target, below, to push the image into
+# Kind).
 ifneq ($(CONFIG),kind)
   HNC_IMG_TAG ?= latest
 else
@@ -64,8 +66,9 @@ CRD_OPTIONS ?= "crd:trivialVersions=true"
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
-# Get check sum value of krew archive
-KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
+# Get check sum value of krew archive. Note that this value is only expanded
+# when the var is used.
+HNC_KREW_TAR_SHA256=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 # The directories to run Go command on (excludes /vendor)
 DIRS=./api/... ./cmd/... ./internal/... ./third_party/...
@@ -103,29 +106,6 @@ kubectl: build
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: build
 	go run ./cmd/manager/main.go --novalidation
-
-# Generate the Krew manifest and put it in manifests/ (creating that dir if it
-# doesn't exist).
-krew-build: krew-tar
-	-mkdir manifests
-	cp hack/krew-hierarchical-namespaces.yaml manifests/krew-hierarchical-namespaces.yaml
-	sed -i 's/^\(\s*sha256\s*:\s*\).*/\1"$(KREW_CKSM)"/' \
-		manifests/krew-hierarchical-namespaces.yaml
-	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(HNC_IMG_TAG)"/' \
-		manifests/krew-hierarchical-namespaces.yaml
-
-# Make krew archive and put into /hack. IS THIS THE RIGHT WAY TO PACKAGE UP
-# BINARIES FOR MULTIPLE OSES?
-krew-tar: build
-	tar -zcvf bin/kubectl-hns.tar.gz bin/kubectl
-
-# Install kubectl plugin locally using krew.
-krew-install: krew-build
-	kubectl krew install --manifest=manifests/krew-hierarchical-namespaces.yaml --archive=bin/kubectl-hns.tar.gz
-
-# Uninstall kubectl plugin locally using krew.
-krew-uninstall:
-	-kubectl krew uninstall hierarchical-namespaces
 
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
@@ -338,7 +318,7 @@ endif
 # Actual error checking:
 check-release-env:
 ifndef HNC_IMG_TAG
-	$(error HNC_IMG_TAG is undefined; ${ERR_MSG})
+	$(error HNC_IMG_TAG is undefined, should be vX.X.X; ${ERR_MSG})
 endif
 ifndef HNC_USER
 	$(error HNC_USER is undefined; ${ERR_MSG})
@@ -352,3 +332,26 @@ endif
 ifeq ($(COULDNT_READ_RELEASE_IMG), 0)
 	$(error The image ${HNC_RELEASE_IMG} already exists. Force and overwrite this image by using HNC_FORCE_RELEASE=true)
 endif
+
+# Generate the Krew manifest and put it in manifests/. Note that 'manifests' must exist because
+# krew-build calls krew-tar calls build calls manifests.
+krew-build: krew-tar
+	cp hack/krew-kubectl-hns.yaml manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_KREW_TAR_SHA256/${HNC_KREW_TAR_SHA256}/' manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_IMG_TAG/${HNC_IMG_TAG}/' manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_RELEASE_REPO_OWNER/${HNC_RELEASE_REPO_OWNER}/' manifests/krew-kubectl-hns.yaml
+
+# This needs to be separate from krew-build so that the HNC_KREW_TAR_SHA256 env
+# var can be evaluated before the recipe starts running.
+krew-tar: build
+	cp LICENSE bin/kubectl
+	tar -zcvf bin/kubectl-hns.tar.gz bin/kubectl
+
+# Install kubectl plugin locally using krew.
+krew-install: krew-build
+	kubectl krew install --manifest=manifests/krew-kubectl-hns.yaml --archive=bin/kubectl-hns.tar.gz
+
+# Uninstall kubectl plugin locally using krew.
+krew-uninstall:
+	-kubectl krew uninstall hns
+

@@ -144,6 +144,17 @@ branch.
 
 We may revise this guidance as HNC matures.
 
+## Update Krew
+
+Starting with HNC v0.6.x, the build process also generates a Krew tarball and
+manifest. This manifest should be downloaded and checked into the Krew index,
+*if* it's for the latest branch. E.g. if you've already released HNC v0.7.0 and
+have to release HNC v0.6.1, do *not* update the Krew index; Krew can only
+support one version of a plugin at a time so we should only support the most
+recent branch.
+
+More details on updating Krew TBD.
+
 ## Track usage
 
 After the release, you can run the same command you used to find the release ID
