@@ -1,0 +1,39 @@
+### WARNING ###
+# In v0.5, we don't have any automation to fill in the variables shown below
+# (HNC_RELEASE_REPO_OWNER, HNC_IMG_TAG, HNC_KreW_TAR_SHA256). You must fill
+# these in by hand. This is all automated in v0.6+.
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: hns
+spec:
+  shortDescription: Manage hierarchical namespaces (part of HNC)
+  description: |
+    Manipulates hierarchical namespaces provided by the Hierarchical Namespace Controller (HNC).
+  version: HNC_IMG_TAG
+  homepage: https://github.com/HNC_RELEASE_REPO_OWNER/multi-tenancy/tree/master/incubator/hnc/docs/user-guide
+  platforms:
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/multi-tenancy/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
+    selector:
+      matchLabels:
+        os: linux
+        arch: amd64
+    sha256: HNC_KREW_TAR_SHA256
+    files:
+      - from: "bin/kubectl/kubectl-hns_linux_amd64"
+        to: "."
+      - from: "bin/kubectl/LICENSE"
+        to: "."
+    bin: "./kubectl-hns_linux_amd64"
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/multi-tenancy/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
+    selector:
+      matchLabels:
+        os: darwin
+        arch: amd64
+    sha256: HNC_KREW_TAR_SHA256
+    files:
+      - from: "bin/kubectl/kubectl-hns_darwin_amd64"
+        to: "."
+      - from: "bin/kubectl/LICENSE"
+        to: "."
+    bin: "./kubectl-hns_darwin_amd64"
