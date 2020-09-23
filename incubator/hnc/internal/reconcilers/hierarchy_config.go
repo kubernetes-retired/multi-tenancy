@@ -273,6 +273,21 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	}
 
 	pnm := nsInst.Annotations[api.SubnamespaceOf]
+
+	// Issue #1130: as a subnamespace is being deleted (e.g. because its anchor was deleted), ignore
+	// the annotation. K8s will remove the HC, which will effectively orphan this namespace, prompting
+	// HNC to remove all propagated objects, allowing it to be deleted cleanly. Without this, HNC
+	// would continue to think that all propagated objects needed to be protected from deletion and
+	// would prevent K8s from emptying and removing the namespace.
+	//
+	// We could also add an exception to allow K8s SAs to override the object validator (and we
+	// probably should), but this prevents us from getting into a war with K8s and is sufficient for
+	// v0.5.
+	if pnm != "" && !nsInst.DeletionTimestamp.IsZero() {
+		log.Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
+		pnm = ""
+	}
+
 	if pnm == "" {
 		ns.IsSub = false
 		return
@@ -546,6 +561,7 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 
 // updateObjects calls all type reconcillers in this namespace.
 func (r *HierarchyConfigReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
+	log.Info("Namespace modified; updating all objects")
 	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
 	// from modifying the list at the same time.
 	r.Forest.Lock()
