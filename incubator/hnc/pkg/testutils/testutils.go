@@ -257,6 +257,13 @@ func RecoverHNC() {
 	}
 	// give HNC enough time to repair
 	time.Sleep(5 * time.Second)
+	// Verify and wait till HNC is fully repaired, sometimes it takes up to 30s.
+	// The `kubectl hns create` command will fail is HNC is broken, so we confirm that HNC is back by successfully 
+	// running this command. 
+	CleanupNamespaces("a", "b")
+	MustRun("kubectl create ns a")
+	RunShouldContain("Successfully created", 30, "kubectl hns create b -n a")
+	CleanupNamespaces("a", "b")
 }
 
 func WriteTempFile(cxt string) string {

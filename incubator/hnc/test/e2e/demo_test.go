@@ -43,6 +43,9 @@ var _ = Describe("Demo", func() {
 		// make acme-org the parent of team-a, and team-a the parent of service-1.
 		MustRun("kubectl hns set", nsTeamA, "--parent", nsOrg)
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamA)
+		// Verify and wait for HNC to pick up the change, otherwise the following commands will fail
+		RunShouldContain("Parent: "+nsOrg, defTimeout, "kubectl hns describe", nsTeamA)
+		RunShouldContain("Parent: "+nsTeamA, defTimeout, "kubectl hns describe", nsService1)
 		// This won't work, will be rejected since it would cause a cycle
 		MustNotRun("kubectl hns set", nsOrg, "--parent", nsTeamA)
 		// verify the tree
@@ -52,7 +55,7 @@ var _ = Describe("Demo", func() {
 		// Now, if we check service-1 again, we’ll see all the rolebindings we expect:
 		RunShouldContainMultiple([]string{"hnc.x-k8s.io/inheritedFrom=acme-org", "hnc.x-k8s.io/inheritedFrom=team-a"},
 			propogationTimeout, "kubectl -n", nsService1, "describe roles")
-		RunShouldContainMultiple([]string{"Role/acme-org-sre", "Role/team-a-sre"}, propogationTimeout, "kubectl -n", nsService1, "get rolebindings")
+		RunShouldContainMultiple([]string{"acme-org-sre", "team-a-sre"}, propogationTimeout, "kubectl -n", nsService1, "get rolebindings")
 
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
 		MustRun("kubectl get ns", nsTeamB)

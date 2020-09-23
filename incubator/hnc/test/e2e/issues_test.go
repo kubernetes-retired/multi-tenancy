@@ -41,7 +41,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent,
 			"--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
 		// Tree should show CannotPropagateObject in nsParent and CannotUpdateObject in nsChild
-		RunShouldContainMultiple([]string{"1) CannotPropagateObject", "2) CannotUpdateObject"}, 1, "kubectl hns tree", nsParent)
+		RunShouldContainMultiple([]string{"1) CannotPropagateObject", "2) CannotUpdateObject"}, defTimeout, "kubectl hns tree", nsParent)
 		// Remove the child and verify that the condition is gone
 		MustRun("kubectl hns set", nsChild, "--root")
 		// There should no longer be any conditions in parent and child
