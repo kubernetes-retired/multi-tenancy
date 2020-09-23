@@ -25,6 +25,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/apiserver/pkg/util/term"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/leaderelection"
@@ -156,8 +157,10 @@ func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.Compl
 			klog.Fatal(http.ListenAndServe(":6060", nil))
 		}()
 		go func() {
-			// start a health port.
-			klog.Fatal(http.ListenAndServe(":8080", nil))
+			// start a health http server.
+			mux := http.NewServeMux()
+			healthz.InstallHandler(mux)
+			klog.Fatal(http.ListenAndServe(":8080", mux))
 		}()
 		<-ctx.Done()
 	}
