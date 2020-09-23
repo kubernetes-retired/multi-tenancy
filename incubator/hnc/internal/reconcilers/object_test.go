@@ -191,6 +191,29 @@ var _ = Describe("Secret", func() {
 		Eventually(objectInheritedFrom(ctx, "Role", barName, "bar-role")).Should(Equal(fooName))
 	})
 
+	It("should overwrite conflicting source with the top source that can propagate", func() {
+		// Create a 'baz-role' in 'foo' that cannot propagate because of the finalizer.
+		makeObject(ctx, "Role", fooName, "baz-role")
+		Eventually(hasObject(ctx, "Role", fooName, "baz-role")).Should(BeTrue())
+		setFinalizer(ctx, fooName, "baz-role", true)
+		// Create a 'baz-role' in 'bar' that can propagate.
+		makeObject(ctx, "Role", barName, "baz-role")
+
+		// Before the tree is constructed, 'baz-role' shouldn't be overwritten.
+		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(""))
+
+		// Construct the tree: foo (root) <- bar <- baz.
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
+		// The 'baz-role' in 'baz' should be overwritten by the conflicting one in
+		// 'bar' but not 'foo', since the one in 'foo' cannot propagate with
+		// finalizer. Add a 500-millisecond gap to allow overwriting the object.
+		time.Sleep(500 * time.Millisecond)
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(barName))
+	})
+
 	It("should have deletions propagated after crit conditions are removed", func() {
 		// Create tree: bar -> foo (root) and make sure foo-role is propagated
 		setParent(ctx, barName, fooName)
@@ -312,6 +335,22 @@ var _ = Describe("Secret", func() {
 		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+	})
+
+	It("shouldn't delete a descendant source object with the same name if the sync mode is 'Remove'", func() {
+		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
+		// Set tree as bar -> foo(root).
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "Secret", barName, "bar-sec")
+		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
+
+		// Create an object with the same name in the parent.
+		makeObject(ctx, "Secret", fooName, "bar-sec")
+		Eventually(hasObject(ctx, "Secret", fooName, "bar-sec")).Should(BeTrue())
+		// Give the reconciler some time to remove the object if it's going to.
+		time.Sleep(500 * time.Millisecond)
+		// The source object in the child shouldn't be deleted since the type has 'Remove' mode.
+		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
 	})
 })
 

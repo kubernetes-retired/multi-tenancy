@@ -3,6 +3,7 @@ package validators
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/api/admission/v1beta1"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -29,6 +31,7 @@ const (
 
 type HNCConfig struct {
 	Log       logr.Logger
+	Forest    *forest.Forest
 	validator gvkValidator
 	decoder   *admission.Decoder
 }
@@ -103,7 +106,10 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 	if !roleBindingExist {
 		return deny(metav1.StatusReasonInvalid, "Configuration for RoleBinding is missing")
 	}
-	return allow("")
+
+	// Lastly, check if changing a type to "Propagate" mode would cause
+	// overwriting user-created objects.
+	return c.checkForest(inst)
 }
 
 // Validate if the configuration of a type already exists. Each type should only have one configuration.
@@ -139,6 +145,106 @@ func (c *HNCConfig) validateType(ctx context.Context, t api.TypeSynchronizationS
 	}
 
 	return allow("")
+}
+
+func (c *HNCConfig) checkForest(inst *api.HNCConfiguration) admission.Response {
+	c.Forest.Lock()
+	defer c.Forest.Unlock()
+
+	// Get types that are changed from other modes to "Propagate" mode.
+	gvks := c.getNewPropagateTypes(inst)
+
+	// Check if user-created objects would be overwritten by these mode changes.
+	for gvk, _ := range gvks {
+		conflicts := c.checkConflictsForGVK(gvk)
+		if len(conflicts) != 0 {
+			msg := fmt.Sprintf("Cannot update configuration because setting type %q to 'Propagate' mode would overwrite user-created object(s):\n", gvk)
+			msg += strings.Join(conflicts, "\n")
+			msg += "\nTo fix this, please rename or remove the conflicting objects first."
+			return deny(metav1.StatusReasonConflict, msg)
+		}
+	}
+
+	return allow("")
+}
+
+// checkConflictsForGVK looks for conflicts from top down for each tree.
+func (c *HNCConfig) checkConflictsForGVK(gvk schema.GroupVersionKind) []string {
+	conflicts := []string{}
+	for _, ns := range c.Forest.GetRoots() {
+		conflicts = append(conflicts, c.checkConflictsForTree(gvk, ancestorObjects{}, ns)...)
+	}
+	return conflicts
+}
+
+func (c *HNCConfig) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancestorObjects, ns *forest.Namespace) []string {
+	conflicts := []string{}
+	objs := ao.copy()
+	for _, o := range ns.GetSourceObjects(gvk) {
+		onm := o.GetName()
+		objs.add(onm, ns)
+		// If there are more than just the one (current) namespace we just added,
+		// there may be conflicts.
+		if objs.hasConflict(onm) {
+			// Currently the top conflicting ancestor would overwrite the object.
+			// TODO: check if this is a real conflict
+			conflicts = append(conflicts, fmt.Sprintf("  Object %q in namespace %q would overwrite the one in %q", onm, objs.top(onm), ns.Name()))
+		}
+	}
+	// This is cycle-free and safe because we only start the
+	// "checkConflictsForTree" from roots in the forest with cycles omitted and
+	// it's impossible to get cycles from non-root.
+	for _, cnm := range ns.ChildNames() {
+		cns := c.Forest.Get(cnm)
+		conflicts = append(conflicts, c.checkConflictsForTree(gvk, objs, cns)...)
+	}
+	return conflicts
+}
+
+// getNewPropagateTypes returns a set of types that are changed from other modes
+// to `Propagate` mode.
+func (c *HNCConfig) getNewPropagateTypes(inst *api.HNCConfiguration) gvkSet {
+	// Get all "Propagate" mode types in the new configuration.
+	newPts := gvkSet{}
+	for _, t := range inst.Spec.Types {
+		if t.Mode == api.Propagate {
+			gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
+			newPts[gvk] = true
+		}
+	}
+
+	// Remove all existing "Propagate" mode types in the forest (current configuration).
+	for _, t := range c.Forest.GetTypeSyncers() {
+		if t.GetMode() == api.Propagate && newPts[t.GetGVK()] {
+			delete(newPts, t.GetGVK())
+		}
+	}
+
+	return newPts
+}
+
+// ancestorObjects maps an object name to the ancestor namespace(s) in which
+// it's defined.
+type ancestorObjects map[string][]string
+
+func (a ancestorObjects) copy() ancestorObjects {
+	copy := ancestorObjects{}
+	for k, v := range a {
+		copy[k] = v
+	}
+	return copy
+}
+
+func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
+	a[onm] = append(a[onm], ns.Name())
+}
+
+func (a ancestorObjects) hasConflict(onm string) bool {
+	return len(a[onm]) > 1
+}
+
+func (a ancestorObjects) top(onm string) string {
+	return a[onm][0]
 }
 
 // realGVKValidator implements gvkValidator, and is not used during unit tests.

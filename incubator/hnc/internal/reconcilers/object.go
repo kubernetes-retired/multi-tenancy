@@ -274,14 +274,16 @@ func (r *ObjectReconciler) skipNamespace(ctx context.Context, log logr.Logger, i
 // which indicates that we need to call the regular syncObject method. Note that this method may
 // modify `inst`.
 func (r *ObjectReconciler) syncMissingObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) syncAction {
-	// If the object exists, skip
+	// If the object exists, skip.
 	if inst.GetCreationTimestamp() != (v1.Time{}) {
 		return actionUnknown
 	}
 
+	ns := r.Forest.Get(inst.GetNamespace())
 	// If it's a source, it must have been deleted. Update the forest and enqueue all its
 	// descendants, but there's nothing else to do.
-	if r.forestHasSource(inst) {
+	if ns.HasSourceObject(r.GVK, inst.GetName()) {
+		ns.DeleteSourceObject(r.GVK, inst.GetName())
 		r.syncUnpropagatedSource(ctx, log, inst)
 		return actionNop
 	}
@@ -325,34 +327,69 @@ func (r *ObjectReconciler) syncObject(ctx context.Context, log logr.Logger, inst
 		return actionNop, nil
 	}
 
+	// If the object should be propagated, we will sync it as an propagated object.
+	if yes, srcInst := r.shouldSyncAsPropagated(log, inst); yes {
+		return r.syncPropagated(log, inst, srcInst)
+	}
+
+	r.syncSource(ctx, log, inst)
+	// No action needs to take on source objects.
+	return actionNop, nil
+}
+
+// shouldSyncAsPropagated returns true and the source object if this object
+// should be synced as a propagated object. Otherwise, return false and nil.
+// Please note 'srcInst' could still be nil even if the object should be synced
+// as propagated, which indicates the source is deleted and so should this object.
+func (r *ObjectReconciler) shouldSyncAsPropagated(log logr.Logger, inst *unstructured.Unstructured) (bool, *unstructured.Unstructured) {
+	// Get the source object if it exists.
+	srcInst := r.getTopSourceToPropagate(log, inst)
+
 	// This object is a propagated copy if it has "api.LabelInheritedFrom" label.
 	if hasPropagatedLabel(inst) {
-		return r.syncPropagated(ctx, log, inst)
+		// Return the top source object of the same name in the ancestors that
+		// should propagate.
+		return true, srcInst
 	}
 
-	// Find the source object of the same name in the ancestors from top down to
-	// see if there's a conflicting source.
-	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
-
-	// The object is a source without conflict if a copy of the source is not
-	// found in the forest or itself is found.
-	if srcInst == nil || srcInst.GetNamespace() == inst.GetNamespace() {
-		r.syncSource(ctx, log, inst)
-		// No action needs to take on source objects.
-		return actionNop, nil
+	// If there's a conflicting source in the ancestors (excluding itself) and the
+	// the type has 'Propagate' mode, the object will be overwritten.
+	mode := r.Forest.GetTypeSyncer(r.GVK).GetMode()
+	if mode == api.Propagate && srcInst != nil {
+		log.Info("Will be overwritten by the conflicting source in the ancestor", "conflictingAncestor", srcInst.GetNamespace())
+		return true, srcInst
 	}
 
-	// Since there's a conflict that another source with the same name is found in
-	// the ancestors, this instance will be treated as propagated objects and will
-	// be overwritten by the source in the ancestor.
-	return r.syncPropagated(ctx, log, inst)
+	return false, nil
+}
+
+// getTopSourceToPropagate returns the top source in the ancestors (excluding
+// itself) that can propagate. Otherwise, return nil.
+func (r *ObjectReconciler) getTopSourceToPropagate(log logr.Logger, inst *unstructured.Unstructured) *unstructured.Unstructured {
+	ns := r.Forest.Get(inst.GetNamespace())
+	// Get all the source objects with the same name in the ancestors excluding
+	// itself from top down.
+	objs := ns.Parent().GetAncestorSourceObjects(r.GVK, inst.GetName())
+	for _, obj := range objs {
+		// If the source cannot propagate, ignore it.
+		// TODO: add a webhook rule to prevent e.g. removing a source finalizer that
+		//  would cause overwrting the source objects in the descendents.
+		//  See https://github.com/kubernetes-sigs/multi-tenancy/issues/1120
+		if !r.shouldPropagateSource(log, obj) {
+			continue
+		}
+		return obj
+	}
+	return nil
 }
 
 // syncPropagated will determine whether to delete the obsolete copy or overwrite it with the source.
 // Or do nothing if it remains the same as the source object.
-func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
-	// Find the source object of the same name in the ancestors from top down.
-	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
+func (r *ObjectReconciler) syncPropagated(log logr.Logger, inst, srcInst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
+	ns := r.Forest.Get(inst.GetNamespace())
+	// Delete this local source object from the forest if it exists. (This could
+	// only happen when we are trying to overwrite a conflicting source).
+	ns.DeleteSourceObject(r.GVK, inst.GetName())
 
 	// If no source object exists, delete this object. This can happen when the source was deleted by
 	// users or the admin decided this type should no longer be propagated.
@@ -382,9 +419,18 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 	return actionNop, nil
 }
 
-// syncSource syncs the copy in the forest with the current source object. If there's a change,
-// enqueue all the descendants to propagate the new source.
+// syncSource updates the copy in the forest with the current source object. We
+// will enqueue all the descendants if the source can be propagated. The
+// propagation exceptions will be checked when reconciling the (enqueued)
+// propagated objects.
 func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+	// Update or create a copy of the source object in the forest. We now store
+	// all the source objects in the forests no matter if the mode is 'Propagate'
+	// or not, because HNCConfig webhook will also check the non-'Propagate' mode
+	// source objects in the forest to see if a mode change is allowed.
+	ns := r.Forest.Get(src.GetNamespace())
+	ns.SetSourceObject(src.DeepCopy())
+
 	if !r.shouldPropagateSource(log, src) {
 		// If an object was *previously* propagated by HNC, it will already be in the forest, and all
 		// the propagated copies will think they can stick around too. If, for some reason, we _now_
@@ -396,26 +442,12 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 		return
 	}
 
-	nnm := src.GetNamespace()
-	nm := src.GetName()
-	ns := r.Forest.Get(nnm)
-	origCopy := ns.GetOriginalObject(r.GVK, nm)
-
-	// Early exit if the source object exists and remains unchanged.
-	if origCopy != nil && reflect.DeepEqual(object.Canonical(src), object.Canonical(origCopy)) {
-		log.V(1).Info("Unchanged Source")
-		return
-	}
-
-	// Update or create a copy of the source object in the forest
-	ns.SetOriginalObject(src.DeepCopy())
-
 	// Signal the config reconciler for reconciliation because it is possible that a source object is
 	// added to the apiserver.
 	hnccrSingleton.requestReconcile("possible new source object")
 
 	// Enqueue all the descendant copies
-	r.enqueueDescendants(ctx, log, src, "new or modified source object")
+	r.enqueueDescendants(ctx, log, src, "possible new or modified source object")
 }
 
 func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
@@ -474,7 +506,7 @@ func (r *ObjectReconciler) enqueuePropagatedObjects(ctx context.Context, log log
 	defer r.Forest.Unlock()
 
 	// Enqueue local copies of the original objects in the ancestors from forest.
-	o := r.Forest.Get(ns).GetPropagatedObjects(r.GVK)
+	o := r.Forest.Get(ns).Parent().GetAncestorSourceObjects(r.GVK, "")
 	for _, obj := range o {
 		lc := object.Canonical(obj)
 		lc.SetNamespace(ns)
@@ -507,7 +539,7 @@ func (r *ObjectReconciler) operate(ctx context.Context, log logr.Logger, act syn
 
 func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
 	log.V(1).Info("Deleting obsolete copy")
-	stats.WriteObject(inst.GroupVersionKind())
+	stats.WriteObject(r.GVK)
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
 		log.V(1).Info("The obsolete copy doesn't exist, no more action needed")
@@ -536,7 +568,7 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	log.V(1).Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
 
 	var err error = nil
-	stats.WriteObject(inst.GroupVersionKind())
+	stats.WriteObject(r.GVK)
 	if exist {
 		log.Info("Updating object")
 		err = r.Update(ctx, inst)
@@ -714,25 +746,11 @@ func clearConditionsForUnknownSources(log logr.Logger, ns *forest.Namespace, sao
 	return cleared
 }
 
-// forestHasSource returns true if the original object is found in the forest.
-func (r *ObjectReconciler) forestHasSource(inst *unstructured.Unstructured) bool {
-	ns := inst.GetNamespace()
-	n := inst.GetName()
-	gvk := inst.GroupVersionKind()
-	return r.Forest.Get(ns).HasOriginalObject(gvk, n)
-}
-
-// syncUnpropagatedSource deletes the source copy in the forest (if it exists) and then enqueues any
-// propagated copies of the source.
+// syncUnpropagatedSource enqueues any propagated copies of the source.
 //
 // The method can be called when the source was deleted by users, or if it will no longer be
 // propagated, e.g. because the user's changed the sync mode in the HNC Config.
 func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
-	nnm := inst.GetNamespace()
-	nm := inst.GetName()
-	gvk := inst.GroupVersionKind()
-	r.Forest.Get(nnm).DeleteOriginalObject(gvk, nm)
-
 	// Signal the config reconciler for reconciliation because it is possible that the source object is
 	// deleted on the apiserver.
 	hnccrSingleton.requestReconcile("possible deleted source object")
