@@ -31,6 +31,25 @@ var _ = Describe("Issues", func() {
 			nsSubSub2, nsSubChild, nsSubSubChild)
 	}) 
 
+	// Note that this was never actually a problem (only subnamespaces were affected) but it seems
+	// like a good thing to test anyway.
+	It("Should delete full namespaces with propagated objects - issue #1130", func() {
+		MustRun("kubectl create ns", nsParent)
+		MustRun("kubectl create ns", nsChild)
+		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		MustRun("kubectl create rolebinding admin-rb -n", nsParent,
+			"--clusterrole=admin --serviceaccount="+nsParent+":default")
+		MustRun("kubectl delete ns", nsChild)
+	})
+
+	It("Should delete subnamespaces with propagated objects - issue #1130", func() {
+		MustRun("kubectl create ns", nsParent)
+		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+		MustRun("kubectl create rolebinding admin-rb -n", nsParent,
+			"--clusterrole=admin --serviceaccount="+nsParent+":default")
+		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
+	})
+
 	It("Should remove obsolete conditions CannotPropagateObject and CannotUpdateObject - issue #328", func() {
 		// Setting up hierarchy with rolebinding that HNC doesn't have permission to copy.
 		MustRun("kubectl create ns", nsParent)
