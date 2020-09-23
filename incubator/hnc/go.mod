@@ -14,11 +14,11 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
-	github.com/pkg/errors v0.8.1
+	github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e
 	github.com/prometheus/client_golang v1.5.0
 	github.com/spf13/cobra v0.0.5
 	go.opencensus.io v0.22.3
-	go.uber.org/atomic v1.4.0
+	go.uber.org/atomic v1.4.0 // indirect
 	k8s.io/api v0.18.6
 	k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery v0.18.6

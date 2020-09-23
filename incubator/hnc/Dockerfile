@@ -6,7 +6,6 @@ WORKDIR /workspace
 COPY go.mod go.mod
 COPY go.sum go.sum
 COPY vendor/ vendor/
-COPY third_party/ third_party/
 
 # Copy the go source
 COPY api/ api/
