@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/errors"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
@@ -132,7 +133,7 @@ func NewMCController(name string, objectType runtime.Object, options Options) (*
 	}
 
 	if c.Queue == nil {
-		c.Queue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
+		c.Queue = fairqueue.NewRateLimitingFairQueue(workqueue.DefaultControllerRateLimiter())
 	}
 
 	return c, nil
