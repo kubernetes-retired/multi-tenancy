@@ -80,7 +80,7 @@ func TestBasicAndFair(t *testing.T) {
 				}
 				v, ok := item.(*reconciler.Request)
 				if !ok {
-					t.Errorf("unable cast to GroupItem")
+					t.Errorf("unable cast to Item")
 				}
 				if v.ClusterName == "added after shutdown!" {
 					t.Errorf("Got an item added after shutdown.")
@@ -139,7 +139,7 @@ func TestReinsert(t *testing.T) {
 	i, _ := q.Get()
 	v, ok := i.(*reconciler.Request)
 	if !ok {
-		t.Errorf("unable cast to GroupItem")
+		t.Errorf("unable cast to Item")
 	}
 	if v.Name != foo.Name {
 		t.Errorf("Expected %v, got %v", "foo", i)
@@ -155,7 +155,7 @@ func TestReinsert(t *testing.T) {
 	i, _ = q.Get()
 	v, ok = i.(*reconciler.Request)
 	if !ok {
-		t.Errorf("unable cast to GroupItem")
+		t.Errorf("unable cast to Item")
 	}
 	if v.Name != foo.Name {
 		t.Errorf("Expected %v, got %v", "foo", i)

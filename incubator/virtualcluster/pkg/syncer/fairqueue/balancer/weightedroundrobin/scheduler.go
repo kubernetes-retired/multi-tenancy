@@ -14,9 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wrr
+package weightedroundrobin
 
-import "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
+import (
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
+)
 
 type node struct {
 	Key    string
@@ -128,17 +130,22 @@ func gcd(x, y int) int {
 }
 
 func (w *wrr) Remove(ref string) {
+	if _, exists := w.keySet[ref]; !exists {
+		return
+	}
 	for i := 0; i < len(w.nodes); i++ {
 		if w.nodes[i].Key == ref {
 			w.nodes = append(w.nodes[:i], w.nodes[i+1:]...)
-			i--
+			if w.i >= i {
+				w.i = w.i - 1
+			}
+			break
 		}
 	}
 
 	delete(w.keySet, ref)
 	w.n = len(w.nodes)
 	w.cw = 0
-	w.i = -1
 	w.maxW = w.weightMax()
 	w.gcd = w.weightGcd()
 }

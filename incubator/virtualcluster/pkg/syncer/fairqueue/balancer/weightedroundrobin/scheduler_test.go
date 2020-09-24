@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wrr
+package weightedroundrobin
 
 import (
 	"math/rand"
@@ -73,6 +73,16 @@ func Test_RR_Next(t *testing.T) {
 
 	if scheduleCounter["a"] != 200 || scheduleCounter["d"] != 800 {
 		t.Errorf("schdule result is unfair: %+v", scheduleCounter)
+	}
+
+	// case wrr remove to 0
+	wrr.Next()      // move iterator to middle
+	wrr.Remove("b") // duplicate remove
+	wrr.Remove("a")
+	wrr.Remove("d")
+
+	if next := wrr.Next(); next != "" {
+		t.Errorf("non empty after resize to 0")
 	}
 }
 

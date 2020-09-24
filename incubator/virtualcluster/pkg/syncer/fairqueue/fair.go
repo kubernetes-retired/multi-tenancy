@@ -23,10 +23,10 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer/wrr"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer/weightedroundrobin"
 )
 
-type GroupItem interface {
+type Item interface {
 	Group() string
 }
 
@@ -90,7 +90,7 @@ func NewRateLimitingFairQueue(rateLimiter workqueue.RateLimiter) workqueue.RateL
 
 func newRateLimitingFairQueue(clock clock.RealClock, rateLimiter workqueue.RateLimiter) workqueue.RateLimitingInterface {
 	ret := &fairQueue{
-		balancer:        wrr.NewWeightedRR(),
+		balancer:        weightedroundrobin.NewWeightedRR(),
 		queueGroup:      make(map[string][]t),
 		dirty:           set{},
 		processing:      set{},
@@ -113,7 +113,7 @@ func (q *fairQueue) Add(obj interface{}) {
 	if q.shuttingDown {
 		return
 	}
-	item, ok := obj.(GroupItem)
+	item, ok := obj.(Item)
 	if !ok {
 		return
 	}
@@ -183,7 +183,7 @@ func (q *fairQueue) Get() (item interface{}, shutdown bool) {
 }
 
 func (q *fairQueue) Done(obj interface{}) {
-	item, ok := obj.(GroupItem)
+	item, ok := obj.(Item)
 	if !ok {
 		return
 	}

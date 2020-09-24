@@ -42,7 +42,7 @@ func (q *fairQueue) AddAfter(item interface{}, duration time.Duration) {
 	}
 }
 
-// notes: copy from k8s.io/client-go/util/workqueue/delaying_queue.go
+// The rest of the code is copied from k8s.io/client-go/util/workqueue/delaying_queue.go
 
 // waitFor holds the data to add and the time it should be added
 type waitFor struct {
