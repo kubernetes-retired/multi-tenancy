@@ -150,11 +150,9 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
-# find or download controller-gen
-# download controller-gen if necessary
-controller-gen: $(CONTROLLER_GEN)
-
-$(CONTROLLER_GEN):
+# Use the version of controller-gen that's checked into vendor/ (see
+# hack/tools.go to see how it got there).
+controller-gen:
 	go build -o $(CONTROLLER_GEN) sigs.k8s.io/controller-tools/cmd/controller-gen
 
 ###################### DEPLOYABLE ARTIFACTS AND ACTIONS #########################
