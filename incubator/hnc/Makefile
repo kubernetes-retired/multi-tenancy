@@ -30,8 +30,11 @@ HNC_RELEASED_IMG ?= "gcr.io/k8s-staging-multitenancy/hnc/controller:${HNC_IMG_TA
 
 CONTROLLER_GEN ?= "./bin/controller-gen"
 
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+# No version conversion yet, but have per-version schema ready for version
+# conversion in next release. Otherwise we cannot patch it with per-version
+# validation, and will get error:
+# "Forbidden: top-level and per-version schemas are mutually exclusive"
+CRD_OPTIONS ?= "crd:trivialVersions=false"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
