@@ -2,7 +2,9 @@ package validators
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -106,8 +108,14 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	oldSource, oldInherited := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newSource, newInherited := metadata.GetLabel(inst, api.LabelInheritedFrom)
 
-	// If the object wasn't and isn't inherited, it's none of our business.
+	// If the object wasn't and isn't inherited, we will check to see if the
+	// source can be created without causing any conflict.
 	if !oldInherited && !newInherited {
+		if yes, dnses := o.hasConflict(inst); yes {
+			dnsesStr := strings.Join(dnses, "\n  * ")
+			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)
+			return deny(metav1.StatusReasonConflict, msg)
+		}
 		return allow("source object")
 	}
 
@@ -144,6 +152,33 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	// If you get here, it means the webhook config is misconfigured to include an operation that we
 	// actually don't support.
 	return deny(metav1.StatusReasonInternalError, "unknown operation: "+string(op))
+}
+
+// hasConflict checks if there's any conflicting objects in the descendants. Returns
+// true and a list of conflicting descendants, if yes.
+func (o *Object) hasConflict(inst *unstructured.Unstructured) (bool, []string) {
+	o.Forest.Lock()
+	defer o.Forest.Unlock()
+
+	// If the instance is empty (for a delete operation) or it's not namespace-scoped,
+	// there must be no conflict.
+	if inst == nil || inst.GetNamespace() == "" {
+		return false, nil
+	}
+
+	nm := inst.GetName()
+	gvk := inst.GroupVersionKind()
+	descs := o.Forest.Get(inst.GetNamespace()).DescendantNames()
+	conflicts := []string{}
+
+	// Get a list of conflicting descendants if there's any.
+	for _, desc := range descs {
+		if o.Forest.Get(desc).HasOriginalObject(gvk, nm) {
+			conflicts = append(conflicts, desc)
+		}
+	}
+
+	return len(conflicts) != 0, conflicts
 }
 
 func (o *Object) InjectClient(c client.Client) error {

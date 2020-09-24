@@ -134,6 +134,25 @@ var _ = Describe("Secret", func() {
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeTrue())
 	})
 
+	It("should overwrite the conflicting source in the descedants", func() {
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+		Eventually(hasObject(ctx, "Role", barName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
+
+		makeObject(ctx, "Role", fooName, "bar-role")
+		// Add a 500-millisecond gap here to allow updating the cached bar-roles in bar
+		// and baz namespaces. Without this, even having 20 seconds in the "Eventually()"
+		// funcs below, the test failed with timeout. Guess the reason is that it's
+		// constantly getting the cached object.
+		time.Sleep(500 * time.Millisecond)
+		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Eventually(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "Role", barName, "bar-role")).Should(BeTrue())
+		Eventually(objectInheritedFrom(ctx, "Role", barName, "bar-role")).Should(Equal(fooName))
+	})
+
 	It("should have deletions propagated after crit conditions are removed", func() {
 		// Create tree: bar -> foo (root) and make sure foo-role is propagated
 		setParent(ctx, barName, fooName)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
@@ -12,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -210,7 +212,57 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
+	// Prevent overwriting source objects in the descendants after the hierarchy change.
+	if co := v.getConflictingObjects(newParent, ns); len(co) != 0 {
+		msg := "Cannot update hierarchy because it would overwrite the following object(s):\n"
+		msg += "  * " + strings.Join(co, "\n  * ") + "\n"
+		msg += "To fix this, please rename or remove the conflicting objects first."
+		return deny(metav1.StatusReasonConflict, msg)
+	}
+
 	return allow("")
+}
+
+// getConflictingObjects returns a list of namespaced objects if there's any conflict.
+func (v *Hierarchy) getConflictingObjects(newParent, ns *forest.Namespace) []string {
+	// If the new parent is nil,  early exit since it's impossible to introduce
+	// new naming conflicts.
+	if newParent == nil {
+		return nil
+	}
+	// Traverse all the types with 'Propagate' mode to find any conflicts.
+	conflicts := []string{}
+	for _, t := range v.Forest.GetTypeSyncers() {
+		if t.GetMode() == api.Propagate {
+			conflicts = append(conflicts, v.getConflictingObjectsOfType(t.GetGVK(), newParent, ns)...)
+		}
+	}
+	return conflicts
+}
+
+// getConflictingObjectsOfType returns a list of namespaced objects if there's
+// any conflict between the new ancestors and the descendants.
+func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, newParent, ns *forest.Namespace) []string {
+	// Get all the source objects in the new ancestors that would be propagated
+	// into the descendants.
+	newAnsSrcObjs := make(map[string]bool)
+	for _, o := range newParent.GetPropagatingObjects(gvk) {
+		newAnsSrcObjs[o.GetName()] = true
+	}
+
+	// Look in the descendants to find if there's any conflict.
+	cos := []string{}
+	dnses := append(ns.DescendantNames(), ns.Name())
+	for _, dns := range dnses {
+		for _, o := range v.Forest.Get(dns).GetOriginalObjects(gvk) {
+			if newAnsSrcObjs[o.GetName()] {
+				co := fmt.Sprintf("Namespace %q: %s (%v)", dns, o.GetName(), gvk)
+				cos = append(cos, co)
+			}
+		}
+	}
+
+	return cos
 }
 
 type serverCheckType int

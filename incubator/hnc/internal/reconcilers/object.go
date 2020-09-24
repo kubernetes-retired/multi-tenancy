@@ -325,21 +325,33 @@ func (r *ObjectReconciler) syncObject(ctx context.Context, log logr.Logger, inst
 		return actionNop, nil
 	}
 
-	// This object is the source if it doesn't have the "api.LabelInheritedFrom" label.
-	if !hasPropagatedLabel(inst) {
+	// This object is a propagated copy if it has "api.LabelInheritedFrom" label.
+	if hasPropagatedLabel(inst) {
+		return r.syncPropagated(ctx, log, inst)
+	}
+
+	// Find the source object of the same name in the ancestors from top down to
+	// see if there's a conflicting source.
+	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
+
+	// The object is a source without conflict if a copy of the source is not
+	// found in the forest or itself is found.
+	if srcInst == nil || srcInst.GetNamespace() == inst.GetNamespace() {
 		r.syncSource(ctx, log, inst)
 		// No action needs to take on source objects.
 		return actionNop, nil
 	}
 
-	// This object is a propagated copy.
+	// Since there's a conflict that another source with the same name is found in
+	// the ancestors, this instance will be treated as propagated objects and will
+	// be overwritten by the source in the ancestor.
 	return r.syncPropagated(ctx, log, inst)
 }
 
 // syncPropagated will determine whether to delete the obsolete copy or overwrite it with the source.
 // Or do nothing if it remains the same as the source object.
 func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
-	// Find a source object of the same name in any of the ancestores.
+	// Find the source object of the same name in the ancestors from top down.
 	srcInst := r.Forest.Get(inst.GetNamespace()).GetSource(r.GVK, inst.GetName())
 
 	// If no source object exists, delete this object. This can happen when the source was deleted by
@@ -354,7 +366,9 @@ func (r *ObjectReconciler) syncPropagated(ctx context.Context, log logr.Logger, 
 	// If the copy does not exist, or is different from the source, return the write action and the
 	// source instance. Note that DeepEqual could return `true` even if the object doesn't exist if
 	// the source object is trivial (e.g. a completely empty ConfigMap).
-	if !exists || !reflect.DeepEqual(object.Canonical(inst), object.Canonical(srcInst)) {
+	if !exists ||
+		!reflect.DeepEqual(object.Canonical(inst), object.Canonical(srcInst)) ||
+		inst.GetLabels()[api.LabelInheritedFrom] != srcInst.GetNamespace() {
 		metadata.SetLabel(inst, api.LabelInheritedFrom, srcInst.GetNamespace())
 		return actionWrite, srcInst
 	}
