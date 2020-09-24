@@ -38,7 +38,7 @@ type Request struct {
 	UID string
 }
 
-func (r Request) Group() string {
+func (r Request) GroupName() string {
 	return r.ClusterName
 }
 

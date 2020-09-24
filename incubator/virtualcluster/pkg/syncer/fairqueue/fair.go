@@ -27,7 +27,7 @@ import (
 )
 
 type Item interface {
-	Group() string
+	GroupName() string
 }
 
 type fairQueue struct {
@@ -38,6 +38,9 @@ type fairQueue struct {
 	// element of queue should be in the dirty set and not in the
 	// processing set.
 	queueGroup map[string][]t
+
+	// length is the sum of queues size.
+	length int
 
 	// dirty defines all of the items that need to be processed.
 	dirty set
@@ -107,6 +110,18 @@ func newRateLimitingFairQueue(clock clock.RealClock, rateLimiter workqueue.RateL
 	return ret
 }
 
+func (q *fairQueue) enqueue(group string, item interface{}) {
+	q.queueGroup[group] = append(q.queueGroup[group], item)
+	q.length++
+}
+
+func (q *fairQueue) dequeue(group string) interface{} {
+	item := q.queueGroup[group][0]
+	q.queueGroup[group] = q.queueGroup[group][1:]
+	q.length--
+	return item
+}
+
 func (q *fairQueue) Add(obj interface{}) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
@@ -127,38 +142,30 @@ func (q *fairQueue) Add(obj interface{}) {
 		return
 	}
 
-	group := item.Group()
+	group := item.GroupName()
 	_, exists := q.queueGroup[group]
 	if !exists {
 		q.queueGroup[group] = []t{}
 		q.balancer.Add(group, 1)
 	}
 
-	q.queueGroup[group] = append(q.queueGroup[group], item)
+	q.enqueue(group, item)
 	q.cond.Signal()
 }
 
 func (q *fairQueue) Len() int {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
-	return q.len()
-}
-
-func (q *fairQueue) len() int {
-	var total = 0
-	for _, q := range q.queueGroup {
-		total += len(q)
-	}
-	return total
+	return q.length
 }
 
 func (q *fairQueue) Get() (item interface{}, shutdown bool) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
-	for q.len() == 0 && !q.shuttingDown {
+	for q.length == 0 && !q.shuttingDown {
 		q.cond.Wait()
 	}
-	if q.len() == 0 {
+	if q.length == 0 {
 		// We must be shutting down.
 		return nil, true
 	}
@@ -174,8 +181,7 @@ func (q *fairQueue) Get() (item interface{}, shutdown bool) {
 		}
 	}
 
-	item, q.queueGroup[nextGroup] = q.queueGroup[nextGroup][0], q.queueGroup[nextGroup][1:]
-
+	item = q.dequeue(nextGroup)
 	q.processing.insert(item)
 	q.dirty.delete(item)
 
@@ -193,8 +199,8 @@ func (q *fairQueue) Done(obj interface{}) {
 
 	q.processing.delete(item)
 	if q.dirty.has(item) {
-		group := item.Group()
-		q.queueGroup[group] = append(q.queueGroup[group], item)
+		group := item.GroupName()
+		q.enqueue(group, item)
 		q.cond.Signal()
 	}
 }
