@@ -1,6 +1,6 @@
 module sigs.k8s.io/multi-tenancy/incubator/virtualcluster
 
-go 1.12
+go 1.13
 
 require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
@@ -42,7 +42,6 @@ require (
 //  and it is not advised that external projects depend upon k8s.io/kubernetes for
 //  this exact reason.
 replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.0.0+incompatible
 	k8s.io/api => k8s.io/api v0.18.6
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery => k8s.io/apimachinery v0.18.6

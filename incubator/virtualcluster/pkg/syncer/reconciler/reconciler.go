@@ -38,6 +38,10 @@ type Request struct {
 	UID string
 }
 
+func (r Request) GroupName() string {
+	return r.ClusterName
+}
+
 type Result reconcile.Result
 
 // DWReconciler is the interface used by a Controller to do downward reconcile (tenant->super).

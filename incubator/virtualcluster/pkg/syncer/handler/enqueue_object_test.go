@@ -79,7 +79,7 @@ func TestEnqueueRequestForObject(t *testing.T) {
 		},
 	}
 
-	expectedEnqueuedRequest := reconciler.Request{
+	expectedEnqueuedRequest := &reconciler.Request{
 		ClusterName: clusterName,
 		NamespacedName: types.NamespacedName{
 			Name:      "n1",

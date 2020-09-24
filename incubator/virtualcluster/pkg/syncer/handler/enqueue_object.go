@@ -33,7 +33,7 @@ func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
 		return
 	}
 
-	r := reconciler.Request{}
+	r := &reconciler.Request{}
 	r.ClusterName = e.ClusterName
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
