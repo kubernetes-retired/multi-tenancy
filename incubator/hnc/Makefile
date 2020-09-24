@@ -72,6 +72,7 @@ HNC_KREW_TAR_SHA256=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 # The directories to run Go command on (excludes /vendor)
 DIRS=./api/... ./cmd/... ./internal/...
+GOFMT_DIRS=$(DIRS:/...=)
 
 all: test docker-build
 
@@ -135,7 +136,11 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt ${DIRS}
+	gofmt -l -w ${GOFMT_DIRS}
+
+# check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
+check-fmt:
+	@test -z $(shell gofmt -l ${GOFMT_DIRS})
 
 # Run go vet against code
 vet:
