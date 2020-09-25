@@ -31,6 +31,26 @@ var _ = Describe("Issues", func() {
 			nsSubSub2, nsSubChild, nsSubSubChild)
 	})
 
+	It("Should not delete full namespace when a faulty anchor is deleted - issue #1149", func() {
+		// Setup
+		MustRun("kubectl create ns", nsParent)
+		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+
+		// Wait for subns
+		MustRun("kubectl describe ns", nsChild)
+
+		// Remove annotation
+		MustRun("kubectl annotate ns", nsChild, "hnc.x-k8s.io/subnamespaceOf-")
+		RunShouldNotContain("subnamespaceOf", 1, "kubectl get -oyaml ns", nsChild)
+
+		// Delete anchor
+		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
+		MustNotRun("kubectl get subns", nsChild, "-n", nsParent)
+
+		// Verify that namespace still exists
+		MustRun("kubectl describe ns", nsChild)
+	})
+
 	// Note that this was never actually a problem (only subnamespaces were affected) but it seems
 	// like a good thing to test anyway.
 	It("Should delete full namespaces with propagated objects - issue #1130", func() {
