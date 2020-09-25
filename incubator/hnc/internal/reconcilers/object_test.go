@@ -45,42 +45,58 @@ var _ = Describe("Secret", func() {
 		cleanupObjects(ctx)
 	})
 
-	// Exceptions have not been implemented, so we are ignoring the following three tests for now.
+	// Exceptions have not been implemented, so we are ignoring the following four tests for now.
 	// They should be enabled once exception is done.
 	PIt("should propagate object only to selected namespace using treeSelect", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
 
-		// Create a secret that does NOT propogate to bazName
+		// Create a Role that does NOT propogate to bazName
 		a := map[string]string{"propagate.hnc.x-k8s.io/treeSelect": "!" + bazName}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
+		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
 
-		Eventually(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
+		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
 	PIt("should propagate object only to selected namespace using select", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
 
-		// Create a secret that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!propagate.hnc.x-k8s.io/" + bazName}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
+		// Create a Role that does NOT propogate to bazName
+		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!" + bazName + ".tree.hnc.x-k8s.io/depth"}
+		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
 
-		Eventually(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
+		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
+		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
+	})
+
+	PIt("should remove object in selected namespace when selector is updated", func() {
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, fooName)
+
+		makeObject(ctx, "Role", fooName, "testrole")
+		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "testrole")).Should(BeTrue())
+
+		// Update the Role so that it does NOT propogate to bazName
+		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!" + bazName + ".tree.hnc.x-k8s.io/depth"}
+		Expect(updateObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)).Should(Succeed())
+
+		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
+		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
 	PIt("should not propagate object to any namespace using none", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
 
-		// Create a secret that does NOT propogate to bazName
+		// Create a Role that does NOT propogate to bazName
 		a := map[string]string{"propagate.hnc.x-k8s.io/none": "true"}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
+		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
 
-		Consistently(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeFalse())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
+		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeFalse())
+		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
 	It("should be copied to descendents", func() {

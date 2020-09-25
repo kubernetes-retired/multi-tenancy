@@ -195,6 +195,21 @@ func makeObjectWithAnnotation(ctx context.Context, kind string, nsName,
 	createdObjects = append(createdObjects, inst)
 }
 
+// updateObjectWithAnnotation gets an object given it's kind, nsName and name, adds the annotation
+// and updates this object
+func updateObjectWithAnnotation(ctx context.Context, kind string, nsName,
+	name string, a map[string]string) error {
+	nnm := types.NamespacedName{Namespace: nsName, Name: name}
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[kind])
+	err := k8sClient.Get(ctx, nnm, inst)
+	if err != nil {
+		return err
+	}
+	inst.SetAnnotations(a)
+	return k8sClient.Update(ctx, inst)
+}
+
 // deleteObject deletes an object of the given kind in a specific namespace. The kind and
 // its corresponding GVK should be included in the GVKs map.
 func deleteObject(ctx context.Context, kind string, nsName, name string) {
