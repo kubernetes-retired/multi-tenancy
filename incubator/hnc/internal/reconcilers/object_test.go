@@ -211,7 +211,7 @@ var _ = Describe("Secret", func() {
 		// 'bar' but not 'foo', since the one in 'foo' cannot propagate with
 		// finalizer. Add a 500-millisecond gap to allow overwriting the object.
 		time.Sleep(500 * time.Millisecond)
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(barName))
+		Eventually(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(barName))
 	})
 
 	It("should have deletions propagated after crit conditions are removed", func() {
