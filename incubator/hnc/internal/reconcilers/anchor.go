@@ -17,10 +17,11 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,7 +66,7 @@ func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// purged.
 	inst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -118,13 +119,19 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		return false, err
 	}
 
+	// Update the state of the anchor
+	//
+	// TODO: call this in the parent function after v0.5 so there's no special code path for the
+	// onDeleting case.
+	r.updateState(log, inst, snsInst)
+
 	log.Info("The anchor is being deleted", "deletingCRD", deletingCRD)
 	switch {
 	case len(inst.ObjectMeta.Finalizers) == 0:
 		// We've finished processing this, nothing to do.
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
-	case r.shouldDeleteSubns(inst, snsInst, deletingCRD):
+	case r.shouldDeleteSubns(log, inst, snsInst, deletingCRD):
 		// The subnamespace is not already being deleted but it allows cascadingDelete or it's a leaf.
 		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
 		// namespaces alone.
@@ -143,12 +150,35 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 
 // shouldDeleteSubns returns true if the namespace still exists and it is a leaf
 // subnamespace or it allows cascading delete unless the CRD is being deleted.
-func (r *AnchorReconciler) shouldDeleteSubns(inst *api.SubnamespaceAnchor, nsInst *corev1.Namespace, deletingCRD bool) bool {
+//
+// TODO: fix comment post-v0.5
+func (r *AnchorReconciler) shouldDeleteSubns(log logr.Logger, inst *api.SubnamespaceAnchor, nsInst *corev1.Namespace, deletingCRD bool) bool {
 	r.forest.Lock()
 	defer r.forest.Unlock()
 
 	// If the CRD is being deleted, we want to leave the subnamespace alone.
 	if deletingCRD {
+		return false
+	}
+
+	// If the anchor isn't in the "ok" state, don't delete the namespace. If it's "conflict," we
+	// *definitely* don't want to delete it; if it's missing (and possibly being created), then there
+	// isn't really a good option but we'll eventually put a condition on the namespace so it's not a
+	// big deal.
+	//
+	// TODO: much of the remaining portion of this function can probably be replaced by this switch
+	// statement. In v0.5, we're playing it safe so I won't modify the rest of the function, but in
+	// v0.6 we should restructure.
+	switch inst.Status.State {
+	case api.Missing:
+		return false
+	case api.Conflict:
+		return false
+	case api.Ok:
+		// keep going...
+	default:
+		log.Error(errors.New("Illegal state"), "Unknown state", "state", inst.Status.State)
+		// Stay on the safe side - don't delete
 		return false
 	}
 
@@ -259,7 +289,7 @@ func (r *AnchorReconciler) getNamespace(ctx context.Context, nm string) (*corev1
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 		return &corev1.Namespace{}, nil
