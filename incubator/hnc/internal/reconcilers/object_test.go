@@ -59,7 +59,7 @@ var _ = Describe("Secret", func() {
 		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
-	PIt("should propagate object only to selected namespace using select", func() {
+	It("should propagate object only to selected namespace using select", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
 
@@ -71,7 +71,7 @@ var _ = Describe("Secret", func() {
 		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
-	PIt("should remove object in selected namespace when selector is updated", func() {
+	It("should remove object in selected namespace when selector is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
 
@@ -83,8 +83,8 @@ var _ = Describe("Secret", func() {
 		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!" + bazName + ".tree.hnc.x-k8s.io/depth"}
 		Expect(updateObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)).Should(Succeed())
 
-		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
+		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
 	})
 
 	PIt("should not propagate object to any namespace using none", func() {
