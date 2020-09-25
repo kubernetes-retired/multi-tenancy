@@ -17,32 +17,52 @@ spec:
     - subns
     singular: subnamespaceanchor
   scope: Namespaced
-  validation:
-    openAPIV3Schema:
-      description: SubnamespaceAnchor is the Schema for the subnamespace API. See details at http://bit.ly/hnc-self-serve-ux.
-      properties:
-        apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-          type: string
-        kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-          type: string
-        metadata:
-          type: object
-        status:
-          description: SubnamespaceAnchorStatus defines the observed state of SubnamespaceAnchor.
-          properties:
-            status:
-              description: "Describes the state of the subnamespace anchor. \n Currently, the supported values are: \n - \"Missing\": the subnamespace has not been created yet. This should be the default state when the anchor is just created. \n - \"Ok\": the subnamespace exists. \n - \"Conflict\": a namespace of the same name already exists. The admission controller will attempt to prevent this. \n - \"Forbidden\": the anchor was created in a namespace that doesn't allow children, such as kube-system or hnc-system. The admission controller will attempt to prevent this."
-              type: string
-          type: object
-      type: object
   version: v1alpha1
   versions:
   - name: v1alpha1
-    served: true
+    schema:
+      openAPIV3Schema:
+        description: SubnamespaceAnchor is the Schema for the subnamespace API. See details at http://bit.ly/hnc-self-serve-ux.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          status:
+            description: SubnamespaceAnchorStatus defines the observed state of SubnamespaceAnchor.
+            properties:
+              status:
+                description: "Describes the state of the subnamespace anchor. \n Currently, the supported values are: \n - \"missing\": the subnamespace has not been created yet. This should be the default state when the anchor is just created. \n - \"ok\": the subnamespace exists. \n - \"conflict\": a namespace of the same name already exists. The admission controller will attempt to prevent this. \n - \"forbidden\": the anchor was created in a namespace that doesn't allow children, such as kube-system or hnc-system. The admission controller will attempt to prevent this."
+                type: string
+            type: object
+        type: object
+    served: false
     storage: false
   - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: SubnamespaceAnchor is the Schema for the subnamespace API. See details at http://bit.ly/hnc-self-serve-ux.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          status:
+            description: SubnamespaceAnchorStatus defines the observed state of SubnamespaceAnchor.
+            properties:
+              status:
+                description: "Describes the state of the subnamespace anchor. \n Currently, the supported values are: \n - \"Missing\": the subnamespace has not been created yet. This should be the default state when the anchor is just created. \n - \"Ok\": the subnamespace exists. \n - \"Conflict\": a namespace of the same name already exists. The admission controller will attempt to prevent this. \n - \"Forbidden\": the anchor was created in a namespace that doesn't allow children, such as kube-system or hnc-system. The admission controller will attempt to prevent this."
+                type: string
+            type: object
+        type: object
     served: true
     storage: true
 status:
