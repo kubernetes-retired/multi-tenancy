@@ -24,5 +24,7 @@ The `hostPID` setting allows pods to share the host process ID namespace allowin
 
 Create a pod or container that sets new `hostPID` to `true`. The pod creation must fail.
 
+**Remediation:**
+
 Define a `PodSecurityPolicy` with `hostPID` set to `false` and map the policy to each tenant&#39;s namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to enforce that `hostPID` cannot be set to `true`. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 

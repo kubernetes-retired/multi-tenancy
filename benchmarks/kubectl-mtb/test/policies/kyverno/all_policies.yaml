@@ -197,3 +197,21 @@ spec:
                 =(capabilities):
                   X(add): null
 ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-always-pull-image
+spec:
+  validationFailureAction: enforce
+  rules:
+    - name: require-always-pull-image
+      match:
+        resources:
+          kinds:
+            - Pod
+      validate:
+        pattern:
+          spec:
+            containers:
+              - (name): "*"
+                imagePullPolicy: "Always"
