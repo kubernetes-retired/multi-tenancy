@@ -26,7 +26,7 @@ func (src *HierarchyConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 	dst := dstRaw.(*v1a2.HierarchyConfiguration)
 
 	// Spec
-	dst.Spec.AllowCascadingDelete = src.Spec.AllowCascadingDelete
+	dst.Spec.AllowCascadingDeletion = src.Spec.AllowCascadingDelete
 	dst.Spec.Parent = src.Spec.Parent
 
 	// We don't need to convert status because controllers will update it.

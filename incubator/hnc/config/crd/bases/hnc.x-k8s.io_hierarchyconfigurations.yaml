@@ -112,8 +112,8 @@ spec:
           spec:
             description: HierarchySpec defines the desired state of Hierarchy
             properties:
-              allowCascadingDelete:
-                description: AllowCascadingDelete indicates if the subnamespaces of this namespace are allowed to cascading delete. TODO update it to allowCascadingDeletion.
+              allowCascadingDeletion:
+                description: AllowCascadingDeletion indicates if the subnamespaces of this namespace are allowed to cascading delete.
                 type: boolean
               parent:
                 description: Parent indicates the parent of this namespace, if any.

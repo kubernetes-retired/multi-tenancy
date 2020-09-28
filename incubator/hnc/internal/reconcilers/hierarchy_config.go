@@ -162,7 +162,7 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 
 // updateFinalizers ensures that the HC can't be deleted if there are any subnamespace anchors in
 // the namespace (with some exceptions). The main reason is that the HC stores the
-// .spec.allowCascadingDelete field, so if we allowed this object to be deleted before all
+// .spec.allowCascadingDeletion field, so if we allowed this object to be deleted before all
 // descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
 func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
@@ -218,7 +218,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
-	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
+	ns.UpdateAllowCascadingDeletion(inst.Spec.AllowCascadingDeletion)
 
 	// Sync the status
 	inst.Status.Children = ns.ChildNames()

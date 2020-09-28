@@ -111,9 +111,9 @@ type HierarchyConfigurationSpec struct {
 	// Parent indicates the parent of this namespace, if any.
 	Parent string `json:"parent,omitempty"`
 
-	// AllowCascadingDelete indicates if the subnamespaces of this namespace are allowed to cascading
-	// delete. TODO update it to allowCascadingDeletion.
-	AllowCascadingDelete bool `json:"allowCascadingDelete,omitempty"`
+	// AllowCascadingDeletion indicates if the subnamespaces of this namespace are
+	// allowed to cascading delete.
+	AllowCascadingDeletion bool `json:"allowCascadingDeletion,omitempty"`
 }
 
 // HierarchyStatus defines the observed state of Hierarchy

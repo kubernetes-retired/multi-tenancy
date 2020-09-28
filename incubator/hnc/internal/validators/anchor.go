@@ -94,8 +94,8 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 		if cns.Parent().Name() != pnm {
 			return allow("")
 		}
-		if cns.Exists() && cns.ChildNames() != nil && !cns.AllowsCascadingDelete() {
-			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDelete flag or make it a leaf first.", cnm)
+		if cns.Exists() && cns.ChildNames() != nil && !cns.AllowsCascadingDeletion() {
+			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDeletion flag or make it a leaf first.", cnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 	}

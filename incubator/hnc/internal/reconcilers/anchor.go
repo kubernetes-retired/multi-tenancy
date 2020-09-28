@@ -125,7 +125,7 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 		log.Info("Do nothing since the finalizers are already gone.")
 		return true, nil
 	case r.shouldDeleteSubns(inst, snsInst, deletingCRD):
-		// The subnamespace is not already being deleted but it allows cascadingDelete or it's a leaf.
+		// The subnamespace is not already being deleted but it allows cascadingDeletion or it's a leaf.
 		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
 		// namespaces alone.
 		log.Info("The subnamespace is not being deleted but it allows cascading deletion or it's a leaf.")
@@ -169,7 +169,7 @@ func (r *AnchorReconciler) shouldDeleteSubns(inst *api.SubnamespaceAnchor, nsIns
 
 	// The subnamespace exists and isn't being deleted. We should delete it if it
 	// doesn't have any children itself, or if cascading deletion is enabled.
-	return cns.ChildNames() == nil || cns.AllowsCascadingDelete()
+	return cns.ChildNames() == nil || cns.AllowsCascadingDeletion()
 }
 
 func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
