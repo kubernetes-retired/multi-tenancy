@@ -206,7 +206,7 @@ spec:
 		// This should not run because service-1 contains its own subnamespace that would be deleted with it,
 		MustNotRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 
-		MustRun("kubectl hns set", nsService1, "--allowCascadingDelete")
+		MustRun("kubectl hns set", nsService1, "--allowCascadingDeletion")
 		MustRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
@@ -228,7 +228,7 @@ spec:
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsService4)
 
 		// delete subnamespace nsService4, namespace nsStaging won’t be deleted but it will have CritParentMissing condition
-		MustRun("kubectl hns set", nsService4, "--allowCascadingDelete")
+		MustRun("kubectl hns set", nsService4, "--allowCascadingDeletion")
 		MustRun("kubectl delete subns", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
