@@ -126,13 +126,6 @@ func main() {
 		}
 	}
 
-	// Start the Cmd
-	log.Info("Starting the Cmd.")
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		log.Error(err, "unable to run the manager")
-		os.Exit(1)
-	}
-
 	go func() {
 		// start a health http server.
 		log.Info("Starting a health http server")
@@ -143,4 +136,11 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	// Start the Cmd
+	log.Info("Starting the Cmd.")
+	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+		log.Error(err, "unable to run the manager")
+		os.Exit(1)
+	}
 }
