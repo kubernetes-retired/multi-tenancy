@@ -134,7 +134,7 @@ func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response 
 
 func (v *Namespace) illegalCascadingDeletion(ns *forest.Namespace) admission.Response {
 	// Early exit if the namespace allows cascading deletion.
-	if ns.AllowsCascadingDelete() {
+	if ns.AllowsCascadingDeletion() {
 		return allow("")
 	}
 
@@ -142,12 +142,12 @@ func (v *Namespace) illegalCascadingDeletion(ns *forest.Namespace) admission.Res
 	cantDelete := []string{}
 	for _, cnm := range ns.ChildNames() {
 		cns := v.Forest.Get(cnm)
-		if cns.IsSub && !cns.AllowsCascadingDelete() {
+		if cns.IsSub && !cns.AllowsCascadingDeletion() {
 			cantDelete = append(cantDelete, cnm)
 		}
 	}
 	if len(cantDelete) != 0 {
-		msg := fmt.Sprintf("Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.\n  Subnamespace(s) without allowCascadingDelete set: %s.", cantDelete)
+		msg := fmt.Sprintf("Please set allowCascadingDeletion first either in the parent namespace or in all the subnamespaces.\n  Subnamespace(s) without allowCascadingDelete set: %s.", cantDelete)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 

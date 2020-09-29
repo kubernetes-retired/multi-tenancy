@@ -206,8 +206,8 @@ However, if you actually try this, you'll get an error:
 ```
 $ kubectl delete namespace parent
 # Output:
-Error from server (Forbidden): admission webhook "namespaces.hnc.x-k8s.io" denied the request: Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.
- Subnamespace(s) without allowCascadingDelete set: [child].
+Error from server (Forbidden): admission webhook "namespaces.hnc.x-k8s.io" denied the request: Please set allowCascadingDeletion first either in the parent namespace or in all the subnamespaces.
+ Subnamespace(s) without allowCascadingDeletion set: [child].
 ```
 
 These errors are there for your protection. Deleting namespaces is very
@@ -215,10 +215,10 @@ dangerous, and deleting _subnamespaces_ can result in entire subtrees of
 namespaces being deleted as well. Therefore, if deleting a namespace (or
 subnamespace) would result in the deletion of any namespace _other than the one
 explicitly being deleted_, HNC requires that you must specify the
-`allowCascadingDelete` field on either all the namespaces that will be
+`allowCascadingDeletion` field on either all the namespaces that will be
 implicitly deleted, or any of their ancestors.
 
-The `allowCascadingDelete` field is a bit like `rm -rf` in a Linux shell.
+The `allowCascadingDeletion` field is a bit like `rm -rf` in a Linux shell.
 
 > **WARNING: this option is very dangerous, so you should only set it on the lowest
 possible level of the hierarchy.**
@@ -228,24 +228,13 @@ deleted, and so will any subnamespaces of those namespaces, and so on. However,
 any _full_ namespaces that are descendants of a subnamespace will not be
 deleted.**
 
-> _Note: In HNC v0.4.x and earlier, the inheritance of `allowCascadingDelete` is
-> actually a bit more restricted than what's sketched out above: its value is
-> only inherited through ancestor _subnamespaces_, or up to the _first_ full
-> namespace._
->
-> _For example, if subnamespace `child` has ancestors `parent` and `grandparent`,
-> both of which are full namespaces, we will only respect the
-> `allowCascadingDelete` field on `parent`, not on `grandparent`. This is
-> because if `grandparent` is deleted, `parent` will not be affected, and
-> therefore neither will `child`._
->
-> _This behaviour was simplified in HNC v0.5.x
-> ([#730](https://github.com/kubernetes-sigs/multi-tenancy/issues/730))._
+> _Note: In HNC v0.5.x and earlier, HNC uses v1alpha1 API and this field is
+> called `allowCascadingDelete`._
 
-To set the `allowCascadingDelete` field on a namespace using the plugin:
+To set the `allowCascadingDeletion` field on a namespace using the plugin:
 
 ```
-$ kubectl hns set parent --allowCascadingDelete
+$ kubectl hns set parent --allowCascadingDeletion
 # Output:
 Allowing cascading deletion on 'parent'
 Succesfully updated 1 property of the hierarchical configuration of parent
@@ -254,8 +243,8 @@ $ kubectl delete namespace parent
 # Should succeed
 ```
 
-To set the `allowCascadingDelete` field without the plugin, simply set the
-`spec.allowCascadingDelete field` to true in the namespace's
+To set the `allowCascadingDeletion` field without the plugin, simply set the
+`spec.allowCascadingDeletion field` to true in the namespace's
 `hierarchyconfiguration/hierarchy` object - for example, via:
 
 ```
@@ -491,7 +480,7 @@ does not make them an _administrator_ of that subnamespace. That requires
 someone to explicitly grant them the `update` permission for the
 `HierarchyConfiguration` object in that namespace. As a result, an unprivileged
 user who creates a subnamespace generally can’t delete it as well, since this
-would require them to set the `allowCascadingDelete` property of the child
+would require them to set the `allowCascadingDeletion` property of the child
 namespace.
 
 <a name="admin-types"/>

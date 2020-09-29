@@ -87,7 +87,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
 		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf="+nsParent)
-		// If the subnamespace doesn't allow cascadingDelete and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
+		// If the subnamespace doesn't allow cascadingDeletion and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
 		// Expected: 'sub1' namespace is not deleted and should have 'SubnamespaceAnchorMissing' condition; no other conditions."
 		RunShouldContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 	})
@@ -107,23 +107,23 @@ var _ = Describe("Issues", func() {
 		RunShouldNotContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 	})
 
-	It("Should cascading delete immediate subnamespaces if the anchor is deleted and the subnamespace allows cascadingDelete - issue #501", func() {
+	It("Should cascading delete immediate subnamespaces if the anchor is deleted and the subnamespace allows cascadingDeletion - issue #501", func() {
 		// set up
 		MustRun("kubectl create ns", nsParent)
 		// Creating the a branch of subnamespace
 		MustRun("kubectl hns create", nsSub1, "-n", nsParent)
 		MustRun("kubectl hns create", nsSub1Sub1, "-n", nsSub1)
 		MustRun("kubectl hns create", nsSub2Sub1, "-n", nsSub1)
-		// If the subnamespace allows cascadingDelete and the anchor is deleted, it should cascading delete all immediate subnamespaces.
-		// Operation: 1) allow cascadingDelete in 'ochid1' - kubectl hns set sub1 --allowCascadingDelete=true
+		// If the subnamespace allows cascadingDeletion and the anchor is deleted, it should cascading delete all immediate subnamespaces.
+		// Operation: 1) allow cascadingDeletion in 'ochid1' - kubectl hns set sub1 --allowCascadingDeletion=true
 		// 2) delete 'sub1' subns in 'parent' - kubectl delete subns sub1 -n parent
 		// Expected: 'sub1', 'sub1-sub1', 'sub2-sub1' should all be gone
-		MustRun("kubectl hns set", nsSub1, "--allowCascadingDelete=true")
+		MustRun("kubectl hns set", nsSub1, "--allowCascadingDeletion=true")
 		MustRun("kubectl delete subns", nsSub1, "-n", nsParent)
 		RunShouldNotContainMultiple([]string{nsSub1, nsSub1Sub1, nsSub2Sub1}, propogationTimeout, "kubectl hns tree", nsParent)
 	})
 
-	It("Should cascading delete all subnamespaces if the parent is deleted and allows cascadingDelete - issue #501", func() {
+	It("Should cascading delete all subnamespaces if the parent is deleted and allows cascadingDeletion - issue #501", func() {
 		// Setting up a 3-level tree with 'parent' as the root
 		MustRun("kubectl create ns", nsParent)
 		// Creating the 1st branch of subnamespace
@@ -137,11 +137,11 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl create ns", nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
-		// If the parent namespace allows cascadingDelete and it's deleted, all its subnamespaces should be cascading deleted.
-		// Operation: 1) allow cascadingDelete in 'parent' - kubectl hns set parent --allowCascadingDelete=true
+		// If the parent namespace allows cascadingDeletion and it's deleted, all its subnamespaces should be cascading deleted.
+		// Operation: 1) allow cascadingDeletion in 'parent' - kubectl hns set parent --allowCascadingDeletion=true
 		// 2) delete 'parent' namespace - kubectl delete ns parent
 		// Expected: only 'fullchild' and 'sub-fullchild' should be left and they should have CRIT_ conditions related to missing 'parent'
-		MustRun("kubectl hns set", nsParent, "--allowCascadingDelete=true")
+		MustRun("kubectl hns set", nsParent, "--allowCascadingDeletion=true")
 		MustRun("kubectl delete ns", nsParent)
 		MustNotRun("kubectl hns tree", nsParent)
 		MustNotRun("kubectl hns tree", nsSub1)
@@ -203,7 +203,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete ns", nsChild)
 	})
 
-	It("Should not delete a parent of a subnamespace if allowCascadingDelete is not set -issue #716", func() {
+	It("Should not delete a parent of a subnamespace if allowCascadingDeletion is not set -issue #716", func() {
 		// Setting up a 2-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
@@ -213,7 +213,7 @@ var _ = Describe("Issues", func() {
 		MustNotRun("kubectl delete ns", nsParent)
 	})
 
-	It("Should delete leaf subnamespace without setting allowCascadingDelete - issue #716", func() {
+	It("Should delete leaf subnamespace without setting allowCascadingDeletion - issue #716", func() {
 		// Setting up a 2-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
@@ -223,26 +223,26 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should not delete a non-leaf subnamespace if allowCascadingDelete is not set - issue #716", func() {
+	It("Should not delete a non-leaf subnamespace if allowCascadingDeletion is not set - issue #716", func() {
 		// Setting up a 3-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
 		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsSubChild)
-		// Test: remove non-leaf subnamespace with 'allowCascadingDelete' unset.
-		// Expected: forbidden because 'allowCascadingDelete'flag is not set
+		// Test: remove non-leaf subnamespace with 'allowCascadingDeletion' unset.
+		// Expected: forbidden because 'allowCascadingDeletion'flag is not set
 		MustNotRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should delete a subnamespace if it's changed from non-leaf to leaf without setting allowCascadingDelete - issue #716", func() {
+	It("Should delete a subnamespace if it's changed from non-leaf to leaf without setting allowCascadingDeletion - issue #716", func() {
 		// Setting up a 3-level tree
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsSubChild, "-n", nsChild)
 		// verify that the namespace has been created
 		MustRun("kubectl get ns", nsSubChild)
-		// Test: remove leaf subnamespaces with 'allowCascadingDelete' unset.
+		// Test: remove leaf subnamespaces with 'allowCascadingDeletion' unset.
 		// Expected: delete successfully
 		MustRun("kubectl delete subns", nsSubChild, "-n", nsChild)
 		// make sure the previous operantion is finished, otherwise the next command will fail
@@ -277,6 +277,28 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl create rolebinding --clusterrole=admin --serviceaccount=default:default -n", nsParent, "foo")
 		// Object should exist in the child, and there should be no conditions
 		MustRun("kubectl get rolebinding foo -n", nsChild, "-oyaml")
+	})
+
+	PIt("should reset allowCascadingDeletion value after the namespace is deleted and recreated - issue #1155", func() {
+		// Create a parent namespace and a subnamespace for it.
+		MustRun("kubectl create ns", nsParent)
+		MustRun("kubectl get ns", nsParent)
+		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+
+		// Cascading delete both namespaces.
+		MustRun("kubectl hns set", nsParent, "--allowCascadingDeletion")
+		FieldShouldContain("hierarchyconfigurations.hnc.x-k8s.io", nsParent, "hierarchy", ".spec", "allowCascadingDeletion:true")
+		MustRun("kubectl delete ns", nsParent)
+
+		// Verify deletion.
+		MustNotRun("kubectl get ns", nsParent)
+		MustNotRun("kubectl get ns", nsChild)
+
+		// Now recreate the parent again.
+		MustRun("kubectl create ns", nsParent)
+
+		// Verify the default is not set to "allowCascadingDeletion:true".
+		FieldShouldNotContain("hierarchyconfigurations.hnc.x-k8s.io", nsParent, "hierarchy", ".spec", "allowCascadingDeletion:true")
 	})
 })
 

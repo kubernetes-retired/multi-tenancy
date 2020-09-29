@@ -48,20 +48,20 @@ var setCmd = &cobra.Command{
 	kubectl hns set bar --root --parent foo # error
 
 	# Allow 'foo', or any of its descendants, to be cascading deleted
-	kubectl hns set foo --allowCascadingDelete
+	kubectl hns set foo --allowCascadingDeletion
 	kubectl hns set foo -a
 
 	# Forbids cascading deletion on 'foo' and its subtree (unless specifically
 	# allowed on any descendants).
-	kubectl hns set foo --forbidCascadingDelete
+	kubectl hns set foo --forbidCascadingDeletion
 	kubectl hns set foo -f`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		nnm := args[0]
 		flags := cmd.Flags()
 		parent, _ := flags.GetString("parent")
-		allowCD, _ := flags.GetBool("allowCascadingDelete")
-		forbidCD, _ := flags.GetBool("forbidCascadingDelete")
+		allowCD, _ := flags.GetBool("allowCascadingDeletion")
+		forbidCD, _ := flags.GetBool("forbidCascadingDeletion")
 
 		updates := hcUpdates{
 			root:     flags.Changed("root"),
@@ -92,7 +92,7 @@ func updateHC(cl Client, updates hcUpdates, nnm string) {
 		setParent(hc, oldpnm, updates.parent, nnm, &numChanges)
 	}
 
-	setAllowCascadingDelete(hc, nnm, updates.allowCD, updates.forbidCD, &numChanges)
+	setAllowCascadingDeletion(hc, nnm, updates.allowCD, updates.forbidCD, &numChanges)
 
 	if numChanges > 0 {
 		cl.updateHierarchy(hc, fmt.Sprintf("update the hierarchical configuration of %s", nnm))
@@ -130,9 +130,9 @@ func setParent(hc *api.HierarchyConfiguration, oldpnm, pnm, nnm string, numChang
 	}
 }
 
-func setAllowCascadingDelete(hc *api.HierarchyConfiguration, nnm string, allow, forbid bool, numChanges *int) {
+func setAllowCascadingDeletion(hc *api.HierarchyConfiguration, nnm string, allow, forbid bool, numChanges *int) {
 	if allow && forbid {
-		fmt.Printf("Cannot set both --allowCascadingDelete and --forbidCascadingDelete\n")
+		fmt.Printf("Cannot set both --allowCascadingDeletion and --forbidCascadingDeletion\n")
 		os.Exit(1)
 	}
 
@@ -142,10 +142,10 @@ func setAllowCascadingDelete(hc *api.HierarchyConfiguration, nnm string, allow, 
 	}
 
 	// We now know that allow != forbid, so we can just look at allow
-	if hc.Spec.AllowCascadingDelete == allow {
+	if hc.Spec.AllowCascadingDeletion == allow {
 		fmt.Printf("Cascading deletion for '%s' is already set to %t; unchanged\n", nnm, allow)
 	} else {
-		hc.Spec.AllowCascadingDelete = allow
+		hc.Spec.AllowCascadingDeletion = allow
 		if allow {
 			fmt.Printf("Allowing cascading deletion on '%s'\n", nnm)
 		} else {
@@ -168,7 +168,7 @@ func normalizeStringArray(in []string) []string {
 func newSetCmd() *cobra.Command {
 	setCmd.Flags().BoolP("root", "r", false, "Removes the current parent namespace, making this namespace a root")
 	setCmd.Flags().StringP("parent", "p", "", "Sets the parent namespace")
-	setCmd.Flags().BoolP("allowCascadingDelete", "a", false, "Allows cascading deletion of its subnamespaces.")
-	setCmd.Flags().BoolP("forbidCascadingDelete", "f", false, "Protects cascading deletion of its subnamespaces.")
+	setCmd.Flags().BoolP("allowCascadingDeletion", "a", false, "Allows cascading deletion of its subnamespaces.")
+	setCmd.Flags().BoolP("forbidCascadingDeletion", "f", false, "Protects cascading deletion of its subnamespaces.")
 	return setCmd
 }

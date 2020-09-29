@@ -52,7 +52,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 	// Create a chain of namespaces from "a" to "e", with "a" as the root. Among them,
 	// "b", "d" and "e" are subnamespaces. This is set up in a long chain to test that
-	// subnamespaces will look all the way up to get the 'allowCascadingDelete` value
+	// subnamespaces will look all the way up to get the 'allowCascadingDeletion` value
 	// and won't stop looking when the first full namespace ancestor is met.
 	f := foresttest.Create("-AbCD")
 	h := &Anchor{Forest: f}
@@ -74,8 +74,8 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.acd != "" {
-				f.Get(tc.acd).UpdateAllowCascadingDelete(true)
-				defer f.Get(tc.acd).UpdateAllowCascadingDelete(false)
+				f.Get(tc.acd).UpdateAllowCascadingDeletion(true)
+				defer f.Get(tc.acd).UpdateAllowCascadingDeletion(false)
 			}
 
 			// Setup

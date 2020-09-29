@@ -107,7 +107,7 @@ spec:
 		FieldShouldContain(hierCRD, nsB, hierSingleton, ".spec.parent", nsA)
 	})
 
-	It("should convert HCs with allowCascadingDelete", func() {
+	It("should convert HCs allowCascadingDelete to allowCascadingDeletion", func() {
 		// Before conversion, create namespace A with allowCascadingDelete.
 		MustRun("kubectl create ns", nsA)
 		hierA := `# temp file created by conversion_test.go
@@ -119,15 +119,16 @@ metadata:
 spec:
   allowCascadingDelete: true`
 		MustApplyYAML(hierA)
+		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDelete:true")
 
 		// Convert
 		setupV1alpha2()
 
 		// Verify CRD conversion.
 		verifyCRDConversion()
-		// Verify allowCascadingDelete in the new version.
+		// Verify allowCascadingDeletion in the new version.
 		FieldShouldContainWithTimeout(hierCRD, nsA, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDelete:true")
+		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDeletion:true")
 	})
 
 	It("should still have HC condition if it exists in v1alpha1", func() {

@@ -20,12 +20,12 @@ type conditions map[api.AffectedObject]map[api.Code]string
 // Namespace represents a namespace in a forest. Other than its structure, it contains some
 // properties useful to the reconcilers.
 type Namespace struct {
-	forest               *Forest
-	name                 string
-	parent               *Namespace
-	children             namedNamespaces
-	exists               bool
-	allowCascadingDelete bool
+	forest                 *Forest
+	name                   string
+	parent                 *Namespace
+	children               namedNamespaces
+	exists                 bool
+	allowCascadingDeletion bool
 
 	// sourceObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
@@ -99,15 +99,15 @@ func (ns *Namespace) clean() {
 	delete(ns.forest.namespaces, ns.name)
 }
 
-// UpdateAllowCascadingDelete updates if this namespace allows cascading deletion.
-func (ns *Namespace) UpdateAllowCascadingDelete(acd bool) {
-	ns.allowCascadingDelete = acd
+// UpdateAllowCascadingDeletion updates if this namespace allows cascading deletion.
+func (ns *Namespace) UpdateAllowCascadingDeletion(acd bool) {
+	ns.allowCascadingDeletion = acd
 }
 
-// AllowsCascadingDelete returns true if the namespace's or any of the ancestors'
-// allowCascadingDelete field is set to true.
-func (ns *Namespace) AllowsCascadingDelete() bool {
-	if ns.allowCascadingDelete == true {
+// AllowsCascadingDeletion returns true if the namespace's or any of the ancestors'
+// allowCascadingDeletion field is set to true.
+func (ns *Namespace) AllowsCascadingDeletion() bool {
+	if ns.allowCascadingDeletion == true {
 		return true
 	}
 	if ns.parent == nil || ns.CycleNames() != nil {
@@ -115,7 +115,7 @@ func (ns *Namespace) AllowsCascadingDelete() bool {
 	}
 
 	// This namespace is neither a root nor in a cycle, so this line can't cause a stack overflow.
-	return ns.parent.AllowsCascadingDelete()
+	return ns.parent.AllowsCascadingDeletion()
 }
 
 // SetAnchors updates the anchors and returns a difference between the new/old list.
