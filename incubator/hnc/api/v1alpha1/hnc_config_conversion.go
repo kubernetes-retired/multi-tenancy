@@ -60,14 +60,11 @@ func (src *HNCConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 	return nil
 }
 
-// We don't need a conversion from v1alpha2 to v1alpha1. because we will never
-// serve both versions. We serve v1alpha1 in 0.5 and v1alpha2 in 0.6. Upgrading
-// from 0.5 to 0.6 only needs one-way conversion. Downgrading is not supported.
-// Thus we keep an empty ConvertFrom just to implement Convertible.
+// We don't need a conversion from v1alpha2 to v1alpha1. because we will never serve both versions.
+// However, the apiserver appears to ask for v1alpha1 even if there are no other clients and
+// complains if the metadata changes, so simply copy the metadata but nothing else.
 func (dst *HNCConfiguration) ConvertFrom(srcRaw conversion.Hub) error {
-	// We wanted to return errors.New("not supported") here considering this
-	// function should never be called, but in reality this error log is populated
-	// constantly even when all the HNC reconcilers and validators are disabled.
-	// To not pollute the logs, we decide to return nil here.
+	src := srcRaw.(*v1a2.HNCConfiguration)
+	dst.ObjectMeta = src.ObjectMeta
 	return nil
 }
