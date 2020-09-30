@@ -358,7 +358,6 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, nms[5], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
 		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("3"))
 	})
-
 })
 
 func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {

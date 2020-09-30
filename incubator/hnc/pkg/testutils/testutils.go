@@ -215,9 +215,17 @@ func CleanupNamespaces(nses ...string) {
 	// has cascading deletion so we can delete any of its subnamespace descendants, and
 	// make sure that it's not a subnamespace itself so we can delete it directly.
 	for _, ns := range nses {
-		TryRunQuietly("kubectl hns set", ns, "-a")
-		TryRunQuietly("kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
-		TryRunQuietly("kubectl delete ns", ns)
+		if err := TryRunQuietly("kubectl get ns", ns); err == nil {
+			MustRunWithTimeout(30, "kubectl hns set", ns, "-a")
+			// 'subnamespaceOf' is the old subnamespace annotation used in v0.5. We
+			// still need to clean up this old annotation because this util func is
+			// also used in the API conversion test to clean up namespaces in v0.5.
+			// TODO: remove this line after v0.6 branches and we are no longer
+			//  supporting v1alpha1 conversion.
+			MustRunWithTimeout(30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
+			MustRunWithTimeout(30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
+			MustRunWithTimeout(30, "kubectl delete ns", ns)
+		}
 	}
 }
 
@@ -270,19 +278,7 @@ func RecoverHNC() {
 		a = "recover-test-a"
 		b = "recover-test-b"
 	)
-	// Do NOT use CleanupNamespaces because that just assumes that if it can't delete a namespace that
-	// everthing's fine, but this is a poor assumption if HNC has just been repaired.
-	//
-	// TODO: if CleanupNamespaces ever starts using labels to select namespaces to delete, then get
-	// rid of this hack.
-	if err := TryRunQuietly("kubectl get ns", a); err == nil {
-		MustRunWithTimeout(30, "kubectl hns set", a, "-a")
-		MustRunWithTimeout(30, "kubectl delete ns", a)
-	}
-	if err := TryRunQuietly("kubectl get ns", b); err == nil {
-		MustRunWithTimeout(30, "kubectl annotate ns", b, "hnc.x-k8s.io/subnamespaceOf-")
-		MustRunWithTimeout(30, "kubectl delete ns", b)
-	}
+	CleanupNamespaces(a, b)
 	// Ensure validators work
 	MustRunWithTimeout(30, "kubectl create ns", a)
 	// Ensure reconcilers work
