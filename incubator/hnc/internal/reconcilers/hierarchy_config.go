@@ -129,10 +129,13 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
+	initial := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
 
-	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
-	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
+	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
+	// isn't the first time we're syncing.
+	updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst)
+	updated = updated || initial
+	if !updated || err != nil {
 		return err
 	}
 
@@ -195,7 +198,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -214,7 +217,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	// for this namespace to be synced.
 	r.syncSubnamespaceParent(log, inst, nsInst, ns)
 	r.syncParent(log, inst, ns)
-	r.markExisting(log, ns)
+	initial := r.markExisting(log, ns)
 
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
@@ -226,6 +229,8 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Sync the tree labels. This should go last since it can depend on the conditions.
 	r.syncLabel(log, nsInst, ns)
+
+	return initial
 }
 
 // syncExternalNamespace sets external tree labels to the namespace in the forest
@@ -315,15 +320,17 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 
 // markExisting marks the namespace as existing. If this is the first time we're reconciling this namespace,
 // mark all possible relatives as being affected since they may have been waiting for this namespace.
-func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
-	if ns.SetExists() {
-		log.Info("Reconciling new namespace")
-		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.IsSub {
-			r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
-			r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
-		}
+func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Namespace) bool {
+	if !ns.SetExists() {
+		return false
 	}
+	log.Info("Reconciling new namespace")
+	r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
+	if ns.IsSub {
+		r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
+		r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
+	}
+	return true
 }
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
