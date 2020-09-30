@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
@@ -31,14 +33,22 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl create rolebinding test --clusterrole=admin --serviceaccount=default:default -n", nsParent)
 		FieldShouldContain("rolebinding", nsChild, "test", ".roleRef.name", "admin")
+
+		// It takes a while for the pods to actually be deleted - over 60s, in some cases (especially on
+		// Kind, I think). But we don't actually need to wait for the pods to be fully deleted - waiting
+		// a few moments seems to be fine, and then the terminated pods don't get in the way. I picked
+		// 5s fairly arbitrarily, but it works well. Feel free to try lower values it you like.
+		//   - aludwin, Sep 2020
 		MustRun("kubectl delete deployment --all -n hnc-system")
-		// The pod might take up to a minite to be deleted, we force the deletion here to save time
-		MustRun("kubectl delete pods --all -n hnc-system --grace-period=0 --force")
-		RunShouldContain("No resources found", 60, "kubectl get pods -n hnc-system")
+		time.Sleep(5*time.Second)
+
+		// Replace the source rolebinding
 		MustRun("kubectl delete rolebinding test -n", nsParent)
 		MustNotRun("kubectl describe rolebinding test -n", nsParent)
 		MustRun("kubectl create rolebinding test --clusterrole=edit --serviceaccount=default:default -n", nsParent)
 		FieldShouldContain("rolebinding", nsParent, "test", ".roleRef.name", "edit")
+
+		// Restore HNC and verify that the new RB is propagated
 		RecoverHNC()
 		FieldShouldContain("rolebinding", nsChild, "test", ".roleRef.name", "edit")
 	})

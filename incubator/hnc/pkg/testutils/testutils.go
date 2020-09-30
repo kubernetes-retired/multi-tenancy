@@ -203,7 +203,8 @@ func RunCommand(cmdln ...string) (string, error) {
 			args = append(args, strings.Split(subcmdln, " ")...)
 		}
 	}
-	GinkgoT().Log("Running: ", args)
+	prefix := fmt.Sprintf("[%d] Running: ", time.Now().Unix())
+	GinkgoT().Log(prefix, args)
 	cmd := exec.Command(args[0], args[1:]...)
 	stdout, err := cmd.CombinedOutput()
 	return string(stdout), err
@@ -247,6 +248,11 @@ func CheckHNCPath() {
 }
 
 func RecoverHNC() {
+	// HNC can take a long time (>30s) to recover in some cases if various parts of its deployment are
+	// deleted, such as the validating webhook configuration or the CRDs. It appears that deleting the
+	// deployment before reapplying the manifests seems to allow HNC to start operating again much
+	// faster.
+	TryRun("kubectl delete deployment --all -n hnc-system")
 	err := TryRun("kubectl apply -f", hncRecoverPath)
 	if err != nil {
 		GinkgoT().Log("-----------------------------WARNING------------------------------")
@@ -257,13 +263,34 @@ func RecoverHNC() {
 	}
 	// give HNC enough time to repair
 	time.Sleep(5 * time.Second)
-	// Verify and wait till HNC is fully repaired, sometimes it takes up to 30s.
-	// The `kubectl hns create` command will fail is HNC is broken, so we confirm that HNC is back by successfully 
-	// running this command. 
-	CleanupNamespaces("a", "b")
-	MustRun("kubectl create ns a")
-	RunShouldContain("Successfully created", 30, "kubectl hns create b -n a")
-	CleanupNamespaces("a", "b")
+	// Verify and wait till HNC is fully repaired, sometimes it takes up to 30s. We try to create a
+	// subnamespace and wait for it to be created to show that both the validators and reconcilers are
+	// up and running.
+	const (
+		a = "recover-test-a"
+		b = "recover-test-b"
+	)
+	// Do NOT use CleanupNamespaces because that just assumes that if it can't delete a namespace that
+	// everthing's fine, but this is a poor assumption if HNC has just been repaired.
+	//
+	// TODO: if CleanupNamespaces ever starts using labels to select namespaces to delete, then get
+	// rid of this hack.
+	if err := TryRunQuietly("kubectl get ns", a); err == nil {
+		MustRunWithTimeout(30, "kubectl hns set", a, "-a")
+		MustRunWithTimeout(30, "kubectl delete ns", a)
+	}
+	if err := TryRunQuietly("kubectl get ns", b); err == nil {
+		MustRunWithTimeout(30, "kubectl annotate ns", b, "hnc.x-k8s.io/subnamespaceOf-")
+		MustRunWithTimeout(30, "kubectl delete ns", b)
+	}
+	// Ensure validators work
+	MustRunWithTimeout(30, "kubectl create ns", a)
+	// Ensure reconcilers work
+	MustRunWithTimeout(30, "kubectl hns create", b, "-n", a)
+	MustRunWithTimeout(30, "kubectl get ns", b)
+	// At this point we can assume that HNC is working sufficiently for the regular CleanupNamespaces
+	// to work.
+	CleanupNamespaces(a, b)
 }
 
 func WriteTempFile(cxt string) string {
