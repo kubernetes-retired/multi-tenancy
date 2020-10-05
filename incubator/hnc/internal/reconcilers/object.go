@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -284,7 +285,7 @@ func (r *ObjectReconciler) syncMissingObject(ctx context.Context, log logr.Logge
 	// descendants, but there's nothing else to do.
 	if ns.HasSourceObject(r.GVK, inst.GetName()) {
 		ns.DeleteSourceObject(r.GVK, inst.GetName())
-		r.syncUnpropagatedSource(ctx, log, inst)
+		r.syncPropagation(ctx, log, inst)
 		return actionNop
 	}
 
@@ -375,7 +376,7 @@ func (r *ObjectReconciler) getTopSourceToPropagate(log logr.Logger, inst *unstru
 		// TODO: add a webhook rule to prevent e.g. removing a source finalizer that
 		//  would cause overwrting the source objects in the descendents.
 		//  See https://github.com/kubernetes-sigs/multi-tenancy/issues/1120
-		if !r.shouldPropagateSource(log, obj) {
+		if !r.shouldPropagateSource(log, obj, inst.GetNamespace()) {
 			continue
 		}
 		return obj
@@ -431,23 +432,8 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 	ns := r.Forest.Get(src.GetNamespace())
 	ns.SetSourceObject(src.DeepCopy())
 
-	if !r.shouldPropagateSource(log, src) {
-		// If an object was *previously* propagated by HNC, it will already be in the forest, and all
-		// the propagated copies will think they can stick around too. If, for some reason, we _now_
-		// want to stop propagating it (e.g. because we've changed the sync mode in the HNCConfig
-		// object), we need to delete it from the forest and enqueue all its propagated copies. The
-		// propagated copies will then see that that the source is missing from the forest, and delete
-		// themselves.
-		r.syncUnpropagatedSource(ctx, log, src)
-		return
-	}
-
-	// Signal the config reconciler for reconciliation because it is possible that a source object is
-	// added to the apiserver.
-	hnccrSingleton.requestReconcile("possible new source object")
-
-	// Enqueue all the descendant copies
-	r.enqueueDescendants(ctx, log, src, "possible new or modified source object")
+	// Enqueue propagated copies for this possibly deleted source
+	r.syncPropagation(ctx, log, src)
 }
 
 func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
@@ -746,24 +732,28 @@ func clearConditionsForUnknownSources(log logr.Logger, ns *forest.Namespace, sao
 	return cleared
 }
 
-// syncUnpropagatedSource enqueues any propagated copies of the source.
+// syncPropagation enqueues any propagated copies of the source.
 //
 // The method can be called when the source was deleted by users, or if it will no longer be
 // propagated, e.g. because the user's changed the sync mode in the HNC Config.
-func (r *ObjectReconciler) syncUnpropagatedSource(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
+func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
 	// Signal the config reconciler for reconciliation because it is possible that the source object is
 	// deleted on the apiserver.
-	hnccrSingleton.requestReconcile("possible deleted source object")
+	hnccrSingleton.requestReconcile("source object")
 
-	r.enqueueDescendants(ctx, log, inst, "possibly deleted source object")
+	r.enqueueDescendants(ctx, log, inst, "source object")
 }
 
 // shouldPropagateSource returns true if the object should be propagated by the HNC. The following
 // objects are not propagated:
 // - Objects of a type whose mode is set to "remove" in the HNCConfiguration singleton
 // - Objects with nonempty finalizer list
+// - Objects have a selector that doesn't match the destination namespace
 // - Service Account token secrets
-func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured) bool {
+func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
+	selector := r.getSelector(log, inst)
+	nsLabels := r.Forest.Get(dst).GetLabels()
+
 	switch {
 	// Users can set the mode of a type to "remove" to exclude objects of the type
 	// from being handled by HNC.
@@ -772,6 +762,10 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 
 	// Object with nonempty finalizer list is not propagated
 	case hasFinalizers(inst):
+		return false
+
+	// Selector does not match
+	case selector != nil && !selector.Matches(nsLabels):
 		return false
 
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":
@@ -791,6 +785,26 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 		// Everything else is propagated
 		return true
 	}
+}
+
+// getSelector returns the selector on a given object if it exists
+func (r *ObjectReconciler) getSelector(log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
+	annot := inst.GetAnnotations()
+	selectorStr, ok := annot[api.AnnotationSelector]
+	if !ok {
+		return nil
+	}
+	labelSelector, err := v1.ParseToLabelSelector(selectorStr)
+	// TODO: surface the error messages here (https://github.com/kubernetes-sigs/multi-tenancy/issues/1165)
+	if err != nil {
+		log.Error(err, "Could not parse selector annotation to labelSelector")
+		return nil
+	}
+	selector, err := v1.LabelSelectorAsSelector(labelSelector)
+	if err != nil {
+		log.Error(err, "Could not convert labelSelector to selector")
+	}
+	return selector
 }
 
 // recordPropagatedObject records the fact that this object has been propagated, so we can report

@@ -449,6 +449,9 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 		anc = anc.Parent()
 		depth++
 	}
+	// Update the labels in the forest so that we can quickly access the labels and
+	// compare if they match the given selector
+	ns.SetLabels(nsInst.Labels)
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {

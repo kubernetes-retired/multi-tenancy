@@ -2,6 +2,7 @@ package forest
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
@@ -26,6 +27,9 @@ type Namespace struct {
 	children               namedNamespaces
 	exists                 bool
 	allowCascadingDeletion bool
+
+	// labels store the original namespaces' labels
+	labels map[string]string
 
 	// sourceObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
@@ -86,6 +90,18 @@ func (ns *Namespace) UnsetExists() bool {
 	ns.exists = false
 	ns.clean() // clean up if this is a useless data structure
 	return changed
+}
+
+func (ns *Namespace) GetLabels() labels.Set {
+	return labels.Set(ns.labels)
+}
+
+// Deep copy the input labels so that it'll not be changed after
+func (ns *Namespace) SetLabels(labels map[string]string) {
+	ns.labels = make(map[string]string)
+	for key, val := range labels {
+		ns.labels[key] = val
+	}
 }
 
 // clean garbage collects this namespace if it has a zero value.
