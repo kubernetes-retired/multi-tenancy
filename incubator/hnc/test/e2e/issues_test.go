@@ -1,8 +1,6 @@
 package e2e
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
@@ -82,24 +80,6 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should remove obsolete conditions CannotPropagateObject and CannotUpdateObject - issue #328", func() {
-		// Setting up hierarchy with rolebinding that HNC doesn't have permission to copy.
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl create ns", nsChild)
-		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
-		// cluster-admin is the highest-powered ClusterRole and HNC is missing some of
-		// its permissions, so it cannot propagate it.
-		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent,
-			"--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
-		// Tree should show CannotPropagateObject in nsParent and CannotUpdateObject in nsChild
-		RunShouldContainMultiple([]string{"1) CannotPropagateObject", "2) CannotUpdateObject"}, defTimeout, "kubectl hns tree", nsParent)
-		// Remove the child and verify that the condition is gone
-		MustRun("kubectl hns set", nsChild, "--root")
-		// There should no longer be any conditions in parent and child
-		RunShouldContain("No conditions", defTimeout, "kubectl hns describe", nsParent)
-		RunShouldContain("No conditions", defTimeout, "kubectl hns describe", nsChild)
-	})
-
 	It("Should set SubnamespaceAnchorMissing condition if the anchor is missing - issue #501", func() {
 		// Setting up a 3-level tree with 'parent' as the root
 		MustRun("kubectl create ns", nsParent)
@@ -168,36 +148,6 @@ var _ = Describe("Issues", func() {
 		MustNotRun("kubectl hns tree", nsSub2)
 		RunShouldContain("CritParentMissing: missing parent", defTimeout, "kubectl hns tree", nsChild)
 		RunShouldContain("CritAncestor", defTimeout, "kubectl hns describe", nsSubChild)
-	})
-
-	It("Should clear CannotUpdate conditions in descendants when a hierarchy changes - issue #605", func() {
-		// Setting up hierarchy with rolebinding that HNC doesn't have permission to copy
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl create ns", nsChild)
-		MustRun("kubectl create ns", nsSubChild)
-		MustRun("kubectl create ns", nsSubSubChild)
-		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
-		MustRun("kubectl hns set", nsSubChild, "--parent", nsChild)
-		MustRun("kubectl hns set", nsSubSubChild, "--parent", nsSubChild)
-		// cluster-admin is the highest-powered ClusterRole and HNC is missing some of its permissions, so it cannot propagate it.
-		MustRun("kubectl create rolebinding cluster-admin-rb -n", nsParent, "--clusterrole='cluster-admin' --serviceaccount="+nsParent+":default")
-		// We put 30s sleep here because - before fixing issue #605, we should see the object gets reconciled after around 8s,
-		// triggered by controller-runtime, with this sleep time. After fixing this issue, the obsolete condition should be cleared
-		// immediately
-		time.Sleep(30 * time.Second)
-		// Tree should show CannotPropagateObject in parent and CannotUpdateObject in child and subchild
-		RunShouldContain("CannotPropagateObject", defTimeout, "kubectl hns describe", nsParent)
-		RunShouldContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsChild)
-		RunShouldContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsSubChild)
-		// Remove the grandchild to avoid removing CannotPropagate condition in parent or CannotUpdate condition in child.
-		// Verify that the conditions in grandchild and greatgrandchild are gone.
-		MustRun("kubectl hns set", nsSubChild, "--root")
-		// We should see sub-child has conditions, and should see sub-sub-child has no conditions immediately after the fix.
-		RunShouldNotContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsSubChild)
-		RunShouldNotContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsSubSubChild)
-		// There should still be CannotPropagate condition in parent and CannotUpdate condition in child
-		RunShouldContain("CannotPropagateObject", defTimeout, "kubectl hns describe", nsParent)
-		RunShouldContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsChild)
 	})
 
 	It("Should have CritParentMissing condition when parent namespace is deleted - issue #716", func() {
@@ -272,20 +222,16 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	It("Should set and unset CannotPropagateObject/CannotUpdateObject condition - issue #771", func() {
-		// set up
+	It("Should have CannotPropagateObject and CannotUpdateObject events - replacing obsolete issues #328, #605, #771", func() {
+		// Set up
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
-		// Creating unpropagatable object; both namespaces should have a condition
+		// Creating unpropagatable object; both namespaces should have an event.
 		MustRun("kubectl create rolebinding --clusterrole=cluster-admin --serviceaccount=default:default -n", nsParent, "foo")
-		// verify
-		RunShouldContain("CannotPropagateObject", defTimeout, "kubectl hns describe", nsParent)
-		RunShouldContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsChild)
-		// Deleting unpropagatable object; all conditions should be cleared
-		MustRun("kubectl delete rolebinding -n", nsParent, "foo")
-		RunShouldNotContain("CannotPropagateObject", defTimeout, "kubectl hns describe", nsParent)
-		RunShouldNotContain("CannotUpdateObject", defTimeout, "kubectl hns describe", nsChild)
+		// Verify object events
+		RunShouldContain("Could not write to destination namespace \""+nsChild+"\"", defTimeout, "kubectl get events -n", nsParent, "--field-selector reason=CannotPropagateObject")
+		RunShouldContain("Could not write from source namespace \""+nsParent+"\"", defTimeout, "kubectl get events -n", nsChild, "--field-selector reason=CannotUpdateObject")
 	})
 
 	It("Should propogate admin rolebindings - issue #772", func() {
