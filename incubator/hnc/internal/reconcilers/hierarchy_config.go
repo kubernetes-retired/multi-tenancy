@@ -212,6 +212,13 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
 
+	// In v0.5.x, HNC uses v1alpha1 and the annotation on any subnamespace is
+	// called "subnamespaceOf". In v1alpha2, the namespace annotation is upgraded
+	// into "subnamespace-of". If the deprecated "subnamespaceOf" annotation still
+	// exists, upgrade API and early exit since updating the subnamespace will
+	// enqueue the singleton again.
+	r.upgradeSubnamespaceAnnotation(nsInst)
+
 	// If this is a subnamespace, make sure .spec.parent is set correctly. Then sync the parent to the
 	// forest, and finally notify any relatives (including the parent) that might have been waiting
 	// for this namespace to be synced.
@@ -265,6 +272,28 @@ func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsIns
 	}
 	etls[ns.Name()] = 0
 	ns.ExternalTreeLabels = etls
+}
+
+// upgradeSubnamespaceAnnotation replaces the deprecated "subnamespaceOf"
+// annotation with the new "subnamespace-of" annotation. If both exist, we will
+// only delete the deprecated annotation.
+func (r *HierarchyConfigReconciler) upgradeSubnamespaceAnnotation(inst *corev1.Namespace) {
+	a := inst.GetAnnotations()
+	sOf, oldAnnotationExists := a[api.DeprecatedSubnamespaceOf]
+	if !oldAnnotationExists {
+		return
+	}
+
+	// Remove old annotation
+	delete(a, api.DeprecatedSubnamespaceOf)
+
+	// Add new annotation key with the old value if it doesn't exist. There's a
+	// corner case if the namespace has the new (unknown to HNC v0.5) annotation
+	// before upgrading API, the new annotation will take over after upgrading.
+	if _, newAnnotationExists := a[api.SubnamespaceOf]; !newAnnotationExists {
+		a[api.SubnamespaceOf] = sOf
+	}
+	inst.SetAnnotations(a)
 }
 
 // syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
