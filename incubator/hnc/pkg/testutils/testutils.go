@@ -230,22 +230,41 @@ func RunCommand(cmdln ...string) (string, error) {
 	return string(stdout), err
 }
 
+// CleanupNamespaces does everything it can to delete the passed-in namespaces. It also uses very
+// high timeouts (30s) since this function is often called after HNC has just been reinstalled, and
+// it can take a while of HNC to start allowing changes to namespaces again.
+//
+// TODO: also find a way to remove all finalizers on all HC objects (subns and hierarchy config).
+// HNC doesn't put finalizers on namespaces themselves; it blocks namespace deletion by blocking
+// deletion of the objects in it, but if HNC is damaged or missing, this can result in namespaces
+// never being deleted without admin action.
 func CleanupNamespaces(nses ...string) {
-	// Remove all possible objections HNC might have to deleting a namesplace. Make sure it
-	// has cascading deletion so we can delete any of its subnamespace descendants, and
-	// make sure that it's not a subnamespace itself so we can delete it directly.
+	const cleanupTimeout = 30
+
+	// Remove all objections HNC might have to deleting a namespace.
+	toDelete := []string{} // exclude missing namespaces
 	for _, ns := range nses {
-		if err := TryRunQuietly("kubectl get ns", ns); err == nil {
-			mustRunWithTimeout(1, 30, "kubectl hns set", ns, "-a")
-			// 'subnamespaceOf' is the old subnamespace annotation used in v0.5. We
-			// still need to clean up this old annotation because this util func is
-			// also used in the API conversion test to clean up namespaces in v0.5.
-			// TODO: remove this line after v0.6 branches and we are no longer
-			//  supporting v1alpha1 conversion.
-			mustRunWithTimeout(1, 30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
-			mustRunWithTimeout(1, 30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
-			mustRunWithTimeout(1, 30, "kubectl delete ns", ns)
+		// Skip any namespace that doesn't actually exist. We only check once (e.g. no retries on
+		// errors) but reads are usually pretty reliable.
+		if err := TryRunQuietly("kubectl get ns", ns); err != nil {
+			continue
 		}
+		toDelete = append(toDelete, ns)
+
+		// If this is a subnamespace, turn it into a normal namespace so we can delete it directly.
+		MustRunWithTimeout(cleanupTimeout, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
+		// NB: 'subnamespaceOf' is the old subnamespace annotation used in v0.5. We still need to
+		// clean up this old annotation because this util func is also used in the API conversion
+		// test to clean up namespaces in v0.5.
+		//
+		// TODO: remove this line after v0.6 branches and we are no longer supporting v1alpha1
+		// conversion.
+		MustRunWithTimeout(cleanupTimeout, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
+	}
+
+	// Now, actually delete them
+	for _, ns := range toDelete {
+		MustRunWithTimeout(cleanupTimeout, "kubectl delete ns", ns)
 	}
 }
 

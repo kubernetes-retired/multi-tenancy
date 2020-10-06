@@ -209,15 +209,15 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearLocalConditions()
 
+	// If there are any traces of v1alpha1 still around, fix them now (they'll be written back to the
+	// apiserver after this function's finished). Do this before reconciling anything else so that the
+	// rest of this function can assume that only v1alpha2 is present.
+	// TODO: remove this after v0.6 branches.
+	r.upgradeV1A1SubnamespaceAnnotation(nsInst)
+	r.upgradeV1A1ManagedBy(nsInst)
+
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
-
-	// In v0.5.x, HNC uses v1alpha1 and the annotation on any subnamespace is
-	// called "subnamespaceOf". In v1alpha2, the namespace annotation is upgraded
-	// into "subnamespace-of". If the deprecated "subnamespaceOf" annotation still
-	// exists, upgrade API and early exit since updating the subnamespace will
-	// enqueue the singleton again.
-	r.upgradeSubnamespaceAnnotation(nsInst)
 
 	// If this is a subnamespace, make sure .spec.parent is set correctly. Then sync the parent to the
 	// forest, and finally notify any relatives (including the parent) that might have been waiting
@@ -274,25 +274,47 @@ func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsIns
 	ns.ExternalTreeLabels = etls
 }
 
-// upgradeSubnamespaceAnnotation replaces the deprecated "subnamespaceOf"
-// annotation with the new "subnamespace-of" annotation. If both exist, we will
-// only delete the deprecated annotation.
-func (r *HierarchyConfigReconciler) upgradeSubnamespaceAnnotation(inst *corev1.Namespace) {
+// upgradeV1A1SubnamespaceAnnotation replaces the deprecated "subnamespaceOf" annotation from v0.5.x
+// with the new "subnamespace-of" annotation used in v0.6.x and beyond. If both exist, we will only
+// delete the deprecated annotation.
+func (r *HierarchyConfigReconciler) upgradeV1A1SubnamespaceAnnotation(inst *corev1.Namespace) {
 	a := inst.GetAnnotations()
-	sOf, oldAnnotationExists := a[api.DeprecatedSubnamespaceOf]
-	if !oldAnnotationExists {
+	oldSubnsOf, oldExists := a[api.SubnamespaceOfV1A1]
+	if !oldExists {
 		return
 	}
 
 	// Remove old annotation
-	delete(a, api.DeprecatedSubnamespaceOf)
+	delete(a, api.SubnamespaceOfV1A1)
 
 	// Add new annotation key with the old value if it doesn't exist. There's a
 	// corner case if the namespace has the new (unknown to HNC v0.5) annotation
 	// before upgrading API, the new annotation will take over after upgrading.
-	if _, newAnnotationExists := a[api.SubnamespaceOf]; !newAnnotationExists {
-		a[api.SubnamespaceOf] = sOf
+	if _, newExists := a[api.SubnamespaceOf]; !newExists {
+		a[api.SubnamespaceOf] = oldSubnsOf
 	}
+
+	inst.SetAnnotations(a)
+}
+
+// upgradeV1A1ManagedBy replaces the v1alpha1 `managedBy` annotation with the v1alpha2 `managed-by`
+// annotation. If there's a conflict, the old one is ignored and deleted.
+func (r *HierarchyConfigReconciler) upgradeV1A1ManagedBy(inst *corev1.Namespace) {
+	// Get old annotation
+	a := inst.GetAnnotations()
+	oldMB, oldExists := a[api.AnnotationManagedByV1A1]
+	if !oldExists {
+		return
+	}
+
+	// Remove old annotation
+	delete(a, api.AnnotationManagedByV1A1)
+
+	// Add new annotation if it doesn't already exist
+	if _, newExists := a[api.AnnotationManagedBy]; !newExists {
+		a[api.AnnotationManagedBy] = oldMB
+	}
+
 	inst.SetAnnotations(a)
 }
 
