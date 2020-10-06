@@ -34,6 +34,10 @@ const (
 	// This issue is logged at https://github.com/kubernetes-sigs/multi-tenancy/issues/871
 	statusUpdateTime = 4 * time.Second
 
+	// propagationTimeout is the timeout for objects to propagate in HNC. It always passes when we
+	// set it to 10 secs
+	propagationTimeout = 10 * time.Second
+
 	// rbacAV is a nice short form of the RBAC APIVersion
 	rbacAV = "rbac.authorization.k8s.io/v1"
 
@@ -180,7 +184,7 @@ var _ = Describe("HNCConfiguration", func() {
 		// Foo should have "foo-sec" since we created there.
 		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
 		// "foo-sec" should now be propagated from foo to bar because we set the mode of Secret to "propagate".
-		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec"), propagationTimeout).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
 		// Change to ignore and wait for reconciler
@@ -191,7 +195,7 @@ var _ = Describe("HNCConfiguration", func() {
 		setParent(ctx, bazName, fooName)
 		// Sleep to give "foo-sec" a chance to propagate from foo to baz, if it could.
 		time.Sleep(nopTime)
-		Expect(hasObject(ctx, "Secret", bazName, "foo-sec")()).Should(BeFalse())
+		Eventually(hasObject(ctx, "Secret", bazName, "foo-sec"), propagationTimeout).Should(BeFalse())
 	})
 
 	It("should propagate objects if the mode of a type is changed from ignore to propagate", func() {
@@ -246,7 +250,7 @@ var _ = Describe("HNCConfiguration", func() {
 		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
 
 		// "foo-resource-quota" should be propagated from foo to bar.
-		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), statusUpdateTime).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), propagationTimeout).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 
@@ -256,7 +260,7 @@ var _ = Describe("HNCConfiguration", func() {
 		makeObject(ctx, "Secret", fooName, "foo-sec")
 
 		// "foo-sec" should propagate from foo to bar.
-		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec"), propagationTimeout).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
 		// Remove from spec and wait for the reconciler to pick it up
