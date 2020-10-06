@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 
+	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -34,25 +35,92 @@ var GVKs = map[string]schema.GroupVersionKind{
 // clean it up properly when cleanupObjects is called.
 var createdObjects = []*unstructured.Unstructured{}
 
+func newHierarchy(nm string) *api.HierarchyConfiguration {
+	hier := &api.HierarchyConfiguration{}
+	hier.ObjectMeta.Namespace = nm
+	hier.ObjectMeta.Name = api.Singleton
+	return hier
+}
+
+func getHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
+	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
+	hier := &api.HierarchyConfiguration{}
+	if err := k8sClient.Get(ctx, nnm, hier); err != nil {
+		GinkgoT().Logf("Error fetching hierarchy for %s: %s", nm, err)
+	}
+	return hier
+}
+
+func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
+	if h.CreationTimestamp.IsZero() {
+		ExpectWithOffset(1, k8sClient.Create(ctx, h)).Should(Succeed())
+	} else {
+		ExpectWithOffset(1, k8sClient.Update(ctx, h)).Should(Succeed())
+	}
+}
+
+func tryUpdateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) error {
+	if h.CreationTimestamp.IsZero() {
+		return k8sClient.Create(ctx, h)
+	} else {
+		return k8sClient.Update(ctx, h)
+	}
+}
+
+func getLabel(ctx context.Context, from, label string) func() string {
+	return func() string {
+		ns := getNamespace(ctx, from)
+		val, _ := ns.GetLabels()[label]
+		return val
+	}
+}
+
+func hasChild(ctx context.Context, nm, cnm string) func() bool {
+	return func() bool {
+		children := getHierarchy(ctx, nm).Status.Children
+		for _, c := range children {
+			if c == cnm {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Namespaces are named "a-<rand>", "b-<rand>", etc
+func createNSes(ctx context.Context, num int) []string {
+	nms := []string{}
+	for i := 0; i < num; i++ {
+		nm := createNS(ctx, fmt.Sprintf("%c", 'a'+i))
+		nms = append(nms, nm)
+	}
+	return nms
+}
+
+func updateNamespace(ctx context.Context, ns *corev1.Namespace) {
+	ExpectWithOffset(1, k8sClient.Update(ctx, ns)).Should(Succeed())
+}
+
 func setParent(ctx context.Context, nm, pnm string) {
 	var oldPNM string
-	Eventually(func() error {
+	GinkgoT().Logf("Changing parent of %s to %s", nm, pnm)
+	EventuallyWithOffset(1, func() error {
 		hier := newOrGetHierarchy(ctx, nm)
 		oldPNM = hier.Spec.Parent
 		hier.Spec.Parent = pnm
 		return tryUpdateHierarchy(ctx, hier) // can fail if a reconciler updates the hierarchy
-	}).Should(Succeed())
+	}).Should(Succeed(), "When setting parent of %s to %s", nm, pnm)
 	if oldPNM != "" {
 		EventuallyWithOffset(1, func() []string {
-			pHier := getHierarchyWithOffset(1, ctx, oldPNM)
+			pHier := getHierarchy(ctx, oldPNM)
 			return pHier.Status.Children
-		}).ShouldNot(ContainElement(nm))
+		}).ShouldNot(ContainElement(nm), "Verifying %s is no longer a child of %s", nm, oldPNM)
 	}
 	if pnm != "" {
 		EventuallyWithOffset(1, func() []string {
-			pHier := getHierarchyWithOffset(1, ctx, pnm)
+			pHier := getHierarchy(ctx, pnm)
 			return pHier.Status.Children
-		}).Should(ContainElement(nm))
+		}).Should(ContainElement(nm), "Verifying %s is now a child of %s", nm, pnm)
 	}
 }
 
@@ -126,36 +194,42 @@ func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 	}
 }
 
-func resetHNCConfigToDefault(ctx context.Context) error {
-	c := getHNCConfig(ctx)
-	c.Spec = api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
-		config.GetDefaultRoleSpec(),
-		config.GetDefaultRoleBindingSpec()}}
-	c.Status.Types = nil
-	c.Status.Conditions = nil
-	return k8sClient.Update(ctx, c)
+func resetHNCConfigToDefault(ctx context.Context) {
+	EventuallyWithOffset(1, func() error {
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return err
+		}
+		c.Spec = api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
+			config.GetDefaultRoleSpec(),
+			config.GetDefaultRoleBindingSpec()}}
+		c.Status.Types = nil
+		c.Status.Conditions = nil
+		return k8sClient.Update(ctx, c)
+	}).Should(Succeed(), "While resetting HNC config")
 }
 
-func getHNCConfig(ctx context.Context) *api.HNCConfiguration {
-	return getHNCConfigWithOffsetAndName(1, ctx, api.HNCConfigSingleton)
+func getHNCConfig(ctx context.Context) (*api.HNCConfiguration, error) {
+	return getHNCConfigWithName(ctx, api.HNCConfigSingleton)
 }
 
-func getHNCConfigWithOffsetAndName(offset int, ctx context.Context, nm string) *api.HNCConfiguration {
-	snm := types.NamespacedName{Name: nm}
+func getHNCConfigWithName(ctx context.Context, nm string) (*api.HNCConfiguration, error) {
+	nnm := types.NamespacedName{Name: nm}
 	config := &api.HNCConfiguration{}
-	EventuallyWithOffset(offset+1, func() error {
-		return k8sClient.Get(ctx, snm, config)
-	}).Should(Succeed())
-	return config
+	err := k8sClient.Get(ctx, nnm, config)
+	return config, err
 }
 
 func addToHNCConfig(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
-	Eventually(func() error {
-		c := getHNCConfig(ctx)
+	EventuallyWithOffset(1, func() error {
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return err
+		}
 		spec := api.TypeSynchronizationSpec{APIVersion: apiVersion, Kind: kind, Mode: mode}
 		c.Spec.Types = append(c.Spec.Types, spec)
 		return updateHNCConfig(ctx, c)
-	}).Should(Succeed())
+	}).Should(Succeed(), "While adding %s/%s=%s to HNC config", apiVersion, kind, mode)
 }
 
 // hasObject returns true if a namespace contains a specific object of the given kind.
@@ -178,7 +252,7 @@ func makeObject(ctx context.Context, kind string, nsName, name string) {
 	inst.SetGroupVersionKind(GVKs[kind])
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
-	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed())
+	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed(), "When creating %s %s/%s", kind, nsName, name)
 	createdObjects = append(createdObjects, inst)
 }
 

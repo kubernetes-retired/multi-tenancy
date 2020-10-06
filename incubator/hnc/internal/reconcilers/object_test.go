@@ -39,10 +39,7 @@ var _ = Describe("Secret", func() {
 	})
 
 	AfterEach(func() {
-		// Change current config back to the default value.
-		Eventually(func() error {
-			return resetHNCConfigToDefault(ctx)
-		}).Should(Succeed())
+		resetHNCConfigToDefault(ctx)
 		cleanupObjects(ctx)
 	})
 
