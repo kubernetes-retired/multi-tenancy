@@ -40,8 +40,8 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl describe ns", nsChild)
 
 		// Remove annotation
-		MustRun("kubectl annotate ns", nsChild, "hnc.x-k8s.io/subnamespaceOf-")
-		RunShouldNotContain("subnamespaceOf", 1, "kubectl get -oyaml ns", nsChild)
+		MustRun("kubectl annotate ns", nsChild, "hnc.x-k8s.io/subnamespace-of-")
+		RunShouldNotContain("subnamespace-of", 1, "kubectl get -oyaml ns", nsChild)
 
 		// Delete anchor
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
@@ -106,7 +106,7 @@ var _ = Describe("Issues", func() {
 		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
-		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf="+nsParent)
+		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespace-of="+nsParent)
 		// If the subnamespace doesn't allow cascadingDeletion and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
 		// Expected: 'sub1' namespace is not deleted and should have 'SubnamespaceAnchorMissing' condition; no other conditions."
 		RunShouldContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
@@ -118,7 +118,7 @@ var _ = Describe("Issues", func() {
 		// create a subnamespace without anchor by creating a full namespace with SubnamespaceOf annotation
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
-		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespaceOf="+nsParent)
+		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespace-of="+nsParent)
 		RunShouldContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 		// If the anchor is re-added, it should unset the 'SubnamespaceAnchorMissing' condition in the subnamespace.
 		// Operation: recreate the 'sub1' subns in 'parent' - kubectl hns create sub1 -n parent
@@ -343,8 +343,8 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		// Creating subns (anchor) 'sub' in both parent and parent2
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent2)
-		// Subnamespace child should be created and have parent as the 'subnamespaceOf' annoation value:
-		RunShouldContain("subnamespaceOf: "+nsParent, defTimeout, "kubectl get ns", nsChild, "-o yaml")
+		// Subnamespace child should be created and have parent as the 'subnamespace-of' annoation value:
+		RunShouldContain("subnamespace-of: "+nsParent, defTimeout, "kubectl get ns", nsChild, "-o yaml")
 		// Creating a 'test-secret' in the subnamespace child
 		MustRun("kubectl create secret generic test-secret --from-literal=key=value -n", nsChild)
 		// subns (anchor) child in parent2 should have 'status: Conflict' because it's a bad anchor:
