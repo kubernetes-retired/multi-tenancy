@@ -47,8 +47,6 @@ const (
 //
 // Please keep this list in alphabetic order.
 const (
-	CannotPropagate           Code = "CannotPropagateObject"
-	CannotUpdate              Code = "CannotUpdateObject"
 	CritAncestor              Code = "CritAncestor"
 	CritCycle                 Code = "CritCycle"
 	CritDeletingCRD           Code = "CritDeletingCRD"
@@ -57,14 +55,28 @@ const (
 )
 
 var AllCodes = []Code{
-	CannotPropagate,
-	CannotUpdate,
 	CritAncestor,
 	CritCycle,
 	CritDeletingCRD,
 	CritParentMissing,
 	SubnamespaceAnchorMissing,
 }
+
+const (
+	// EventCannotPropagate is for events when a namespace contains an object that
+	// couldn't be propagated *out* of the namespace, to one or more of its
+	// descendants. If the object couldn't be propagated to *any* descendants - for
+	// example, because it has a finalizer on it (HNC can't propagate objects with
+	// finalizers), the error message will point to the object in this namespace.
+	// Otherwise, if it couldn't be propagated to *some* descendant, the error
+	// message will point to the descendant.
+	EventCannotPropagate string = "CannotPropagateObject"
+	// EventCannotUpdate is for events when a namespace has an object that couldn't
+	// be propagated *into* this namespace - that is, it couldn't be created in
+	// the first place, or it couldn't be updated. The error message will point to
+	//the source namespace.
+	EventCannotUpdate string = "CannotUpdateObject"
+)
 
 // ClearConditionCriterion describes when a condition should be automatically cleared based on
 // forest changes. See individual constants for better documentation.
@@ -180,18 +192,6 @@ type Condition struct {
 	//
 	// - "SubnamespaceAnchorMissing": this namespace is a subnamespace, but the anchor referenced in
 	// its `subnamespaceOf` annotation does not exist in the parent.
-	//
-	// - "CannotPropagateObject": this namespace contains an object that couldn't be propagated *out*
-	// of this namespace, to one or more of this namespace's descendants. If the object couldn't be
-	// propagated to *any* descendants - for example, because it has a finalizer on it (HNC can't
-	// propagate objects with finalizers), the `Affects` field will point to the object in this
-	// namespace. Otherwise, if it couldn't be propagated to *some* descendants, `Affects` will
-	// contain a list of the objects in those descendants that couldn't be created or updated.
-	//
-	// - "CannotUpdateObject": this namespace has an object that couldn't be propagated *into* this
-	// namespace - that is, it couldn't be created in the first place, or it couldn't be updated. The
-	// `Affects` field will point to the source object, which will always be in a namespace that's an
-	// ancestor of this namespace.
 	Code Code `json:"code"`
 
 	// A human-readable description of the condition, if the `code` and `affects` fields are not
@@ -284,18 +284,5 @@ func init() {
 		CritDeletingCRD:           CCCManual,
 		CritParentMissing:         CCCManual,
 		SubnamespaceAnchorMissing: CCCManual,
-
-		// A source object can cause the CannotPropagate condition in two ways: if it cannot be
-		// propagated *out* of its original namespace (e.g. because it has a finalizer), or if it cannot
-		// be propagated *into* a descendant namespace. In the former case, the affected object is in
-		// the source namespace; in the latter, it's in a descendant (and the descendant namespace will
-		// have a CannotUpdate condition).
-		CannotPropagate: CCCSubtree,
-
-		// A propagated object can cause the CannotUpdate object in the destination namespace if there's
-		// a reason it cannot be copied into that namespace (e.g. transient errors, HNC has insufficient
-		// privileges, etc). The affected object will always be the source object, which will always be
-		// in an ancestor namespace.
-		CannotUpdate: CCCAncestor,
 	}
 }

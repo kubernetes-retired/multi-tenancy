@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -64,7 +65,8 @@ type namespacedNameSet map[types.NamespacedName]bool
 // group/version/kind that needs to be propagated and set its `GVK` field appropriately.
 type ObjectReconciler struct {
 	client.Client
-	Log logr.Logger
+	EventRecorder record.EventRecorder
+	Log           logr.Logger
 
 	// Forest is the in-memory forest managed by the HierarchyConfigReconciler.
 	Forest *forest.Forest
@@ -519,7 +521,7 @@ func (r *ObjectReconciler) operate(ctx context.Context, log logr.Logger, act syn
 		err = fmt.Errorf("HNC couldn't determine how to update this object (desired action: %s)", act)
 	}
 
-	r.setConditions(log, srcInst, inst, act, err)
+	r.generateEvents(srcInst, inst, act, err)
 	return err
 }
 
@@ -601,69 +603,26 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	return nil
 }
 
-// setConditions is called when the reconciler has performed all necessary actions and knows if
-// they've succeeded or failed. It re-locks the forest just long enough to set or clear all
-// conditions. Since we didn't hold the lock while we were contacting the apiserver, we need to be
-// aware that the hierarchy may have changed in arbitrary ways; see below for details.
-//
-// This function also enqueues any modified namespaces for reconciliation.
-func (r *ObjectReconciler) setConditions(log logr.Logger, srcInst, inst *unstructured.Unstructured, act syncAction, err error) {
-	r.Forest.Lock()
-	defer r.Forest.Unlock()
-	ao := api.NewAffectedObject(inst.GetObjectKind().GroupVersionKind(), inst.GetNamespace(), inst.GetName())
-	// This affected object is initialized with the source object if it exits.
-	sao := api.NewAffectedObject(inst.GetObjectKind().GroupVersionKind(), inst.GetLabels()[api.LabelInheritedFrom], inst.GetName())
-	ns := r.Forest.Get(inst.GetNamespace())
-
+// generateEvents is called when the reconciler has performed all necessary
+// actions and knows if they've succeeded or failed. If a source should not be
+// propagated or there was a failure, generate "Warning" events.
+func (r *ObjectReconciler) generateEvents(srcInst, inst *unstructured.Unstructured, act syncAction, err error) {
 	switch {
 	case hasFinalizers(inst):
 		// Propagated objects can never have finalizers
-		if ns.SetCondition(ao, api.CannotPropagate, "Objects with finalizers cannot be propagated") {
-			r.enqueueHC(log, ns.Name(), "Set CannotPropagate since it has finalizers")
-		}
+		r.EventRecorder.Event(inst, "Warning", api.EventCannotPropagate, "Objects with finalizers cannot be propagated")
 
 	case err != nil:
-		// There was an error updating this object; set a condition pointing to the source object. Note we
-		// never take actions on a source object, so only propagated objects could possibly get an error.
-		msg := fmt.Sprintf("Could not %s: %s", act, err.Error())
-		if ns.SetCondition(sao, api.CannotUpdate, msg) {
-			r.enqueueHC(log, ns.Name(), "Set CannotUpdate due to error")
-		}
+		// There was an error updating this object; generate a warning pointing to
+		// the source object. Note we never take actions on a source object, so only
+		// propagated objects could possibly get an error.
+		msg := fmt.Sprintf("Could not %s from source namespace %q: %s.", act, inst.GetLabels()[api.LabelInheritedFrom], err.Error())
+		r.EventRecorder.Event(inst, "Warning", api.EventCannotUpdate, msg)
 
-		// Also set a condition on the source if one exists.
+		// Also generate a warning on the source if one exists.
 		if srcInst != nil {
-			srcNS := r.Forest.Get(srcInst.GetNamespace())
-			if ns.IsAncestor(srcNS) {
-				if srcNS.SetCondition(ao, api.CannotPropagate, msg) {
-					r.enqueueHC(log, srcNS.Name(), "Set CannotPropagate on source namespace due to error updating")
-				}
-			} else {
-				// Because we released the lock for a bit, there's a chance that srcInst is no longer a parent
-				// of inst. If that happened, any conditions on srcInst related to this object should already
-				// have been cleared by the HCR.
-				log.Info("Not setting conditions on source namespace since it's no longer an ancestor", "srcNS", srcNS.Name())
-			}
-		}
-
-	default:
-		// No error conditions exist for this object; clear all conditions in the namespace and all its
-		// ancestors (technically, srcNS is the only feasible ancestor, but because we don't hold the
-		// lock, it's safer to just do everything).
-		if hasPropagatedLabel(inst) {
-			cleared := clearConditionsForUnknownSources(log, ns, sao)
-			if !cleared {
-				// If there were no unknown sources, try the known one
-				cleared = ns.ClearCondition(sao, "")
-			}
-			if cleared {
-				r.enqueueHC(log, ns.Name(), "Removed condition on destination namespace")
-			}
-		}
-		for ns != nil {
-			if ns.ClearCondition(ao, "") {
-				r.enqueueHC(log, ns.Name(), "Removed condition on source namespace")
-			}
-			ns = ns.Parent()
+			msg = fmt.Sprintf("Could not %s to destination namespace %q: %s.", act, inst.GetNamespace(), err.Error())
+			r.EventRecorder.Event(srcInst, "Warning", api.EventCannotPropagate, msg)
 		}
 	}
 }
@@ -677,59 +636,6 @@ func hasPropagatedLabel(inst *unstructured.Unstructured) bool {
 	}
 	_, po := labels[api.LabelInheritedFrom]
 	return po
-}
-
-// clearConditionsForUnknownSources cleans up conditions that indicated that we couldn't propagate an
-// object, after the source object is deleted.
-//
-// This function is used when we're reconciling an object that doesn't actually exist, and that we
-// think wasn't a source. In such cases, the earlier parts of this reconciler sets the inheritedFrom
-// label to `unknownSourceNamespace`; if we had found a source, this label would have been updated,
-// but it wasn't. So if this function doesn't early-exit, we know this either was a source namespace
-// that got deleted (and then reconciled multiple times), or else it was supposed to be a propagated
-// object that never actually got created, and whose source has now been deleted (if the source was
-// present, the label would have been set).
-//
-// In this first case, this function will do nothing - any conditions associated with a source
-// object will be cleared when the source was first deleted. But in the second case, the _reason_
-// that this propagated object was never actually created is very likely because some error
-// prevented it from being created, which means there's very likely a condition on the namespace.
-//
-// Unfortunately, namespaces use the source object as the key to handle conditions, and we don't
-// know the source! So we can't just say ns.ClearCondition(sourceObject, "") as we usually would.
-// Instead, we need to look through all relevant conditions on the namespace and clear anything that
-// *might* have been caused by this object failing to be propagated.
-//
-// Is this really safe? Yes: HNC enforces that all objects with a given name and GVK are the same
-// across namespaces, so any condition on this namespace with the same GVK and name *must* be
-// talking about this copy of the object in this namespace. Since this object doesn't *and
-// shouldn't* exist, any condition on its namespace are now invalid, and can be safely removed.
-//
-// Is this method fast enough? In theory. ns.GetConditions() looks slow, but in a typical case, most
-// namespaces will so few conditions that looking through them in memory will take negligible time.
-// Also, it's very rare that we'll reconcile a completely missing object in the first place, so this
-// method should be caleld very rarely.
-func clearConditionsForUnknownSources(log logr.Logger, ns *forest.Namespace, sao api.AffectedObject) bool {
-	// Early-exit if the source is known
-	if sao.Namespace != unknownSourceNamespace {
-		return false
-	}
-
-	cleared := false
-	for _, cond := range ns.Conditions() {
-		for _, ao := range cond.Affects {
-			aoCmp := ao
-			aoCmp.Namespace = unknownSourceNamespace // to make comparison easier
-			if aoCmp != sao {
-				continue
-			}
-
-			log.Info("Object didn't exist but found possibly matching condition", "condition", cond)
-			ns.ClearCondition(ao, "")
-			cleared = true
-		}
-	}
-	return cleared
 }
 
 // syncPropagation enqueues any propagated copies of the source.

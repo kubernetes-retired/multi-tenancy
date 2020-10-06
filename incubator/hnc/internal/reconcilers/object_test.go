@@ -10,6 +10,7 @@ import (
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -323,7 +324,7 @@ var _ = Describe("Secret", func() {
 		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
 	})
 
-	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
+	It("should generate CannotPropagate event if it's excluded from being propagated", func() {
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -332,25 +333,26 @@ var _ = Describe("Secret", func() {
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 
+		// Verify there's no CannotPropagate event before introducing the error.
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(false))
+
 		// Make the secret unpropagateable and verify that it disappears.
 		setFinalizer(ctx, fooName, "foo-role", true)
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
 
-		// Observe the condition on the source namespace
-		want := &api.Condition{
-			Code:    api.CannotPropagate,
-			Affects: []api.AffectedObject{{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role", Namespace: fooName, Name: "foo-role"}},
-		}
-		Eventually(getCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(want))
+		// Verify the CannotPropagate event from source object.
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
 
-		// Fix the problem and verify that the condition vanishes and the secret is propagated again
+		// Fix the problem and verify that the role is propagated again. Please note
+		// that events are removed one hour after the last occurrence. Therefore, we
+		// should still see the CannotPropagate event after fixing the issue.
 		setFinalizer(ctx, fooName, "foo-role", false)
-		Eventually(hasCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(false))
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
 	})
 
 	It("shouldn't delete a descendant source object with the same name if the sync mode is 'Remove'", func() {
@@ -430,4 +432,21 @@ func removeRole(ctx context.Context, nsName, roleName string) {
 	role.Name = roleName
 	role.Namespace = nsName
 	ExpectWithOffset(1, k8sClient.Delete(ctx, role)).Should(Succeed())
+}
+
+func hasEvent(ctx context.Context, nsName, objName, reason string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args.
+	return func() bool {
+		eventList := &corev1.EventList{}
+		EventuallyWithOffset(1, func() error {
+			return k8sClient.List(ctx, eventList, &client.ListOptions{Namespace: nsName})
+		}).Should(Succeed())
+
+		for _, event := range eventList.Items {
+			if event.InvolvedObject.Name == objName && event.Reason == reason {
+				return true
+			}
+		}
+		return false
+	}
 }
