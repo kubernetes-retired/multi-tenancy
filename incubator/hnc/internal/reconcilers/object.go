@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -658,6 +659,7 @@ func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger,
 // - Service Account token secrets
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
 	selector := r.getSelector(log, inst)
+	treeSelector := r.getTreeSelector(log, inst)
 	nsLabels := r.Forest.Get(dst).GetLabels()
 
 	switch {
@@ -672,6 +674,10 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 
 	// Selector does not match
 	case selector != nil && !selector.Matches(nsLabels):
+		return false
+
+	// treeSelector does not match
+	case treeSelector != nil && !treeSelector.Matches(nsLabels):
 		return false
 
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":
@@ -693,6 +699,29 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 	}
 }
 
+// getTreeSelector is similar to a regular selector, except that it adds the LabelTreeDepthSuffix to every string
+// To transform a tree selector into a regular label selector, we follow these steps:
+// 1. get the treeSelector annotation if it exists
+// 2. convert the annotation string to a slice of strings seperated by comma, because user is allowed to put multiple selectors
+// 3. append the LabelTreeDepthSuffix to each of the treeSelector string
+// 4. combine them into a single string connected by comma
+func (r *ObjectReconciler) getTreeSelector(log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
+	annot := inst.GetAnnotations()
+	treeSelectorStr, ok := annot[api.AnnotationTreeSelector]
+	if !ok {
+		return nil
+	}
+	strs := strings.Split(treeSelectorStr, ",")
+	selectorStr := ""
+	for i, str := range strs {
+		selectorStr = selectorStr + str + api.LabelTreeDepthSuffix
+		if i < len(strs)-1 {
+			selectorStr = selectorStr + ", "
+		}
+	}
+	return r.getSelectorFromString(log, selectorStr)
+}
+
 // getSelector returns the selector on a given object if it exists
 func (r *ObjectReconciler) getSelector(log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
 	annot := inst.GetAnnotations()
@@ -700,7 +729,12 @@ func (r *ObjectReconciler) getSelector(log logr.Logger, inst *unstructured.Unstr
 	if !ok {
 		return nil
 	}
-	labelSelector, err := v1.ParseToLabelSelector(selectorStr)
+	return r.getSelectorFromString(log, selectorStr)
+}
+
+// getSelectorFromString converts the given string to a selector
+func (r *ObjectReconciler) getSelectorFromString(log logr.Logger, str string) labels.Selector {
+	labelSelector, err := v1.ParseToLabelSelector(str)
 	// TODO: surface the error messages here (https://github.com/kubernetes-sigs/multi-tenancy/issues/1165)
 	if err != nil {
 		log.Error(err, "Could not parse selector annotation to labelSelector")
