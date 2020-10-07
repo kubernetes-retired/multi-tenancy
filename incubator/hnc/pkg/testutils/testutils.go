@@ -1,7 +1,6 @@
 package testutils
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,59 +19,75 @@ const eventuallyTimeout = 5
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
 func FieldShouldContain(resource, ns, nm, field, want string){
-	FieldShouldContainMultiple(resource, ns, nm, field, []string{want})
+	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, eventuallyTimeout)
 }
 
 func FieldShouldContainMultiple(resource, ns, nm, field string, want []string){
-	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, want, eventuallyTimeout)
 }
 
 func FieldShouldContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
-	FieldShouldContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, timeout)
 }
 
 func FieldShouldContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, want, timeout)
+}
+
+func fieldShouldContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64){
 	if ns != "" {
-		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+		runShouldContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
 	} else {
-		RunShouldContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+		runShouldContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
 	}
 }
 
 func FieldShouldNotContain(resource, ns, nm, field, want string){
-	FieldShouldNotContainMultiple(resource, ns, nm, field, []string{want})
+	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, eventuallyTimeout)
 }
 
 func FieldShouldNotContainMultiple(resource, ns, nm, field string, want []string){
-	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, want, eventuallyTimeout)
+	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, want, eventuallyTimeout)
 }
 
 func FieldShouldNotContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
-	FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field, []string{want}, timeout)
+	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, timeout)
 }
 
 func FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, want, timeout)
+}
+
+func fieldShouldNotContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64){
 	if ns != "" {
-		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
+		runShouldNotContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
 	} else {
-		RunShouldNotContainMultiple(want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
+		runShouldNotContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-o template --template={{"+field+"}}")
 	}
 }
 
 func MustRun(cmdln ...string) {
-	MustRunWithTimeout(eventuallyTimeout, cmdln...)
+	mustRunWithTimeout(1, eventuallyTimeout, cmdln...)
 }
 
 func MustRunWithTimeout(timeout float64, cmdln ...string) {
-	Eventually(func() error {
+	mustRunWithTimeout(1, timeout, cmdln...)
+}
+
+func mustRunWithTimeout(offset int, timeout float64, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() error {
 		return TryRun(cmdln...)
-	}, timeout).Should(BeNil())
+	}, timeout).Should(Succeed(), "Command: %s", cmdln)
 }
 
 func MustNotRun(cmdln ...string) {
-	Eventually(func() error {
+	mustNotRun(1, cmdln...)
+}
+
+func mustNotRun(offset int, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() error {
 		return TryRun(cmdln...)
-	}, eventuallyTimeout).Should(Not(BeNil()))
+	}, eventuallyTimeout).ShouldNot(Succeed(), "Command: %s", cmdln)
 }
 
 func TryRun(cmdln ...string) error {
@@ -94,48 +109,50 @@ func TryRunQuietly(cmdln ...string) error {
 }
 
 func RunShouldContain(substr string, seconds float64, cmdln ...string) {
-	RunShouldContainMultiple([]string{substr}, seconds, cmdln...)
+	runShouldContainMultiple(1, []string{substr}, seconds, cmdln...)
 }
 
 func RunShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
-	Eventually(func() error {
-		missing, err := runShouldContainMultiple(substrs, cmdln...)
+	runShouldContainMultiple(1, substrs, seconds, cmdln...)
+}
+
+func runShouldContainMultiple(offset int, substrs []string, seconds float64, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() string {
+		missing, err := tryRunShouldContainMultiple(substrs, cmdln...)
 		if err != nil {
-			return err
+			return "failed: "+err.Error()
 		}
-		if missing != "" {
-			return errors.New(missing)
-		}
-		return nil
-	}, seconds).Should(Succeed())
+		return missing
+	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
 }
 
 func RunErrorShouldContain(substr string, seconds float64, cmdln ...string) {
-	RunErrorShouldContainMultiple([]string{substr}, seconds, cmdln...)
+	runErrorShouldContainMultiple(1, []string{substr}, seconds, cmdln...)
 }
 
 func RunErrorShouldContainMultiple(substrs []string, seconds float64, cmdln ...string) {
-	Eventually(func() error {
-		missing, err := runShouldContainMultiple(substrs, cmdln...)
-		if missing != "" {
-			return errors.New(missing)
-		}
-		if err == nil {
-			return errors.New("Expecting command to fail but get succeed.")
-		}
-		return nil
-	}, seconds).Should(Succeed())
+	runErrorShouldContainMultiple(1, substrs, seconds, cmdln...)
 }
 
-func runShouldContainMultiple(substrs []string, cmdln ...string) (string, error) {
+func runErrorShouldContainMultiple(offset int, substrs []string, seconds float64, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() string {
+		missing, err := tryRunShouldContainMultiple(substrs, cmdln...)
+		if err == nil {
+			return "passed but should have failed"
+		}
+		return missing
+	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
+}
+
+func tryRunShouldContainMultiple(substrs []string, cmdln ...string) (string, error) {
 		stdout, err := RunCommand(cmdln...)
 		GinkgoT().Log("Output: ", stdout)
 		return missAny(substrs, stdout), err
 }
 
 // If any of the substrs are missing from teststring, returns a string of the form:
-//   Missing: <string1>, <string2>, ...
-//   Got: teststring
+//   did not output the expected substring(s): <string1>, <string2>, ...
+//   and instead output: teststring
 // Otherwise returns the empty string.
 func missAny(substrs []string, teststring string) string {
 	var missing []string
@@ -150,35 +167,38 @@ func missAny(substrs []string, teststring string) string {
 	// This looks *ok* if we're only missing a single multiline string, and ok if we're missing
 	// multiple single-line strings. It would look awful if we were missing multiple multiline strings
 	// but I think that's pretty rare.
-	msg := "Missing: "+strings.Join(missing, ", ")+"\n\n"
-	msg += "Got: "+teststring
+	msg := "did not output the expected substring(s): "+strings.Join(missing, ", ")+"\n"
+	msg += "and instead output: "+teststring
 	return msg
 }
 
 func RunShouldNotContain(substr string, seconds float64, cmdln ...string) {
-	RunShouldNotContainMultiple([]string{substr}, seconds, cmdln...)
+	runShouldNotContain(1, substr, seconds, cmdln...)
+}
+
+func runShouldNotContain(offset int, substr string, seconds float64, cmdln ...string) {
+	runShouldNotContainMultiple(offset+1, []string{substr}, seconds, cmdln...)
 }
 
 func RunShouldNotContainMultiple(substrs []string, seconds float64, cmdln ...string) {
-	Eventually(func() error {
+	runShouldNotContainMultiple(1, substrs, seconds, cmdln...)
+}
+
+func runShouldNotContainMultiple(offset int, substrs []string, seconds float64, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() string {
 		stdout, err := RunCommand(cmdln...)
 		if err != nil {
-			return err
+			return "failed: "+err.Error()
 		}
 
-		noneContained := true
 		for _, substr := range substrs {
 			if strings.Contains(stdout, substr) == true {
-				noneContained = false
-				break
+				return "produced the undesired output: "+substr
 			}
 		}
 
-		if noneContained == false {
-			return errors.New("Not expecting: " + strings.Join(substrs, ", ") + " but get: " + stdout)
-		}
-		return nil
-	}, seconds).Should(Succeed())
+		return ""
+	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
 }
 
 func MustApplyYAML(s string){
@@ -216,15 +236,15 @@ func CleanupNamespaces(nses ...string) {
 	// make sure that it's not a subnamespace itself so we can delete it directly.
 	for _, ns := range nses {
 		if err := TryRunQuietly("kubectl get ns", ns); err == nil {
-			MustRunWithTimeout(30, "kubectl hns set", ns, "-a")
+			mustRunWithTimeout(1, 30, "kubectl hns set", ns, "-a")
 			// 'subnamespaceOf' is the old subnamespace annotation used in v0.5. We
 			// still need to clean up this old annotation because this util func is
 			// also used in the API conversion test to clean up namespaces in v0.5.
 			// TODO: remove this line after v0.6 branches and we are no longer
 			//  supporting v1alpha1 conversion.
-			MustRunWithTimeout(30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
-			MustRunWithTimeout(30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
-			MustRunWithTimeout(30, "kubectl delete ns", ns)
+			mustRunWithTimeout(1, 30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
+			mustRunWithTimeout(1, 30, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
+			mustRunWithTimeout(1, 30, "kubectl delete ns", ns)
 		}
 	}
 }
@@ -244,18 +264,28 @@ func TearDownHNC(hncVersion string) {
 		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-"+hncVersion+"/hnc-manager.yaml")
 	}
 	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
-	RunShouldNotContain("hnc-system", 10, "kubectl get ns")
-	RunShouldNotContain(".hnc.x-k8s.io", 10, "kubectl get crd")
+	runShouldNotContain(1, "hnc-system", 10, "kubectl get ns")
+	runShouldNotContain(1, ".hnc.x-k8s.io", 10, "kubectl get crd")
 }
 
+// CheckHNCPath return true if we'll be able to successfully call RecoverHNC, and false otherwise.
 func CheckHNCPath() {
-	// we don't want to destroy the HNC without being able to repair it, so skip this test if recovery path not set
 	if hncRecoverPath == "" {
 		Skip("Environment variable HNC_REPAIR not set. Skipping tests that require repairing HNC.")
 	}
 }
 
+// RecoverHNC assumes that HNC has been damaged in some way and repairs by re-applying its manifest
+// and then waiting until very basic functionality is working again.
 func RecoverHNC() {
+	// Even if a test is skipped because CheckHNCPath returned false, RecoverHNC is often placed in
+	// the AfterEach block to clean up after a test is run, and this appears to be called even if the
+	// test is skipped (which makes sense, because tests can be skipped at any time and might still
+	// require cleanup). So if the path is unset, we skip this function too, otherwise we'll simply
+	// delete the existing (healthy) HNC deployment and never repair it.
+	if hncRecoverPath == "" {
+		return
+	}
 	// HNC can take a long time (>30s) to recover in some cases if various parts of its deployment are
 	// deleted, such as the validating webhook configuration or the CRDs. It appears that deleting the
 	// deployment before reapplying the manifests seems to allow HNC to start operating again much
@@ -280,12 +310,10 @@ func RecoverHNC() {
 	)
 	CleanupNamespaces(a, b)
 	// Ensure validators work
-	MustRunWithTimeout(30, "kubectl create ns", a)
+	mustRunWithTimeout(1, 30, "kubectl create ns", a)
 	// Ensure reconcilers work
-	MustRunWithTimeout(30, "kubectl hns create", b, "-n", a)
-	MustRunWithTimeout(30, "kubectl get ns", b)
-	// At this point we can assume that HNC is working sufficiently for the regular CleanupNamespaces
-	// to work.
+	mustRunWithTimeout(1, 30, "kubectl hns create", b, "-n", a)
+	mustRunWithTimeout(1, 30, "kubectl get ns", b)
 	CleanupNamespaces(a, b)
 }
 
@@ -300,3 +328,24 @@ func WriteTempFile(cxt string) string {
 func RemoveFile(path string) {
 	Expect(os.Remove(path)).Should(BeNil())
 }
+
+// silencer is a matcher that assumes that an empty string is good, and any
+// non-empty string means that test failed. You use it by saying
+// `Should(beQuiet())` instead of `Should(Equal(""))`, which both looks
+// moderately nicer in the code but more importantly produces much nicer error
+// messages if it fails. You should never say `ShouldNot(beQuiet())`.
+//
+// See https://onsi.github.io/gomega/#adding-your-own-matchers for details.
+type silencer struct{}
+func beQuiet() silencer {return silencer{}}
+func (_ silencer) Match(actual interface{}) (bool, error) {
+	diffs := actual.(string)
+	return diffs == "", nil
+}
+func (_ silencer) FailureMessage(actual interface{}) string {
+	return actual.(string)
+}
+func (_ silencer) NegatedFailureMessage(actual interface{}) string {
+	return "!!!! you should not put beQuiet() in a ShouldNot matcher !!!!"
+}
+
