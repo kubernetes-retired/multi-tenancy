@@ -35,7 +35,8 @@ const (
 	LabelInheritedFrom        = MetaGroup + "/inheritedFrom"
 	FinalizerHasSubnamespace  = MetaGroup + "/hasSubnamespace"
 	LabelTreeDepthSuffix      = ".tree." + MetaGroup + "/depth"
-	AnnotationManagedBy       = MetaGroup + "/managedBy"
+	AnnotationManagedBy       = MetaGroup + "/managed-by"
+	AnnotationManagedByV1A1   = MetaGroup + "/managedBy" // TODO: remove after v0.6 branches (#1177)
 	AnnotationPropagatePrefix = "propagate." + MetaGroup
 
 	AnnotationSelector = AnnotationPropagatePrefix + "/select"
