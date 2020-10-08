@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -26,13 +25,16 @@ const (
 	// We may need to increase the sleep time in future if HNC takes longer to propagate objects.
 	nopTime = 1 * time.Second
 
-	// statusUpdateTime is the timeout for `Eventually` to verify the object counts in the HNC Config
+	// countUpdateTime is the timeout for `Eventually` to verify the object counts in the HNC Config
 	// status.  Currently the config reconciler periodically updates status every 3 seconds. From
-	// experiments, tests are flaky when setting the statusUpdateTime to 3 seconds and tests can
-	// always pass when setting the time to 4 seconds. We may need to increase the time in future if
-	// the config reconciler takes longer to update the status.
-	// This issue is logged at https://github.com/kubernetes-sigs/multi-tenancy/issues/871
-	statusUpdateTime = 4 * time.Second
+	// experiments on workstations, tests are flaky when setting the countUpdateTime to 3 seconds and
+	// tests can always pass when setting the time to 4 seconds. We may need to increase the time in
+	// future if the config reconciler takes longer to update the status.  This issue is logged at
+	// https://github.com/kubernetes-sigs/multi-tenancy/issues/871
+	//
+	// Update: since Prow machines appear to be overloaded, and since we've seen some random failures
+	// in counting tests, I'm increasing this to 6s - aludwin, Oct 2020
+	countUpdateTime = 6 * time.Second
 
 	// rbacAV is a nice short form of the RBAC APIVersion
 	rbacAV = "rbac.authorization.k8s.io/v1"
@@ -50,6 +52,7 @@ var _ = Describe("HNCConfiguration", func() {
 	)
 
 	BeforeEach(func() {
+		resetHNCConfigToDefault(ctx)
 		// We want to ensure we're working with a clean slate, in case a previous tests objects still exist
 		cleanupObjects(ctx)
 
@@ -59,15 +62,13 @@ var _ = Describe("HNCConfiguration", func() {
 
 	AfterEach(func() {
 		// Change current config back to the default value.
-		Eventually(func() error {
-			return resetHNCConfigToDefault(ctx)
-		}).Should(Succeed())
+		resetHNCConfigToDefault(ctx)
 		cleanupObjects(ctx)
 	})
 
 	It("should set mode of Roles and RoleBindings as propagate by default", func() {
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
-		Eventually(typeSpecHasMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
 	})
 
 	It("should propagate Roles by default", func() {
@@ -80,15 +81,15 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should insert Roles if it does not exist", func() {
-		removeHNCConfigType(ctx, rbacAV, "Role")
+		removeTypeConfig(ctx, rbacAV, "Role")
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
 	It("should set the mode of Roles to `propagate` if the mode is not `propagate`", func() {
-		updateHNCConfigSpec(ctx, rbacAV, "Role", api.Ignore)
+		updateTypeConfig(ctx, rbacAV, "Role", api.Ignore)
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role"), statusUpdateTime).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "Role")).Should(Equal(api.Propagate))
 	})
 
 	It("should propagate RoleBindings by default", func() {
@@ -101,26 +102,26 @@ var _ = Describe("HNCConfiguration", func() {
 	})
 
 	It("should insert RoleBindings if it does not exist", func() {
-		removeHNCConfigType(ctx, rbacAV, "RoleBinding")
+		removeTypeConfig(ctx, rbacAV, "RoleBinding")
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
 	})
 
 	It("should set the mode of RoleBindings to `propagate` if the mode is not `propagate`", func() {
-		updateHNCConfigSpec(ctx, rbacAV, "RoleBinding", api.Ignore)
+		updateTypeConfig(ctx, rbacAV, "RoleBinding", api.Ignore)
 
-		Eventually(typeSpecHasMode(ctx, rbacAV, "Role"), statusUpdateTime).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, rbacAV, "RoleBinding")).Should(Equal(api.Propagate))
 	})
 
 	It("should unset ObjectReconcilerCreationFailed condition if a bad type spec is removed", func() {
 		// API version of ConfigMap should be "v1"
 		addToHNCConfig(ctx, "v2", "ConfigMap", api.Propagate)
 
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeTrue())
+		Eventually(getHNCConfigCondition(ctx, api.ObjectReconcilerCreationFailed)).Should(ContainSubstring("/v2, Kind=ConfigMap"))
 
-		removeHNCConfigType(ctx, "v2", "ConfigMap")
+		removeTypeConfig(ctx, "v2", "ConfigMap")
 
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "/v2, Kind=ConfigMap")).Should(BeFalse())
+		Eventually(getHNCConfigCondition(ctx, api.ObjectReconcilerCreationFailed)).Should(Equal(""))
 	})
 
 	It("should set MultipleConfigurationsForOneType if there are multiple configurations for one type", func() {
@@ -128,9 +129,9 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
 
-		// The second configuration should be ignored.
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeTrue())
+		// The second configuration should be identified
+		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
+			Should(ContainSubstring("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))
 	})
 
 	It("should unset MultipleConfigurationsForOneType if extra configurations are later removed", func() {
@@ -138,13 +139,13 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "Secret", api.Propagate)
 		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
 
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeTrue())
+		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
+			Should(ContainSubstring("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))
 
-		removeHNCConfigTypeWithMode(ctx, "v1", "Secret", api.Remove)
+		removeTypeConfigWithMode(ctx, "v1", "Secret", api.Remove)
 
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.MultipleConfigurationsForOneType,
-			fmt.Sprintf("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove)), statusUpdateTime).Should(BeFalse())
+		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
+			ShouldNot(ContainSubstring("APIVersion: v1, Kind: Secret, Mode: %s", api.Remove))
 	})
 
 	It("should not propagate objects if the type is not in HNCConfiguration", func() {
@@ -184,8 +185,7 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
 		// Change to ignore and wait for reconciler
-		updateHNCConfigSpec(ctx, "v1", "Secret", api.Ignore)
-		Eventually(typeStatusHasMode(ctx, "v1", "Secret"), statusUpdateTime).Should(Equal(api.Ignore))
+		setTypeConfig(ctx, "v1", "Secret", api.Ignore)
 
 		bazName := createNS(ctx, "baz")
 		setParent(ctx, bazName, fooName)
@@ -206,9 +206,9 @@ var _ = Describe("HNCConfiguration", func() {
 		time.Sleep(nopTime)
 		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 
-		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
+		setTypeConfig(ctx, "v1", "ResourceQuota", api.Propagate)
 		// "foo-resource-quota" should now be propagated from foo to bar because the mode of ResourceQuota is set to "propagate".
-		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), statusUpdateTime).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 
@@ -222,13 +222,13 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
-		updateHNCConfigSpec(ctx, "v1", "Secret", api.Remove)
+		setTypeConfig(ctx, "v1", "Secret", api.Remove)
 
 		// Foo should still have "foo-sec" because it is a source object, not propagated one.
 		// Therefore, we do not remove it.
-		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec"), statusUpdateTime).Should(BeTrue())
+		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec")).Should(BeTrue())
 		// "foo-sec" should be removed from bar.
-		Eventually(hasObject(ctx, "Secret", barName, "foo-sec"), statusUpdateTime).Should(BeFalse())
+		Eventually(hasObject(ctx, "Secret", barName, "foo-sec")).Should(BeFalse())
 	})
 
 	It("should propagate objects if the mode of a type is changed from remove to propagate", func() {
@@ -243,10 +243,10 @@ var _ = Describe("HNCConfiguration", func() {
 		// "foo-resource-quota" should not be propagated from foo to bar.
 		Expect(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")()).Should(BeFalse())
 
-		updateHNCConfigSpec(ctx, "v1", "ResourceQuota", api.Propagate)
+		setTypeConfig(ctx, "v1", "ResourceQuota", api.Propagate)
 
 		// "foo-resource-quota" should be propagated from foo to bar.
-		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota"), statusUpdateTime).Should(BeTrue())
+		Eventually(hasObject(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "ResourceQuota", barName, "foo-resource-quota")).Should(Equal(fooName))
 	})
 
@@ -260,17 +260,15 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, "Secret", barName, "foo-sec")).Should(Equal(fooName))
 
 		// Remove from spec and wait for the reconciler to pick it up
-		removeHNCConfigType(ctx, "v1", "Secret")
-		Eventually(typeStatusHasMode(ctx, "v1", "Secret"), statusUpdateTime).Should(Equal(testModeMisssing))
+		removeTypeConfig(ctx, "v1", "Secret")
+		Eventually(typeStatusMode(ctx, "v1", "Secret")).Should(Equal(testModeMisssing))
 
 		// Give foo another secret.
 		makeObject(ctx, "Secret", fooName, "foo-sec-2")
-		// Foo should have "foo-sec-2" because we created there.
+		// Foo should have "foo-sec-2" because we created it there.
 		Eventually(hasObject(ctx, "Secret", fooName, "foo-sec-2")).Should(BeTrue())
-		// Sleep to give "foo-sec-2" a chance to propagate from foo to bar, if it could.
-		time.Sleep(nopTime)
-		// "foo-role-2" should not propagate from foo to bar because the reconciliation request is ignored.
-		Expect(hasObject(ctx, "Secret", barName, "foo-sec-2")()).Should(BeFalse())
+		// "foo-sec-2" should not propagate from foo to bar because the reconciliation request is ignored.
+		Consistently(hasObject(ctx, "Secret", barName, "foo-sec-2")()).Should(BeFalse(), "foo-sec-2 should not propagate to %s because propagation's been disabled", barName)
 
 	})
 
@@ -279,13 +277,15 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "stable.example.com/v1", "CronTab", api.Propagate)
 
 		// The corresponding object reconciler should not be created because the type does not exist.
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab"), statusUpdateTime).Should(BeTrue())
+		Eventually(getHNCConfigCondition(ctx, api.ObjectReconcilerCreationFailed)).
+			Should(ContainSubstring("stable.example.com/v1, Kind=CronTab"))
 
 		// Add the CRD for CronTab to the apiserver.
 		createCronTabCRD(ctx)
 
-		// The object reconciler for CronTab should be created successfully.
-		Eventually(hasHNCConfigurationConditionWithMsg(ctx, api.ObjectReconcilerCreationFailed, "stable.example.com/v1, Kind=CronTab")).Should(BeFalse())
+		// The object reconciler for CronTab should be created successfully, which means all conditions
+		// should be cleared.
+		Eventually(getHNCConfigCondition(ctx, api.ObjectReconcilerCreationFailed)).Should(Equal(""))
 
 		// Give foo a CronTab object.
 		setParent(ctx, barName, fooName)
@@ -301,11 +301,11 @@ var _ = Describe("HNCConfiguration", func() {
 		setParent(ctx, barName, fooName)
 		makeObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(1))
 
 		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
+		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(0))
 	})
 
 	It("should set NumPropagatedObjects back to 0 after switching from propagate to remove mode", func() {
@@ -313,11 +313,11 @@ var _ = Describe("HNCConfiguration", func() {
 		setParent(ctx, barName, fooName)
 		makeObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(1))
 
-		updateHNCConfigSpec(ctx, "v1", "LimitRange", api.Remove)
+		setTypeConfig(ctx, "v1", "LimitRange", api.Remove)
 
-		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
+		Eventually(getNumPropagatedObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(0))
 
 		// TODO: Delete objects created via makeObject after each test case.
 		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
@@ -327,7 +327,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "LimitRange", api.Propagate)
 		makeObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(1))
 
 		// TODO: Delete objects created via makeObject after each test case.
 		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
@@ -338,7 +338,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "LimitRange", "")
 		makeObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(1))
 
 		// TODO: Delete objects created via makeObject after each test case.
 		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
@@ -348,23 +348,26 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "v1", "LimitRange", api.Propagate)
 		makeObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(1))
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(1))
 
 		deleteObject(ctx, "LimitRange", fooName, "foo-lr")
 
-		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(Equal(0))
+		Eventually(getNumSourceObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(Equal(0))
 	})
 
 	It("should not set NumSourceObjects for a type not in propagate mode", func() {
 		addToHNCConfig(ctx, "v1", "LimitRange", api.Remove)
 
-		Eventually(hasNumSourceObjects(ctx, "v1", "LimitRange"), statusUpdateTime).Should(BeFalse())
+		Eventually(hasNumSourceObjects(ctx, "v1", "LimitRange"), countUpdateTime).Should(BeFalse())
 	})
 })
 
-func typeSpecHasMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
+func typeSpecMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
 	return func() api.SynchronizationMode {
-		config := getHNCConfig(ctx)
+		config, err := getHNCConfig(ctx)
+		if err != nil {
+			return (api.SynchronizationMode)(err.Error())
+		}
 		for _, t := range config.Spec.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind {
 				return t.Mode
@@ -374,9 +377,12 @@ func typeSpecHasMode(ctx context.Context, apiVersion, kind string) func() api.Sy
 	}
 }
 
-func typeStatusHasMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
+func typeStatusMode(ctx context.Context, apiVersion, kind string) func() api.SynchronizationMode {
 	return func() api.SynchronizationMode {
-		config := getHNCConfig(ctx)
+		config, err := getHNCConfig(ctx)
+		if err != nil {
+			return (api.SynchronizationMode)(err.Error())
+		}
 		for _, t := range config.Status.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind {
 				return t.Mode
@@ -408,40 +414,49 @@ func makeRoleBinding(ctx context.Context, nsName, roleName, userName, roleBindin
 	ExpectWithOffset(1, k8sClient.Create(ctx, roleBinding)).Should(Succeed())
 }
 
-func hasHNCConfigurationConditionWithMsg(ctx context.Context, code api.HNCConfigurationCode, subMsg string) func() bool {
-	return func() bool {
-		c := getHNCConfig(ctx)
-		return hasHNCConfigurationConditionWithSingletonAndSubMsg(code, subMsg, c)
-	}
+func getHNCConfigCondition(ctx context.Context, code api.HNCConfigurationCode) func() string {
+	return getNamedHNCConfigCondition(ctx, api.HNCConfigSingleton, code)
 }
 
-func hasHNCConfigurationConditionWithName(ctx context.Context, code api.HNCConfigurationCode, nm string) func() bool {
-	return func() bool {
-		c := getHNCConfigWithOffsetAndName(1, ctx, nm)
-		// Use an empty string here to match Msg field so that the match always succeeds.
-		// It is not necessary and less robust to check the error message since the
-		// name invalidation error is not associated with a specific type.
-		return hasHNCConfigurationConditionWithSingletonAndSubMsg(code, "", c)
-	}
-}
-
-func hasHNCConfigurationConditionWithSingletonAndSubMsg(code api.HNCConfigurationCode, subMsg string, c *api.HNCConfiguration) bool {
-	conds := c.Status.Conditions
-	if code == "" {
-		return len(conds) > 0
-	}
-	for _, cond := range conds {
-		if cond.Code == code && strings.Contains(cond.Msg, subMsg) {
-			return true
+func getNamedHNCConfigCondition(ctx context.Context, nm string, code api.HNCConfigurationCode) func() string {
+	return func() string {
+		c, err := getHNCConfigWithName(ctx, nm)
+		if err != nil {
+			return err.Error()
 		}
+		msg := ""
+		for _, cond := range c.Status.Conditions {
+			if cond.Code == code {
+				msg += cond.Msg + "\n"
+			}
+		}
+		return msg
 	}
-	return false
 }
 
-func updateHNCConfigSpec(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
-	Eventually(func() error {
+// setTypeConfig is usually what you should call. It updates the config *and* waits for the
+// config to take effect, as shown by the status.
+//
+// If you're making a change that won't be reflected in the status (e.g. removing Role), call
+// updateTypeConfig, which doesn't confirm that the mode's taken effect.
+func setTypeConfig(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	updateTypeConfigWithOffset(1, ctx, apiVersion, kind, mode)
+	EventuallyWithOffset(1, typeStatusMode(ctx, apiVersion, kind)).Should(Equal(mode), "While setting type config for %s/%s to %s", apiVersion, kind, mode)
+}
+
+// updateTypeConfig is like setTypeConfig but it doesn't wait to confirm that the change was
+// successful.
+func updateTypeConfig(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	updateTypeConfigWithOffset(1, ctx, apiVersion, kind, mode)
+}
+
+func updateTypeConfigWithOffset(offset int, ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	EventuallyWithOffset(offset+1, func() error {
 		// Get the existing spec from the apiserver
-		c := getHNCConfig(ctx)
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return err
+		}
 
 		// Modify the existing spec. We should find the thing we were looking for.
 		found := false
@@ -455,13 +470,26 @@ func updateHNCConfigSpec(ctx context.Context, apiVersion, kind string, mode api.
 		Expect(found).Should(BeTrue())
 
 		// Update the apiserver
+		GinkgoT().Logf("Changing type config of %s/%s to %s", apiVersion, kind, mode)
 		return updateHNCConfig(ctx, c)
-	}).Should(Succeed())
+	}).Should(Succeed(), "While updating type config for %s/%s to %s", apiVersion, kind, mode)
 }
 
-func removeHNCConfigType(ctx context.Context, apiVersion, kind string) {
-	Eventually(func() error {
-		c := getHNCConfig(ctx)
+func unsetTypeConfig(ctx context.Context, apiVersion, kind string) {
+	removeTypeConfigWithOffset(1, ctx, apiVersion, kind)
+	Eventually(typeStatusMode(ctx, apiVersion, kind)).Should(Equal(testModeMisssing))
+}
+
+func removeTypeConfig(ctx context.Context, apiVersion, kind string) {
+	removeTypeConfigWithOffset(1, ctx, apiVersion, kind)
+}
+
+func removeTypeConfigWithOffset(offset int, ctx context.Context, apiVersion, kind string) {
+	EventuallyWithOffset(offset+1, func() error {
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return err
+		}
 		i := 0
 		for ; i < len(c.Spec.Types); i++ {
 			if c.Spec.Types[i].APIVersion == apiVersion && c.Spec.Types[i].Kind == kind {
@@ -472,15 +500,19 @@ func removeHNCConfigType(ctx context.Context, apiVersion, kind string) {
 		if i == len(c.Spec.Types) {
 			return nil
 		}
+		GinkgoT().Logf("Removing type config for %s/%s", apiVersion, kind)
 		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
 		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
 		return updateHNCConfig(ctx, c)
-	}).Should(Succeed())
+	}).Should(Succeed(), "While removing type config for %s/%s", apiVersion, kind)
 }
 
-func removeHNCConfigTypeWithMode(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
-	Eventually(func() error {
-		c := getHNCConfig(ctx)
+func removeTypeConfigWithMode(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+	EventuallyWithOffset(1, func() error {
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return err
+		}
 		i := 0
 		for ; i < len(c.Spec.Types); i++ {
 			if c.Spec.Types[i].APIVersion == apiVersion && c.Spec.Types[i].Kind == kind && c.Spec.Types[i].Mode == mode {
@@ -494,7 +526,7 @@ func removeHNCConfigTypeWithMode(ctx context.Context, apiVersion, kind string, m
 		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
 		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
 		return updateHNCConfig(ctx, c)
-	}).Should(Succeed())
+	}).Should(Succeed(), "While removing type config for %s/%s with mode %s", apiVersion, kind, mode)
 }
 
 func createCronTabCRD(ctx context.Context) {
@@ -526,7 +558,10 @@ func createCronTabCRD(ctx context.Context) {
 // not set or if type does not exist in status, it returns -1 and an error.
 func getNumPropagatedObjects(ctx context.Context, apiVersion, kind string) func() (int, error) {
 	return func() (int, error) {
-		c := getHNCConfig(ctx)
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return -1, err
+		}
 		for _, t := range c.Status.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind {
 				if t.NumPropagatedObjects != nil {
@@ -544,7 +579,10 @@ func getNumPropagatedObjects(ctx context.Context, apiVersion, kind string) func(
 // if NumSourceObjects is not set. It returns false and an error if the type does not exist in the status.
 func hasNumSourceObjects(ctx context.Context, apiVersion, kind string) func() (bool, error) {
 	return func() (bool, error) {
-		c := getHNCConfig(ctx)
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return false, err
+		}
 		for _, t := range c.Status.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind {
 				return t.NumSourceObjects != nil, nil
@@ -558,7 +596,10 @@ func hasNumSourceObjects(ctx context.Context, apiVersion, kind string) func() (b
 // not set or if type does not exist in status, it returns -1 and an error.
 func getNumSourceObjects(ctx context.Context, apiVersion, kind string) func() (int, error) {
 	return func() (int, error) {
-		c := getHNCConfig(ctx)
+		c, err := getHNCConfig(ctx)
+		if err != nil {
+			return -1, err
+		}
 		for _, t := range c.Status.Types {
 			if t.APIVersion == apiVersion && t.Kind == kind {
 				if t.NumSourceObjects != nil {

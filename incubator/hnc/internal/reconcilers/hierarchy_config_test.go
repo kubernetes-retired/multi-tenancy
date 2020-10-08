@@ -2,12 +2,10 @@ package reconcilers_test
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -387,74 +385,4 @@ func getCondition(ctx context.Context, nm string, code api.Code) func() *api.Con
 		}
 		return nil
 	}
-}
-
-func newHierarchy(nm string) *api.HierarchyConfiguration {
-	hier := &api.HierarchyConfiguration{}
-	hier.ObjectMeta.Namespace = nm
-	hier.ObjectMeta.Name = api.Singleton
-	return hier
-}
-
-func getHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
-	return getHierarchyWithOffset(1, ctx, nm)
-}
-
-func getHierarchyWithOffset(offset int, ctx context.Context, nm string) *api.HierarchyConfiguration {
-	snm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
-	hier := &api.HierarchyConfiguration{}
-	EventuallyWithOffset(offset+1, func() error {
-		return k8sClient.Get(ctx, snm, hier)
-	}).Should(Succeed())
-	return hier
-}
-
-func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
-	if h.CreationTimestamp.IsZero() {
-		ExpectWithOffset(1, k8sClient.Create(ctx, h)).Should(Succeed())
-	} else {
-		ExpectWithOffset(1, k8sClient.Update(ctx, h)).Should(Succeed())
-	}
-}
-
-func tryUpdateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) error {
-	if h.CreationTimestamp.IsZero() {
-		return k8sClient.Create(ctx, h)
-	} else {
-		return k8sClient.Update(ctx, h)
-	}
-}
-
-func getLabel(ctx context.Context, from, label string) func() string {
-	return func() string {
-		ns := getNamespace(ctx, from)
-		val, _ := ns.GetLabels()[label]
-		return val
-	}
-}
-
-func hasChild(ctx context.Context, nm, cnm string) func() bool {
-	return func() bool {
-		children := getHierarchy(ctx, nm).Status.Children
-		for _, c := range children {
-			if c == cnm {
-				return true
-			}
-		}
-		return false
-	}
-}
-
-// Namespaces are named "a-<rand>", "b-<rand>", etc
-func createNSes(ctx context.Context, num int) []string {
-	nms := []string{}
-	for i := 0; i < num; i++ {
-		nm := createNS(ctx, fmt.Sprintf("%c", 'a'+i))
-		nms = append(nms, nm)
-	}
-	return nms
-}
-
-func updateNamespace(ctx context.Context, ns *corev1.Namespace) {
-	ExpectWithOffset(1, k8sClient.Update(ctx, ns)).Should(Succeed())
 }
