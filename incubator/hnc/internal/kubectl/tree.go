@@ -122,10 +122,10 @@ func nameAndFootnotes(hier *api.HierarchyConfiguration) (string, bool) {
 	cycle := false
 	notes := []int{}
 	for _, cond := range hier.Status.Conditions {
-		if cond.Code == api.CritCycle {
+		if cond.Reason == api.ReasonInCycle {
 			cycle = true
 		}
-		txt := (string)(cond.Code) + ": " + cond.Msg
+		txt := cond.Type + " (" + cond.Reason + "): " + cond.Message
 		if idx, ok := footnotesByMsg[txt]; ok {
 			notes = append(notes, idx)
 		} else {

@@ -86,9 +86,12 @@ type TypeSynchronizationStatus struct {
 	NumSourceObjects *int `json:"numSourceObjects,omitempty"`
 }
 
-type CodeAndAffectedNamespaces struct {
-	// Code is a namespace condition code
-	Code Code `json:"code"`
+type ConditionAndAffectedNamespaces struct {
+	// Type is a namespace condition type
+	Type string `json:"type"`
+
+	// Reason is a namespace condition reason
+	Reason string `json:"reason"`
 
 	// Namespaces is the list of namespaces affected by this code
 	Namespaces []string `json:"namespaces"`
@@ -121,13 +124,14 @@ type HNCConfigurationStatus struct {
 	// Conditions describes the errors, if any.
 	Conditions []HNCConfigurationCondition `json:"conditions,omitempty"`
 
-	// NamespaceConditions is a map of namespace condition codes to the namespaces affected by those
-	// codes. If HNC is operating normally, no conditions will be present; if there are any conditions
-	// beginning with the "Crit" (critical) prefix, this means that HNC cannot function in the
-	// affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will
-	// have more information. To learn more about conditions, see
+	// NamespaceConditions is a map of namespace condition types and reasons to
+	// the affected namespaces. If HNC is operating normally, no conditions will
+	// be present; if there are any conditions with "ActivitiesHalted" type, this
+	// means that HNC cannot function in the affected namespaces. The
+	// HierarchyConfiguration object in each of the affected namespaces will have
+	// more information. To learn more about conditions, see
 	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
-	NamespaceConditions []CodeAndAffectedNamespaces `json:"namespaceConditions,omitempty"`
+	NamespaceConditions []ConditionAndAffectedNamespaces `json:"namespaceConditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

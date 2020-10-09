@@ -2,7 +2,6 @@ package stats
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,12 +37,13 @@ var (
 // Create a GroupKind Tag for metrics of object reconcilers for different GroupKind.
 var KeyGroupKind, _ = tag.NewKey("GroupKind")
 
-// KeyNamespaceCondition indicates the condition that a namespace is affected by.
-var KeyNamespaceCondition, _ = tag.NewKey("NamespaceCondition")
+// KeyNamespaceConditionType is the type of the namespace condition. The values
+// could be "ActivitiesHalted" or "BadConfiguration".
+var KeyNamespaceConditionType, _ = tag.NewKey("Condition")
 
-// KeyNamespaceCritical is "yes" if the namespace is affected by a critical condition, and "no" if
-// it's affected by a noncritical condition.
-var KeyNamespaceCritical, _ = tag.NewKey("NamespaceCritical")
+// KeyNamespaceConditionReason indicates the reason of the namespace condition.
+// The values could be "InCycle", "ParentMissing", etc.
+var KeyNamespaceConditionReason, _ = tag.NewKey("Reason")
 
 // Create Views. Views are the coupling of an Aggregation applied to a Measure and
 // optionally Tags. Views are the connection to Metric exporters.
@@ -105,7 +105,7 @@ var (
 		Measure:     namespaceConditions,
 		Description: "The number of namespaces with conditions",
 		Aggregation: ocview.LastValue(),
-		TagKeys:     []tag.Key{KeyNamespaceCondition, KeyNamespaceCritical},
+		TagKeys:     []tag.Key{KeyNamespaceConditionType, KeyNamespaceConditionReason},
 	}
 )
 
@@ -156,13 +156,9 @@ func recordObjectMetric(m counter, ms *ocstats.Int64Measure, gk schema.GroupKind
 	ocstats.Record(ctx, ms.M(int64(m)))
 }
 
-func RecordNamespaceCondition(code string, num int) {
-	crit := "no"
-	if strings.HasPrefix(code, "Crit") {
-		crit = "yes"
-	}
-	ctx, _ := tag.New(context.Background(), tag.Insert(KeyNamespaceCritical, crit))
-	ctx, _ = tag.New(ctx, tag.Insert(KeyNamespaceCondition, code))
+func RecordNamespaceCondition(tp, reason string, num int) {
+	ctx, _ := tag.New(context.Background(), tag.Insert(KeyNamespaceConditionType, tp))
+	ctx, _ = tag.New(ctx, tag.Insert(KeyNamespaceConditionReason, reason))
 	ocstats.Record(ctx, namespaceConditions.M(int64(num)))
 }
 

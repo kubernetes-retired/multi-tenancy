@@ -128,35 +128,47 @@ spec:
                   type: string
                 type: array
               conditions:
-                description: Conditions describes the errors and the affected objects, if any.
+                description: Conditions describes the errors, if any.
                 items:
-                  description: Condition specifies the condition and the affected objects.
+                  description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, type FooStatus struct{     // Represents the observations of a foo's current state.     // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     // +patchStrategy=merge     // +listType=map     // +listMapKey=type     Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n     // other fields }"
                   properties:
-                    affects:
-                      description: Affects is a list of group-version-kind-namespace-name that uniquely identifies the object(s) affected by the condition.
-                      items:
-                        description: AffectedObject defines uniquely identifiable objects.
-                        properties:
-                          group:
-                            type: string
-                          kind:
-                            type: string
-                          name:
-                            type: string
-                          namespace:
-                            type: string
-                          version:
-                            type: string
-                        type: object
-                      type: array
-                    code:
-                      description: "Describes the condition in a machine-readable string value. The currently valid values are shown below, but new values may be added over time. This field is always present in a condition. \n All codes that begin with the prefix `Crit` indicate that all HNC activities (e.g. propagating objects, updating labels) have been paused in this namespaces. HNC will resume updating the namespace once the condition has been resolved. Non-critical conditions typically indicate some kind of error that HNC itself can ignore, but likely indicates that the hierarchical structure is out-of-sync with the users' expectations. \n If the validation webhooks are working properly, there should typically not be any conditions on any namespaces, although some may appear transiently when the HNC controller is restarted. These should quickly resolve themselves (<30s). However, validation webhooks are not perfect, especially if multiple users are modifying the same namespace trees quickly, so it's important to monitor for critical conditions and resolve them if they arise. See the user guide for more information. \n Currently, the supported values are: \n - \"CritParentMissing\": the specified parent is missing and the namespace is an orphan. \n - \"CritCycle\": the namespace is a member of a cycle. For example, if namespace B says that its parent is namespace A, but namespace A says that its parent is namespace B, then A and B are in a cycle with each other and both of them will have the CritCycle condition. \n - \"CritDeletingCRD\": The HierarchyConfiguration CRD is being deleted. No more objects will be propagated into or out of this namespace. It is expected that the HNC controller will be stopped soon after the CRDs are fully deleted. \n - \"CritAncestor\": a critical error exists in an ancestor namespace, so this namespace is no longer being updated either. \n - \"SubnamespaceAnchorMissing\": this namespace is a subnamespace, but the anchor referenced in its `subnamespaceOf` annotation does not exist in the parent."
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
                       type: string
-                    msg:
-                      description: A human-readable description of the condition, if the `code` and `affects` fields are not sufficiently clear on their own.
+                    message:
+                      description: message is a human readable message indicating details about the transition. This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase. --- Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be useful (see .node.status.conditions), the ability to deconflict is important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
-                  - code
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
                   type: object
                 type: array
             type: object
