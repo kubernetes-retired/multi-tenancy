@@ -57,6 +57,8 @@ type fairQueue struct {
 
 	// stopCh lets us signal a shutdown to the waiting loop
 	stopCh chan struct{}
+	// stopOnce guarantees we only signal shutdown a single time
+	stopOnce sync.Once
 
 	// waitingForAddCh is a buffered channel that feeds waitingForAdd
 	waitingForAddCh chan *waitFor
@@ -187,10 +189,14 @@ func (q *fairQueue) Done(obj interface{}) {
 }
 
 func (q *fairQueue) ShutDown() {
-	q.cond.L.Lock()
-	defer q.cond.L.Unlock()
-	q.shuttingDown = true
-	q.cond.Broadcast()
+	q.stopOnce.Do(func() {
+		q.cond.L.Lock()
+		defer q.cond.L.Unlock()
+		q.shuttingDown = true
+		q.cond.Broadcast()
+		close(q.stopCh)
+		q.heartbeat.Stop()
+	})
 }
 
 func (q *fairQueue) ShuttingDown() bool {
