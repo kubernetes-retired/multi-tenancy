@@ -111,6 +111,8 @@ func (q *fairQueue) Add(obj interface{}) {
 	if !exists {
 		fifo = NewFIFOQueue()
 		q.queueGroup[group] = fifo
+		// TODO(zhuangqh): weight aware fair queue after introducing priority to vc crd.
+		// filled in `1` here and weightroundrobin will downgrade to roundrobin.
 		q.balancer.Add(group, 1)
 	}
 
