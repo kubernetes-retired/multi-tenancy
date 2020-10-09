@@ -33,4 +33,20 @@ var _ = Describe("Subnamespaces", func() {
 		MustRun("kubectl delete subns", nsB, "-n", nsA)
 		MustNotRun("kubectl get ns", nsB)
 	})
+
+	It("should cascading delete the subnamespace if the parent has allowCascadingDeletion", func() {
+		// set up
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl get ns", nsA)
+		MustRun("kubectl hns create", nsB, "-n", nsA)
+
+		// verify
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "subnamespace-of:"+nsA)
+
+		// Cascading delete
+		MustRun("kubectl hns set", nsA, "-a")
+		MustRun("kubectl delete ns", nsA)
+		MustNotRun("kubectl get ns", nsA)
+		MustNotRun("kubectl get ns", nsB)
+	})
 })
