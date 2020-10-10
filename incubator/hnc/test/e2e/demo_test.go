@@ -38,7 +38,7 @@ var _ = Describe("Demo", func() {
 		MustRun("kubectl -n", nsOrg, "create role", nsOrg+"-sre", "--verb=update --resource=deployments")
 		MustRun("kubectl -n", nsOrg, "create rolebinding", nsOrg+"-sres", "--role", nsOrg+"-sre", "--serviceaccount="+nsOrg+":default")
 		// none of this affects service-1
-		RunShouldContain("No resources found in "+nsService1, defTimeout, "kubectl -n", nsService1, "get rolebindings")
+		RunShouldContain("No resources found.", defTimeout, "kubectl -n", nsService1, "get rolebindings")
 
 		// make acme-org the parent of team-a, and team-a the parent of service-1.
 		MustRun("kubectl hns set", nsTeamA, "--parent", nsOrg)
@@ -96,7 +96,7 @@ var _ = Describe("Demo", func() {
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
 	})
 
-	It("Should intergrate hierarchical network policy", func(){
+	It("Should intergrate hierarchical network policy", func() {
 		GinkgoT().Log("WARNING: IF THIS TEST FAILS, PLEASE CHECK THAT THE NETWORK POLICY IS ENABLED ON THE TEST CLUSTER")
 
 		MustRun("kubectl create ns", nsOrg)
@@ -108,15 +108,15 @@ var _ = Describe("Demo", func() {
 		MustRun("kubectl run s2 -n", nsService2, "--image=nginx --restart=Never --expose --port 80")
 		clientArgs := "-i --image=alpine --restart=Never --rm -- sh -c"
 		cmdln := "\"wget -qO- --timeout 2 http://s2.service-2\""
-		// at least 20 seconds is needed here from experiments 
-		RunShouldContain("Welcome to nginx!", 20, 
+		// at least 20 seconds is needed here from experiments
+		RunShouldContain("Welcome to nginx!", 20,
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout,
 			"kubectl run client -n", nsTeamA, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout,
 			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 
-		// create a default network policy that blocks any ingress from other namespaces 
+		// create a default network policy that blocks any ingress from other namespaces
 		policy := `# temp file created by demo_test.go
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
@@ -129,7 +129,7 @@ spec:
   ingress:
   - from:
     - podSelector: {}`
-		
+
 		filename := WriteTempFile(policy)
 		defer RemoveFile(filename)
 		MustRun("kubectl apply -f", filename)
@@ -145,7 +145,7 @@ spec:
 		// Now we’ll see that we can no longer access service-2 from the client in service-1:
 		RunErrorShouldContain("wget: download timed out", cleanupTimeout,
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		
+
 		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
 		policy = `# temp file created by demo_test.go
 kind: NetworkPolicy
@@ -173,13 +173,13 @@ spec:
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
 
 		// Now, we can access the service from other namespaces in team-a, but not outside of it:
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
+		RunShouldContain("Welcome to nginx!", cleanupTimeout,
 			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunErrorShouldContain("wget: download timed out", cleanupTimeout, 
+		RunErrorShouldContain("wget: download timed out", cleanupTimeout,
 			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 	})
 
-	It("Should create and delete subnamespaces", func(){
+	It("Should create and delete subnamespaces", func() {
 		// set up initial structure
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
