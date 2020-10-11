@@ -18,9 +18,10 @@ package fairqueue
 
 import (
 	"sync"
+	"time"
 
-	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer/weightedroundrobin"
@@ -31,13 +32,12 @@ type Item interface {
 }
 
 type fairQueue struct {
+	option
+
 	// balancer choose which queue to go.
 	balancer balancer.Scheduler
 	// queueGroup group each queue by a unique key.
-	// each queue defines the order in which we will work on items. Every
-	// element of queue should be in the dirty set and not in the
-	// processing set.
-	queueGroup map[string][]t
+	queueGroup map[string]*fifoQueue
 
 	// length is the sum of queues size.
 	length int
@@ -55,71 +55,35 @@ type fairQueue struct {
 
 	shuttingDown bool
 
-	rateLimiter workqueue.RateLimiter
-
-	// clock tracks time for delayed firing
-	clock clock.Clock
-
 	// stopCh lets us signal a shutdown to the waiting loop
 	stopCh chan struct{}
-
-	// heartbeat ensures we wait no more than maxWait before firing
-	heartbeat clock.Ticker
+	// stopOnce guarantees we only signal shutdown a single time
+	stopOnce sync.Once
 
 	// waitingForAddCh is a buffered channel that feeds waitingForAdd
 	waitingForAddCh chan *waitFor
 }
 
-type empty struct{}
-type t interface{}
-type set map[t]empty
-
-func (s set) has(item t) bool {
-	_, exists := s[item]
-	return exists
-}
-
-func (s set) insert(item t) {
-	s[item] = empty{}
-}
-
-func (s set) delete(item t) {
-	delete(s, item)
-}
-
-func NewRateLimitingFairQueue(rateLimiter workqueue.RateLimiter) workqueue.RateLimitingInterface {
-	return newRateLimitingFairQueue(clock.RealClock{}, rateLimiter)
-}
-
-func newRateLimitingFairQueue(clock clock.RealClock, rateLimiter workqueue.RateLimiter) workqueue.RateLimitingInterface {
+func NewRateLimitingFairQueue(opts ...OptConfig) workqueue.RateLimitingInterface {
+	o := defaultConfig
+	for _, opt := range opts {
+		opt(&o)
+	}
 	ret := &fairQueue{
+		option:          o,
 		balancer:        weightedroundrobin.NewWeightedRR(),
-		queueGroup:      make(map[string][]t),
-		dirty:           set{},
-		processing:      set{},
-		rateLimiter:     rateLimiter,
+		queueGroup:      make(map[string]*fifoQueue),
+		dirty:           make(set),
+		processing:      make(set),
 		cond:            sync.NewCond(&sync.Mutex{}),
-		clock:           clock,
-		heartbeat:       clock.NewTicker(maxWait),
 		stopCh:          make(chan struct{}),
 		waitingForAddCh: make(chan *waitFor, 1000),
 	}
 
 	go ret.waitingLoop()
+	go ret.cleanIdleQueue()
 
 	return ret
-}
-
-func (q *fairQueue) enqueue(group string, item interface{}) {
-	q.queueGroup[group] = append(q.queueGroup[group], item)
-	q.length++
-}
-
-func (q *fairQueue) dequeue(group string) interface{} {
-	item := q.queueGroup[group][0]
-	q.queueGroup[group] = q.queueGroup[group][1:]
-	q.length--
-	return item
 }
 
 func (q *fairQueue) Add(obj interface{}) {
@@ -143,13 +107,18 @@ func (q *fairQueue) Add(obj interface{}) {
 	}
 
 	group := item.GroupName()
-	_, exists := q.queueGroup[group]
+	fifo, exists := q.queueGroup[group]
 	if !exists {
-		q.queueGroup[group] = []t{}
+		fifo = NewFIFOQueue()
+		q.queueGroup[group] = fifo
+		// TODO(zhuangqh): weight aware fair queue after introducing priority to vc crd.
+		// filled in `1` here and weightroundrobin will downgrade to roundrobin.
 		q.balancer.Add(group, 1)
 	}
 
-	q.enqueue(group, item)
+	fifo.Add(item)
+	q.length++
+
 	q.cond.Signal()
 }
 
@@ -157,6 +126,12 @@ func (q *fairQueue) Len() int {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	return q.length
+}
+
+func (q *fairQueue) GroupNum() int {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	return len(q.queueGroup)
 }
 
 func (q *fairQueue) Get() (item interface{}, shutdown bool) {
@@ -171,17 +146,17 @@ func (q *fairQueue) Get() (item interface{}, shutdown bool) {
 	}
 
 	var nextGroup string
-	// TODO(zhuangqh): asynchronously queue gc.
 	for {
 		nextGroup = q.balancer.Next()
-		if len(q.queueGroup[nextGroup]) == 0 {
+		if q.queueGroup[nextGroup].Len() == 0 {
 			nextGroup = q.balancer.Next()
 		} else {
 			break
 		}
 	}
 
-	item = q.dequeue(nextGroup)
+	item, _ = q.queueGroup[nextGroup].Get()
+	q.length--
 	q.processing.insert(item)
 	q.dirty.delete(item)
 
@@ -198,18 +173,32 @@ func (q *fairQueue) Done(obj interface{}) {
 	defer q.cond.L.Unlock()
 
 	q.processing.delete(item)
+
+	fifo, exists := q.queueGroup[item.GroupName()]
+	if !exists {
+		if q.dirty.has(item) {
+			fifo = NewFIFOQueue()
+			q.queueGroup[item.GroupName()] = fifo
+		}
+		return
+	}
+
 	if q.dirty.has(item) {
-		group := item.GroupName()
-		q.enqueue(group, item)
+		fifo.Add(item)
+		q.length++
 		q.cond.Signal()
 	}
 }
 
 func (q *fairQueue) ShutDown() {
-	q.cond.L.Lock()
-	defer q.cond.L.Unlock()
-	q.shuttingDown = true
-	q.cond.Broadcast()
+	q.stopOnce.Do(func() {
+		q.cond.L.Lock()
+		defer q.cond.L.Unlock()
+		q.shuttingDown = true
+		q.cond.Broadcast()
+		close(q.stopCh)
+		q.heartbeat.Stop()
+	})
 }
 
 func (q *fairQueue) ShuttingDown() bool {
@@ -217,6 +206,32 @@ func (q *fairQueue) ShuttingDown() bool {
 	defer q.cond.L.Unlock()
 
 	return q.shuttingDown
+}
+
+func (q *fairQueue) cleanIdleQueue() {
+	for {
+		select {
+		case <-q.stopCh:
+			return
+		case now := <-q.gcTick.C:
+			q.checkAndCleanIdleQueue(now)
+		}
+	}
+}
+
+func (q *fairQueue) checkAndCleanIdleQueue(now time.Time) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+
+	for group, fifo := range q.queueGroup {
+		lastActiveTime := fifo.LastActiveTime()
+		// delete this group if its active time is far away from now.
+		if lastActiveTime.Add(q.queueExpireDuration).Before(now) && fifo.Len() == 0 {
+			q.balancer.Remove(group)
+			delete(q.queueGroup, group)
+			klog.V(4).Infof("fairqueue: queue %v idle for more than %v, removed", group, q.queueExpireDuration)
+		}
+	}
 }
 
 func (q *fairQueue) AddRateLimited(item interface{}) {

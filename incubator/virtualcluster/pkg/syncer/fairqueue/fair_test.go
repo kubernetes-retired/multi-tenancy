@@ -23,8 +23,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 )
 
@@ -40,7 +38,7 @@ func groupItemWrapper(id string) *reconciler.Request {
 
 func TestBasicAndFair(t *testing.T) {
 	// If something is seriously wrong this test will never complete.
-	q := NewRateLimitingFairQueue(workqueue.DefaultControllerRateLimiter())
+	q := NewRateLimitingFairQueue()
 
 	scheduleCounter := make(map[string]int)
 	var mu sync.Mutex
@@ -114,7 +112,7 @@ func TestLen(t *testing.T) {
 	foo := groupItemWrapper("foo")
 	bar := groupItemWrapper("bar")
 
-	q := NewRateLimitingFairQueue(workqueue.DefaultControllerRateLimiter())
+	q := NewRateLimitingFairQueue()
 	q.Add(foo)
 	if e, a := 1, q.Len(); e != a {
 		t.Errorf("Expected %v, got %v", e, a)
@@ -130,7 +128,7 @@ func TestLen(t *testing.T) {
 }
 
 func TestReinsert(t *testing.T) {
-	q := NewRateLimitingFairQueue(workqueue.DefaultControllerRateLimiter())
+	q := NewRateLimitingFairQueue()
 	foo := groupItemWrapper("foo")
 
 	q.Add(foo)
@@ -166,5 +164,39 @@ func TestReinsert(t *testing.T) {
 
 	if a := q.Len(); a != 0 {
 		t.Errorf("Expected queue to be empty. Has %v items", a)
+	}
+}
+
+func TestQueueGC(t *testing.T) {
+	timeUnit := 1 * time.Millisecond
+
+	fq := NewRateLimitingFairQueue(
+		WithIdleQueueCheckPeriod(timeUnit),
+		WithQueueExpireDuration(timeUnit),
+	)
+	q := fq.(*fairQueue)
+	foo := groupItemWrapper("foo")
+
+	q.Add(foo)
+
+	if q.GroupNum() != 1 {
+		t.Errorf("expected 1 group, got %v", q.GroupNum())
+	}
+
+	time.Sleep(100 * timeUnit)
+	if q.GroupNum() != 1 {
+		t.Errorf("expected 1 group, got %v", q.GroupNum())
+	}
+
+	item, _ := q.Get()
+	time.Sleep(100 * timeUnit)
+	if q.GroupNum() != 0 {
+		t.Errorf("expected 0 group, got %v", q.GroupNum())
+	}
+
+	q.Done(item)
+	time.Sleep(100 * timeUnit)
+	if q.GroupNum() != 0 {
+		t.Errorf("expected 0 group, got %v", q.GroupNum())
 	}
 }
