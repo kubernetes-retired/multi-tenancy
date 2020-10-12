@@ -5,16 +5,17 @@ This demo illustrates how to setup a virtualcluster in an existing `minikube` Ku
 All virtualcluster related API resources (CRD, Secret, Configmap etc.) are created in an
 "admin namespace" for the rest of this demo we'll use the `default` namespace.
 
-## Build `vcctl`
-It is recommended to use `vcctl` cli tool to simplify some operations.
+## Build and install `kubectl-vc`
 ```bash
-# on osx
-make vcctl-osx
-# on linux
-make all WHAT=cmd/vcctl
+# build
+make build WHAT=cmd/kubectl-vc
+# build on macOS
+make build WHAT=cmd/kubectl-vc GOOS=darwin
+# install
+cp -f _output/bin/kubectl-vc /usr/local/bin
 ```
 
-The binary can be found in `_output/bin/vcctl`.
+And then you can manage virtualcluster by `kubectl vc` command tool.
 
 ## Install CRDs and all components
 Running following cmds will install all CRDs and create all virtualcluster components.
@@ -65,7 +66,7 @@ A clusterversion CR specifies one tenant master configuration, which can be used
 create the tenant master components. The following cmd will create a `cv-sample-np` clusterversion CR
 which specifies three StatefulSets for Kubernetes 1.15 apiserver, etcd and controller manager respectively.
 ```bash
-_output/bin/vcctl create -yaml https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/clusterversion_v1_nodeport.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/clusterversion_v1_nodeport.yaml
 ```
 
 Note that tenant master does not have scheduler installed. The Pods are scheduled in super master.
@@ -75,7 +76,7 @@ We can use the following cmd to create a virtualcluster CR `vc-sample-1` in `ten
 The vc-manager will create a Kubernetes 1.15 tenant master. The tenant apiserver is exposed through nodeport service
 in `minikube` node.
 ```bash
-_output/bin/vcctl create -yaml https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/virtualcluster_1_nodeport.yaml -vckbcfg vc-1.kubeconfig
+kubectl vc create -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/virtualcluster_1_nodeport.yaml -o vc-1.kubeconfig
 ```
 
 Once the tenant master is created, a kubeconfig file `vc-1.kubeconfig` will be created in the current directory.
