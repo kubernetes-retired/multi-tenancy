@@ -39,7 +39,8 @@ const (
 	AnnotationManagedByV1A1   = MetaGroup + "/managedBy" // TODO: remove after v0.6 branches (#1177)
 	AnnotationPropagatePrefix = "propagate." + MetaGroup
 
-	AnnotationSelector = AnnotationPropagatePrefix + "/select"
+	AnnotationSelector     = AnnotationPropagatePrefix + "/select"
+	AnnotationTreeSelector = AnnotationPropagatePrefix + "/treeSelect"
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code, be

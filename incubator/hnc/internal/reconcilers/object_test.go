@@ -15,6 +15,178 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
+var _ = Describe("Exceptions", func() {
+	ctx := context.Background()
+
+	BeforeEach(func() {
+		// We want to ensure we're working with a clean slate, in case a previous tests objects still exist
+		cleanupObjects(ctx)
+	})
+
+	AfterEach(func() {
+		// Change current config back to the default value.
+		resetHNCConfigToDefault(ctx)
+		cleanupObjects(ctx)
+	})
+
+	Context("Add exception annotations", func() {
+		const (
+			p  = "parent"
+			c1 = "child1"
+			c2 = "child2"
+			c3 = "child3"
+		)
+		tests := []struct {
+			name         string
+			selector     string
+			treeSelector string
+			want         []string
+			notWant      []string
+		}{{
+			name:     "not propagate object to a negatively selected namespace",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix,
+			want:     []string{c2, c3},
+			notWant:  []string{c1},
+		}, {
+			name:     "not propagate object to multiple negatively selected namespaces",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix + ", !" + c2 + api.LabelTreeDepthSuffix,
+			want:     []string{c3},
+			notWant:  []string{c1, c2},
+		}, {
+			name:         "not propagate object to a negatively treeSelected namespace",
+			treeSelector: "!" + c1,
+			want:         []string{c2, c3},
+			notWant:      []string{c1},
+		}, {
+			name:         "not propagate object to multiple negatively treeSelected namespaces",
+			treeSelector: "!" + c1 + ", !" + c2,
+			want:         []string{c3},
+			notWant:      []string{c1, c2},
+		}, {
+			name:         "not propagate object to neither negatively selected or treeSelected namespaces",
+			selector:     "!" + c1 + api.LabelTreeDepthSuffix,
+			treeSelector: "!" + c2,
+			want:         []string{c3},
+			notWant:      []string{c1, c2},
+		}, {
+			name:         "only propagate object to the intersection of selected and treeSelected namespaces",
+			selector:     c1 + api.LabelTreeDepthSuffix,
+			treeSelector: c2,
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}}
+
+		for _, tc := range tests {
+			// Making a local copy of tc is necessary to ensure the correct value is passed to the closure,
+			// for more details look at https://onsi.github.io/ginkgo/ and search for 'closure'
+			tc := tc
+			It("Should "+tc.name, func() {
+				// Set up namespaces
+				names := map[string]string{
+					p:  createNS(ctx, p),
+					c1: createNS(ctx, c1),
+					c2: createNS(ctx, c2),
+					c3: createNS(ctx, c3),
+				}
+				setParent(ctx, names[c1], names[p])
+				setParent(ctx, names[c2], names[p])
+				setParent(ctx, names[c3], names[p])
+
+				tc.selector = replaceStrings(tc.selector, names)
+				tc.treeSelector = replaceStrings(tc.treeSelector, names)
+
+				// Create a Role with the selector and treeSelector annotation
+				makeObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+					"propagate.hnc.x-k8s.io/select":     tc.selector,
+					"propagate.hnc.x-k8s.io/treeSelect": tc.treeSelector,
+				})
+				for _, ns := range tc.want {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+				for _, ns := range tc.notWant {
+					ns = replaceStrings(ns, names)
+					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+				}
+			})
+		}
+	})
+
+	Context("Update exception annotations", func() {
+		const (
+			p  = "parent"
+			c1 = "child1"
+			c2 = "child2"
+			c3 = "child3"
+		)
+		tests := []struct {
+			name         string
+			selector     string
+			treeSelector string
+			want         []string
+			notWant      []string
+		}{{
+			name:     "update select",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix,
+			want:     []string{c2, c3},
+			notWant:  []string{c1},
+		}, {
+			name:         "update treeSelect",
+			treeSelector: "!" + c1,
+			want:         []string{c2, c3},
+			notWant:      []string{c1},
+		}}
+
+		for _, tc := range tests {
+			// Making a local copy of tc is necessary to ensure the correct value is passed to the closure,
+			// for more details look at https://onsi.github.io/ginkgo/ and search for 'closure'
+			tc := tc
+			It("Should "+tc.name, func() {
+				// Set up namespaces
+				names := map[string]string{
+					p:  createNS(ctx, p),
+					c1: createNS(ctx, c1),
+					c2: createNS(ctx, c2),
+					c3: createNS(ctx, c3),
+				}
+				setParent(ctx, names[c1], names[p])
+				setParent(ctx, names[c2], names[p])
+				setParent(ctx, names[c3], names[p])
+				tc.selector = replaceStrings(tc.selector, names)
+				tc.treeSelector = replaceStrings(tc.treeSelector, names)
+
+				// Create a Role and verify it's propagated
+				makeObject(ctx, "Role", names[p], "testrole")
+				for _, ns := range names {
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+
+				// update the role with the selector and treeSelector annotation
+				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+					"propagate.hnc.x-k8s.io/select":     tc.selector,
+					"propagate.hnc.x-k8s.io/treeSelect": tc.treeSelector,
+				})
+				// make sure the changes are propagated
+				for _, ns := range tc.notWant {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+				}
+				// then check that the objects are kept in these namespaces
+				for _, ns := range tc.want {
+					ns = replaceStrings(ns, names)
+					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+
+				// remove the annotation and verify that the object is back for every namespace
+				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{})
+				for _, ns := range names {
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+			})
+		}
+	})
+})
+
 var _ = Describe("Secret", func() {
 	ctx := context.Background()
 
@@ -43,48 +215,7 @@ var _ = Describe("Secret", func() {
 		cleanupObjects(ctx)
 	})
 
-	// Exceptions have not been implemented, so we are ignoring the following four tests for now.
-	// They should be enabled once exception is done.
-	PIt("should propagate object only to selected namespace using treeSelect", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a Role that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/treeSelect": "!" + bazName}
-		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
-
-		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
-	})
-
-	It("should propagate object only to selected namespace using select", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a Role that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!" + bazName + ".tree.hnc.x-k8s.io/depth"}
-		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
-
-		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
-	})
-
-	It("should remove object in selected namespace when selector is updated", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		makeObject(ctx, "Role", fooName, "testrole")
-		Eventually(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
-		Eventually(hasObject(ctx, "Role", bazName, "testrole")).Should(BeTrue())
-
-		// Update the Role so that it does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!" + bazName + ".tree.hnc.x-k8s.io/depth"}
-		Expect(updateObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)).Should(Succeed())
-
-		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeTrue())
-		Eventually(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
-	})
-
+	// This test should be converted to a table test after 'none' selector is implemented
 	PIt("should not propagate object to any namespace using none", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, fooName)
@@ -93,8 +224,8 @@ var _ = Describe("Secret", func() {
 		a := map[string]string{"propagate.hnc.x-k8s.io/none": "true"}
 		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
 
-		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeFalse())
-		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse())
+		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeFalse(), "When propagating testrole to %s", barName)
+		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse(), "When propagating testrole to %s", bazName)
 	})
 
 	It("should be copied to descendents", func() {

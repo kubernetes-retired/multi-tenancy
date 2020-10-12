@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -321,4 +322,13 @@ func objectInheritedFrom(ctx context.Context, kind string, nsName, name string) 
 	}
 	lif, _ := inst.GetLabels()["hnc.x-k8s.io/inheritedFrom"]
 	return lif
+}
+
+// replaceStrings returns a copy of str with all non-overlapping instances of the keys in table
+// replaced by values in table
+func replaceStrings(str string, table map[string]string) string {
+	for key, val := range table {
+		str = strings.ReplaceAll(str, key, val)
+	}
+	return str
 }
