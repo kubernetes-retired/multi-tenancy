@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"time"
 
 	"github.com/pkg/errors"
@@ -30,7 +31,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -131,11 +131,6 @@ func createVirtualCluster(cli client.Client, vccli vcclient.Interface, vc *tenan
 		return nil, errors.Wrapf(err, "required cluster version not found")
 	}
 
-	apiSvcPort, err := getAPISvcPort(cv.Spec.APIServer.Service)
-	if err != nil {
-		return nil, err
-	}
-
 	// fail early, if service type is not supported
 	svcType := cv.Spec.APIServer.Service.Spec.Type
 	if svcType != v1.ServiceTypeNodePort &&
@@ -155,23 +150,23 @@ func createVirtualCluster(cli client.Client, vccli vcclient.Interface, vc *tenan
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/etcd in ns %s: %s", ns, err)
 	}
-	klog.Info("etcd is ready")
+	log.Println("etcd is ready")
 
 	if err := retryIfNotFound(5, 2, func() error {
 		return kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/apiserver in ns %s: %s", ns, err)
 	}
-	klog.Info("apiserver is ready")
+	log.Println("apiserver is ready")
 
 	if err := retryIfNotFound(5, 2, func() error {
 		return kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/controller-manager in ns %s: %s", ns, err)
 	}
-	klog.Info("controller-manager is ready")
+	log.Println("controller-manager is ready")
 
-	return genKubeConfig(ns, cli, svcType, apiSvcPort)
+	return genKubeConfig(cli, vc, cv)
 }
 
 // getAPISvcPort gets the apiserver service port if not specifed
@@ -225,7 +220,8 @@ func getVcKubeConfig(cli client.Client, clusterNamespace, srtName string) ([]byt
 }
 
 // genKubeConfig generates the kubeconfig file for accessing the virtual cluster
-func genKubeConfig(clusterNamespace string, cli client.Client, svcType v1.ServiceType, apiSvcPort int) ([]byte, error) {
+func genKubeConfig(cli client.Client, vc *tenancyv1alpha1.VirtualCluster, cv *tenancyv1alpha1.ClusterVersion) ([]byte, error) {
+	clusterNamespace := conversion.ToClusterKey(vc)
 	kbCfgBytes, err := getVcKubeConfig(cli, clusterNamespace, "admin-kubeconfig")
 	if err != nil {
 		return nil, err
@@ -236,8 +232,13 @@ func genKubeConfig(clusterNamespace string, cli client.Client, svcType v1.Servic
 		return nil, err
 	}
 
+	apiSvcPort, err := getAPISvcPort(cv.Spec.APIServer.Service)
+	if err != nil {
+		return nil, err
+	}
+
 	// replace the server address in kubeconfig based on service type
-	kubecfg, err = replaceServerAddr(kubecfg, cli, clusterNamespace, svcType, apiSvcPort)
+	kubecfg, err = replaceServerAddr(kubecfg, cli, clusterNamespace, cv.Spec.APIServer.Service.Spec.Type, apiSvcPort)
 	if err != nil {
 		return nil, err
 	}

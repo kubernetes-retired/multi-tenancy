@@ -40,6 +40,7 @@ func main() {
 	}
 
 	rootCmd.AddCommand(NewCmdCreate(f))
+	rootCmd.AddCommand(NewCmdExec(f))
 
 	CheckErr(rootCmd.Execute())
 }
