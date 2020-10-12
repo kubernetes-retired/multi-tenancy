@@ -15,12 +15,14 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
+	github.com/urfave/cli v1.20.0
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.0.0-20200520004742-59133d7f0dd7
 	k8s.io/api v0.18.6
 	k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery v0.18.6
 	k8s.io/apiserver v0.18.6
+	k8s.io/cli-runtime v0.18.6
 	k8s.io/client-go v0.18.6
 	k8s.io/code-generator v0.18.6
 	k8s.io/component-base v0.18.6
@@ -29,6 +31,7 @@ require (
 	k8s.io/kubernetes v1.18.6
 	k8s.io/utils v0.0.0-20200619165400-6e3d28b6ed19
 	sigs.k8s.io/controller-runtime v0.6.1
+	sigs.k8s.io/yaml v1.2.0
 )
 
 // We use the replace directive to pin k8s.io dependencies that we don't directly
