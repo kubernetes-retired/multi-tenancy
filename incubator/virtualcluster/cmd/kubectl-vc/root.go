@@ -17,11 +17,15 @@ limitations under the License.
 package main
 
 import (
-	"k8s.io/klog"
+	"fmt"
 	"os"
 
 	"github.com/urfave/cli"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
@@ -31,7 +35,32 @@ func main() {
 	app.Usage = "VirtualCluster Command tool"
 	app.Version = version.BriefVersion()
 
-	if err := app.Run(os.Args); err != nil {
-		klog.Fatal(err)
+	app.Commands = []cli.Command{
+		createCommand,
 	}
+
+	if err := app.Run(os.Args); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func newGenericK8sClient() (client.Client, error) {
+	kubecfgFlags := genericclioptions.NewConfigFlags(true)
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return client.New(config, client.Options{Scheme: scheme.Scheme})
+}
+
+func newVCClient() (vcclient.Interface, error) {
+	kubecfgFlags := genericclioptions.NewConfigFlags(true)
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return vcclient.NewForConfig(config)
 }
