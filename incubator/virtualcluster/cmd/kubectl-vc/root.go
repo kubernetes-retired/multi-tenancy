@@ -20,47 +20,30 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/spf13/cobra"
 
-	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
 func main() {
-	app := cli.NewApp()
-	app.Name = "kubectl-vc"
-	app.Usage = "VirtualCluster Command tool"
-	app.Version = version.BriefVersion()
-
-	app.Commands = []cli.Command{
-		createCommand,
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Println(err)
+	f, err := NewFactory()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to new client factory: %v", err)
 		os.Exit(1)
 	}
-}
 
-func newGenericK8sClient() (client.Client, error) {
-	kubecfgFlags := genericclioptions.NewConfigFlags(true)
-	config, err := kubecfgFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
+	rootCmd := &cobra.Command{
+		Use:     "kubectl-vc",
+		Short:   "VirtualCluster Command tool",
+		Version: version.BriefVersion(),
+		Run:     runHelp,
 	}
 
-	return client.New(config, client.Options{Scheme: scheme.Scheme})
+	rootCmd.AddCommand(NewCmdCreate(f))
+
+	CheckErr(rootCmd.Execute())
 }
 
-func newVCClient() (vcclient.Interface, error) {
-	kubecfgFlags := genericclioptions.NewConfigFlags(true)
-	config, err := kubecfgFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	return vcclient.NewForConfig(config)
+func runHelp(cmd *cobra.Command, args []string) {
+	cmd.Help()
 }

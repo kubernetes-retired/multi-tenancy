@@ -17,10 +17,71 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 )
+
+// Factory provides abstractions that allow the Kubectl command to be extended across multiple types
+// of resources and different API sets.
+type Factory interface {
+	// GenericClient from controller runtime
+	GenericClient() (client.Client, error)
+
+	// KubernetesClientSet gives you back an external clientset
+	KubernetesClientSet() (kubernetes.Interface, error)
+
+	// VirtualClusterClientSet is the virtualcluster clientset
+	VirtualClusterClientSet() (vcclient.Interface, error)
+}
+
+type factoryImpl struct {
+	config *rest.Config
+}
+
+func NewFactory() (Factory, error) {
+	kubecfgFlags := genericclioptions.NewConfigFlags(true)
+	config, err := kubecfgFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	return &factoryImpl{config: config}, nil
+}
+
+func (f *factoryImpl) GenericClient() (client.Client, error) {
+	return client.New(f.config, client.Options{Scheme: scheme.Scheme})
+}
+
+func (f *factoryImpl) KubernetesClientSet() (kubernetes.Interface, error) {
+	return kubernetes.NewForConfig(f.config)
+}
+
+func (f *factoryImpl) VirtualClusterClientSet() (vcclient.Interface, error) {
+	return vcclient.NewForConfig(f.config)
+}
+
+func UsageErrorf(cmd *cobra.Command, format string, args ...interface{}) error {
+	msg := fmt.Sprintf(format, args...)
+	return fmt.Errorf("%s\nSee '%s -h' for help and examples", msg, cmd.CommandPath())
+}
+
+func CheckErr(err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
 
 // getYamlContent reads the yaml content from the `yamlPath`
 func getYamlContent(yamlPath string) ([]byte, error) {
