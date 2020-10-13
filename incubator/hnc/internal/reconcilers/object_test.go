@@ -40,6 +40,7 @@ var _ = Describe("Exceptions", func() {
 			name         string
 			selector     string
 			treeSelector string
+			noneSelector string
 			want         []string
 			notWant      []string
 		}{{
@@ -53,6 +54,14 @@ var _ = Describe("Exceptions", func() {
 			want:     []string{c3},
 			notWant:  []string{c1, c2},
 		}, {
+			// When the user input an invalid selector and we don't understand what the users' intention is,
+			// we choose not to propagate this object to any child namespace to protect any object in the child
+			// namespaces to be overwritten. Same for treeSelectors and noneSelector.
+			name:     "not propagate to any namespace with a bad selector",
+			selector: "random",
+			want:     []string{},
+			notWant:  []string{c1, c2, c3},
+		}, {
 			name:         "not propagate object to a negatively treeSelected namespace",
 			treeSelector: "!" + c1,
 			want:         []string{c2, c3},
@@ -63,6 +72,11 @@ var _ = Describe("Exceptions", func() {
 			want:         []string{c3},
 			notWant:      []string{c1, c2},
 		}, {
+			name:         "not propagate to any namespace with a bad treeSelector",
+			treeSelector: "random",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
 			name:         "not propagate object to neither negatively selected or treeSelected namespaces",
 			selector:     "!" + c1 + api.LabelTreeDepthSuffix,
 			treeSelector: "!" + c2,
@@ -72,6 +86,28 @@ var _ = Describe("Exceptions", func() {
 			name:         "only propagate object to the intersection of selected and treeSelected namespaces",
 			selector:     c1 + api.LabelTreeDepthSuffix,
 			treeSelector: c2,
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "not propagate to any object when noneSelector is set to true",
+			noneSelector: "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "propagate to all objects when noneSelector is set to false",
+			noneSelector: "false",
+			want:         []string{c1, c2, c3},
+			notWant:      []string{},
+		}, {
+			name:         "not propagate to any child namespace with a bad noneSelector",
+			noneSelector: "random",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "only propagate the intersection of three selectors",
+			selector:     c1 + api.LabelTreeDepthSuffix,
+			treeSelector: c1 + ", " + c2,
+			noneSelector: "true",
 			want:         []string{},
 			notWant:      []string{c1, c2, c3},
 		}}
@@ -97,8 +133,9 @@ var _ = Describe("Exceptions", func() {
 
 				// Create a Role with the selector and treeSelector annotation
 				makeObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
-					"propagate.hnc.x-k8s.io/select":     tc.selector,
-					"propagate.hnc.x-k8s.io/treeSelect": tc.treeSelector,
+					api.AnnotationSelector:     tc.selector,
+					api.AnnotationTreeSelector: tc.treeSelector,
+					api.AnnotationNoneSelector: tc.noneSelector,
 				})
 				for _, ns := range tc.want {
 					ns = replaceStrings(ns, names)
@@ -123,6 +160,7 @@ var _ = Describe("Exceptions", func() {
 			name         string
 			selector     string
 			treeSelector string
+			noneSelector string
 			want         []string
 			notWant      []string
 		}{{
@@ -135,6 +173,11 @@ var _ = Describe("Exceptions", func() {
 			treeSelector: "!" + c1,
 			want:         []string{c2, c3},
 			notWant:      []string{c1},
+		}, {
+			name:         "update noneSelector",
+			noneSelector: "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
 		}}
 
 		for _, tc := range tests {
@@ -163,8 +206,9 @@ var _ = Describe("Exceptions", func() {
 
 				// update the role with the selector and treeSelector annotation
 				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
-					"propagate.hnc.x-k8s.io/select":     tc.selector,
-					"propagate.hnc.x-k8s.io/treeSelect": tc.treeSelector,
+					api.AnnotationSelector:     tc.selector,
+					api.AnnotationTreeSelector: tc.treeSelector,
+					api.AnnotationNoneSelector: tc.noneSelector,
 				})
 				// make sure the changes are propagated
 				for _, ns := range tc.notWant {
@@ -213,19 +257,6 @@ var _ = Describe("Secret", func() {
 	AfterEach(func() {
 		resetHNCConfigToDefault(ctx)
 		cleanupObjects(ctx)
-	})
-
-	// This test should be converted to a table test after 'none' selector is implemented
-	PIt("should not propagate object to any namespace using none", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a Role that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/none": "true"}
-		makeObjectWithAnnotation(ctx, "Role", fooName, "testrole", a)
-
-		Consistently(hasObject(ctx, "Role", barName, "testrole")).Should(BeFalse(), "When propagating testrole to %s", barName)
-		Consistently(hasObject(ctx, "Role", bazName, "testrole")).Should(BeFalse(), "When propagating testrole to %s", bazName)
 	})
 
 	It("should be copied to descendents", func() {

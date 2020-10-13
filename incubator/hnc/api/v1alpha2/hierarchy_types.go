@@ -41,6 +41,7 @@ const (
 
 	AnnotationSelector     = AnnotationPropagatePrefix + "/select"
 	AnnotationTreeSelector = AnnotationPropagatePrefix + "/treeSelect"
+	AnnotationNoneSelector = AnnotationPropagatePrefix + "/none"
 )
 
 // Condition codes. *All* codes must also be documented in the comment to Condition.Code, be
