@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -135,9 +136,13 @@ func (o *ExecOption) placeVCKubeconfig(ns, name string) (string, error) {
 }
 
 func enterVCShell(kbFilePath, ns, name string) error {
-	fmt.Printf("❗ You are now at VirtualCluster %s/%s\n", ns, name)
-	fmt.Println("❗ use regular kubectl commands to operate vc in this temporary workspace")
-	fmt.Println("❗ type 'exit' to exit")
+	warningPrompt := "!!"
+	if isSmartTerminal() {
+		warningPrompt = "❗"
+	}
+	fmt.Printf("%s You are now at VirtualCluster %s/%s\n", warningPrompt, ns, name)
+	fmt.Printf("%s use regular kubectl commands to operate vc in this temporary workspace\n", warningPrompt)
+	fmt.Printf("%s type 'exit' to exit\n", warningPrompt)
 
 	c := exec.Command(os.Getenv("SHELL"))
 	c.Env = append(os.Environ(),
@@ -149,7 +154,29 @@ func enterVCShell(kbFilePath, ns, name string) error {
 	c.Stderr = os.Stderr
 
 	defer func() {
-		fmt.Printf("❗ exit VirtualCluster %s/%s\n", ns, name)
+		fmt.Printf("%s exit VirtualCluster %s/%s\n", warningPrompt, ns, name)
 	}()
 	return c.Run()
+}
+
+func isSmartTerminal() bool {
+	// Explicit request for no ANSI escape codes
+	// https://no-color.org/
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+
+	// Explicitly dumb terminals are not smart
+	// https://en.wikipedia.org/wiki/Computer_terminal#Dumb_terminals
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+
+	// On Windows WT_SESSION is set by the modern terminal component.
+	// Older terminals have poor support for UTF-8, VT escape codes, etc.
+	if runtime.GOOS == "windows" && os.Getenv("WT_SESSION") == "" {
+		return false
+	}
+
+	return true
 }
