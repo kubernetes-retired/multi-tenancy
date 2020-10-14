@@ -83,11 +83,11 @@ func CheckErr(err error) {
 	}
 }
 
-// getYamlContent reads the yaml content from the `yamlPath`
-func getYamlContent(yamlPath string) ([]byte, error) {
-	if isURL(yamlPath) {
+// readFromFileOrURL reads the content from the file path or url.
+func readFromFileOrURL(path string) ([]byte, error) {
+	if isURL(path) {
 		// read from an URL
-		resp, err := http.Get(yamlPath)
+		resp, err := http.Get(path)
 		if err != nil {
 			return nil, err
 		}
@@ -97,8 +97,8 @@ func getYamlContent(yamlPath string) ([]byte, error) {
 		return yamlContent, nil
 	}
 	// read from a file
-	yamlContent, err := ioutil.ReadFile(yamlPath)
-	return yamlContent, err
+	content, err := ioutil.ReadFile(path)
+	return content, err
 }
 
 // isURL checks if `path` is an URL

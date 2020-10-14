@@ -29,13 +29,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 
 	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned/scheme"
 	kubeutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	netutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -68,7 +70,7 @@ func NewCmdCreate(f Factory) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.fileName, "filename", "f", "", "the configuration to apply")
+	cmd.Flags().StringVarP(&o.fileName, "filename", "f", "", "the configuration to apply. in json, yaml or url")
 	cmd.Flags().StringVarP(&o.outputPath, "output", "o", "", "path to the kubeconfig that is used to access virtual cluster")
 
 	return cmd
@@ -100,13 +102,14 @@ func (o *CreateOptions) Validate(cmd *cobra.Command) error {
 }
 
 func (o *CreateOptions) Run() error {
-	fileBytes, err := getYamlContent(o.fileName)
+	fileBytes, err := readFromFileOrURL(o.fileName)
 	if err != nil {
 		return errors.Wrapf(err, "read \"%s\"", o.fileName)
 	}
 
 	vc := &tenancyv1alpha1.VirtualCluster{}
-	if err = yaml.Unmarshal(fileBytes, vc); err != nil {
+	codecs := serializer.NewCodecFactory(scheme.Scheme)
+	if err = runtime.DecodeInto(codecs.UniversalDecoder(), fileBytes, vc); err != nil {
 		return err
 	}
 

@@ -42,7 +42,7 @@ const (
 	kubectl vc exec foo/bar
 
 	# Customize kubeconfig file path
-	kubectl vc exec --kube-file-dir /path/to/file foo/bar`
+	kubectl vc exec --kubeconfig-file-dir /path/to/file foo/bar`
 )
 
 type ExecOption struct {
@@ -67,7 +67,7 @@ func NewCmdExec(f Factory) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&o.namespace, "namespace", "n", metav1.NamespaceDefault, "If present, the namespace scope for this CLI request")
-	cmd.Flags().StringVar(&o.kubeFileDir, "kube-file-dir", filepath.Join(os.Getenv("HOME"), ".kube/vc/"), "The directory to place the kubeconfig of specific vc")
+	cmd.Flags().StringVar(&o.kubeFileDir, "kubeconfig-file-dir", filepath.Join(os.Getenv("HOME"), ".kube/vc/"), "The directory to place the kubeconfig of specific vc")
 
 	return cmd
 }
