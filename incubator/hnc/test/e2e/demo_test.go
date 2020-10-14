@@ -1,9 +1,11 @@
 package e2e
 
 import (
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
 
@@ -85,7 +87,7 @@ var _ = Describe("Demo", func() {
 		time.Sleep(2 * time.Second)
 		// secret does not show up in service-1 because we haven’t configured HNC to propagate secrets in HNCConfiguration.
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
-		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Propagate")
+		MustRun("kubectl hns config set-type --apiVersion v1 --kind Secret Propagate --force")
 		// this command is not needed here, just to check that user can run it without error
 		MustRun("kubectl get hncconfiguration config -oyaml")
 		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
@@ -129,12 +131,12 @@ spec:
   ingress:
   - from:
     - podSelector: {}`
-		
+
 		filename := WriteTempFile(policy)
 		defer RemoveFile(filename)
 		MustRun("kubectl apply -f", filename)
 		// ensure this policy can be propagated to its descendants
-		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy Propagate")
+		MustRun("kubectl hns config set-type --apiVersion networking.k8s.io/v1 --kind NetworkPolicy Propagate --force")
 		expected := "deny-from-other-namespaces"
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsOrg)
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
@@ -142,10 +144,19 @@ spec:
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService1)
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
 
-		// Now we’ll see that we can no longer access service-2 from the client in service-1:
-		RunErrorShouldContain("wget: download timed out", cleanupTimeout,
-			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		
+		// Now we’ll see that we can no longer access service-2 from the client in service-1. If we can,
+		// that probably means that network policies aren't enabled on this cluster (e.g. Kind, GKE by
+		// default) and we should skip the rest of this test.
+		netpolTestStdout := ""
+		Eventually(func() error {
+			stdout, err := RunCommand("kubectl run client -n", nsService1, clientArgs, cmdln)
+			netpolTestStdout = stdout
+			return err
+		}).Should(Succeed())
+		if !strings.Contains(netpolTestStdout, "wget: download timed out") {
+			Skip("Basic network policies don't appear to be working; skipping the netpol demo")
+		}
+
 		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
 		policy = `# temp file created by demo_test.go
 kind: NetworkPolicy

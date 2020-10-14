@@ -62,6 +62,7 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 		acd  string
 		pnm  string
 		cnm  string
+		stt  api.SubnamespaceAnchorState // anchor state, "ok" by default
 		fail bool
 	}{
 		{name: "set in parent", acd: "c", pnm: "c", cnm: "d"},
@@ -69,7 +70,8 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 		{name: "set in ancestor that is not the first full namespace", acd: "a", pnm: "c", cnm: "d"},
 		{name: "unset in leaf", pnm: "d", cnm: "e"},
 		{name: "unset in non-leaf", pnm: "c", cnm: "d", fail: true},
-		{name: "unset in non-leaf but bad anchor", pnm: "b", cnm: "d"},
+		{name: "unset in non-leaf but bad anchor (incorrect hierarchy)", pnm: "b", cnm: "d", stt: api.Conflict},
+		{name: "unset in non-leaf but bad anchor (correct hierarchy)", pnm: "c", cnm: "d", stt: api.Conflict},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -83,6 +85,10 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 			anchor := &api.SubnamespaceAnchor{}
 			anchor.ObjectMeta.Namespace = tc.pnm
 			anchor.ObjectMeta.Name = tc.cnm
+			if tc.stt == "" {
+				tc.stt = api.Ok
+			}
+			anchor.Status.State = tc.stt
 			req := &anchorRequest{
 				anchor: anchor,
 				op:     v1beta1.Delete,
