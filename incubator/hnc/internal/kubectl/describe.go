@@ -16,11 +16,19 @@ limitations under the License.
 package kubectl
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/duration"
+	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
 var describeCmd = &cobra.Command{
@@ -67,32 +75,76 @@ var describeCmd = &cobra.Command{
 			fmt.Printf("  No children\n")
 		}
 
-		// Early exit if no conditions
-		if len(hier.Status.Conditions) == 0 {
-			fmt.Printf("  No conditions\n")
-			return
-		}
-
 		// Conditions
-		fmt.Printf("  Conditions:\n")
-		for _, c := range hier.Status.Conditions {
-			fmt.Printf("  - %s: %s\n", c.Code, c.Msg)
-			if len(c.Affects) == 0 {
-				continue
-			}
-			fmt.Printf("    Affected by this condition:\n")
-			for _, a := range c.Affects {
-				if a.Name != "" {
-					if a.Group == "" {
-						a.Group = "core"
-					}
-					fmt.Printf("      - %s/%s (%s/%s/%s)\n", a.Namespace, a.Name, a.Group, a.Version, a.Kind)
-				} else {
-					fmt.Printf("      - %s\n", a.Namespace)
+		describeConditions(hier.Status.Conditions)
+
+		// Events
+		describeEvents(nnm)
+	},
+}
+
+func describeConditions(cond []api.Condition) {
+	if len(cond) == 0 {
+		fmt.Printf("  No conditions\n")
+		return
+	}
+	fmt.Printf("  Conditions:\n")
+	for _, c := range cond {
+		fmt.Printf("  - %s: %s\n", c.Code, c.Msg)
+		if len(c.Affects) == 0 {
+			continue
+		}
+		fmt.Printf("    Affected by this condition:\n")
+		for _, a := range c.Affects {
+			if a.Name != "" {
+				if a.Group == "" {
+					a.Group = "core"
 				}
+				fmt.Printf("      - %s/%s (%s/%s/%s)\n", a.Namespace, a.Name, a.Group, a.Version, a.Kind)
+			} else {
+				fmt.Printf("      - %s\n", a.Namespace)
 			}
 		}
-	},
+	}
+}
+
+func describeEvents(nnm string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	events, _ := k8sClient.CoreV1().Events(nnm).List(ctx, metav1.ListOptions{})
+	// filter out HNC events only
+	hncEvents := []v1.Event{}
+	for _, event := range events.Items {
+		if event.Source.Component == "hnc.x-k8s.io" {
+			hncEvents = append(hncEvents, event)
+		}
+	}
+	if len(hncEvents) == 0 {
+		fmt.Printf("\nNo recent HNC events for objects in this namespace\n")
+		return
+	}
+	fmt.Printf("\nEvents from the objects in namespace %s\n", nnm)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintln(w, "Last Seen\tReason\tObject\tMessage")
+	set := make(map[string]bool)
+	// sort the events by time so that we always show the latest if there's duplicate events
+	sort.Slice(hncEvents, func(i, j int) bool {
+		return hncEvents[i].LastTimestamp.Time.After(hncEvents[j].LastTimestamp.Time)
+	})
+	for _, event := range hncEvents {
+		obj := event.InvolvedObject.Kind + ":" + event.InvolvedObject.Namespace + "/" + event.InvolvedObject.Name
+		if set[event.Reason+obj] {
+			continue
+		}
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n",
+			duration.HumanDuration(time.Since(event.LastTimestamp.Time)),
+			event.Reason,
+			obj,
+			strings.TrimSpace(event.Message),
+		)
+		set[event.Reason+obj] = true
+	}
+	w.Flush()
 }
 
 func newDescribeCmd() *cobra.Command {
