@@ -20,22 +20,24 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 
 	tenancyv1alpha1 "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned/scheme"
 	kubeutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/kube"
 	netutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/util/net"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -48,64 +50,88 @@ const (
 	pollStsTimeoutSec = 120
 )
 
-var createCommand = cli.Command{
-	Name:  "create",
-	Usage: "Create a new VirtualCluster",
-	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "filename, f",
-			Usage: "the configuration to apply",
-		},
-		cli.StringFlag{
-			Name:  "output, o",
-			Usage: "path to the kubeconfig that is used to access virtual cluster",
-		},
-	},
-	Action: func(cctx *cli.Context) error {
-		filename := cctx.String("filename")
-		if filename == "" {
-			return errors.New("must specific --filename,-f flag")
-		}
-
-		outputPath := cctx.String("output")
-		if outputPath == "" {
-			return errors.New("must specific --output,-o flag")
-		}
-
-		vccli, err := newVCClient()
-		if err != nil {
-			return err
-		}
-
-		fileBytes, err := getYamlContent(filename)
-		if err != nil {
-			return errors.Wrapf(err, "read \"%s\"", filename)
-		}
-
-		vc := &tenancyv1alpha1.VirtualCluster{}
-		if err = yaml.Unmarshal(fileBytes, vc); err != nil {
-			return err
-		}
-
-		kubecfgBytes, err := createVirtualCluster(vccli, vc)
-		if err != nil {
-			return err
-		}
-
-		// write tenant kubeconfig to outputPath.
-		return ioutil.WriteFile(outputPath, kubecfgBytes, 0644)
-	},
+type CreateOptions struct {
+	client     client.Client
+	vcclient   vcclient.Interface
+	fileName   string
+	outputPath string
 }
 
-func createVirtualCluster(vccli vcclient.Interface, vc *tenancyv1alpha1.VirtualCluster) ([]byte, error) {
+func NewCmdCreate(f Factory) *cobra.Command {
+	o := &CreateOptions{}
+
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new VirtualCluster",
+		Run: func(cmd *cobra.Command, args []string) {
+			CheckErr(o.Complete(f, cmd))
+			CheckErr(o.Validate(cmd))
+			CheckErr(o.Run())
+		},
+	}
+
+	cmd.Flags().StringVarP(&o.fileName, "filename", "f", "", "the configuration to apply. in json, yaml or url")
+	cmd.Flags().StringVarP(&o.outputPath, "output", "o", "", "path to the kubeconfig that is used to access virtual cluster")
+
+	return cmd
+}
+
+func (o *CreateOptions) Complete(f Factory, cmd *cobra.Command) error {
+	var err error
+	o.vcclient, err = f.VirtualClusterClientSet()
+	if err != nil {
+		return err
+	}
+
+	o.client, err = f.GenericClient()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (o *CreateOptions) Validate(cmd *cobra.Command) error {
+	if len(o.fileName) == 0 {
+		return UsageErrorf(cmd, "--filename,-f should not be empty")
+	}
+	if len(o.outputPath) == 0 {
+		return UsageErrorf(cmd, "--output,-o should not be empty")
+	}
+	return nil
+}
+
+func (o *CreateOptions) Run() error {
+	fileBytes, err := readFromFileOrURL(o.fileName)
+	if err != nil {
+		return errors.Wrapf(err, "read \"%s\"", o.fileName)
+	}
+
+	vc := &tenancyv1alpha1.VirtualCluster{}
+	codecs := serializer.NewCodecFactory(scheme.Scheme)
+	if err = runtime.DecodeInto(codecs.UniversalDecoder(), fileBytes, vc); err != nil {
+		return err
+	}
+
+	kubecfgBytes, err := createVirtualCluster(o.client, o.vcclient, vc)
+	if err != nil {
+		return err
+	}
+
+	// write tenant kubeconfig to outputPath.
+	if err := ioutil.WriteFile(o.outputPath, kubecfgBytes, 0644); err != nil {
+		return err
+	}
+
+	log.Printf("VirtualCluster %s/%s setup successfully\n", vc.Namespace, vc.Name)
+
+	return nil
+}
+
+func createVirtualCluster(cli client.Client, vccli vcclient.Interface, vc *tenancyv1alpha1.VirtualCluster) ([]byte, error) {
 	cv, err := vccli.TenancyV1alpha1().ClusterVersions().Get(vc.Spec.ClusterVersionName, metav1.GetOptions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "required cluster version not found")
-	}
-
-	apiSvcPort, err := getAPISvcPort(cv.Spec.APIServer.Service)
-	if err != nil {
-		return nil, err
 	}
 
 	// fail early, if service type is not supported
@@ -122,33 +148,28 @@ func createVirtualCluster(vccli vcclient.Interface, vc *tenancyv1alpha1.VirtualC
 
 	ns := conversion.ToClusterKey(vc)
 
-	cli, err := newGenericK8sClient()
-	if err != nil {
-		return nil, err
-	}
-
 	if err := retryIfNotFound(5, 2, func() error {
 		return kubeutil.WaitStatefulSetReady(cli, ns, "etcd", pollStsTimeoutSec, pollStsPeriodSec)
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/etcd in ns %s: %s", ns, err)
 	}
-	klog.Info("etcd is ready")
+	log.Println("etcd is ready")
 
 	if err := retryIfNotFound(5, 2, func() error {
 		return kubeutil.WaitStatefulSetReady(cli, ns, "apiserver", pollStsTimeoutSec, pollStsPeriodSec)
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/apiserver in ns %s: %s", ns, err)
 	}
-	klog.Info("apiserver is ready")
+	log.Println("apiserver is ready")
 
 	if err := retryIfNotFound(5, 2, func() error {
 		return kubeutil.WaitStatefulSetReady(cli, ns, "controller-manager", pollStsTimeoutSec, pollStsPeriodSec)
 	}); err != nil {
 		return nil, fmt.Errorf("cannot find sts/controller-manager in ns %s: %s", ns, err)
 	}
-	klog.Info("controller-manager is ready")
+	log.Println("controller-manager is ready")
 
-	return genKubeConfig(ns, cli, svcType, apiSvcPort)
+	return genKubeConfig(cli, vc, cv)
 }
 
 // getAPISvcPort gets the apiserver service port if not specifed
@@ -202,7 +223,8 @@ func getVcKubeConfig(cli client.Client, clusterNamespace, srtName string) ([]byt
 }
 
 // genKubeConfig generates the kubeconfig file for accessing the virtual cluster
-func genKubeConfig(clusterNamespace string, cli client.Client, svcType v1.ServiceType, apiSvcPort int) ([]byte, error) {
+func genKubeConfig(cli client.Client, vc *tenancyv1alpha1.VirtualCluster, cv *tenancyv1alpha1.ClusterVersion) ([]byte, error) {
+	clusterNamespace := conversion.ToClusterKey(vc)
 	kbCfgBytes, err := getVcKubeConfig(cli, clusterNamespace, "admin-kubeconfig")
 	if err != nil {
 		return nil, err
@@ -213,8 +235,13 @@ func genKubeConfig(clusterNamespace string, cli client.Client, svcType v1.Servic
 		return nil, err
 	}
 
+	apiSvcPort, err := getAPISvcPort(cv.Spec.APIServer.Service)
+	if err != nil {
+		return nil, err
+	}
+
 	// replace the server address in kubeconfig based on service type
-	kubecfg, err = replaceServerAddr(kubecfg, cli, clusterNamespace, svcType, apiSvcPort)
+	kubecfg, err = replaceServerAddr(kubecfg, cli, clusterNamespace, cv.Spec.APIServer.Service.Spec.Type, apiSvcPort)
 	if err != nil {
 		return nil, err
 	}
