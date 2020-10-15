@@ -23,6 +23,11 @@ import (
 const (
 	HNCConfigSingleton  = "config"
 	HNCConfigSingletons = "hncconfigurations"
+	RBACGroup           = "rbac.authorization.k8s.io"
+	RoleResource        = "roles"
+	RoleKind            = "Role"
+	RoleBindingResource = "rolebindings"
+	RoleBindingKind     = "RoleBinding"
 )
 
 // SynchronizationMode describes propagation mode of objects of the same kind.
@@ -46,16 +51,19 @@ const (
 // HNCConfigurationCondition codes. *All* codes must also be documented in the
 // comment to HNCConfigurationCondition.Code.
 const (
+	TypeNotFound                     HNCConfigurationCode = "TypeNotFound"
 	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
 	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
 )
 
-// TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
+// TypeSynchronizationSpec defines the desired synchronization state of a
+// specific resource.
 type TypeSynchronizationSpec struct {
-	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion"`
-	// Kind to be configured.
-	Kind string `json:"kind"`
+	// Group of the resource defined below. This is used to unambiguously identify
+	// the resource.
+	Group string `json:"group"`
+	// Resource to be configured.
+	Resource string `json:"resource"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
 	// as "Propagate".
 	// +optional
@@ -65,10 +73,12 @@ type TypeSynchronizationSpec struct {
 
 // TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
 type TypeSynchronizationStatus struct {
-	// API version of the kind defined below. This is used to unambiguously identifies the kind.
-	APIVersion string `json:"apiVersion"`
-	// Kind to be configured.
-	Kind string `json:"kind"`
+	// Group of the resource defined below.
+	Group string `json:"group"`
+	// Version of the resource defined below.
+	Version string `json:"version"`
+	// Resource to be configured.
+	Resource string `json:"resource"`
 	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
 	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
 	// spec and the default is chosen.
@@ -154,10 +164,12 @@ type HNCConfigurationCondition struct {
 	//
 	// Currently, the supported values are:
 	//
-	// - "objectReconcilerCreationFailed": an error exists when creating the object
+	// - "TypeNotFound": the type in the spec is not found in the API server.
+	//
+	// - "ObjectReconcilerCreationFailed": an error exists when creating the object
 	// reconciler for the type specified in Msg.
 	//
-	// - "multipleConfigurationsForOneType": Multiple configurations exist for the type specified
+	// - "MultipleConfigurationsForOneType": Multiple configurations exist for the type specified
 	// in the Msg. One type should only have one configuration.
 	Code HNCConfigurationCode `json:"code"`
 

@@ -21,9 +21,9 @@ var EX = map[string]bool{
 // See details in http://bit.ly/hnc-type-configuration
 
 func GetDefaultRoleSpec() api.TypeSynchronizationSpec {
-	return api.TypeSynchronizationSpec{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: api.Propagate}
+	return api.TypeSynchronizationSpec{Group: api.RBACGroup, Resource: api.RoleResource, Mode: api.Propagate}
 }
 
 func GetDefaultRoleBindingSpec() api.TypeSynchronizationSpec {
-	return api.TypeSynchronizationSpec{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: api.Propagate}
+	return api.TypeSynchronizationSpec{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: api.Propagate}
 }

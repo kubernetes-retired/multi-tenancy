@@ -232,7 +232,71 @@ spec:
 
 		// Verify default types in the new version.
 		FieldShouldContainWithTimeout(configCRD, "", configSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.types", []string{"Role", "RoleBinding"})
+		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.types", []string{"roles", "rolebindings"})
+	})
+
+	It("should convert HNCConfig types", func() {
+		// Create a tree with A as the root and B as the child
+		createSampleV1alpha1Tree()
+		// Delete the webhook to apply unsupported modes in v1alpha1.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		// Set 'propagate', 'remove', unknown ('ignore') modes in v1alpha1
+		cfg := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  types:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate
+  - apiVersion: v1
+    kind: Secret
+    mode: propagate
+  - apiVersion: v1
+    kind: ResourceQuota
+    mode: remove
+  - apiVersion: v1
+    kind: WrongType
+    mode: remove
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    mode: remove
+  - apiVersion: v1
+    kind: ConfigMap
+    mode: foobar`
+		MustApplyYAML(cfg)
+		// Create a secret in ns A and make sure it's propagated to ns B.
+		MustRun("kubectl -n", nsA, "create secret generic my-creds-1 --from-literal=password=iama")
+		RunShouldContain("my-creds-1", propagationTime, "kubectl get secrets -n", nsB)
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify type conversion. Look for some text that was legal in v1alpha1 but
+		// isn't legal in v1alpha2 as a good first check to ensure conversion.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "apiVersion")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "kind")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "v1")
+		// Check NetworkPolicy to networkpolicies conversion
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:networking.k8s.io mode:Remove resource:networkpolicies")
+		// Check WrongType conversion with TypeNotFound condition.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status.types", "wrongtypes")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:TypeNotFound msg:Resource \"wrongtypes\" not found")
+		// Check all other type conversions
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:roles")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:rolebindings")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Propagate resource:secrets")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Remove resource:resourcequotas")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Ignore resource:configmaps")
+
+		// Verify sync mode behavior.
+		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
+		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
 	})
 
 	It("should convert HNCConfig sync modes", func() {

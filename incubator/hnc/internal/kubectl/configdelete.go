@@ -24,40 +24,40 @@ import (
 )
 
 var configDeleteCmd = &cobra.Command{
-	Use:   "delete-type --apiVersion X --kind Y",
+	Use:   "delete-type --group X --resource Y",
 	Short: "Delete the HNC configuration of a specific type",
 	Example: fmt.Sprintf("  # Delete configuration of a core type\n" +
-		"  kubectl hns config delete-type --apiVersion v1 --kind Secret\n\n" +
+		"  kubectl hns config delete-type --resource secrets\n\n" +
 		"  # Delete configuration of a custom type\n" +
-		"  kubectl hns config delete-type --apiversion stable.example.com/v1 --kind CronTab"),
+		"  kubectl hns config delete-type --group stable.example.com --resource crontabs"),
 	Run: func(cmd *cobra.Command, args []string) {
 		flags := cmd.Flags()
-		apiVersion, _ := flags.GetString("apiVersion")
-		kind, _ := flags.GetString("kind")
+		group, _ := flags.GetString("group")
+		resource, _ := flags.GetString("resource")
 		config := client.getHNCConfig()
 
 		var newTypes []api.TypeSynchronizationSpec
 		exist := false
 		for _, t := range config.Spec.Types {
-			if t.APIVersion == apiVersion && t.Kind == kind {
+			if t.Group == group && t.Resource == resource {
 				exist = true
 			} else {
 				newTypes = append(newTypes, t)
 			}
 		}
 		if !exist {
-			fmt.Printf("Nothing to delete; No configuration for type with API version: %s, "+
-				"kind: %s\n", apiVersion, kind)
+			fmt.Printf("Nothing to delete; No configuration for type with group: %s, "+
+				"resource: %s\n", group, resource)
 			return
 		}
 		config.Spec.Types = newTypes
 		client.updateHNCConfig(config)
-		fmt.Printf("Configuration for type with API version: %s, kind: %s is deleted\n", apiVersion, kind)
+		fmt.Printf("Configuration for type with group: %s, resource: %s is deleted\n", group, resource)
 	},
 }
 
 func newConfigDeleteCmd() *cobra.Command {
-	configDeleteCmd.Flags().String("apiVersion", "", "API version of the kind")
-	configDeleteCmd.Flags().String("kind", "", "Kind to be configured")
+	configDeleteCmd.Flags().String("group", "", "group of the resource")
+	configDeleteCmd.Flags().String("resource", "", "resource to be configured")
 	return configDeleteCmd
 }

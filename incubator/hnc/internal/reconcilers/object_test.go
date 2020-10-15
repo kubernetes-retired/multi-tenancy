@@ -132,18 +132,18 @@ var _ = Describe("Exceptions", func() {
 				tc.treeSelector = replaceStrings(tc.treeSelector, names)
 
 				// Create a Role with the selector and treeSelector annotation
-				makeObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+				makeObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
 				})
 				for _, ns := range tc.want {
 					ns = replaceStrings(ns, names)
-					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
 				}
 				for _, ns := range tc.notWant {
 					ns = replaceStrings(ns, names)
-					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+					Consistently(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
 				}
 			})
 		}
@@ -199,13 +199,13 @@ var _ = Describe("Exceptions", func() {
 				tc.treeSelector = replaceStrings(tc.treeSelector, names)
 
 				// Create a Role and verify it's propagated
-				makeObject(ctx, "Role", names[p], "testrole")
+				makeObject(ctx, api.RoleResource, names[p], "testrole")
 				for _, ns := range names {
-					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
 				}
 
 				// update the role with the selector and treeSelector annotation
-				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+				updateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
@@ -213,18 +213,18 @@ var _ = Describe("Exceptions", func() {
 				// make sure the changes are propagated
 				for _, ns := range tc.notWant {
 					ns = replaceStrings(ns, names)
-					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
 				}
 				// then check that the objects are kept in these namespaces
 				for _, ns := range tc.want {
 					ns = replaceStrings(ns, names)
-					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+					Consistently(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
 				}
 
 				// remove the annotation and verify that the object is back for every namespace
-				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{})
+				updateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{})
 				for _, ns := range names {
-					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
 				}
 			})
 		}
@@ -249,9 +249,9 @@ var _ = Describe("Secret", func() {
 		cleanupObjects(ctx)
 
 		// Give them each a role.
-		makeObject(ctx, "Role", fooName, "foo-role")
-		makeObject(ctx, "Role", barName, "bar-role")
-		makeObject(ctx, "Role", bazName, "baz-role")
+		makeObject(ctx, api.RoleResource, fooName, "foo-role")
+		makeObject(ctx, api.RoleResource, barName, "bar-role")
+		makeObject(ctx, api.RoleResource, bazName, "baz-role")
 	})
 
 	AfterEach(func() {
@@ -263,46 +263,46 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "bar-role")).Should(Equal(barName))
 	})
 
 	It("should be copied to descendents when source object is empty", func() {
 		setParent(ctx, barName, fooName)
 		// Creates an empty ConfigMap. We use ConfigMap for this test because the apiserver will not
 		// add additional fields to an empty ConfigMap object to make it non-empty.
-		makeObject(ctx, "ConfigMap", fooName, "foo-config")
-		addToHNCConfig(ctx, "v1", "ConfigMap", api.Propagate)
+		makeObject(ctx, "configmaps", fooName, "foo-config")
+		addToHNCConfig(ctx, "", "configmaps", api.Propagate)
 
 		// "foo-config" should now be propagated from foo to bar.
-		Eventually(hasObject(ctx, "ConfigMap", barName, "foo-config")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "ConfigMap", barName, "foo-config")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, "configmaps", barName, "foo-config")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "configmaps", barName, "foo-config")).Should(Equal(fooName))
 	})
 
 	It("should be removed if the hierarchy changes", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
 		setParent(ctx, bazName, fooName)
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
 		setParent(ctx, bazName, "")
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should not be propagated if modified", func() {
 		// Set tree as bar -> foo and make sure the first-time propagation of foo-role
 		// is finished before modifying the foo-role in bar namespace
 		setParent(ctx, barName, fooName)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
 
 		// Wait 1 second to make sure all enqueued fooName hiers are successfully reconciled
 		// in case the manual modification is overridden by the unfinished propagation.
@@ -314,32 +314,32 @@ var _ = Describe("Secret", func() {
 		// that if the other one *isn't* copied, this is because we decided not to, and
 		// not that we just haven't gotten to it yet.
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
 
 		// Make sure the bad one got overwritte.
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
 	})
 
 	It("should be removed if the source no longer exists", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
 
 		removeRole(ctx, fooName, "foo-role")
-		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, fooName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeFalse())
 	})
 
 	It("should overwrite the propagated ones if the source is updated", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, fooName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, fooName, "foo-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, barName, "foo-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
 		Eventually(isModified(ctx, bazName, "foo-role")).Should(BeFalse())
 
 		modifyRole(ctx, fooName, "foo-role")
@@ -351,49 +351,49 @@ var _ = Describe("Secret", func() {
 	It("should overwrite the conflicting source in the descedants", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", barName, "bar-role")).Should(BeTrue())
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "bar-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "bar-role")).Should(Equal(barName))
 
-		makeObject(ctx, "Role", fooName, "bar-role")
+		makeObject(ctx, api.RoleResource, fooName, "bar-role")
 		// Add a 500-millisecond gap here to allow updating the cached bar-roles in bar
 		// and baz namespaces. Without this, even having 20 seconds in the "Eventually()"
 		// funcs below, the test failed with timeout. Guess the reason is that it's
 		// constantly getting the cached object.
 		time.Sleep(500 * time.Millisecond)
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
-		Eventually(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", barName, "bar-role")).Should(BeTrue())
-		Eventually(objectInheritedFrom(ctx, "Role", barName, "bar-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
+		Eventually(objectInheritedFrom(ctx, api.RoleResource, bazName, "bar-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "bar-role")).Should(BeTrue())
+		Eventually(objectInheritedFrom(ctx, api.RoleResource, barName, "bar-role")).Should(Equal(fooName))
 	})
 
 	It("should overwrite conflicting source with the top source that can propagate", func() {
 		// Create a 'baz-role' in 'foo' that cannot propagate because of the finalizer.
-		makeObject(ctx, "Role", fooName, "baz-role")
-		Eventually(hasObject(ctx, "Role", fooName, "baz-role")).Should(BeTrue())
+		makeObject(ctx, api.RoleResource, fooName, "baz-role")
+		Eventually(hasObject(ctx, api.RoleResource, fooName, "baz-role")).Should(BeTrue())
 		setFinalizer(ctx, fooName, "baz-role", true)
 		// Create a 'baz-role' in 'bar' that can propagate.
-		makeObject(ctx, "Role", barName, "baz-role")
+		makeObject(ctx, api.RoleResource, barName, "baz-role")
 
 		// Before the tree is constructed, 'baz-role' shouldn't be overwritten.
-		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(""))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "baz-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "baz-role")).Should(Equal(""))
 
 		// Construct the tree: foo (root) <- bar <- baz.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "baz-role")).Should(BeTrue())
 		// The 'baz-role' in 'baz' should be overwritten by the conflicting one in
 		// 'bar' but not 'foo', since the one in 'foo' cannot propagate with
 		// finalizer. Add a 500-millisecond gap to allow overwriting the object.
 		time.Sleep(500 * time.Millisecond)
-		Eventually(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(barName))
+		Eventually(objectInheritedFrom(ctx, api.RoleResource, bazName, "baz-role")).Should(Equal(barName))
 	})
 
 	It("should have deletions propagated after crit conditions are removed", func() {
 		// Create tree: bar -> foo (root) and make sure foo-role is propagated
 		setParent(ctx, barName, fooName)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
 
 		// Create a critical condition on foo (and also bar by extension)
 		brumpfName := createNSName("brumpf")
@@ -406,16 +406,16 @@ var _ = Describe("Secret", func() {
 		// Delete the object from `foo`, wait until we're sure that it's gone, and then wait a while
 		// longer and verify it *isn't* deleted from `bar`, because the critical condition has paused
 		// deletions.
-		deleteObject(ctx, "Role", fooName, "foo-role")
-		Eventually(hasObject(ctx, "Role", fooName, "foo-role")).Should(BeFalse())
+		deleteObject(ctx, api.RoleResource, fooName, "foo-role")
+		Eventually(hasObject(ctx, api.RoleResource, fooName, "foo-role")).Should(BeFalse())
 		time.Sleep(1 * time.Second) // todo: merge with similar constants elsewhere
-		Expect(hasObject(ctx, "Role", barName, "foo-role")()).Should(BeTrue())
+		Expect(hasObject(ctx, api.RoleResource, barName, "foo-role")()).Should(BeTrue())
 
 		// Resolve the critical condition and verify that the object is deleted
 		fooHier = newOrGetHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = ""
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeFalse())
 	})
 
 	It("shouldn't propagate/delete if the namespace has Crit condition", func() {
@@ -423,13 +423,13 @@ var _ = Describe("Secret", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
 
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "bar-role")).Should(Equal(barName))
 
 		// Set foo's parent to a non-existent namespace.
 		brumpfName := createNSName("brumpf")
@@ -442,20 +442,20 @@ var _ = Describe("Secret", func() {
 
 		// Set baz's parent to foo and add a new role in foo.
 		setParent(ctx, bazName, fooName)
-		makeObject(ctx, "Role", fooName, "foo-role-2")
+		makeObject(ctx, api.RoleResource, fooName, "foo-role-2")
 
 		// Since the sync is frozen, baz should still have bar-role (no deleting).
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "bar-role")).Should(Equal(barName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "bar-role")).Should(Equal(barName))
 		// baz and bar shouldn't have foo-role-2 (no propagating).
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role-2")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", barName, "foo-role-2")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role-2")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role-2")).Should(BeFalse())
 
 		// Create the missing parent namespace with one object.
 		brumpfNS := &corev1.Namespace{}
 		brumpfNS.Name = brumpfName
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
-		makeObject(ctx, "Role", brumpfName, "brumpf-role")
+		makeObject(ctx, api.RoleResource, brumpfName, "brumpf-role")
 
 		// The Crit conditions should be gone.
 		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(false))
@@ -463,42 +463,42 @@ var _ = Describe("Secret", func() {
 		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(false))
 
 		// Everything should be up to date after the Crit conditions are gone.
-		Eventually(hasObject(ctx, "Role", fooName, "brumpf-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", fooName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, api.RoleResource, fooName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, fooName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", barName, "foo-role-2")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role-2")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", barName, "brumpf-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role-2")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role-2")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role-2")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", bazName, "brumpf-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "brumpf-role")).Should(Equal(brumpfName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role-2")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role-2")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "brumpf-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "brumpf-role")).Should(Equal(brumpfName))
 
-		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "bar-role")).Should(BeFalse())
 	})
 
 	It("should generate CannotPropagate event if it's excluded from being propagated", func() {
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
 
 		// Verify there's no CannotPropagate event before introducing the error.
 		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(false))
 
 		// Make the secret unpropagateable and verify that it disappears.
 		setFinalizer(ctx, fooName, "foo-role", true)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeFalse())
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeFalse())
 
 		// Verify the CannotPropagate event from source object.
 		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
@@ -507,27 +507,27 @@ var _ = Describe("Secret", func() {
 		// that events are removed one hour after the last occurrence. Therefore, we
 		// should still see the CannotPropagate event after fixing the issue.
 		setFinalizer(ctx, fooName, "foo-role", false)
-		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
-		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, barName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
 		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
 	})
 
 	It("shouldn't delete a descendant source object with the same name if the sync mode is 'Remove'", func() {
-		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
+		addToHNCConfig(ctx, "", "secrets", api.Remove)
 		// Set tree as bar -> foo(root).
 		setParent(ctx, barName, fooName)
-		makeObject(ctx, "Secret", barName, "bar-sec")
-		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
+		makeObject(ctx, "secrets", barName, "bar-sec")
+		Eventually(hasObject(ctx, "secrets", barName, "bar-sec")).Should(BeTrue())
 
 		// Create an object with the same name in the parent.
-		makeObject(ctx, "Secret", fooName, "bar-sec")
-		Eventually(hasObject(ctx, "Secret", fooName, "bar-sec")).Should(BeTrue())
+		makeObject(ctx, "secrets", fooName, "bar-sec")
+		Eventually(hasObject(ctx, "secrets", fooName, "bar-sec")).Should(BeTrue())
 		// Give the reconciler some time to remove the object if it's going to.
 		time.Sleep(500 * time.Millisecond)
 		// The source object in the child shouldn't be deleted since the type has 'Remove' mode.
-		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
+		Eventually(hasObject(ctx, "secrets", barName, "bar-sec")).Should(BeTrue())
 	})
 })
 
