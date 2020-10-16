@@ -20,14 +20,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -43,6 +41,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/object"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
 )
 
@@ -659,8 +658,14 @@ func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger,
 // - Objects have a selector that doesn't match the destination namespace
 // - Service Account token secrets
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
-	selector := r.getSelector(log, inst)
-	treeSelector := r.getTreeSelector(log, inst)
+	selector, err := selectors.GetSelector(inst)
+	if err != nil {
+		log.Error(err, "Invalid value")
+	}
+	treeSelector, err := selectors.GetTreeSelector(inst)
+	if err != nil {
+		log.Error(err, "Invalid value")
+	}
 	noneSelector := r.getNoneSelector(log, inst)
 	nsLabels := r.Forest.Get(dst).GetLabels()
 
@@ -726,55 +731,6 @@ func (r *ObjectReconciler) getNoneSelector(log logr.Logger, inst *unstructured.U
 		return true
 	}
 	return noneSelector
-}
-
-// getTreeSelector is similar to a regular selector, except that it adds the LabelTreeDepthSuffix to every string
-// To transform a tree selector into a regular label selector, we follow these steps:
-// 1. get the treeSelector annotation if it exists
-// 2. convert the annotation string to a slice of strings seperated by comma, because user is allowed to put multiple selectors
-// 3. append the LabelTreeDepthSuffix to each of the treeSelector string
-// 4. combine them into a single string connected by comma
-func (r *ObjectReconciler) getTreeSelector(log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
-	annot := inst.GetAnnotations()
-	treeSelectorStr, ok := annot[api.AnnotationTreeSelector]
-	if !ok {
-		return nil
-	}
-	strs := strings.Split(treeSelectorStr, ",")
-	selectorStr := ""
-	for i, str := range strs {
-		selectorStr = selectorStr + str + api.LabelTreeDepthSuffix
-		if i < len(strs)-1 {
-			selectorStr = selectorStr + ", "
-		}
-	}
-	return r.getSelectorFromString(log, selectorStr)
-}
-
-// getSelector returns the selector on a given object if it exists
-func (r *ObjectReconciler) getSelector(log logr.Logger, inst *unstructured.Unstructured) labels.Selector {
-	annot := inst.GetAnnotations()
-	selectorStr, ok := annot[api.AnnotationSelector]
-	if !ok {
-		return nil
-	}
-	return r.getSelectorFromString(log, selectorStr)
-}
-
-// getSelectorFromString converts the given string to a selector
-// Note: any invalid Selector value will cause this object not propagating to any child namespace
-func (r *ObjectReconciler) getSelectorFromString(log logr.Logger, str string) labels.Selector {
-	labelSelector, err := v1.ParseToLabelSelector(str)
-	// TODO: surface the error messages here (https://github.com/kubernetes-sigs/multi-tenancy/issues/1165)
-	if err != nil {
-		log.Error(err, "Could not parse selector annotation to labelSelector")
-		return nil
-	}
-	selector, err := v1.LabelSelectorAsSelector(labelSelector)
-	if err != nil {
-		log.Error(err, "Could not convert labelSelector to selector")
-	}
-	return selector
 }
 
 // recordPropagatedObject records the fact that this object has been propagated, so we can report
