@@ -29,9 +29,9 @@ var setTypeCmd = &cobra.Command{
 		api.Propagate, api.Remove, api.Ignore),
 	Short: "Sets the HNC configuration of a specific resources type",
 	Example: fmt.Sprintf("  # Set configuration of a core type\n" +
-		"  kubectl hns config set-type --apiVersion v1 --kind Secret ignore\n\n" +
+		"  kubectl hns config set-type --apiVersion v1 --kind Secret Ignore\n\n" +
 		"  # Set configuration of a custom type\n" +
-		"  kubectl hns config set-type --apiversion stable.example.com/v1 --kind CronTab propagate"),
+		"  kubectl hns config set-type --apiVersion stable.example.com/v1 --kind CronTab Propagate"),
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := api.SynchronizationMode(args[0])
