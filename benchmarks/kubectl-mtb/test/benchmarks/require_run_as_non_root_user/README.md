@@ -22,7 +22,7 @@ Processes in containers run as the root user (uid 0), by default. To prevent pot
 
 **Audit:**
 
-Create a pod or container that does not set `runAsNonRoot` to `true` in its `securityContext`. The pod creation must fail for both cases.
+Create a pod or container that does not set `runAsNonRoot` to `true` in its `securityContext`, and `runAsUser` must not set to 0. The pod creation must fail for both cases.
 
 **Remediation:**
 
