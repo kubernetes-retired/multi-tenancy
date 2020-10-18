@@ -173,7 +173,7 @@ func (o *Object) hasConflict(inst *unstructured.Unstructured) (bool, []string) {
 
 	// Get a list of conflicting descendants if there's any.
 	for _, desc := range descs {
-		if o.Forest.Get(desc).HasOriginalObject(gvk, nm) {
+		if o.Forest.Get(desc).HasSourceObject(gvk, nm) {
 			conflicts = append(conflicts, desc)
 		}
 	}

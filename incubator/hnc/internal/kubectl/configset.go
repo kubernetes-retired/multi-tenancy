@@ -17,6 +17,7 @@ package kubectl
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -37,12 +38,22 @@ var setTypeCmd = &cobra.Command{
 		flags := cmd.Flags()
 		apiVersion, _ := flags.GetString("apiVersion")
 		kind, _ := flags.GetString("kind")
+		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
 		exist := false
 		for i := 0; i < len(config.Spec.Types); i++ {
 			t := &config.Spec.Types[i]
 			if t.APIVersion == apiVersion && t.Kind == kind {
+				if t.Mode == api.Ignore && mode == api.Propagate && !force {
+					fmt.Println("Switching directly from 'Ignore' to 'Propagate' mode could cause existing %s objects in "+
+						"child namespaces to be overwritten by objects from ancestor namespaces.", kind)
+					fmt.Println("If you are sure you want to proceed with this operation, use the '--force' flag.")
+					fmt.Println("If you are not sure and would like to see what source objects would be overwritten," +
+						"please switch to 'Remove' first. To see how to enable propagation safely, refer to " +
+						"https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types")
+					os.Exit(1)
+				}
 				t.Mode = mode
 				exist = true
 				break
@@ -65,5 +76,6 @@ var setTypeCmd = &cobra.Command{
 func newSetTypeCmd() *cobra.Command {
 	setTypeCmd.Flags().String("apiVersion", "", "API version of the kind")
 	setTypeCmd.Flags().String("kind", "", "Kind to be configured")
+	setTypeCmd.Flags().BoolP("force", "f", false, "Force to set the propagation mode")
 	return setTypeCmd
 }

@@ -225,6 +225,11 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 
 // getConflictingObjects returns a list of namespaced objects if there's any conflict.
 func (v *Hierarchy) getConflictingObjects(newParent, ns *forest.Namespace) []string {
+	// If the new parent is nil,  early exit since it's impossible to introduce
+	// new naming conflicts.
+	if newParent == nil {
+		return nil
+	}
 	// Traverse all the types with 'Propagate' mode to find any conflicts.
 	conflicts := []string{}
 	for _, t := range v.Forest.GetTypeSyncers() {
@@ -241,7 +246,10 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	// Get all the source objects in the new ancestors that would be propagated
 	// into the descendants.
 	newAnsSrcObjs := make(map[string]bool)
-	for _, o := range newParent.GetPropagatingObjects(gvk) {
+	// TODO additionally check if the ancestor source objects obey the
+	//  'shouldPropagateSource()' rules from the reconcilers/object.go. Only
+	//  propagatable ancestor source would cause overwriting conflict.
+	for _, o := range newParent.GetAncestorSourceObjects(gvk, "") {
 		newAnsSrcObjs[o.GetName()] = true
 	}
 
@@ -249,7 +257,7 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	cos := []string{}
 	dnses := append(ns.DescendantNames(), ns.Name())
 	for _, dns := range dnses {
-		for _, o := range v.Forest.Get(dns).GetOriginalObjects(gvk) {
+		for _, o := range v.Forest.Get(dns).GetSourceObjects(gvk) {
 			if newAnsSrcObjs[o.GetName()] {
 				co := fmt.Sprintf("Namespace %q: %s (%v)", dns, o.GetName(), gvk)
 				cos = append(cos, co)

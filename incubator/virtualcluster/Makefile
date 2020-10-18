@@ -133,10 +133,6 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-# build vcctl on osx
-vcctl-osx:
-	GOOS=darwin hack/make-rules/build.sh cmd/vcctl 
-
 # Build and run kubernetes e2e tests.
 #
 # Args:

@@ -17,10 +17,11 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,7 +55,7 @@ type AnchorReconciler struct {
 func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("trigger", req.NamespacedName)
-	log.Info("Reconciling anchor")
+	log.V(1).Info("Reconciling anchor")
 
 	// Get names of the hierarchical namespace and the current namespace.
 	nm := req.Name
@@ -65,7 +66,8 @@ func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// purged.
 	inst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
+			log.Info("Anchor has been deleted")
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -87,13 +89,15 @@ func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	// Update the state so we know the relationship between the anchor and its namespace.
+	r.updateState(log, inst, snsInst)
+
+	// Handle the case where the anchor is being deleted.
 	if deleting, err := r.onDeleting(ctx, log, inst, snsInst); deleting {
 		return ctrl.Result{}, err
 	}
 
-	// Update the state. If the subnamespace doesn't exist, create it.
-	// (This is how a subnamespace is created through a CR)
-	r.updateState(log, inst, snsInst)
+	// If the subnamespace doesn't exist, create it.
 	if inst.Status.State == api.Missing {
 		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
 			return ctrl.Result{}, err
@@ -106,94 +110,168 @@ func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 }
 
-func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) (deleting bool, err error) {
+// onDeleting returns true if the anchor is in the process of being deleted, and handles all
+// necessary steps to allow it to be deleted. This typically amounts to two steps:
+//
+// 1. Delete the subnamespace controlled by this anchor.
+// 2. Remove the finalizers on this anchor, allowing it to be deleted.
+//
+// There are several conditions where we skip step 1 - for example, if we're uninstalling HNC, or
+// if allowCascadingDeletion is disabled but the subnamespace has descendants (see
+// shouldDeleteSubns for details). In such cases, we move straight to step 2.
+func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) (bool, error) {
 	// Early exit and continue reconciliation if the instance is not being deleted.
 	if inst.DeletionTimestamp.IsZero() {
 		return false, nil
 	}
 
+	// We handle deletions differently depending on whether _one_ anchor is being deleted (i.e., the
+	// user wants to delete the namespace) or whether the Anchor CRD is being deleted, which usually
+	// means HNC is being uninstalled and we shouldn't delete _any_ namespaces.
 	deletingCRD, err := isDeletingCRD(ctx, r, api.Anchors)
 	if err != nil {
 		log.Info("Couldn't determine if CRD is being deleted")
 		return false, err
 	}
+	log.Info("Anchor is being deleted", "deletingCRD", deletingCRD)
 
-	log.Info("The anchor is being deleted", "deletingCRD", deletingCRD)
+	// Check if we need to perform step 1 (delete subns), step 2 (allow finalization) or just wait for
+	// something to happen. See method-level comments for details.
 	switch {
-	case len(inst.ObjectMeta.Finalizers) == 0:
-		// We've finished processing this, nothing to do.
-		log.Info("Do nothing since the finalizers are already gone.")
-		return true, nil
-	case r.shouldDeleteSubns(inst, snsInst, deletingCRD):
-		// The subnamespace is not already being deleted but it allows cascadingDelete or it's a leaf.
-		// Delete the subnamespace, unless the CRD is being deleted, in which case, we want to leave the
-		// namespaces alone.
-		log.Info("The subnamespace is not being deleted but it allows cascading deletion or it's a leaf.")
+	case r.shouldDeleteSubns(log, inst, snsInst, deletingCRD):
+		log.Info("Deleting subnamespace")
 		return true, r.deleteNamespace(ctx, log, snsInst)
-	case r.removeFinalizers(log, inst, snsInst):
-		// We've determined that this anchor is ready to be deleted.
+	case r.shouldFinalizeAnchor(log, inst, snsInst):
+		log.Info("Removing finalizer")
+		inst.ObjectMeta.Finalizers = nil
 		return true, r.writeInstance(ctx, log, inst)
 	default:
-		// The subnamespace is already being deleted. Do nothing in this Reconcile().
-		// Wait until it's purged to remove the finalizers in another Reconcile().
-		log.Info("Do nothing since the subnamespace is still being deleted (not purged yet).")
+		// There's nothing to do; we're just waiting for something to happen. Print out a log message
+		// indicating what we're waiting for.
+		if len(inst.ObjectMeta.Finalizers) > 0 {
+			log.Info("Waiting for subnamespace to be fully purged")
+		} else {
+			// I doubt we'll ever get here but I suppose it's possible
+			log.Info("Waiting for K8s to delete this anchor (all finalizers are removed)")
+		}
 		return true, nil
 	}
 }
 
-// shouldDeleteSubns returns true if the namespace still exists and it is a leaf
-// subnamespace or it allows cascading delete unless the CRD is being deleted.
-func (r *AnchorReconciler) shouldDeleteSubns(inst *api.SubnamespaceAnchor, nsInst *corev1.Namespace, deletingCRD bool) bool {
+// shouldDeleteSubns returns true if the namespace still exists and should be deleted as a result of
+// the anchor being deleted. There are a variety of reasons why subnamespaces *shouldn't* be deleted
+// with their anchors (see the body of this method for details); this function also returns false if
+// the subns is already being deleted and we just need to keep waiting for it to disappear.
+//
+// This is the only part of the deletion process that needs to access the forest, in order to check
+// the recursive AllowCascadingDeletion setting.
+func (r *AnchorReconciler) shouldDeleteSubns(log logr.Logger, inst *api.SubnamespaceAnchor, nsInst *corev1.Namespace, deletingCRD bool) bool {
 	r.forest.Lock()
 	defer r.forest.Unlock()
 
 	// If the CRD is being deleted, we want to leave the subnamespace alone.
 	if deletingCRD {
+		log.Info("Will not delete subnamespace since the anchor CRD is being deleted")
 		return false
 	}
 
-	cnm := inst.Name
-	pnm := inst.Namespace
-	cns := r.forest.Get(cnm)
+	// The state of the anchor is the most important factor in whether the namespace should be
+	// deleted.
+	switch inst.Status.State {
+	case api.Ok:
+		// The namespace and anchor are bound together, so it's valid to decide the fate of the
+		// namespace here. Firstly, if the namespace is already being deleted, or the anchor has already
+		// been finalized, it means we've already passed step #1 in the deletion process (see onDeleting
+		// for details) so we shouldn't try to perform it again.
+		if !nsInst.DeletionTimestamp.IsZero() {
+			log.V(1).Info("The subnamespace is already being deleted; no need to delete again")
+			return false
+		}
+		if len(inst.ObjectMeta.Finalizers) == 0 {
+			log.V(1).Info("The anchor has already been finalized; do not reconsider deleting the namespace")
+			return false
+		}
 
-	// If the declared subnamespace is not created by this anchor, don't delete it.
-	if cns.Parent().Name() != pnm {
+		// The subns is ready to be deleted. It's only safe to delete subnamespaces if they're leaves or
+		// if ACD=true on one of their ancestors; the webhooks *should* ensure that this is always true
+		// before we get here, but if something slips by, we'll just leave the old subnamespace alone
+		// with a missing-anchor condition.
+		cns := r.forest.Get(inst.Name)
+		if cns.ChildNames() != nil && !cns.AllowsCascadingDeletion() {
+			log.Info("This subnamespace has descendants and allowCascadingDeletion is disabled; will not delete")
+			return false
+		}
+
+		// Everything looks normal and safe. Delete the namespace.
+		return true
+
+	case api.Conflict:
+		// The anchor is in a bad state; a namespace exists but isn't tied to this anchor. We certainly
+		// shouldn't delete the namespace.
+		log.Info("Anchor is conflicted; will not delete subnamespace")
+		return false
+
+	case api.Missing:
+		// This most likely means that the namespace has been deleted. There's a small chance that the
+		// user created this anchor and then deleted it before the subns could be created; if so,
+		// there's nothing to delete.
+		log.V(1).Info("The subnamespace is deleted; no need to delete again")
+		return false
+
+	default:
+		log.Error(errors.New("Bad anchor state"), "state", inst.Status.State)
+		// Stay on the safe side - don't delete
 		return false
 	}
 
-	// If the subnamespace is created by this anchor but is already being deleted,
-	// or has already been deleted, then there's no need to delete it again.
-	if !nsInst.DeletionTimestamp.IsZero() || !cns.Exists() {
-		return false
-	}
-
-	// The subnamespace exists and isn't being deleted. We should delete it if it
-	// doesn't have any children itself, or if cascading deletion is enabled.
-	return cns.ChildNames() == nil || cns.AllowsCascadingDelete()
 }
 
-func (r *AnchorReconciler) removeFinalizers(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
-	pnm := inst.Namespace
-	sOf := snsInst.GetAnnotations()[api.SubnamespaceOf]
-
-	// This switch statement has an explicit case for all conditions when we *can* delete the
-	// finalizers. The default behaviour is that we *cannot* delete the finalizers yet.
-	switch {
-	case snsInst.Name == "":
-		log.Info("The subnamespace is already purged; allowing the anchor to be deleted")
-	case sOf != pnm:
-		log.Info("The subnamespace believes it is the subnamespace of another namespace; allowing the anchor to be deleted", "annotation", sOf)
-	case snsInst.DeletionTimestamp.IsZero():
-		// onDeleting has decided not to try to delete this namespace. Either cascading deletion isn't
-		// allowed (and the user has bypassed the webhook), or the CRD has been deleted and we don't
-		// want to invoke cascading deletion. Just allow the anchor to be deleted.
-		log.Info("We've decided not to delete the subnamespace; allowing the anchor to be deleted")
-	default:
+// shouldFinalizeAnchor determines whether the anchor is safe to delete. It should only be called once
+// we know that we don't need to delete the subnamespace itself (e.g. it's already gone, it can't be
+// deleted, it's in the process of being deleted, etc).
+func (r *AnchorReconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
+	// If the anchor is already finalized, there's no need to do it again.
+	if len(inst.ObjectMeta.Finalizers) == 0 {
 		return false
 	}
 
-	inst.ObjectMeta.Finalizers = nil
-	return true
+	switch inst.Status.State {
+	case api.Ok:
+		// The subnamespace exists and is bound to this anchor. Since we called shouldDeleteSubns before
+		// this function, we can rely on the subns' deletion timestamp being nonzero if the subns should
+		// be deleted with this namespace. If the subns *isn't* being deleted at this point, we can
+		// infer that it's not going to be, and the anchor is safe to finalize now.
+		if snsInst.DeletionTimestamp.IsZero() {
+			log.Info("Subnamespace will not be deleted; allowing anchor to be finalized")
+			return true
+		}
+		log.V(1).Info("Subnamespace is being deleted; cannot finalize anchor yet")
+		return false
+
+	case api.Missing:
+		// Most likely, the namespace has been deleted. There's a small chance the anchor was created
+		// and then deleted before we were able to create the namespace, in which case, it's also fine
+		// to allow the anchor to be deleted.
+		//
+		// Is it possible that the namespace actually was created, but that HNC just hasn't noticed it
+		// yet? I don't _think_ so - we'd create the namespace via the controller-runtime client, and
+		// then we'd try to read it via the same client, so I'm hoping there's no weird distributed
+		// concurrency problem. But even if this isn't true, the worst that could happen (in this corner
+		// case of a corner case) is that the namespace gets created with a Missing Anchor condition,
+		// which really isn't the end of the world. So I don't think it's worth worrying about too much.
+		log.Info("Subnamespace does not exist; allowing anchor to be finalized")
+		return true
+
+	case api.Conflict:
+		// Bad anchors can always be removed.
+		log.Info("Anchor is in the conflicted state; allowing it to be finalized")
+		return true
+
+	default:
+		// Should never happen, so log an error and let it be deleted.
+		log.Error(errors.New("Illegal state"), "Unknown state", "state", inst.Status.State)
+		return true
+	}
 }
 
 func (r *AnchorReconciler) updateState(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) {
@@ -202,13 +280,16 @@ func (r *AnchorReconciler) updateState(log logr.Logger, inst *api.SubnamespaceAn
 	sOf := snsInst.Annotations[api.SubnamespaceOf]
 	switch {
 	case snsInst.Name == "":
-		log.Info("The subnamespace does not exist", "subnamespace", nm)
+		log.Info("The subnamespace does not exist; anchor state is Missing", "subnamespace", nm)
 		inst.Status.State = api.Missing
 	case sOf != pnm:
-		log.Info("The subnamespaceOf annotation of this namespace doesn't match its parent", "annotation", sOf)
+		log.Info("The subnamespaceOf annotation does not match parent; anchor state is Conflict", "annotation", sOf)
 		inst.Status.State = api.Conflict
 	default:
-		log.Info("The subnamespace has the correct subnamespaceOf annotation", "annotation", sOf)
+		if inst.Status.State != api.Ok {
+			// Only print log if something's changed
+			log.Info("The subnamespace and its anchor are correctly synchronized", "prevState", inst.Status.State)
+		}
 		inst.Status.State = api.Ok
 	}
 }
@@ -237,13 +318,11 @@ func (r *AnchorReconciler) getInstance(ctx context.Context, pnm, nm string) (*ap
 
 func (r *AnchorReconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
 	if inst.CreationTimestamp.IsZero() {
-		log.Info("Creating instance on apiserver")
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
 			return err
 		}
 	} else {
-		log.Info("Updating instance on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating on apiserver")
 			return err
@@ -259,7 +338,7 @@ func (r *AnchorReconciler) getNamespace(ctx context.Context, nm string) (*corev1
 	ns := &corev1.Namespace{}
 	nnm := types.NamespacedName{Name: nm}
 	if err := r.Get(ctx, nnm, ns); err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
 		return &corev1.Namespace{}, nil
@@ -285,7 +364,6 @@ func (r *AnchorReconciler) writeNamespace(ctx context.Context, log logr.Logger, 
 }
 
 func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
-	log.Info("Deleting namespace on apiserver")
 	if err := r.Delete(ctx, inst); err != nil {
 		log.Error(err, "while deleting on apiserver")
 		return err

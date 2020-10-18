@@ -129,10 +129,13 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
+	initial := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
 
-	// Write back if anything's changed. Early-exit if we just write back exactly what we had.
-	if updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst); !updated || err != nil {
+	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
+	// isn't the first time we're syncing.
+	updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst)
+	updated = updated || initial
+	if !updated || err != nil {
 		return err
 	}
 
@@ -162,7 +165,7 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 
 // updateFinalizers ensures that the HC can't be deleted if there are any subnamespace anchors in
 // the namespace (with some exceptions). The main reason is that the HC stores the
-// .spec.allowCascadingDelete field, so if we allowed this object to be deleted before all
+// .spec.allowCascadingDeletion field, so if we allowed this object to be deleted before all
 // descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
 func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
@@ -195,7 +198,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine.
-func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) {
+func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -206,6 +209,13 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearLocalConditions()
 
+	// If there are any traces of v1alpha1 still around, fix them now (they'll be written back to the
+	// apiserver after this function's finished). Do this before reconciling anything else so that the
+	// rest of this function can assume that only v1alpha2 is present.
+	// TODO: remove this after v0.6 branches.
+	r.upgradeV1A1SubnamespaceAnnotation(nsInst)
+	r.upgradeV1A1ManagedBy(nsInst)
+
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
 
@@ -214,11 +224,11 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	// for this namespace to be synced.
 	r.syncSubnamespaceParent(log, inst, nsInst, ns)
 	r.syncParent(log, inst, ns)
-	r.markExisting(log, ns)
+	initial := r.markExisting(log, ns)
 
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
-	ns.UpdateAllowCascadingDelete(inst.Spec.AllowCascadingDelete)
+	ns.UpdateAllowCascadingDeletion(inst.Spec.AllowCascadingDeletion)
 
 	// Sync the status
 	inst.Status.Children = ns.ChildNames()
@@ -226,6 +236,8 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Sync the tree labels. This should go last since it can depend on the conditions.
 	r.syncLabel(log, nsInst, ns)
+
+	return initial
 }
 
 // syncExternalNamespace sets external tree labels to the namespace in the forest
@@ -262,6 +274,50 @@ func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsIns
 	ns.ExternalTreeLabels = etls
 }
 
+// upgradeV1A1SubnamespaceAnnotation replaces the deprecated "subnamespaceOf" annotation from v0.5.x
+// with the new "subnamespace-of" annotation used in v0.6.x and beyond. If both exist, we will only
+// delete the deprecated annotation.
+func (r *HierarchyConfigReconciler) upgradeV1A1SubnamespaceAnnotation(inst *corev1.Namespace) {
+	a := inst.GetAnnotations()
+	oldSubnsOf, oldExists := a[api.SubnamespaceOfV1A1]
+	if !oldExists {
+		return
+	}
+
+	// Remove old annotation
+	delete(a, api.SubnamespaceOfV1A1)
+
+	// Add new annotation key with the old value if it doesn't exist. There's a
+	// corner case if the namespace has the new (unknown to HNC v0.5) annotation
+	// before upgrading API, the new annotation will take over after upgrading.
+	if _, newExists := a[api.SubnamespaceOf]; !newExists {
+		a[api.SubnamespaceOf] = oldSubnsOf
+	}
+
+	inst.SetAnnotations(a)
+}
+
+// upgradeV1A1ManagedBy replaces the v1alpha1 `managedBy` annotation with the v1alpha2 `managed-by`
+// annotation. If there's a conflict, the old one is ignored and deleted.
+func (r *HierarchyConfigReconciler) upgradeV1A1ManagedBy(inst *corev1.Namespace) {
+	// Get old annotation
+	a := inst.GetAnnotations()
+	oldMB, oldExists := a[api.AnnotationManagedByV1A1]
+	if !oldExists {
+		return
+	}
+
+	// Remove old annotation
+	delete(a, api.AnnotationManagedByV1A1)
+
+	// Add new annotation if it doesn't already exist
+	if _, newExists := a[api.AnnotationManagedBy]; !newExists {
+		a[api.AnnotationManagedBy] = oldMB
+	}
+
+	inst.SetAnnotations(a)
+}
+
 // syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
 // condition if the anchor is missing in the parent namespace according to the forest. The
 // subnamespaceOf annotation is the source of truth of the ownership (e.g. being a subnamespace),
@@ -273,6 +329,21 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	}
 
 	pnm := nsInst.Annotations[api.SubnamespaceOf]
+
+	// Issue #1130: as a subnamespace is being deleted (e.g. because its anchor was deleted), ignore
+	// the annotation. K8s will remove the HC, which will effectively orphan this namespace, prompting
+	// HNC to remove all propagated objects, allowing it to be deleted cleanly. Without this, HNC
+	// would continue to think that all propagated objects needed to be protected from deletion and
+	// would prevent K8s from emptying and removing the namespace.
+	//
+	// We could also add an exception to allow K8s SAs to override the object validator (and we
+	// probably should), but this prevents us from getting into a war with K8s and is sufficient for
+	// v0.5.
+	if pnm != "" && !nsInst.DeletionTimestamp.IsZero() {
+		log.Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
+		pnm = ""
+	}
+
 	if pnm == "" {
 		ns.IsSub = false
 		return
@@ -300,15 +371,17 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 
 // markExisting marks the namespace as existing. If this is the first time we're reconciling this namespace,
 // mark all possible relatives as being affected since they may have been waiting for this namespace.
-func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
-	if ns.SetExists() {
-		log.Info("Reconciling new namespace")
-		r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
-		if ns.IsSub {
-			r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
-			r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
-		}
+func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Namespace) bool {
+	if !ns.SetExists() {
+		return false
 	}
+	log.Info("Reconciling new namespace")
+	r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
+	if ns.IsSub {
+		r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
+		r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
+	}
+	return true
 }
 
 func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
@@ -398,6 +471,9 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 		anc = anc.Parent()
 		depth++
 	}
+	// Update the labels in the forest so that we can quickly access the labels and
+	// compare if they match the given selector
+	ns.SetLabels(nsInst.Labels)
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {
@@ -546,6 +622,7 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 
 // updateObjects calls all type reconcillers in this namespace.
 func (r *HierarchyConfigReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
+	log.Info("Namespace modified; updating all objects")
 	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
 	// from modifying the list at the same time.
 	r.Forest.Lock()

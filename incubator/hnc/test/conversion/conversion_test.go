@@ -27,6 +27,10 @@ const (
 	configCRD       = "hncconfigurations.hnc.x-k8s.io"
 	hierSingleton   = "hierarchy"
 	configSingleton = "config"
+
+	namspacePrefix = "e2e-conversion-test-"
+	nsA            = namspacePrefix + "a"
+	nsB            = namspacePrefix + "b"
 )
 
 func TestConversion(t *testing.T) {
@@ -41,44 +45,123 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 	const (
 		// hncFromVersion has to be a version using v1alpha1.
 		hncFromVersion = "v0.5.0"
-		namspacePrefix = "e2e-conversion-test-"
-		nsA            = namspacePrefix + "a"
-		nsB            = namspacePrefix + "b"
 	)
 
 	BeforeEach(func() {
+		// CleanupNamespaces uses v1alpha2 which only exists in HNC v0.6. We don't know for sure if v0.6
+		// is installed right now but our best bet to clean up namespaces safely is to hope that it is.
+		// TODO: make CleanupNamespaces work regardless of whether HNC is running or not (see that
+		// function for details).
 		CleanupNamespaces(nsA, nsB)
-		// Tear down HNC for both the specified version and at HEAD.
+
+		// Almost all tests start with HNC v0.5 so just start there.
 		TearDownHNC(hncFromVersion)
 		setupV1alpha1(hncFromVersion)
 	})
 
 	AfterEach(func() {
+		// Restore to the initial starting point. Clean up namespaces before tearing down HNC to remove
+		// finalizers.
 		CleanupNamespaces(nsA, nsB)
-		// Only tear down HNC at HEAD, since that's what we just deployed.
 		TearDownHNC("")
 	})
 
-	It("should convert subnamespace anchors", func() {
-		// Before conversion, create namespace A and a subnamespace B.
+	It("should convert managedBy annotation", func() {
+		// Create externally managed namespace
 		MustRun("kubectl create ns", nsA)
-		subnsB := `# temp file created by conversion_test.go
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: SubnamespaceAnchor
-metadata:
-  name: e2e-conversion-test-b
-  namespace: e2e-conversion-test-a`
-		MustApplyYAML(subnsB)
-		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "ok")
+		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo")
 
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
+		// Verify correct annotation
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:foo")
+	})
+
+	It("should always respect the new managed-by annotation even if both exists before conversion (very unlikely)", func() {
+		// Create externally managed namespace with conflicting values
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo")
+		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managed-by=bar") // unknown to v0.5
+		// Both should just sit there
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
+
+		// Convert
+		setupV1alpha2()
+
+		// Only the new value should be present
+		FieldShouldNotContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
+	})
+
+	It("should respect the new 'managed-by' annotation AFTER conversion if both exists", func() {
+		// Start with v1a2 this time
+		setupV1alpha2()
+
+		// Create the namespace with both the correct and obsolete annotations
+		MustRun("kubectl create ns", nsA)
+		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managed-by=bar")
+		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo") // deprecated in v0.6
+
+		// Verify that the deprecated version is removed
+		FieldShouldNotContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
+	})
+
+
+	It("should convert subnamespace anchors and subnamespace-of annotation", func() {
+		// Before conversion, create namespace A and a subnamespace B.
+		createSampleV1alpha1Subnamespace()
+
+		// Convert
+		setupV1alpha2()
+
 		// Verify subnamespace anchor status in the new version.
 		FieldShouldContainWithTimeout(anchorCRD, nsA, nsB, ".apiVersion", "v1alpha2", crdConversionTime)
 		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "Ok")
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "map[hnc.x-k8s.io/subnamespace-of:"+nsA+"]")
+	})
+
+	It("should always respect the new 'subnamespace-of' annotation even if both exists before conversion (very unlikely)", func() {
+		// Before conversion, create namespace A and a subnamespace B.
+		createSampleV1alpha1Subnamespace()
+		// Add `subnamespace-of` annotation, which should be unknown to HNC v0.5.
+		MustRun("kubectl annotate ns", nsB, "hnc.x-k8s.io/subnamespace-of=wrongvalue")
+		// Both subnamespace annotations should be there.
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespaceOf:"+nsA)
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespace-of:wrongvalue")
+
+		// Convert
+		setupV1alpha2()
+
+		// It should respect the new 'subnamespace-of' annotation even if it's wrong.
+		// Verify subnamespace anchor status ('Conflict') in the new version and the
+		// subnamespace annotation value ('wrongvalue').
+		FieldShouldContainWithTimeout(anchorCRD, nsA, nsB, ".apiVersion", "v1alpha2", crdConversionTime)
+		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "Conflict")
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespace-of:wrongvalue")
+	})
+
+	It("should respect the new 'subnamespace-of' annotation AFTER conversion if both exists", func() {
+		// Before conversion, create namespace A and a subnamespace B.
+		createSampleV1alpha1Subnamespace()
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify subnamespace anchor status (not 'Conflict') in the new version and
+		// the 'subnamespace-of' annotation.
+		FieldShouldContainWithTimeout(anchorCRD, nsA, nsB, ".apiVersion", "v1alpha2", crdConversionTime)
+		FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "Ok")
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "map[hnc.x-k8s.io/subnamespace-of:"+nsA+"]")
+
+		// Add `subnamespaceOf` annotation, which is obsolete in HNC v0.6.
+		MustRun("kubectl annotate ns", nsB, "hnc.x-k8s.io/subnamespaceOf=wrongvalue")
+		// Still only the new subnamespace annotation with the same value should be
+		// there, and the obsolete one should be deleted.
+		FieldShouldNotContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespaceOf:")
+		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespace-of:"+nsA)
 	})
 
 	It("should convert HCs with parent", func() {
@@ -98,8 +181,6 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
 		// Verify the parent spec and the children status in the new version.
 		FieldShouldContainWithTimeout(hierCRD, nsA, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
 		FieldShouldContain(hierCRD, nsA, hierSingleton, ".status.children", nsB)
@@ -107,7 +188,7 @@ spec:
 		FieldShouldContain(hierCRD, nsB, hierSingleton, ".spec.parent", nsA)
 	})
 
-	It("should convert HCs with allowCascadingDelete", func() {
+	It("should convert HCs allowCascadingDelete to allowCascadingDeletion", func() {
 		// Before conversion, create namespace A with allowCascadingDelete.
 		MustRun("kubectl create ns", nsA)
 		hierA := `# temp file created by conversion_test.go
@@ -119,15 +200,14 @@ metadata:
 spec:
   allowCascadingDelete: true`
 		MustApplyYAML(hierA)
+		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDelete:true")
 
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
-		// Verify allowCascadingDelete in the new version.
+		// Verify allowCascadingDeletion in the new version.
 		FieldShouldContainWithTimeout(hierCRD, nsA, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDelete:true")
+		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDeletion:true")
 	})
 
 	It("should still have HC condition if it exists in v1alpha1", func() {
@@ -141,8 +221,6 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
 		// Verify conditions in the new version.
 		FieldShouldContainWithTimeout(hierCRD, nsB, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
 		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
@@ -152,8 +230,6 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
 		// Verify default types in the new version.
 		FieldShouldContainWithTimeout(configCRD, "", configSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
 		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.types", []string{"Role", "RoleBinding"})
@@ -195,8 +271,6 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify CRD conversion.
-		verifyCRDConversion()
 		// Verify sync mode conversion.
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Propagate")
 		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "propagate")
@@ -232,10 +306,8 @@ func setupV1alpha2(){
 	MustRun("kubectl apply -f ../../manifests/hnc-manager.yaml")
 	// Wait for the cert rotator to write caBundles in CRD conversion webhooks.
 	ensureCRDConvWHReady()
-}
 
-// Verify CRDs still have 'v1alpha1' in spec.versions but not in status.storedVersions.
-func verifyCRDConversion(){
+	// Verify CRDs still have 'v1alpha1' in spec.versions but not in status.storedVersions.
 	checkCRDVersionInField("v1alpha1", ".spec.versions", true)
 	checkCRDVersionInField("v1alpha2", ".spec.versions", true)
 	checkCRDVersionInField("v1alpha1", ".status.storedVersions", false)
@@ -268,15 +340,31 @@ func ensureCRDConvWHReady(){
 
 // createSampleV1alpha1Tree creates a tree with 'a' as the root, 'b' as the child.
 func createSampleV1alpha1Tree(){
-	MustRun("kubectl create ns e2e-conversion-test-a")
-	MustRun("kubectl create ns e2e-conversion-test-b")
+	MustRun("kubectl create ns", nsA)
+	MustRun("kubectl create ns", nsB)
 	hierB := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HierarchyConfiguration
 metadata:
   name: hierarchy
-  namespace: e2e-conversion-test-b
+  namespace: `+nsB+`
 spec:
-  parent: e2e-conversion-test-a`
+  parent: `+nsA+`
+`
 	MustApplyYAML(hierB)
+}
+
+// createSampleV1alpha1Subnamespace creates 'a' and a subnamespace 'b'.
+func createSampleV1alpha1Subnamespace(){
+	MustRun("kubectl create ns", nsA)
+	subnsB := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: SubnamespaceAnchor
+metadata:
+  name: `+nsB+`
+  namespace: `+nsA+`
+`
+	MustApplyYAML(subnsB)
+	FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "ok")
+	FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespaceOf:"+nsA)
 }

@@ -35,15 +35,12 @@ spec:
         spec:
           containers:
           - =(securityContext):
-              # https://github.com/kubernetes/api/blob/7dc09db16fb8ff2eee16c65dc066c85ab3abb7ce/core/v1/types.go#L5754
               =(allowPrivilegeEscalation): false
 ---
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: disallow-root-user
-  annotations:
-    pod-policies.kyverno.io/autogen-controllers: none
 spec:
   validationFailureAction: enforce
   rules:
@@ -59,9 +56,16 @@ spec:
           securityContext:
             runAsNonRoot: true
       - spec:
+          securityContext:
+            runAsUser: ">0"
+      - spec:
           containers:
           - securityContext:
               runAsNonRoot: true
+      - spec:
+          containers:
+          - securityContext:
+              runAsUser: ">0"
 ---
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -81,8 +85,6 @@ spec:
           spec:
             containers:
               - =(securityContext):
-                  # https://github.com/kubernetes/api/blob/7dc09db16fb8ff2eee16c65dc066c85ab3abb7ce/core/v1/types.go#L5707-L5711
-                  # k8s default to false
                   =(privileged): false
                   =(allowPrivilegeEscalation): false
 ---
@@ -197,3 +199,21 @@ spec:
                 =(capabilities):
                   X(add): null
 ---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-always-pull-image
+spec:
+  validationFailureAction: enforce
+  rules:
+    - name: require-always-pull-image
+      match:
+        resources:
+          kinds:
+            - Pod
+      validate:
+        pattern:
+          spec:
+            containers:
+              - (name): "*"
+                imagePullPolicy: "Always"

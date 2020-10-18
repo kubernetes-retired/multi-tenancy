@@ -5,80 +5,79 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SetOriginalObject updates or creates the original object in the namespace in the forest.
-func (ns *Namespace) SetOriginalObject(obj *unstructured.Unstructured) {
+// SetSourceObject updates or creates the source object in forest.namespace.
+func (ns *Namespace) SetSourceObject(obj *unstructured.Unstructured) {
 	gvk := obj.GroupVersionKind()
 	name := obj.GetName()
-	_, ok := ns.originalObjects[gvk]
+	_, ok := ns.sourceObjects[gvk]
 	if !ok {
-		ns.originalObjects[gvk] = map[string]*unstructured.Unstructured{}
+		ns.sourceObjects[gvk] = map[string]*unstructured.Unstructured{}
 	}
-	ns.originalObjects[gvk][name] = obj
+	ns.sourceObjects[gvk][name] = obj
 }
 
-// GetOriginalObject gets an original object by name. It returns nil, if the object doesn't exist.
-func (ns *Namespace) GetOriginalObject(gvk schema.GroupVersionKind, nm string) *unstructured.Unstructured {
-	return ns.originalObjects[gvk][nm]
+// GetSourceObject gets a source object by name. If it doesn't exist, return nil.
+func (ns *Namespace) GetSourceObject(gvk schema.GroupVersionKind, nm string) *unstructured.Unstructured {
+	return ns.sourceObjects[gvk][nm]
 }
 
-// HasOriginalObject returns if the namespace has an original object.
-func (ns *Namespace) HasOriginalObject(gvk schema.GroupVersionKind, oo string) bool {
-	return ns.GetOriginalObject(gvk, oo) != nil
+// HasSourceObject returns if the namespace has a source object.
+func (ns *Namespace) HasSourceObject(gvk schema.GroupVersionKind, oo string) bool {
+	return ns.GetSourceObject(gvk, oo) != nil
 }
 
-// DeleteOriginalObject deletes an original object by name.
-func (ns *Namespace) DeleteOriginalObject(gvk schema.GroupVersionKind, nm string) {
-	delete(ns.originalObjects[gvk], nm)
+// DeleteSourceObject deletes a source object by name.
+func (ns *Namespace) DeleteSourceObject(gvk schema.GroupVersionKind, nm string) {
+	delete(ns.sourceObjects[gvk], nm)
 	// Garbage collection
-	if len(ns.originalObjects[gvk]) == 0 {
-		delete(ns.originalObjects, gvk)
+	if len(ns.sourceObjects[gvk]) == 0 {
+		delete(ns.sourceObjects, gvk)
 	}
 }
 
-// GetOriginalObjects returns all original objects in the namespace.
-func (ns *Namespace) GetOriginalObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
+// GetSourceObjects returns all source objects in the namespace.
+func (ns *Namespace) GetSourceObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
 	o := []*unstructured.Unstructured{}
-	for _, obj := range ns.originalObjects[gvk] {
+	for _, obj := range ns.sourceObjects[gvk] {
 		o = append(o, obj)
 	}
 	return o
 }
 
-// GetNumOriginalObjects returns the total number of original objects of a specific GVK in the namespace.
-func (ns *Namespace) GetNumOriginalObjects(gvk schema.GroupVersionKind) int {
-	return len(ns.originalObjects[gvk])
+// GetNumSourceObjects returns the total number of source objects of a specific
+// GVK in the namespace.
+func (ns *Namespace) GetNumSourceObjects(gvk schema.GroupVersionKind) int {
+	return len(ns.sourceObjects[gvk])
 }
 
-// GetPropagatedObjects returns all original copies in the ancestors.
-func (ns *Namespace) GetPropagatedObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
-	o := []*unstructured.Unstructured{}
+// GetAncestorSourceObjects returns all source objects with the specified name
+// in the ancestors (including itself) from top down. If the name is not
+// specified, all the source objects in the ancestors will be returned.
+func (ns *Namespace) GetAncestorSourceObjects(gvk schema.GroupVersionKind, name string) []*unstructured.Unstructured {
+	// The namespace could be nil when we use this function on "ns.Parent()" to
+	// get the source objects of the ancestors excluding itself without caring if
+	// the "ns.Parent()" is nil.
+	if ns == nil {
+		return nil
+	}
+
+	// Get the source objects in the ancestors from top down.
+	objs := []*unstructured.Unstructured{}
 	ans := ns.AncestryNames()
 	for _, n := range ans {
-		// Exclude the original objects in this namespace
-		if n == ns.name {
-			continue
-		}
-		o = append(o, ns.forest.Get(n).GetOriginalObjects(gvk)...)
-	}
-	return o
-}
-
-// GetPropagatingObjects returns all the source objects to be propagated into the
-// descendants of this namespace.
-// TODO update this function to reflect the changes introduced by the future HNC
-//  exceptions implementation.
-func (ns *Namespace) GetPropagatingObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
-	return append(ns.GetPropagatedObjects(gvk), ns.GetOriginalObjects(gvk)...)
-}
-
-// GetSource returns the original copy in the ancestors if it exists.
-// Otherwise, return nil.
-func (ns *Namespace) GetSource(gvk schema.GroupVersionKind, name string) *unstructured.Unstructured {
-	pos := ns.GetPropagatedObjects(gvk)
-	for _, po := range pos {
-		if po.GetName() == name {
-			return po
+		nsObjs := ns.forest.Get(n).GetSourceObjects(gvk)
+		if name == "" {
+			// Get all the source objects if the name is not specified.
+			objs = append(objs, ns.forest.Get(n).GetSourceObjects(gvk)...)
+		} else {
+			// If a name is specified, return the matching objects.
+			for _, o := range nsObjs {
+				if o.GetName() == name {
+					objs = append(objs, o)
+				}
+			}
 		}
 	}
-	return nil
+
+	return objs
 }

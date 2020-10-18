@@ -72,32 +72,34 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	cnm := req.anchor.Name
 	cns := v.Forest.Get(cnm)
 
-	if req.op == v1beta1.Create {
+	switch req.op {
+	case v1beta1.Create:
+		// Can't create subnamespaces in excluded namespaces
 		if config.EX[pnm] {
 			msg := fmt.Sprintf("The namespace %s is not allowed to create subnamespaces. Please create subnamespaces in a different namespace.", pnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 
+		// Can't create anchors for existing namespaces, _unless_ it's for a subns with a missing
+		// anchor.
 		if cns.Exists() {
-			// Forbid this, unless it's to allow an anchor to be created for an existing subnamespace
-			// that's just missing its anchor.
-			if cns.Parent().Name() == pnm && cns.IsSub {
-				return allow("")
+			childIsMissingAnchor := (cns.Parent().Name() == pnm && cns.IsSub)
+			if !childIsMissingAnchor {
+				msg := fmt.Sprintf("The requested namespace %s already exists. Please use a different name.", cnm)
+				return deny(metav1.StatusReasonConflict, msg)
 			}
-			msg := fmt.Sprintf("The requested namespace %s already exists. Please use a different name.", cnm)
-			return deny(metav1.StatusReasonConflict, msg)
 		}
-	}
 
-	if req.op == v1beta1.Delete {
-		// Allow deleting a bad anchor.
-		if cns.Parent().Name() != pnm {
-			return allow("")
-		}
-		if cns.Exists() && cns.ChildNames() != nil && !cns.AllowsCascadingDelete() {
-			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDelete flag or make it a leaf first.", cnm)
+	case v1beta1.Delete:
+		// Don't allow the anchor to be deleted if it's in a good state and has descendants of its own,
+		// unless allowCascadingDeletion is set.
+		if req.anchor.Status.State == api.Ok && cns.ChildNames() != nil && !cns.AllowsCascadingDeletion() {
+			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDeletion flag or make it a leaf first.", cnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
+
+	default:
+		// nop for updates etc
 	}
 
 	return allow("")

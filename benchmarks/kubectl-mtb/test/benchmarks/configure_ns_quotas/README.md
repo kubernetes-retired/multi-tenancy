@@ -28,5 +28,7 @@ kubectl --kubeconfig=tenant-a -n a1 describe quota
 ```
 
 
+**Remediation:**
+
 Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml`
 

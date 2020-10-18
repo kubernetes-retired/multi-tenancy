@@ -1,6 +1,6 @@
 module sigs.k8s.io/multi-tenancy/incubator/virtualcluster
 
-go 1.12
+go 1.13
 
 require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.60.324
@@ -21,6 +21,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery v0.18.6
 	k8s.io/apiserver v0.18.6
+	k8s.io/cli-runtime v0.18.6
 	k8s.io/client-go v0.18.6
 	k8s.io/code-generator v0.18.6
 	k8s.io/component-base v0.18.6
@@ -29,6 +30,7 @@ require (
 	k8s.io/kubernetes v1.18.6
 	k8s.io/utils v0.0.0-20200619165400-6e3d28b6ed19
 	sigs.k8s.io/controller-runtime v0.6.1
+	sigs.k8s.io/yaml v1.2.0
 )
 
 // We use the replace directive to pin k8s.io dependencies that we don't directly
@@ -42,7 +44,6 @@ require (
 //  and it is not advised that external projects depend upon k8s.io/kubernetes for
 //  this exact reason.
 replace (
-	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.0.0+incompatible
 	k8s.io/api => k8s.io/api v0.18.6
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery => k8s.io/apimachinery v0.18.6

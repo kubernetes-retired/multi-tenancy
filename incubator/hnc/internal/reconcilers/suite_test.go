@@ -53,7 +53,11 @@ var (
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	SetDefaultEventuallyTimeout(time.Second * 2)
+	// Prow machines appear to be very overloaded. While 2s seems to work just fine on a workstation
+	// (1s is usually not enough), we've seen some errors on Prow that can only really be attributed
+	// to needing more time. So let's set this to 4s for now.
+	// - aludwin, Oct 2020
+	SetDefaultEventuallyTimeout(time.Second * 4)
 	RunSpecsWithDefaultAndCustomReporters(t,
 		"Reconciler Suite",
 		[]Reporter{printer.NewlineReporter{}})
@@ -66,7 +70,11 @@ var _ = BeforeSuite(func(done Done) {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		// We set path to "../../manifests/envtest/" as a workaround for a known
+		// envtest bug. We should set it back to "../../config/crd/bases/" after the
+		// bug is fixed in controller-runtime. See issue -
+		// https://github.com/kubernetes-sigs/multi-tenancy/issues/1148
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "manifests", "envtest")},
 	}
 
 	var err error

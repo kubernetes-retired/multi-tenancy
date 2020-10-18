@@ -26,5 +26,3 @@ Create a pod defining a container using a host port. The pod creation must fail.
 
 Create a pod defining a container using a host network. The pod creation must fail.&#34;
 
-
-

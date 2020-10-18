@@ -16,13 +16,3 @@ Self-Service Operations
 
 Tenants should be able to create roles and role-bindings in their namespaces.
 
-**Rationale:**
-
-
-
-**Audit:**
-
-
-
-
-

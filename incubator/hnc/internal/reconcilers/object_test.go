@@ -10,9 +10,226 @@ import (
 	v1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
+
+var _ = Describe("Exceptions", func() {
+	ctx := context.Background()
+
+	BeforeEach(func() {
+		// We want to ensure we're working with a clean slate, in case a previous tests objects still exist
+		cleanupObjects(ctx)
+	})
+
+	AfterEach(func() {
+		// Change current config back to the default value.
+		resetHNCConfigToDefault(ctx)
+		cleanupObjects(ctx)
+	})
+
+	Context("Add exception annotations", func() {
+		const (
+			p  = "parent"
+			c1 = "child1"
+			c2 = "child2"
+			c3 = "child3"
+		)
+		tests := []struct {
+			name         string
+			selector     string
+			treeSelector string
+			noneSelector string
+			want         []string
+			notWant      []string
+		}{{
+			name:     "not propagate object to a negatively selected namespace",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix,
+			want:     []string{c2, c3},
+			notWant:  []string{c1},
+		}, {
+			name:     "not propagate object to multiple negatively selected namespaces",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix + ", !" + c2 + api.LabelTreeDepthSuffix,
+			want:     []string{c3},
+			notWant:  []string{c1, c2},
+		}, {
+			// When the user input an invalid selector and we don't understand what the users' intention is,
+			// we choose not to propagate this object to any child namespace to protect any object in the child
+			// namespaces to be overwritten. Same for treeSelectors and noneSelector.
+			name:     "not propagate to any namespace with a bad selector",
+			selector: "random",
+			want:     []string{},
+			notWant:  []string{c1, c2, c3},
+		}, {
+			name:         "not propagate object to a negatively treeSelected namespace",
+			treeSelector: "!" + c1,
+			want:         []string{c2, c3},
+			notWant:      []string{c1},
+		}, {
+			name:         "not propagate object to multiple negatively treeSelected namespaces",
+			treeSelector: "!" + c1 + ", !" + c2,
+			want:         []string{c3},
+			notWant:      []string{c1, c2},
+		}, {
+			name:         "not propagate to any namespace with a bad treeSelector",
+			treeSelector: "random",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "not propagate object to neither negatively selected or treeSelected namespaces",
+			selector:     "!" + c1 + api.LabelTreeDepthSuffix,
+			treeSelector: "!" + c2,
+			want:         []string{c3},
+			notWant:      []string{c1, c2},
+		}, {
+			name:         "only propagate object to the intersection of selected and treeSelected namespaces",
+			selector:     c1 + api.LabelTreeDepthSuffix,
+			treeSelector: c2,
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "not propagate to any object when noneSelector is set to true",
+			noneSelector: "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "propagate to all objects when noneSelector is set to false",
+			noneSelector: "false",
+			want:         []string{c1, c2, c3},
+			notWant:      []string{},
+		}, {
+			name:         "not propagate to any child namespace with a bad noneSelector",
+			noneSelector: "random",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "only propagate the intersection of three selectors",
+			selector:     c1 + api.LabelTreeDepthSuffix,
+			treeSelector: c1 + ", " + c2,
+			noneSelector: "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}}
+
+		for _, tc := range tests {
+			// Making a local copy of tc is necessary to ensure the correct value is passed to the closure,
+			// for more details look at https://onsi.github.io/ginkgo/ and search for 'closure'
+			tc := tc
+			It("Should "+tc.name, func() {
+				// Set up namespaces
+				names := map[string]string{
+					p:  createNS(ctx, p),
+					c1: createNS(ctx, c1),
+					c2: createNS(ctx, c2),
+					c3: createNS(ctx, c3),
+				}
+				setParent(ctx, names[c1], names[p])
+				setParent(ctx, names[c2], names[p])
+				setParent(ctx, names[c3], names[p])
+
+				tc.selector = replaceStrings(tc.selector, names)
+				tc.treeSelector = replaceStrings(tc.treeSelector, names)
+
+				// Create a Role with the selector and treeSelector annotation
+				makeObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+					api.AnnotationSelector:     tc.selector,
+					api.AnnotationTreeSelector: tc.treeSelector,
+					api.AnnotationNoneSelector: tc.noneSelector,
+				})
+				for _, ns := range tc.want {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+				for _, ns := range tc.notWant {
+					ns = replaceStrings(ns, names)
+					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+				}
+			})
+		}
+	})
+
+	Context("Update exception annotations", func() {
+		const (
+			p  = "parent"
+			c1 = "child1"
+			c2 = "child2"
+			c3 = "child3"
+		)
+		tests := []struct {
+			name         string
+			selector     string
+			treeSelector string
+			noneSelector string
+			want         []string
+			notWant      []string
+		}{{
+			name:     "update select",
+			selector: "!" + c1 + api.LabelTreeDepthSuffix,
+			want:     []string{c2, c3},
+			notWant:  []string{c1},
+		}, {
+			name:         "update treeSelect",
+			treeSelector: "!" + c1,
+			want:         []string{c2, c3},
+			notWant:      []string{c1},
+		}, {
+			name:         "update noneSelector",
+			noneSelector: "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}}
+
+		for _, tc := range tests {
+			// Making a local copy of tc is necessary to ensure the correct value is passed to the closure,
+			// for more details look at https://onsi.github.io/ginkgo/ and search for 'closure'
+			tc := tc
+			It("Should "+tc.name, func() {
+				// Set up namespaces
+				names := map[string]string{
+					p:  createNS(ctx, p),
+					c1: createNS(ctx, c1),
+					c2: createNS(ctx, c2),
+					c3: createNS(ctx, c3),
+				}
+				setParent(ctx, names[c1], names[p])
+				setParent(ctx, names[c2], names[p])
+				setParent(ctx, names[c3], names[p])
+				tc.selector = replaceStrings(tc.selector, names)
+				tc.treeSelector = replaceStrings(tc.treeSelector, names)
+
+				// Create a Role and verify it's propagated
+				makeObject(ctx, "Role", names[p], "testrole")
+				for _, ns := range names {
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+
+				// update the role with the selector and treeSelector annotation
+				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{
+					api.AnnotationSelector:     tc.selector,
+					api.AnnotationTreeSelector: tc.treeSelector,
+					api.AnnotationNoneSelector: tc.noneSelector,
+				})
+				// make sure the changes are propagated
+				for _, ns := range tc.notWant {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+				}
+				// then check that the objects are kept in these namespaces
+				for _, ns := range tc.want {
+					ns = replaceStrings(ns, names)
+					Consistently(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+
+				// remove the annotation and verify that the object is back for every namespace
+				updateObjectWithAnnotation(ctx, "Role", names[p], "testrole", map[string]string{})
+				for _, ns := range names {
+					Eventually(hasObject(ctx, "Role", ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+			})
+		}
+	})
+})
 
 var _ = Describe("Secret", func() {
 	ctx := context.Background()
@@ -38,49 +255,8 @@ var _ = Describe("Secret", func() {
 	})
 
 	AfterEach(func() {
-		// Change current config back to the default value.
-		Eventually(func() error {
-			return resetHNCConfigToDefault(ctx)
-		}).Should(Succeed())
+		resetHNCConfigToDefault(ctx)
 		cleanupObjects(ctx)
-	})
-
-	// Exceptions have not been implemented, so we are ignoring the following three tests for now.
-	// They should be enabled once exception is done.
-	PIt("should propagate object only to selected namespace using treeSelect", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a secret that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/treeSelect": "!" + bazName}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
-
-		Eventually(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
-	})
-
-	PIt("should propagate object only to selected namespace using select", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a secret that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/select": "!propagate.hnc.x-k8s.io/" + bazName}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
-
-		Eventually(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeTrue())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
-	})
-
-	PIt("should not propagate object to any namespace using none", func() {
-		setParent(ctx, barName, fooName)
-		setParent(ctx, bazName, fooName)
-
-		// Create a secret that does NOT propogate to bazName
-		a := map[string]string{"propagate.hnc.x-k8s.io/none": "true"}
-		makeObjectWithAnnotation(ctx, "Secret", fooName, "fooSecret", a)
-
-		Consistently(hasObject(ctx, "Secret", barName, "fooSecret")).Should(BeFalse())
-		Consistently(hasObject(ctx, "Secret", bazName, "fooSecret")).Should(BeFalse())
 	})
 
 	It("should be copied to descendents", func() {
@@ -191,6 +367,29 @@ var _ = Describe("Secret", func() {
 		Eventually(objectInheritedFrom(ctx, "Role", barName, "bar-role")).Should(Equal(fooName))
 	})
 
+	It("should overwrite conflicting source with the top source that can propagate", func() {
+		// Create a 'baz-role' in 'foo' that cannot propagate because of the finalizer.
+		makeObject(ctx, "Role", fooName, "baz-role")
+		Eventually(hasObject(ctx, "Role", fooName, "baz-role")).Should(BeTrue())
+		setFinalizer(ctx, fooName, "baz-role", true)
+		// Create a 'baz-role' in 'bar' that can propagate.
+		makeObject(ctx, "Role", barName, "baz-role")
+
+		// Before the tree is constructed, 'baz-role' shouldn't be overwritten.
+		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
+		Expect(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(""))
+
+		// Construct the tree: foo (root) <- bar <- baz.
+		setParent(ctx, barName, fooName)
+		setParent(ctx, bazName, barName)
+		Eventually(hasObject(ctx, "Role", bazName, "baz-role")).Should(BeTrue())
+		// The 'baz-role' in 'baz' should be overwritten by the conflicting one in
+		// 'bar' but not 'foo', since the one in 'foo' cannot propagate with
+		// finalizer. Add a 500-millisecond gap to allow overwriting the object.
+		time.Sleep(500 * time.Millisecond)
+		Eventually(objectInheritedFrom(ctx, "Role", bazName, "baz-role")).Should(Equal(barName))
+	})
+
 	It("should have deletions propagated after crit conditions are removed", func() {
 		// Create tree: bar -> foo (root) and make sure foo-role is propagated
 		setParent(ctx, barName, fooName)
@@ -284,7 +483,7 @@ var _ = Describe("Secret", func() {
 		Eventually(hasObject(ctx, "Role", bazName, "bar-role")).Should(BeFalse())
 	})
 
-	It("should set conditions if it's excluded from being propagated, and clear them if it's fixed", func() {
+	It("should generate CannotPropagate event if it's excluded from being propagated", func() {
 		// Set tree as baz -> bar -> foo(root) and make sure the secret gets propagated.
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
@@ -293,25 +492,42 @@ var _ = Describe("Secret", func() {
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
 
+		// Verify there's no CannotPropagate event before introducing the error.
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(false))
+
 		// Make the secret unpropagateable and verify that it disappears.
 		setFinalizer(ctx, fooName, "foo-role", true)
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeFalse())
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeFalse())
 
-		// Observe the condition on the source namespace
-		want := &api.Condition{
-			Code:    api.CannotPropagate,
-			Affects: []api.AffectedObject{{Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role", Namespace: fooName, Name: "foo-role"}},
-		}
-		Eventually(getCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(want))
+		// Verify the CannotPropagate event from source object.
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
 
-		// Fix the problem and verify that the condition vanishes and the secret is propagated again
+		// Fix the problem and verify that the role is propagated again. Please note
+		// that events are removed one hour after the last occurrence. Therefore, we
+		// should still see the CannotPropagate event after fixing the issue.
 		setFinalizer(ctx, fooName, "foo-role", false)
-		Eventually(hasCondition(ctx, fooName, api.CannotPropagate)).Should(Equal(false))
 		Eventually(hasObject(ctx, "Role", barName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", barName, "foo-role")).Should(Equal(fooName))
 		Eventually(hasObject(ctx, "Role", bazName, "foo-role")).Should(BeTrue())
 		Expect(objectInheritedFrom(ctx, "Role", bazName, "foo-role")).Should(Equal(fooName))
+		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
+	})
+
+	It("shouldn't delete a descendant source object with the same name if the sync mode is 'Remove'", func() {
+		addToHNCConfig(ctx, "v1", "Secret", api.Remove)
+		// Set tree as bar -> foo(root).
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "Secret", barName, "bar-sec")
+		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
+
+		// Create an object with the same name in the parent.
+		makeObject(ctx, "Secret", fooName, "bar-sec")
+		Eventually(hasObject(ctx, "Secret", fooName, "bar-sec")).Should(BeTrue())
+		// Give the reconciler some time to remove the object if it's going to.
+		time.Sleep(500 * time.Millisecond)
+		// The source object in the child shouldn't be deleted since the type has 'Remove' mode.
+		Eventually(hasObject(ctx, "Secret", barName, "bar-sec")).Should(BeTrue())
 	})
 })
 
@@ -375,4 +591,21 @@ func removeRole(ctx context.Context, nsName, roleName string) {
 	role.Name = roleName
 	role.Namespace = nsName
 	ExpectWithOffset(1, k8sClient.Delete(ctx, role)).Should(Succeed())
+}
+
+func hasEvent(ctx context.Context, nsName, objName, reason string) func() bool {
+	// `Eventually` only works with a fn that doesn't take any args.
+	return func() bool {
+		eventList := &corev1.EventList{}
+		EventuallyWithOffset(1, func() error {
+			return k8sClient.List(ctx, eventList, &client.ListOptions{Namespace: nsName})
+		}).Should(Succeed())
+
+		for _, event := range eventList.Items {
+			if event.InvolvedObject.Name == objName && event.Reason == reason {
+				return true
+			}
+		}
+		return false
+	}
 }

@@ -33,33 +33,10 @@ It is possible to interact with hierarchical namespaces purely through
 Kubernetes tools such as `kubectl`. However, the `kubectl-hns`
 [plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/)
 greatly simplifies several tasks. This guide illustrates both methods, but we
-recommend installing the `kubectl-hns` plugin as well.
+recommend installing the `kubectl-hns` plugin.
 
-To install the plugin, first switch to a directory on your `PATH`
-(e.g. `~/bin`), then run the following commands:
-
-```
-# Select the HNC version that matches the version installed on your cluster.
-# Ask your cluster administrator if you're not sure. The latest version is
-# shown below, as of August 2020.
-HNC_VERSION=v0.5.2
-
-# HNC v0.5.1 or earlier: download the plugin (Linux only)
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns -o ./kubectl-hns
-
-# HNC v0.5.2 or later: set the platform and download the plugin. The support platforms are:
-# * linux_amd64 (Linux on Intel/AMD)
-# * darwin_amd64 (MacOS on Intel)
-HNC_PLATFORM=linux_amd64
-curl -L https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/kubectl-hns_${HNC_PLATFORM} -o ./kubectl-hns
-
-# Make the plugin executable.
-chmod +x ./kubectl-hns
-
-# Ensure the plugin is working
-kubectl hns
-# The help text should be displayed
-```
+You can install the plugin by following the instructions for the [latest
+release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.3).
 
 <a name="use-subns-create">
 
@@ -141,7 +118,7 @@ status: {}
 
 ### Inspect namespace hierarchies
 
-This section is under construction (as of Map 2020). TL;DR: `kubectl hns tree <name>` and `kubectl hns describe <name>`.
+This section is under construction (as of May 2020). TL;DR: `kubectl hns tree <name>` and `kubectl hns describe <name>`.
 
 TODO: explain conditions (eg get HNC to try to propagate a `cluster-admin` rolebinding).
 
@@ -152,11 +129,32 @@ TODO: explain conditions (eg get HNC to try to propagate a `cluster-admin` roleb
 By default, HNC propagates RBAC `Role` and `RoleBinding` objects. If you create
 objects of these kinds in a parent namespace, it will automatically be copied
 into any descendant namespaces as well. You cannot modify these propagated
-copies; HNC’s admission controllers will attempt to stop you from editing them,
-and if you bypass the controllers, HNC will overwrite them.
+copies; HNC’s admission controllers will attempt to stop you from editing them.
+
+Similarly, if you try to create an object in a parent ancestor with the same
+name as an object in one of its descendants, HNC will stop you from doing so,
+because this would result in the objects in the descendants being silently
+overwritten. HNC will also prevent you from changing the parent of a namespace
+if this would result in objects being overwritten.
+
+**WARNING: this guard against creating ancestor objects was only introduced in
+HNC v0.5.3. Earlier versions of HNC have inconsistent behaviour; see #1076 for
+details.**
+
+However, if you bypass these admission controllers - for example, by updating
+objects while HNC is being upgraded - HNC _will_ overwrite conflicting objects
+in descendant namespaces. This is to ensure that if you are able to successfully
+create a policy in an ancestor namespace, you can be confident that it will be
+uniformly applied to all descendant namespaces.
 
 HNC can also propagate objects other than RBAC objects, but only cluster
 administrators can modify this. See [here](#admin-types) for instructions.
+
+Occasionally, objects might fail to be propagated to descendant namespaces for a
+variety of reasons - e.g., HNC itself might not have sufficient RBAC
+permissions. To understand why an object is not being propagated to a namespace,
+use `kubectl hns describe <ns>`, where `<ns>` is either the source (ancestor) or
+destination (descendant) namespace.
 
 <a name="use-select"/>
 
@@ -206,8 +204,8 @@ However, if you actually try this, you'll get an error:
 ```
 $ kubectl delete namespace parent
 # Output:
-Error from server (Forbidden): admission webhook "namespaces.hnc.x-k8s.io" denied the request: Please set allowCascadingDelete first either in the parent namespace or in all the subnamespaces.
- Subnamespace(s) without allowCascadingDelete set: [child].
+Error from server (Forbidden): admission webhook "namespaces.hnc.x-k8s.io" denied the request: Please set allowCascadingDeletion first either in the parent namespace or in all the subnamespaces.
+ Subnamespace(s) without allowCascadingDeletion set: [child].
 ```
 
 These errors are there for your protection. Deleting namespaces is very
@@ -215,10 +213,10 @@ dangerous, and deleting _subnamespaces_ can result in entire subtrees of
 namespaces being deleted as well. Therefore, if deleting a namespace (or
 subnamespace) would result in the deletion of any namespace _other than the one
 explicitly being deleted_, HNC requires that you must specify the
-`allowCascadingDelete` field on either all the namespaces that will be
+`allowCascadingDeletion` field on either all the namespaces that will be
 implicitly deleted, or any of their ancestors.
 
-The `allowCascadingDelete` field is a bit like `rm -rf` in a Linux shell.
+The `allowCascadingDeletion` field is a bit like `rm -rf` in a Linux shell.
 
 > **WARNING: this option is very dangerous, so you should only set it on the lowest
 possible level of the hierarchy.**
@@ -228,24 +226,13 @@ deleted, and so will any subnamespaces of those namespaces, and so on. However,
 any _full_ namespaces that are descendants of a subnamespace will not be
 deleted.**
 
-> _Note: In HNC v0.4.x and earlier, the inheritance of `allowCascadingDelete` is
-> actually a bit more restricted than what's sketched out above: its value is
-> only inherited through ancestor _subnamespaces_, or up to the _first_ full
-> namespace._
->
-> _For example, if subnamespace `child` has ancestors `parent` and `grandparent`,
-> both of which are full namespaces, we will only respect the
-> `allowCascadingDelete` field on `parent`, not on `grandparent`. This is
-> because if `grandparent` is deleted, `parent` will not be affected, and
-> therefore neither will `child`._
->
-> _This behaviour was simplified in HNC v0.5.x
-> ([#730](https://github.com/kubernetes-sigs/multi-tenancy/issues/730))._
+> _Note: In HNC v0.5.x and earlier, HNC uses v1alpha1 API and this field is
+> called `allowCascadingDelete`._
 
-To set the `allowCascadingDelete` field on a namespace using the plugin:
+To set the `allowCascadingDeletion` field on a namespace using the plugin:
 
 ```
-$ kubectl hns set parent --allowCascadingDelete
+$ kubectl hns set parent --allowCascadingDeletion
 # Output:
 Allowing cascading deletion on 'parent'
 Succesfully updated 1 property of the hierarchical configuration of parent
@@ -254,8 +241,8 @@ $ kubectl delete namespace parent
 # Should succeed
 ```
 
-To set the `allowCascadingDelete` field without the plugin, simply set the
-`spec.allowCascadingDelete field` to true in the namespace's
+To set the `allowCascadingDeletion` field without the plugin, simply set the
+`spec.allowCascadingDeletion field` to true in the namespace's
 `hierarchyconfiguration/hierarchy` object - for example, via:
 
 ```
@@ -339,14 +326,9 @@ release notes for that version.
 
 #### Install an official release
 
-As of August 2020, the most recent official release is v0.5.2.
-
-```bash
-# Set the desired release:
-HNC_VERSION=v0.5.2
-
-kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
-```
+[The most recent official release is
+v0.5.3](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.3).
+Please see that page for release notes and installation instructions.
 
 #### Download the kubectl plugin
 
@@ -491,7 +473,7 @@ does not make them an _administrator_ of that subnamespace. That requires
 someone to explicitly grant them the `update` permission for the
 `HierarchyConfiguration` object in that namespace. As a result, an unprivileged
 user who creates a subnamespace generally can’t delete it as well, since this
-would require them to set the `allowCascadingDelete` property of the child
+would require them to set the `allowCascadingDeletion` property of the child
 namespace.
 
 <a name="admin-types"/>
@@ -509,6 +491,10 @@ HNC supports following propagation modes for each object type:
 HNC propagates `Roles` and `RoleBindings` by default. You can also set any type
 of Kubernetes resource to any of the propagation modes discussed above. To do
 so, you need cluster privileges.
+
+**WARNING: If you start propagating a new object type, HNC _cannot_ check
+whether there are conflicting objects in descendant namespaces, and will
+overwrite them. This will be fixed in HNC v0.6 (see #1102).**
 
 To configure an object type using the kubectl plugin:
 

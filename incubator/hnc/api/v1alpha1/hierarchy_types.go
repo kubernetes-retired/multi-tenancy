@@ -92,6 +92,7 @@ var ClearConditionCriteria map[Code]ClearConditionCriterion
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // +kubebuilder:object:root=true
+// +kubebuilder:unservedversion
 
 // Hierarchy is the Schema for the hierarchies API
 type HierarchyConfiguration struct {

@@ -329,7 +329,9 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	}
 
 	or := &ObjectReconciler{
-		Client:            r.Client,
+		Client: r.Client,
+		// This field will be shown as source.component=hnc.x-k8s.io in events.
+		EventRecorder:     r.Manager.GetEventRecorderFor(api.MetaGroup),
 		Log:               ctrl.Log.WithName("reconcilers").WithName(gvk.Kind),
 		Forest:            r.Forest,
 		GVK:               gvk,
@@ -396,7 +398,7 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 			nms := r.Forest.GetNamespaceNames()
 			for _, nm := range nms {
 				ns := r.Forest.Get(nm)
-				numSrc += ns.GetNumOriginalObjects(gvk)
+				numSrc += ns.GetNumSourceObjects(gvk)
 			}
 			status.NumSourceObjects = &numSrc
 		}

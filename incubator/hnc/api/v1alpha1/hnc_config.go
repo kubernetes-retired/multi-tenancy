@@ -96,6 +96,7 @@ type CodeAndAffectedNamespaces struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hncconfigurations,scope=Cluster
+// +kubebuilder:unservedversion
 
 // HNCConfiguration is a cluster-wide configuration for HNC as a whole. See details in http://bit.ly/hnc-type-configuration
 type HNCConfiguration struct {

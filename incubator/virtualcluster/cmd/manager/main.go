@@ -19,8 +19,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
+	"k8s.io/apiserver/pkg/server/healthz"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -123,6 +125,17 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	go func() {
+		// start a health http server.
+		log.Info("Starting a health http server")
+		mux := http.NewServeMux()
+		healthz.InstallHandler(mux)
+		if err := http.ListenAndServe(":8080", mux); err != nil {
+			log.Error(err, "unable to start health http server")
+			os.Exit(1)
+		}
+	}()
 
 	// Start the Cmd
 	log.Info("Starting the Cmd.")

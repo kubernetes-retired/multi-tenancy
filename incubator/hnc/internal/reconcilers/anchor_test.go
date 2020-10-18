@@ -74,18 +74,18 @@ var _ = Describe("Anchor", func() {
 		}).Should(Equal(fooName))
 
 		// Change the bar's parent. Additionally change another field to reflect the
-		// update of the HC instance (hc.Spec.AllowCascadingDelete).
+		// update of the HC instance (hc.Spec.AllowCascadingDeletion).
 		Eventually(func() error {
 			barHier := getHierarchy(ctx, barName)
 			barHier.Spec.Parent = "other"
-			barHier.Spec.AllowCascadingDelete = true
+			barHier.Spec.AllowCascadingDeletion = true
 			return tryUpdateHierarchy(ctx, barHier) // can fail if made too quickly
 		}).Should(Succeed())
 
 		// The parent of 'bar' should be set back to 'foo' after reconciliation.
 		Eventually(func() bool {
 			barHier := getHierarchy(ctx, barName)
-			return barHier.Spec.AllowCascadingDelete
+			return barHier.Spec.AllowCascadingDeletion
 		}).Should(Equal(true))
 		Eventually(func() string {
 			barHier := getHierarchy(ctx, barName)

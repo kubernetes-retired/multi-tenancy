@@ -52,7 +52,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 	// Create a chain of namespaces from "a" to "e", with "a" as the root. Among them,
 	// "b", "d" and "e" are subnamespaces. This is set up in a long chain to test that
-	// subnamespaces will look all the way up to get the 'allowCascadingDelete` value
+	// subnamespaces will look all the way up to get the 'allowCascadingDeletion` value
 	// and won't stop looking when the first full namespace ancestor is met.
 	f := foresttest.Create("-AbCD")
 	h := &Anchor{Forest: f}
@@ -62,6 +62,7 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 		acd  string
 		pnm  string
 		cnm  string
+		stt  api.SubnamespaceAnchorState // anchor state, "ok" by default
 		fail bool
 	}{
 		{name: "set in parent", acd: "c", pnm: "c", cnm: "d"},
@@ -69,13 +70,14 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 		{name: "set in ancestor that is not the first full namespace", acd: "a", pnm: "c", cnm: "d"},
 		{name: "unset in leaf", pnm: "d", cnm: "e"},
 		{name: "unset in non-leaf", pnm: "c", cnm: "d", fail: true},
-		{name: "unset in non-leaf but bad anchor", pnm: "b", cnm: "d"},
+		{name: "unset in non-leaf but bad anchor (incorrect hierarchy)", pnm: "b", cnm: "d", stt: api.Conflict},
+		{name: "unset in non-leaf but bad anchor (correct hierarchy)", pnm: "c", cnm: "d", stt: api.Conflict},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.acd != "" {
-				f.Get(tc.acd).UpdateAllowCascadingDelete(true)
-				defer f.Get(tc.acd).UpdateAllowCascadingDelete(false)
+				f.Get(tc.acd).UpdateAllowCascadingDeletion(true)
+				defer f.Get(tc.acd).UpdateAllowCascadingDeletion(false)
 			}
 
 			// Setup
@@ -83,6 +85,10 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 			anchor := &api.SubnamespaceAnchor{}
 			anchor.ObjectMeta.Namespace = tc.pnm
 			anchor.ObjectMeta.Name = tc.cnm
+			if tc.stt == "" {
+				tc.stt = api.Ok
+			}
+			anchor.Status.State = tc.stt
 			req := &anchorRequest{
 				anchor: anchor,
 				op:     v1beta1.Delete,

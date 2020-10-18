@@ -30,10 +30,12 @@ endif
 HNC_IMG_NAME ?= hnc-manager
 
 # By default, the image tag is "latest" but you should override this when
-# creating a release. If you're using Kind, the tag is 'kind-local' since K8s
-# always attempts to re-pull an image the 'latest' tag, and this doesn't work
-# when we're testing locally (we rely on the docker-push target, below, to push
-# the image into Kind).
+# creating a release in the form vX.Y.Z (e.g. v0.5.1).
+#
+# If you're using Kind, the tag is 'kind-local' since K8s always attempts to
+# re-pull an image the 'latest' tag, and this doesn't work when we're testing
+# locally (we rely on the docker-push target, below, to push the image into
+# Kind).
 ifneq ($(CONFIG),kind)
   HNC_IMG_TAG ?= latest
 else
@@ -58,17 +60,23 @@ CURDIR = $(shell pwd)
 KUSTOMIZE ?= ${CURDIR}/hack/kustomize-3.8.1
 CONTROLLER_GEN ?= ${CURDIR}/bin/controller-gen
 
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+# Enable CRD per-version validation. As of Kubernetes 1.13, we can have multiple
+# versions of the Kind defined in the CRD, and use a webhook to convert between
+# them. By default, KubeBuilder disables generating different validation for
+# different versions of the Kind in the CRD, to be compatible with older
+# Kubernetes versions.
+CRD_OPTIONS ?= "crd:trivialVersions=false"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
-# Get check sum value of krew archive
-KREW_CKSM=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
+# Get check sum value of krew archive. Note that this value is only expanded
+# when the var is used.
+HNC_KREW_TAR_SHA256=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 
 # The directories to run Go command on (excludes /vendor)
-DIRS=./api/... ./cmd/... ./internal/... ./third_party/...
+DIRS=./api/... ./cmd/... ./internal/...
+GOFMT_DIRS=$(DIRS:/...=)
 
 all: test docker-build
 
@@ -76,6 +84,7 @@ all: test docker-build
 
 # Run tests
 test: build
+	./hack/crd_patches/ensure-all-served-for-envtest.sh
 	go test ${DIRS} -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
@@ -104,29 +113,6 @@ kubectl: build
 run: build
 	go run ./cmd/manager/main.go --novalidation
 
-# Generate the Krew manifest and put it in manifests/ (creating that dir if it
-# doesn't exist).
-krew-build: krew-tar
-	-mkdir manifests
-	cp hack/krew-hierarchical-namespaces.yaml manifests/krew-hierarchical-namespaces.yaml
-	sed -i 's/^\(\s*sha256\s*:\s*\).*/\1"$(KREW_CKSM)"/' \
-		manifests/krew-hierarchical-namespaces.yaml
-	sed -i 's/^\(\s*version\s*:\s*\).*/\1"$(HNC_IMG_TAG)"/' \
-		manifests/krew-hierarchical-namespaces.yaml
-
-# Make krew archive and put into /hack. IS THIS THE RIGHT WAY TO PACKAGE UP
-# BINARIES FOR MULTIPLE OSES?
-krew-tar: build
-	tar -zcvf bin/kubectl-hns.tar.gz bin/kubectl
-
-# Install kubectl plugin locally using krew.
-krew-install: krew-build
-	kubectl krew install --manifest=manifests/krew-hierarchical-namespaces.yaml --archive=bin/kubectl-hns.tar.gz
-
-# Uninstall kubectl plugin locally using krew.
-krew-uninstall:
-	-kubectl krew uninstall hierarchical-namespaces
-
 # Generate manifests e.g. CRD, RBAC etc. This can both update the generated
 # files in /config (which should be checked into Git) as well as the kustomized
 # files in /manifest (which are not checked into Git).
@@ -138,7 +124,8 @@ krew-uninstall:
 manifests: controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
 	@# See the comment above about the 'paths' arguments
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." paths="./third_party/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." output:crd:artifacts:config=config/crd/bases
+	./hack/crd_patches/singleton-enum-patch.sh
 	-rm -rf manifests/
 	mkdir manifests
 	cd manifests && \
@@ -155,7 +142,11 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	go fmt ${DIRS}
+	gofmt -l -w ${GOFMT_DIRS}
+
+# check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
+check-fmt:
+	@test -z $(shell gofmt -l ${GOFMT_DIRS})
 
 # Run go vet against code
 vet:
@@ -165,11 +156,9 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
-# find or download controller-gen
-# download controller-gen if necessary
-controller-gen: $(CONTROLLER_GEN)
-
-$(CONTROLLER_GEN):
+# Use the version of controller-gen that's checked into vendor/ (see
+# hack/tools.go to see how it got there).
+controller-gen:
 	go build -o $(CONTROLLER_GEN) sigs.k8s.io/controller-tools/cmd/controller-gen
 
 ###################### DEPLOYABLE ARTIFACTS AND ACTIONS #########################
@@ -338,7 +327,7 @@ endif
 # Actual error checking:
 check-release-env:
 ifndef HNC_IMG_TAG
-	$(error HNC_IMG_TAG is undefined; ${ERR_MSG})
+	$(error HNC_IMG_TAG is undefined, should be vX.X.X; ${ERR_MSG})
 endif
 ifndef HNC_USER
 	$(error HNC_USER is undefined; ${ERR_MSG})
@@ -352,3 +341,26 @@ endif
 ifeq ($(COULDNT_READ_RELEASE_IMG), 0)
 	$(error The image ${HNC_RELEASE_IMG} already exists. Force and overwrite this image by using HNC_FORCE_RELEASE=true)
 endif
+
+# Generate the Krew manifest and put it in manifests/. Note that 'manifests' must exist because
+# krew-build calls krew-tar calls build calls manifests.
+krew-build: krew-tar
+	cp hack/krew-kubectl-hns.yaml manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_KREW_TAR_SHA256/${HNC_KREW_TAR_SHA256}/' manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_IMG_TAG/${HNC_IMG_TAG}/' manifests/krew-kubectl-hns.yaml
+	sed -i 's/HNC_RELEASE_REPO_OWNER/${HNC_RELEASE_REPO_OWNER}/' manifests/krew-kubectl-hns.yaml
+
+# This needs to be separate from krew-build so that the HNC_KREW_TAR_SHA256 env
+# var can be evaluated before the recipe starts running.
+krew-tar: build
+	cp LICENSE bin/kubectl
+	tar -zcvf bin/kubectl-hns.tar.gz bin/kubectl
+
+# Install kubectl plugin locally using krew.
+krew-install: krew-build
+	kubectl krew install --manifest=manifests/krew-kubectl-hns.yaml --archive=bin/kubectl-hns.tar.gz
+
+# Uninstall kubectl plugin locally using krew.
+krew-uninstall:
+	-kubectl krew uninstall hns
+

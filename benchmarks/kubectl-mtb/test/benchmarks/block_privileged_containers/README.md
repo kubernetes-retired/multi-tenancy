@@ -24,5 +24,7 @@ By default a container is not allowed to access any devices on the host, but a â
 
 Create a pod or container that sets `privileged` to `true` in its `securityContext`. The pod creation must fail.
 
+**Remediation:**
+
 Define a `PodSecurityPolicy` with `privileged` set to `false` and map the policy to each tenant&#39;s namespace, or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to prevent tenants from running privileged containers. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 

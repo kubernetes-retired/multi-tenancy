@@ -20,6 +20,7 @@ readonly VC_ALL_TARGETS=(
   cmd/manager
   cmd/syncer
   cmd/vn-agent
+  cmd/kubectl-vc
 )
 readonly VC_ALL_BINARIES=("${VC_ALL_TARGETS[@]##*/}")
 
