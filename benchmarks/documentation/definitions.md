@@ -23,14 +23,11 @@ A tenant administrator can define new roles and role-bindings for their namespac
 ## Level 1
 Items in this profile:
 - isolate and protect the kubernetes control plane from tenants
-- use standard Kubernetes resources
-- may inhibit cluster-wide Kubernetes features. For example, a tenant may not be allowed to install a CRD
+- may inhibit Kubernetes features. For example, a tenant may not be allowed to change a network policy.
 
 ## Level 2
 This profile extends the "Level 1" profile. Items in this profile:
-- may require multi-tenancy related CRDs or other Kubernetes extensions
-- enable self-service creation of tenant namespaces
-- enable self-service management of other namespace resources like network policies, roles, and role bindings
+- enable self-service management of per-tenant resources like network policies, roles, and role bindings
 
 <br/><br/>
 *Read Next >> [Benchmark Types](types.md)*
