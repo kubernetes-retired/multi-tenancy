@@ -2,6 +2,7 @@ package conversion
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -166,17 +167,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 
 	It("should convert HCs with parent", func() {
 		// Before conversion, create namespace A and B and set A as the parent of B.
-		MustRun("kubectl create ns", nsA)
-		MustRun("kubectl create ns", nsB)
-		hierA := `# temp file created by conversion_test.go
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: HierarchyConfiguration
-metadata:
-  name: hierarchy
-  namespace: e2e-conversion-test-b
-spec:
-  parent: e2e-conversion-test-a`
-		MustApplyYAML(hierA)
+		createSampleV1alpha1ParentChildTree()
 
 		// Convert
 		setupV1alpha2()
@@ -282,6 +273,105 @@ spec:
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
 		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
 	})
+
+	It("should convert inheritedFrom label to 'inherited-from' on propagated objects", func() {
+		// Before conversion, create a propagated object in v1alpha1.
+		// Create a tree a <- b, where a is the parent.
+		createSampleV1alpha1ParentChildTree()
+
+		// Create a role in namespace A that should be propagated to namespace B.
+		roleA := "team-a-sre"
+		createRole(roleA, nsA)
+		// Verify the v1a1 inheritedFrom label - `inheritedFrom`.
+		FieldShouldContain("roles", nsB, roleA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify the converted v1a2 inheritedFrom label - `inherited-from`.
+		FieldShouldContain("roles", nsB, roleA, ".metadata.labels", "hnc.x-k8s.io/inherited-from:"+nsA)
+		// Verify the v1a1 label is gone.
+		FieldShouldNotContain("roles", nsB, roleA, ".metadata.labels", "inheritedFrom")
+	})
+	// 3 more corner cases for v1a1 propagated objects with inheritedFrom label
+	// during conversion:
+	// 1) It may not clear v1a1 propagated objects if the source object is removed during conversion;
+	// 2) It may not clear v1a1 propagated objects if the type mode is changed from 'propagate' to 'remove' during conversion;
+	// 3) It should not clear previously propagated objects after conversion if the type mode was 'ignore'.
+	// The first two are possible race conditions and we hacked it in the tests
+	// below to make it consistent. The 3rd is always the case. We will add these
+	// to the user guide - https://github.com/kubernetes-sigs/multi-tenancy/issues/1210
+	It("may not clear v1a1 propagated objects if the source object is removed during conversion", func() {
+		// Create a role, let it propagate. Delete the role right before conversion
+		// (hacked by deleting the v1a1 deployment first to make it consistent).
+		// Create a tree a <- b, where a is the parent.
+		createSampleV1alpha1ParentChildTree()
+		roleA := "team-a-sre"
+		createRole(roleA, nsA)
+		// Verify the v1a1 inheritedFrom label - `inheritedFrom`.
+		FieldShouldContain("roles", nsB, roleA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+		// Delete the deployment before deleting the source to make sure the HNC
+		// v1a1 object reconciler won't remove the propagated object in v1a1.
+		MustRun("kubectl -n hnc-system delete deployment hnc-controller-manager")
+		MustRun("kubectl delete role", roleA, "-n", nsA)
+
+		// Convert
+		MustRun("kubectl apply -f ../../manifests/hnc-manager.yaml")
+		verifyConversion()
+
+		// Verify the v1a1 propagated object is still there.
+		FieldShouldContain("roles", nsB, roleA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+	})
+	It("may not clear v1a1 propagated objects if the type mode is changed from 'propagate' to 'remove' during conversion", func() {
+		// Set 'Secret' to 'propagate' in v1a1, create a secret and let it propagate.
+		// Then change the mode to 'remove' right before conversion (hacked by
+		// deleting the v1a1 deployment first to make it consistent).
+		setV1alpha1SecretMode("propagate")
+		// Create tree a <- b, where a is the parent.
+		createSampleV1alpha1ParentChildTree()
+		credA := "my-creds"
+		createSecret(credA, nsA)
+		// Verify the propagated object in b has the v1a1 "inheritedFrom" label.
+		FieldShouldContain("secrets", nsB, credA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+		// Delete the deployment before changing the mode so that it makes sure the
+		// HNC v1a1 object reconciler won't remove propagated object in v1a1.
+		MustRun("kubectl -n hnc-system delete deployment hnc-controller-manager")
+		// Delete the validating webhook so we can change the mode after deleting
+		// the deployment.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		setV1alpha1SecretMode("remove")
+
+		// Convert
+		MustRun("kubectl apply -f ../../manifests/hnc-manager.yaml")
+		verifyConversion()
+
+		// Verify the v1a1 propagated object is still there.
+		FieldShouldContain("secrets", nsB, credA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+	})
+	It("should not clear previously propagated objects after conversion if the type mode was 'ignore'", func() {
+		// Set 'Secret' to 'propagate' in v1a1, create a secret and let it propagate.
+		// Then change the mode to 'ignore'.
+		setV1alpha1SecretMode("propagate")
+		createSampleV1alpha1ParentChildTree()
+		credA := "my-creds"
+		createSecret(credA, nsA)
+		// Verify the v1a1 inheritedFrom label - `inheritedFrom`.
+		FieldShouldContain("secrets", nsB, credA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+		// Update mode to 'ignore' and verify the new mode is working.
+		setV1alpha1SecretMode("ignore")
+		time.Sleep(1*time.Second)
+		igSecA := "ignored-creds"
+		createSecret(igSecA, nsA)
+		RunShouldNotContain(igSecA, propagationTime, "kubectl get secrets -n", nsB)
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify the v1a1 propagated object is still there.
+		FieldShouldContain("secrets", nsB, credA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
+		// Double check the ignored source is not propagated.
+		RunShouldNotContain(igSecA, propagationTime, "kubectl get secrets -n", nsB)
+	})
 })
 
 // Install HNC and kubectl plugin with v1alpha1.
@@ -304,6 +394,10 @@ func setupV1alpha2(){
 	// See https://github.com/kubernetes-sigs/multi-tenancy/issues/1025.
 	MustRun("kubectl -n hnc-system delete deployment hnc-controller-manager")
 	MustRun("kubectl apply -f ../../manifests/hnc-manager.yaml")
+	verifyConversion()
+}
+
+func verifyConversion(){
 	// Wait for the cert rotator to write caBundles in CRD conversion webhooks.
 	ensureCRDConvWHReady()
 
@@ -367,4 +461,81 @@ metadata:
 	MustApplyYAML(subnsB)
 	FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "ok")
 	FieldShouldContain("ns", "", nsB, ".metadata.annotations", "hnc.x-k8s.io/subnamespaceOf:"+nsA)
+}
+
+// createSampleV1alpha1ParentChildTree creates 'a' and a child 'b'.
+func createSampleV1alpha1ParentChildTree(){
+	MustRun("kubectl create ns", nsA)
+	MustRun("kubectl create ns", nsB)
+	hierB := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HierarchyConfiguration
+metadata:
+  name: hierarchy
+  namespace: `+nsB+`
+spec:
+  parent: `+nsA+`
+`
+	MustApplyYAML(hierB)
+	FieldShouldContain(hierCRD, nsA, hierSingleton, ".status.children", nsB)
+	FieldShouldContain(hierCRD, nsB, hierSingleton, ".spec.parent", nsA)
+}
+
+// setV1alpha1SecretMode sets the secret sync mode in v1alpah1.
+func setV1alpha1SecretMode(mode string){
+	cfg := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  types:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate
+  - apiVersion: v1
+    kind: Secret
+    mode: `+mode+`
+`
+	MustApplyYAML(cfg)
+	// We cannot get the mode for a specific type, so this is a rough check since
+	// role and rolebinding always have propagate mode.
+	FieldShouldContain(configCRD, "", configSingleton, ".spec.types", mode)
+}
+
+// createRole creates a role in a namespace.
+func createRole(nm, nsnm string){
+	role := `# temp file created by conversion_test.go
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: `+nm+`
+  namespace: `+nsnm+`
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - update`
+	MustApplyYAML(role)
+	RunShouldContain(nm, propagationTime, "kubectl get roles -n", nsnm)
+}
+
+// createSecret creates a secret in a namespace.
+func createSecret(nm, nsnm string){
+	sec := `# temp file created by conversion_test.go
+apiVersion: v1
+data:
+  password: aWFtdGVhbWI=
+kind: Secret
+metadata:
+  name: `+nm+`
+  namespace: `+nsnm+`
+type: Opaque`
+	MustApplyYAML(sec)
+	RunShouldContain(nm, propagationTime, "kubectl get secrets -n", nsnm)
 }

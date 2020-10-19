@@ -55,7 +55,7 @@ var _ = Describe("Demo", func() {
 		RunShouldContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamA)
 
 		// Now, if we check service-1 again, we’ll see all the rolebindings we expect:
-		RunShouldContainMultiple([]string{"hnc.x-k8s.io/inheritedFrom=acme-org", "hnc.x-k8s.io/inheritedFrom=team-a"},
+		RunShouldContainMultiple([]string{"hnc.x-k8s.io/inherited-from=acme-org", "hnc.x-k8s.io/inherited-from=team-a"},
 			propogationTimeout, "kubectl -n", nsService1, "describe roles")
 		RunShouldContainMultiple([]string{"acme-org-sre", "team-a-sre"}, propogationTimeout, "kubectl -n", nsService1, "get rolebindings")
 
