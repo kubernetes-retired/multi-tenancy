@@ -207,7 +207,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	// first, record whether there were any critical ones since if this changes, we'll need to notify
 	// other namespaces.
 	hadCrit := ns.HasLocalCritCondition()
-	ns.ClearLocalConditions()
+	ns.ClearConditions()
 
 	// If there are any traces of v1alpha1 still around, fix them now (they'll be written back to the
 	// apiserver after this function's finished). Do this before reconciling anything else so that the
@@ -365,7 +365,7 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 		}
 	}
 	if !found {
-		ns.SetLocalCondition(api.SubnamespaceAnchorMissing, "The anchor is missing in the parent namespace")
+		ns.SetCondition(api.ConditionBadConfiguration, api.ReasonAnchorMissing, "The anchor is missing in the parent namespace")
 	}
 }
 
@@ -394,7 +394,7 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 	curParent := r.Forest.Get(inst.Spec.Parent)
 	if curParent != nil && !curParent.Exists() {
 		log.Info("Missing parent", "parent", inst.Spec.Parent)
-		ns.SetLocalCondition(api.CritParentMissing, "missing parent")
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, "missing parent")
 	}
 
 	// If the parent hasn't changed, there's nothing more to do.
@@ -446,7 +446,7 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	}
 
 	// Look for all ancestors. Stop as soon as we find a namespaces that has a critical condition in
-	// the forest (note that CritAncestor is never included in the forest). This should handle orphans
+	// the forest (note that AncestorHaltActivities is never included in the forest). This should handle orphans
 	// and cycles.
 	anc := ns
 	depth := 0
@@ -477,9 +477,6 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {
-	// Hierarchy changes may mean that some object conditions are no longer relevant.
-	ns.ClearObsoleteConditions(log)
-
 	// Sync critical conditions after all locally-set conditions are updated.
 	r.syncCritConditions(log, ns, deletingCRD, hadCrit)
 
@@ -495,11 +492,11 @@ func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *fore
 	// If we're in a cycle, determine that now
 	if cycle := ns.CycleNames(); cycle != nil {
 		msg := fmt.Sprintf("Namespace is a member of the cycle: %s", strings.Join(cycle, " <- "))
-		ns.SetLocalCondition(api.CritCycle, msg)
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonInCycle, msg)
 	}
 
 	if deletingCRD {
-		ns.SetLocalCondition(api.CritDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all syncing is disabled.")
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all syncing is disabled.")
 	}
 
 	// Early exit if there's no need to enqueue relatives.
@@ -527,11 +524,7 @@ func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration,
 		}
 		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
 		msg := fmt.Sprintf("Propagation paused in the subtree of %s due to a critical condition", ans.Name())
-		condition := api.Condition{
-			Code:    api.CritAncestor,
-			Msg:     msg,
-			Affects: []api.AffectedObject{{Namespace: ans.Name()}},
-		}
+		condition := api.NewCondition(api.ConditionActivitiesHalted, api.ReasonAncestor, msg)
 		inst.Status.Conditions = append(inst.Status.Conditions, condition)
 		return
 	}

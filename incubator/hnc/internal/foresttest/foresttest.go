@@ -11,7 +11,7 @@ import (
 // * If the string element is a hyphen ('-'), the namespace is a root.
 // * If the string element is a lowercase letter, the referenced namespace is a normal parent.
 //   * If the referenced namespace is not in len(desc), it will not exist and we'll set
-//   CritParentMissing on the child.
+//   ParentMissing on the child.
 // * If the string element is an uppercase letter, that namespaces will be the parent and the
 // *current* namespace will be a subnamespace.
 //
@@ -19,7 +19,7 @@ import (
 // * "-"   -> creates a single namespace "a" that is a root
 // * "-a"  -> creates the tree a <- b
 // * "-A"  -> creates the tree a <- b where b is a subnamespace of a
-// * "z"   -> creates the tree z <- a where z does not exist and a has CritParentMissing
+// * "z"   -> creates the tree z <- a where z does not exist and a has ParentMissing
 // * "-aa" -> creates namespace `a` with two children, `b` and `c`
 // * "-aA" -> as above, but c is a subnamespace and b is a full namespace
 // * "ba"  -> creates a cycle
@@ -51,10 +51,10 @@ func Create(desc string) *forest.Forest {
 		pns := f.Get(string(pnm))
 		ns.SetParent(pns)
 		if !pns.Exists() {
-			ns.SetLocalCondition(api.CritParentMissing, "no parent")
+			ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, "no parent")
 		}
 		for _, cnm := range ns.CycleNames() {
-			f.Get(cnm).SetLocalCondition(api.CritCycle, "in cycle")
+			f.Get(cnm).SetCondition(api.ConditionActivitiesHalted, api.ReasonInCycle, "in cycle")
 		}
 	}
 

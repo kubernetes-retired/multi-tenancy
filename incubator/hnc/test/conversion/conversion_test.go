@@ -223,7 +223,9 @@ spec:
 
 		// Verify conditions in the new version.
 		FieldShouldContainWithTimeout(hierCRD, nsB, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
+		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "ActivitiesHalted")
+		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "ParentMissing")
+		FieldShouldNotContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
 	})
 
 	It("should convert HNCConfig", func() {

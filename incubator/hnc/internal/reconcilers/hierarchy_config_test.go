@@ -30,21 +30,21 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(hasChild(ctx, barName, fooName)).Should(Equal(true))
 	})
 
-	It("should set CritParentMissing condition if the parent is missing", func() {
+	It("should set ParentMissing condition if the parent is missing", func() {
 		// Set up the parent-child relationship
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(true))
 	})
 
-	It("should unset CritParentMissing condition if the parent is later created", func() {
+	It("should unset ParentMissing condition if the parent is later created", func() {
 		// Set up the parent-child relationship with the missing name
 		brumpfName := createNSName("brumpf")
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(true))
 
 		// Create the missing parent
 		brumpfNS := &corev1.Namespace{}
@@ -52,39 +52,39 @@ var _ = Describe("Hierarchy", func() {
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
 
 		// Ensure the condition is resolved on the child
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
 		Eventually(hasChild(ctx, brumpfName, barName)).Should(Equal(true))
 	})
 
-	It("should set CritAncestor condition if any ancestor has critical condition", func() {
+	It("should set AncestorHaltActivities condition if any ancestor has critical condition", func() {
 		// Set up the parent-child relationship
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "brumpf"
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(true))
 
 		// Set bar as foo's parent
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(true))
 	})
 
-	It("should unset CritAncestor condition if critical conditions in ancestors are gone", func() {
+	It("should unset AncestorHaltActivities condition if critical conditions in ancestors are gone", func() {
 		// Set up the parent-child relationship with the missing name
 		brumpfName := createNSName("brumpf")
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, barHier)
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(true))
 
 		// Set bar as foo's parent
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(true))
 
 		// Create the missing parent
 		brumpfNS := &corev1.Namespace{}
@@ -92,37 +92,37 @@ var _ = Describe("Hierarchy", func() {
 		Expect(k8sClient.Create(ctx, brumpfNS)).Should(Succeed())
 
 		// Ensure the condition is resolved on the child
-		Eventually(hasCondition(ctx, barName, api.CritParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(false))
 
 		// Ensure the child is listed on the parent
 		Eventually(hasChild(ctx, brumpfName, barName)).Should(Equal(true))
 
-		// Ensure foo is enqueued and thus get CritAncestor condition updated after
+		// Ensure foo is enqueued and thus get AncestorHaltActivities condition updated after
 		// critical conditions are resolved in bar.
-		Eventually(hasCondition(ctx, fooName, api.CritAncestor)).Should(Equal(false))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(false))
 	})
 
-	It("should set CritCycle condition if a self-cycle is detected", func() {
+	It("should set InCycle condition if a self-cycle is detected", func() {
 		fooHier := newHierarchy(fooName)
 		fooHier.Spec.Parent = fooName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonInCycle)).Should(Equal(true))
 	})
 
-	It("should set CritCycle condition if a cycle is detected", func() {
+	It("should set InCycle condition if a cycle is detected", func() {
 		// Set up initial hierarchy
 		setParent(ctx, barName, fooName)
 		Eventually(hasChild(ctx, fooName, barName)).Should(Equal(true))
 
 		// Break it
 		setParent(ctx, fooName, barName)
-		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(true))
-		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonInCycle)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonInCycle)).Should(Equal(true))
 
 		// Fix it
 		setParent(ctx, fooName, "")
-		Eventually(hasCondition(ctx, fooName, api.CritCycle)).Should(Equal(false))
-		Eventually(hasCondition(ctx, barName, api.CritCycle)).Should(Equal(false))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonInCycle)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonInCycle)).Should(Equal(false))
 	})
 
 	It("should have a tree label", func() {
@@ -358,31 +358,14 @@ var _ = Describe("Hierarchy", func() {
 	})
 })
 
-func hasCondition(ctx context.Context, nm string, code api.Code) func() bool {
+func hasCondition(ctx context.Context, nm string, tp, reason string) func() bool {
 	return func() bool {
 		conds := getHierarchy(ctx, nm).Status.Conditions
-		if code == "" {
-			return len(conds) > 0
-		}
 		for _, cond := range conds {
-			if cond.Code == code {
+			if cond.Type == tp && cond.Reason == reason {
 				return true
 			}
 		}
 		return false
-	}
-}
-
-func getCondition(ctx context.Context, nm string, code api.Code) func() *api.Condition {
-	return func() *api.Condition {
-		conds := getHierarchy(ctx, nm).Status.Conditions
-		for _, cond := range conds {
-			if cond.Code == code {
-				ret := cond.DeepCopy()
-				ret.Msg = "" // don't want changes here to break tests
-				return ret
-			}
-		}
-		return nil
 	}
 }

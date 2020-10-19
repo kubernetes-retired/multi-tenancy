@@ -89,7 +89,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespace-of="+nsParent)
 		// If the subnamespace doesn't allow cascadingDeletion and the anchor is missing in the parent namespace, it should have 'SubnamespaceAnchorMissing' condition while its descendants shoudn't have any conditions."
 		// Expected: 'sub1' namespace is not deleted and should have 'SubnamespaceAnchorMissing' condition; no other conditions."
-		RunShouldContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
+		RunShouldContain("reason: SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 	})
 
 	It("Should unset SubnamespaceAnchorMissing condition if the anchor is re-added - issue #501", func() {
@@ -99,12 +99,12 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl create ns", nsSub1)
 		MustRun("kubectl hns set", nsSub1, "--parent", nsParent)
 		MustRun("kubectl annotate ns", nsSub1, "hnc.x-k8s.io/subnamespace-of="+nsParent)
-		RunShouldContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
+		RunShouldContain("reason: SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 		// If the anchor is re-added, it should unset the 'SubnamespaceAnchorMissing' condition in the subnamespace.
 		// Operation: recreate the 'sub1' subns in 'parent' - kubectl hns create sub1 -n parent
 		// Expected: no conditions.
 		MustRun("kubectl hns create", nsSub1, "-n", nsParent)
-		RunShouldNotContain("SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
+		RunShouldNotContain("reason: SubnamespaceAnchorMissing", defTimeout, "kubectl get hierarchyconfigurations.hnc.x-k8s.io -n", nsSub1, "-o yaml")
 	})
 
 	It("Should cascading delete immediate subnamespaces if the anchor is deleted and the subnamespace allows cascadingDeletion - issue #501", func() {
@@ -140,35 +140,35 @@ var _ = Describe("Issues", func() {
 		// If the parent namespace allows cascadingDeletion and it's deleted, all its subnamespaces should be cascading deleted.
 		// Operation: 1) allow cascadingDeletion in 'parent' - kubectl hns set parent --allowCascadingDeletion=true
 		// 2) delete 'parent' namespace - kubectl delete ns parent
-		// Expected: only 'fullchild' and 'sub-fullchild' should be left and they should have CRIT_ conditions related to missing 'parent'
+		// Expected: only 'fullchild' and 'sub-fullchild' should be left and they should have ActivitiesHalted conditions related to missing 'parent'
 		MustRun("kubectl hns set", nsParent, "--allowCascadingDeletion=true")
 		MustRun("kubectl delete ns", nsParent)
 		MustNotRun("kubectl hns tree", nsParent)
 		MustNotRun("kubectl hns tree", nsSub1)
 		MustNotRun("kubectl hns tree", nsSub2)
-		RunShouldContain("CritParentMissing: missing parent", defTimeout, "kubectl hns tree", nsChild)
-		RunShouldContain("CritAncestor", defTimeout, "kubectl hns describe", nsSubChild)
+		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns tree", nsChild)
+		RunShouldContain("ActivitiesHalted: AncestorHaltActivities", defTimeout, "kubectl hns describe", nsSubChild)
 	})
 
-	It("Should have CritParentMissing condition when parent namespace is deleted - issue #716", func() {
+	It("Should have ParentMissing condition when parent namespace is deleted - issue #716", func() {
 		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		// Test: Remove parent namespace 'a'
-		// Expected: b should have 'CritParentMissing' condition
+		// Expected: b should have 'ParentMissing' condition
 		MustRun("kubectl delete ns", nsParent)
-		RunShouldContain("CritParentMissing", defTimeout, "kubectl hns describe", nsChild)
+		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns describe", nsChild)
 	})
 
-	It("Should delete namespace with CritParentMissing condition - issue #716", func() {
+	It("Should delete namespace with ParentMissing condition - issue #716", func() {
 		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl create ns", nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
-		// create and verify CritParentMissing condition
+		// create and verify ParentMissing condition
 		MustRun("kubectl delete ns", nsParent)
-		RunShouldContain("CritParentMissing", defTimeout, "kubectl hns describe", nsChild)
+		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns describe", nsChild)
 		// test: delete namespace
 		MustRun("kubectl delete ns", nsChild)
 	})

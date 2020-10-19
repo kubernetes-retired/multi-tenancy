@@ -90,21 +90,7 @@ func describeConditions(cond []api.Condition) {
 	}
 	fmt.Printf("  Conditions:\n")
 	for _, c := range cond {
-		fmt.Printf("  - %s: %s\n", c.Code, c.Msg)
-		if len(c.Affects) == 0 {
-			continue
-		}
-		fmt.Printf("    Affected by this condition:\n")
-		for _, a := range c.Affects {
-			if a.Name != "" {
-				if a.Group == "" {
-					a.Group = "core"
-				}
-				fmt.Printf("      - %s/%s (%s/%s/%s)\n", a.Namespace, a.Name, a.Group, a.Version, a.Kind)
-			} else {
-				fmt.Printf("      - %s\n", a.Namespace)
-			}
-		}
+		fmt.Printf("  - %s (%s): %s\n", c.Type, c.Reason, c.Message)
 	}
 }
 

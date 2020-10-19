@@ -238,13 +238,13 @@ spec:
 			"└── " + nsStaging
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsService4)
 
-		// delete subnamespace nsService4, namespace nsStaging won’t be deleted but it will have CritParentMissing condition
+		// delete subnamespace nsService4, namespace nsStaging won’t be deleted but it will have ParentMissing condition
 		MustRun("kubectl hns set", nsService4, "--allowCascadingDeletion")
 		MustRun("kubectl delete subns", nsService4, "-n", nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
 			"└── [s] " + nsService2
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
-		RunShouldContain("CritParentMissing: missing parent", defTimeout, "kubectl hns describe", nsStaging)
+		RunShouldContain("ActivitiesHalted: ParentMissing: missing parent", defTimeout, "kubectl hns describe", nsStaging)
 	})
 })

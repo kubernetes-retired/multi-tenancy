@@ -14,10 +14,6 @@ import (
 // use the GVK as the key in this map.
 type objects map[schema.GroupVersionKind]map[string]*unstructured.Unstructured
 
-// conditions stores the conditions for a single namespace, in the form obj -> code -> msg. Note
-// that only one message can be stored per obj and code.
-type conditions map[api.AffectedObject]map[api.Code]string
-
 // Namespace represents a namespace in a forest. Other than its structure, it contains some
 // properties useful to the reconcilers.
 type Namespace struct {
@@ -37,7 +33,7 @@ type Namespace struct {
 
 	// conditions store conditions so that object propagation can be disabled if there's a problem
 	// on this namespace.
-	conditions conditions
+	conditions []api.Condition
 
 	// IsSub indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.

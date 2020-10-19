@@ -426,26 +426,34 @@ func (r *ConfigReconciler) loadNamespaceConditions(inst *api.HNCConfiguration) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
-	conds := map[string][]string{}
+	// Get namespace conditions by type and reason.
+	conds := map[string]map[string][]string{}
 	for _, nsnm := range r.Forest.GetNamespaceNames() {
 		for _, cond := range r.Forest.Get(nsnm).Conditions() {
-			code := (string)(cond.Code)
-			conds[code] = append(conds[code], nsnm)
+			if _, ok := conds[cond.Type]; !ok {
+				conds[cond.Type] = map[string][]string{}
+			}
+			conds[cond.Type][cond.Reason] = append(conds[cond.Type][cond.Reason], nsnm)
 		}
 	}
 
-	status := []api.CodeAndAffectedNamespaces{}
-	for _, code := range api.AllCodes {
-		nsnms := conds[(string)(code)]
-		stats.RecordNamespaceCondition((string)(code), len(nsnms))
-		if len(nsnms) == 0 {
-			continue
+	status := []api.ConditionAndAffectedNamespaces{}
+	// Use 'AllConditions' here to make sure we clear (set to 0) conditions in the
+	// metrics.
+	for tp, reasons := range api.AllConditions {
+		for _, reason := range reasons {
+			nsnms := conds[tp][reason]
+			stats.RecordNamespaceCondition(tp, reason, len(nsnms))
+			if len(nsnms) == 0 {
+				continue
+			}
+			sort.Strings(nsnms)
+			status = append(status, api.ConditionAndAffectedNamespaces{
+				Type:       tp,
+				Reason:     reason,
+				Namespaces: nsnms,
+			})
 		}
-		sort.Strings(nsnms)
-		status = append(status, api.CodeAndAffectedNamespaces{
-			Code:       (api.Code)(code),
-			Namespaces: nsnms,
-		})
 	}
 
 	if len(status) > 0 {

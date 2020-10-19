@@ -400,8 +400,8 @@ var _ = Describe("Secret", func() {
 		fooHier := newOrGetHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(BeTrue())
-		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(BeTrue())
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(BeTrue())
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(BeTrue())
 
 		// Delete the object from `foo`, wait until we're sure that it's gone, and then wait a while
 		// longer and verify it *isn't* deleted from `bar`, because the critical condition has paused
@@ -436,9 +436,9 @@ var _ = Describe("Secret", func() {
 		fooHier := newOrGetHierarchy(ctx, fooName)
 		fooHier.Spec.Parent = brumpfName
 		updateHierarchy(ctx, fooHier)
-		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(true))
-		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(Equal(true))
-		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(true))
+		Eventually(hasCondition(ctx, bazName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(true))
 
 		// Set baz's parent to foo and add a new role in foo.
 		setParent(ctx, bazName, fooName)
@@ -458,9 +458,9 @@ var _ = Describe("Secret", func() {
 		makeObject(ctx, "Role", brumpfName, "brumpf-role")
 
 		// The Crit conditions should be gone.
-		Eventually(hasCondition(ctx, fooName, api.CritParentMissing)).Should(Equal(false))
-		Eventually(hasCondition(ctx, barName, api.CritAncestor)).Should(Equal(false))
-		Eventually(hasCondition(ctx, bazName, api.CritAncestor)).Should(Equal(false))
+		Eventually(hasCondition(ctx, fooName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(false))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(false))
+		Eventually(hasCondition(ctx, bazName, api.ConditionActivitiesHalted, api.ReasonAncestor)).Should(Equal(false))
 
 		// Everything should be up to date after the Crit conditions are gone.
 		Eventually(hasObject(ctx, "Role", fooName, "brumpf-role")).Should(BeTrue())
