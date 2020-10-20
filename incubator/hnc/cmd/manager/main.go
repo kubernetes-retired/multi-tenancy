@@ -21,8 +21,6 @@ import (
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
-	prom "github.com/prometheus/client_golang/prometheus"
-	"go.opencensus.io/stats/view"
 	corev1 "k8s.io/api/core/v1"
 
 	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
@@ -32,6 +30,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	// +kubebuilder:scaffold:imports
 
@@ -110,16 +109,21 @@ func main() {
 		}
 	}
 	if err != nil {
-		setupLog.Error(err, "cannot create Stackdriver exporter")
+		setupLog.Error(err, "Could not create Stackdriver exporter")
 	}
 
+	// Hook up OpenCensus to Prometheus.
+	//
+	// Creating a prom/oc exporter automatically registers the exporter with Prometheus; we can ignore
+	// the returned value since it doesn't do anything anyway. See:
+	// (https://github.com/census-ecosystem/opencensus-go-exporter-prometheus/blob/2b9ada237b532c09fcb0a1242469827bdb89df41/prometheus.go#L103)
 	setupLog.Info("Creating Prometheus exporter")
-	prom.DefaultRegisterer = prom.DefaultRegisterer.(*prom.Registry)
-	promExporter, err := prometheus.NewExporter(prometheus.Options{Registry: prom.DefaultRegisterer.(*prom.Registry)})
+	_, err = prometheus.NewExporter(prometheus.Options{
+		Registerer: metrics.Registry, // use the controller-runtime registry to merge with all other metrics
+	})
 	if err != nil {
-		setupLog.Error(err, "Cannot create Prometheus exporter")
+		setupLog.Error(err, "Could not create Prometheus exporter")
 	}
-	view.RegisterExporter(promExporter)
 
 	setupLog.Info("Configuring controller-manager")
 	ctrl.SetLogger(zap.Logger(debugLogs))
