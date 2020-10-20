@@ -154,13 +154,10 @@ spec:
               types:
                 description: Types indicates the desired synchronization states of kinds, if any.
                 items:
-                  description: TypeSynchronizationSpec defines the desired synchronization state of a specific kind.
+                  description: TypeSynchronizationSpec defines the desired synchronization state of a specific resource.
                   properties:
-                    apiVersion:
-                      description: API version of the kind defined below. This is used to unambiguously identifies the kind.
-                      type: string
-                    kind:
-                      description: Kind to be configured.
+                    group:
+                      description: Group of the resource defined below. This is used to unambiguously identify the resource.
                       type: string
                     mode:
                       description: Synchronization mode of the kind. If the field is empty, it will be treated as "Propagate".
@@ -169,9 +166,12 @@ spec:
                       - Ignore
                       - Remove
                       type: string
+                    resource:
+                      description: Resource to be configured.
+                      type: string
                   required:
-                  - apiVersion
-                  - kind
+                  - group
+                  - resource
                   type: object
                 type: array
             type: object
@@ -184,7 +184,7 @@ spec:
                   description: HNCConfigurationCondition specifies the code and the description of an error condition.
                   properties:
                     code:
-                      description: "Describes the condition in a machine-readable string value. The currently valid values are shown below, but new values may be added over time. This field is always present in a condition. \n Conditions typically indicate some kinds of error that HNC itself can ignore. However, the behaviors of some types might be out-of-sync with the users' expectations. \n Currently, the supported values are: \n - \"objectReconcilerCreationFailed\": an error exists when creating the object reconciler for the type specified in Msg. \n - \"multipleConfigurationsForOneType\": Multiple configurations exist for the type specified in the Msg. One type should only have one configuration."
+                      description: "Describes the condition in a machine-readable string value. The currently valid values are shown below, but new values may be added over time. This field is always present in a condition. \n Conditions typically indicate some kinds of error that HNC itself can ignore. However, the behaviors of some types might be out-of-sync with the users' expectations. \n Currently, the supported values are: \n - \"TypeNotFound\": the type in the spec is not found in the API server. \n - \"ObjectReconcilerCreationFailed\": an error exists when creating the object reconciler for the type specified in Msg. \n - \"MultipleConfigurationsForOneType\": Multiple configurations exist for the type specified in the Msg. One type should only have one configuration."
                       type: string
                     msg:
                       description: A human-readable description of the condition, if the `code` field is not sufficiently clear on their own. If the condition is only for specific types, Msg will include information about the types (e.g., GVK).
@@ -219,11 +219,8 @@ spec:
                 items:
                   description: TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
                   properties:
-                    apiVersion:
-                      description: API version of the kind defined below. This is used to unambiguously identifies the kind.
-                      type: string
-                    kind:
-                      description: Kind to be configured.
+                    group:
+                      description: Group of the resource defined below.
                       type: string
                     mode:
                       description: Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode in the spec, except when the reconciler has fallen behind or when the mode is omitted from the spec and the default is chosen.
@@ -236,9 +233,16 @@ spec:
                       description: Tracks the number of objects that are created by users.
                       minimum: 0
                       type: integer
+                    resource:
+                      description: Resource to be configured.
+                      type: string
+                    version:
+                      description: Version of the resource defined below.
+                      type: string
                   required:
-                  - apiVersion
-                  - kind
+                  - group
+                  - resource
+                  - version
                   type: object
                 type: array
             type: object

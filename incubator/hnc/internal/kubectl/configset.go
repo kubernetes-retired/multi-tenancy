@@ -25,29 +25,29 @@ import (
 )
 
 var setTypeCmd = &cobra.Command{
-	Use: fmt.Sprintf("set-type --apiVersion X --kind Y <%s|%s|%s>",
+	Use: fmt.Sprintf("set-type --group X --resource Y <%s|%s|%s>",
 		api.Propagate, api.Remove, api.Ignore),
 	Short: "Sets the HNC configuration of a specific resources type",
 	Example: fmt.Sprintf("  # Set configuration of a core type\n" +
-		"  kubectl hns config set-type --apiVersion v1 --kind Secret ignore\n\n" +
+		"  kubectl hns config set-type --resource secrets Ignore\n\n" +
 		"  # Set configuration of a custom type\n" +
-		"  kubectl hns config set-type --apiversion stable.example.com/v1 --kind CronTab propagate"),
+		"  kubectl hns config set-type --group stable.example.com --resource crontabs Propagate"),
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		mode := api.SynchronizationMode(args[0])
 		flags := cmd.Flags()
-		apiVersion, _ := flags.GetString("apiVersion")
-		kind, _ := flags.GetString("kind")
+		group, _ := flags.GetString("group")
+		resource, _ := flags.GetString("resource")
 		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
 		exist := false
 		for i := 0; i < len(config.Spec.Types); i++ {
 			t := &config.Spec.Types[i]
-			if t.APIVersion == apiVersion && t.Kind == kind {
+			if t.Group == group && t.Resource == resource {
 				if t.Mode == api.Ignore && mode == api.Propagate && !force {
-					fmt.Println("Switching directly from 'Ignore' to 'Propagate' mode could cause existing %s objects in "+
-						"child namespaces to be overwritten by objects from ancestor namespaces.", kind)
+					fmt.Printf("Switching directly from 'Ignore' to 'Propagate' mode could cause existing %q objects in "+
+						"child namespaces to be overwritten by objects from ancestor namespaces.\n", resource)
 					fmt.Println("If you are sure you want to proceed with this operation, use the '--force' flag.")
 					fmt.Println("If you are not sure and would like to see what source objects would be overwritten," +
 						"please switch to 'Remove' first. To see how to enable propagation safely, refer to " +
@@ -63,9 +63,9 @@ var setTypeCmd = &cobra.Command{
 		if !exist {
 			config.Spec.Types = append(config.Spec.Types,
 				api.TypeSynchronizationSpec{
-					APIVersion: apiVersion,
-					Kind:       kind,
-					Mode:       mode,
+					Group:    group,
+					Resource: resource,
+					Mode:     mode,
 				})
 		}
 
@@ -74,8 +74,8 @@ var setTypeCmd = &cobra.Command{
 }
 
 func newSetTypeCmd() *cobra.Command {
-	setTypeCmd.Flags().String("apiVersion", "", "API version of the kind")
-	setTypeCmd.Flags().String("kind", "", "Kind to be configured")
+	setTypeCmd.Flags().String("group", "", "group of the resource")
+	setTypeCmd.Flags().String("resource", "", "resource to be configured")
 	setTypeCmd.Flags().BoolP("force", "f", false, "Force to set the propagation mode")
 	return setTypeCmd
 }

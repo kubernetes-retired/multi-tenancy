@@ -18,17 +18,17 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
-// GVKs maps a kind to its corresponding GVK.
+// GVKs maps a resource to its corresponding GVK.
 var GVKs = map[string]schema.GroupVersionKind{
-	"Secret":        {Group: "", Version: "v1", Kind: "Secret"},
-	"Role":          {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "Role"},
-	"RoleBinding":   {Group: "rbac.authorization.k8s.io", Version: "v1", Kind: "RoleBinding"},
-	"NetworkPolicy": {Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
-	"ResourceQuota": {Group: "", Version: "v1", Kind: "ResourceQuota"},
-	"LimitRange":    {Group: "", Version: "v1", Kind: "LimitRange"},
-	"ConfigMap":     {Group: "", Version: "v1", Kind: "ConfigMap"},
-	// CronTab is a custom resource.
-	"CronTab": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
+	"secrets":               {Group: "", Version: "v1", Kind: "Secret"},
+	api.RoleResource:        {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
+	api.RoleBindingResource: {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
+	"networkpolicies":       {Group: "networking.k8s.io", Version: "v1", Kind: "NetworkPolicy"},
+	"resourcequotas":        {Group: "", Version: "v1", Kind: "ResourceQuota"},
+	"limitranges":           {Group: "", Version: "v1", Kind: "LimitRange"},
+	"configmaps":            {Group: "", Version: "v1", Kind: "ConfigMap"},
+	// crontabs is a custom resource.
+	"crontabs": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
 }
 
 // createdObjects keeps track of objects created out of the makeObject function.
@@ -221,26 +221,26 @@ func getHNCConfigWithName(ctx context.Context, nm string) (*api.HNCConfiguration
 	return config, err
 }
 
-func addToHNCConfig(ctx context.Context, apiVersion, kind string, mode api.SynchronizationMode) {
+func addToHNCConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
 	EventuallyWithOffset(1, func() error {
 		c, err := getHNCConfig(ctx)
 		if err != nil {
 			return err
 		}
-		spec := api.TypeSynchronizationSpec{APIVersion: apiVersion, Kind: kind, Mode: mode}
+		spec := api.TypeSynchronizationSpec{Group: group, Resource: resource, Mode: mode}
 		c.Spec.Types = append(c.Spec.Types, spec)
 		return updateHNCConfig(ctx, c)
-	}).Should(Succeed(), "While adding %s/%s=%s to HNC config", apiVersion, kind, mode)
+	}).Should(Succeed(), "While adding %s/%s=%s to HNC config", group, resource, mode)
 }
 
 // hasObject returns true if a namespace contains a specific object of the given kind.
 //  The kind and its corresponding GVK should be included in the GVKs map.
-func hasObject(ctx context.Context, kind string, nsName, name string) func() bool {
+func hasObject(ctx context.Context, resource string, nsName, name string) func() bool {
 	// `Eventually` only works with a fn that doesn't take any args.
 	return func() bool {
 		nnm := types.NamespacedName{Namespace: nsName, Name: name}
 		inst := &unstructured.Unstructured{}
-		inst.SetGroupVersionKind(GVKs[kind])
+		inst.SetGroupVersionKind(GVKs[resource])
 		err := k8sClient.Get(ctx, nnm, inst)
 		return err == nil
 	}
@@ -248,21 +248,21 @@ func hasObject(ctx context.Context, kind string, nsName, name string) func() boo
 
 // makeObject creates an empty object of the given kind in a specific namespace. The kind and
 // its corresponding GVK should be included in the GVKs map.
-func makeObject(ctx context.Context, kind string, nsName, name string) {
+func makeObject(ctx context.Context, resource string, nsName, name string) {
 	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetGroupVersionKind(GVKs[resource])
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
-	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed(), "When creating %s %s/%s", kind, nsName, name)
+	ExpectWithOffset(1, k8sClient.Create(ctx, inst)).Should(Succeed(), "When creating %s %s/%s", resource, nsName, name)
 	createdObjects = append(createdObjects, inst)
 }
 
 // makeObjectWithAnnotation creates an empty object with annotation given kind in a specific
 // namespace. The kind and its corresponding GVK should be included in the GVKs map.
-func makeObjectWithAnnotation(ctx context.Context, kind string, nsName,
+func makeObjectWithAnnotation(ctx context.Context, resource string, nsName,
 	name string, a map[string]string) {
 	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetGroupVersionKind(GVKs[resource])
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
 	inst.SetAnnotations(a)
@@ -272,11 +272,11 @@ func makeObjectWithAnnotation(ctx context.Context, kind string, nsName,
 
 // updateObjectWithAnnotation gets an object given it's kind, nsName and name, adds the annotation
 // and updates this object
-func updateObjectWithAnnotation(ctx context.Context, kind string, nsName,
+func updateObjectWithAnnotation(ctx context.Context, resource string, nsName,
 	name string, a map[string]string) error {
 	nnm := types.NamespacedName{Namespace: nsName, Name: name}
 	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetGroupVersionKind(GVKs[resource])
 	err := k8sClient.Get(ctx, nnm, inst)
 	if err != nil {
 		return err
@@ -287,9 +287,9 @@ func updateObjectWithAnnotation(ctx context.Context, kind string, nsName,
 
 // deleteObject deletes an object of the given kind in a specific namespace. The kind and
 // its corresponding GVK should be included in the GVKs map.
-func deleteObject(ctx context.Context, kind string, nsName, name string) {
+func deleteObject(ctx context.Context, resource string, nsName, name string) {
 	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetGroupVersionKind(GVKs[resource])
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
 	ExpectWithOffset(1, k8sClient.Delete(ctx, inst)).Should(Succeed())
@@ -309,10 +309,10 @@ func cleanupObjects(ctx context.Context) {
 // objectInheritedFrom returns the name of the namespace where a specific object of a given kind
 // is propagated from or an empty string if the object is not a propagated object. The kind and
 // its corresponding GVK should be included in the GVKs map.
-func objectInheritedFrom(ctx context.Context, kind string, nsName, name string) string {
+func objectInheritedFrom(ctx context.Context, resource string, nsName, name string) string {
 	nnm := types.NamespacedName{Namespace: nsName, Name: name}
 	inst := &unstructured.Unstructured{}
-	inst.SetGroupVersionKind(GVKs[kind])
+	inst.SetGroupVersionKind(GVKs[resource])
 	if err := k8sClient.Get(ctx, nnm, inst); err != nil {
 		// should have been caught above
 		return err.Error()

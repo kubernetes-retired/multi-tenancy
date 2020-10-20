@@ -16,6 +16,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"strings"
+
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
 	v1a2 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
@@ -39,8 +41,21 @@ func (src *HNCConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 	dstSpecTypes := []v1a2.TypeSynchronizationSpec{}
 	for _, st := range srcSpecTypes {
 		dt := v1a2.TypeSynchronizationSpec{}
-		dt.APIVersion = st.APIVersion
-		dt.Kind = st.Kind
+		// Hack the group from APIVersion by removing the version, e.g.
+		// 1) "rbac.authorization.k8s.io/v1" => "rbac.authorization.k8s.io";
+		// 2) "v1" => "" (for core type).
+		gv := strings.Split(st.APIVersion, "/")
+		if len(gv) == 2 {
+			dt.Group = gv[0]
+		}
+		// Hack the resource from Kind by using the lower case and plural form, e.g.
+		// 1) "Role" => "roles"
+		// 2) "NetworkPolicy" => "networkpolicies"
+		lk := strings.ToLower(st.Kind)
+		if strings.HasSuffix(lk, "y") {
+			lk = strings.TrimSuffix(lk, "y") + "ie"
+		}
+		dt.Resource = lk + "s"
 		dtm, ok := toV1A2[st.Mode]
 		if !ok {
 			// This should never happen with the enum schema validation.

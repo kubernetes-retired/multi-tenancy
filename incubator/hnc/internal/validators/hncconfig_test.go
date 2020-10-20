@@ -16,6 +16,16 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
+var (
+	// This mapping is used to implement a fake grTranslator with GVKFor() method.
+	gr2gvk = map[schema.GroupResource]schema.GroupVersionKind{
+		{Group: api.RBACGroup, Resource: api.RoleResource}:        {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
+		{Group: api.RBACGroup, Resource: api.RoleBindingResource}: {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
+		{Group: "", Resource: "secrets"}:                          {Group: "", Version: "v1", Kind: "Secret"},
+		{Group: "", Resource: "resourcequotas"}:                   {Group: "", Version: "v1", Kind: "ResourceQuota"},
+	}
+)
+
 func TestDeletingConfigObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
 		g := NewGomegaWithT(t)
@@ -52,7 +62,7 @@ func TestDeletingOtherObject(t *testing.T) {
 
 func TestRBACTypes(t *testing.T) {
 	f := forest.NewForest()
-	config := &HNCConfig{Forest: f}
+	config := &HNCConfig{translator: fakeGRTranslator{}, Forest: f}
 
 	tests := []struct {
 		name    string
@@ -62,60 +72,60 @@ func TestRBACTypes(t *testing.T) {
 		{
 			name: "Correct RBAC config with Propagate mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: true,
 		},
 		{
 			name: "Correct RBAC config with unset mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding"},
+				{Group: api.RBACGroup, Resource: api.RoleResource},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource},
 			},
 			allow: true,
 		},
 		{
-			name: "Missing Role",
+			name: "Missing role",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
-			name: "Missing RoleBinding",
+			name: "Missing rolebinding",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
-			name: "Incorrect Role mode",
+			name: "Incorrect role mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Ignore"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Ignore"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
-			name: "Incorrect RoleBinding mode",
+			name: "Incorrect rolebinding mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Ignore"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Ignore"},
 			},
 			allow: false,
 		}, {
 			name: "Duplicate RBAC types with different modes",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		},
 		{
 			name: "Duplicate RBAC types with the same mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		},
@@ -136,20 +146,20 @@ func TestRBACTypes(t *testing.T) {
 }
 
 func TestNonRBACTypes(t *testing.T) {
-	f := fakeGVKValidator{"CronTab"}
+	f := fakeGRTranslator{"crontabs"}
 	tests := []struct {
 		name      string
 		configs   []api.TypeSynchronizationSpec
-		validator fakeGVKValidator
+		validator fakeGRTranslator
 		allow     bool
 	}{
 		{
 			name: "Correct Non-RBAC types config",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
-				{APIVersion: "v1", Kind: "ResourceQuota"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				{Group: "", Resource: "secrets", Mode: "Ignore"},
+				{Group: "", Resource: "resourcequotas"},
 			},
 			validator: f,
 			allow:     true,
@@ -157,30 +167,30 @@ func TestNonRBACTypes(t *testing.T) {
 		{
 			name: "Resource does not exist",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
-				// "CronTab" kind does not exist in "v1"
-				{APIVersion: "v1", Kind: "CronTab", Mode: "Ignore"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				// "crontabs" resource does not exist in ""
+				{Group: "", Resource: "crontabs", Mode: "Ignore"},
 			},
 			validator: f,
 			allow:     false,
 		}, {
 			name: "Duplicate types with different modes",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				{Group: "", Resource: "secrets", Mode: "Ignore"},
+				{Group: "", Resource: "secrets", Mode: "Propagate"},
 			},
 			validator: f,
 			allow:     false,
 		}, {
 			name: "Duplicate types with the same mode",
 			configs: []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Ignore"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				{Group: "", Resource: "secrets", Mode: "Ignore"},
+				{Group: "", Resource: "secrets", Mode: "Ignore"},
 			},
 			validator: f,
 			allow:     false,
@@ -191,7 +201,7 @@ func TestNonRBACTypes(t *testing.T) {
 			g := NewGomegaWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
 			c.Name = api.HNCConfigSingleton
-			config := &HNCConfig{validator: tc.validator, Forest: forest.NewForest()}
+			config := &HNCConfig{translator: tc.validator, Forest: forest.NewForest()}
 
 			got := config.handle(context.Background(), c)
 
@@ -220,14 +230,14 @@ func TestPropagateConflict(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			configs := []api.TypeSynchronizationSpec{
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "Role", Mode: "Propagate"},
-				{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding", Mode: "Propagate"},
-				{APIVersion: "v1", Kind: "Secret", Mode: "Propagate"}}
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				{Group: "", Resource: "secrets", Mode: "Propagate"}}
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: configs}}
 			c.Name = api.HNCConfigSingleton
 			// Create a forest with "a" as the parent and "b" and "c" as the children.
 			f := foresttest.Create("-aa")
-			config := &HNCConfig{validator: fakeGVKValidator{}, Forest: f}
+			config := &HNCConfig{translator: fakeGRTranslator{}, Forest: f}
 
 			// Add source objects to the forest.
 			inst := &unstructured.Unstructured{}
@@ -244,15 +254,15 @@ func TestPropagateConflict(t *testing.T) {
 	}
 }
 
-// fakeGVKValidator implements gvkValidator. Any kind that are in the slice are denied; anything else
-// is allowed.
-type fakeGVKValidator []string
+// fakeGRTranslator implements grTranslator. Any kind that are in the slice are
+// denied; anything else are translated.
+type fakeGRTranslator []string
 
-func (f fakeGVKValidator) Exists(_ context.Context, gvk schema.GroupVersionKind) error {
-	for _, k := range f {
-		if k == gvk.Kind {
-			return fmt.Errorf("%s does not exist", gvk)
+func (f fakeGRTranslator) GVKFor(gr schema.GroupResource) (schema.GroupVersionKind, error) {
+	for _, r := range f {
+		if r == gr.Resource {
+			return schema.GroupVersionKind{}, fmt.Errorf("%s does not exist", gr)
 		}
 	}
-	return nil
+	return gr2gvk[gr], nil
 }

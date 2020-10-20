@@ -40,7 +40,7 @@ var configDescribeCmd = &cobra.Command{
 			default:
 				action = "Ignoring"
 			}
-			fmt.Printf("* %s: %s (%s)\n", action, t.Kind, t.APIVersion)
+			fmt.Printf("* %s: %s (%s/%s)\n", action, t.Resource, t.Group, t.Version)
 		}
 		fmt.Print("\nConditions:\n")
 		for _, c := range config.Status.Conditions {

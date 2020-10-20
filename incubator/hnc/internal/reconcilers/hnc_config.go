@@ -9,6 +9,9 @@ import (
 
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -51,8 +54,12 @@ type ConfigReconciler struct {
 	// not use it.
 	HierarchyConfigUpdates chan event.GenericEvent
 
-	// activeGVKs contains GVKs that are configured in the Spec.
-	activeGVKs gvkSet
+	// activeGVKMode contains GRs that are configured in the Spec and their mapping
+	// GVKs and configured modes.
+	activeGVKMode gr2gvkMode
+
+	// activeGR contains the mapped GVKs of the GRs configured in the Spec.
+	activeGR gvk2gr
 
 	// enqueueReasons maintains the list of reasons we've been asked to update ourselves. Functionally,
 	// it's just a boolean (nil or non-nil), everything else is just for logging.
@@ -60,8 +67,16 @@ type ConfigReconciler struct {
 	enqueueReasonsLock sync.Mutex
 }
 
-// gvkSet keeps track of a group of unique GVKs.
-type gvkSet map[schema.GroupVersionKind]bool
+type gvkMode struct {
+	gvk  schema.GroupVersionKind
+	mode api.SynchronizationMode
+}
+
+// gr2gvkMode keeps track of a group of unique GRs and the mapping GVKs and modes.
+type gr2gvkMode map[schema.GroupResource]gvkMode
+
+// gvk2gr keeps track of a group of unique GVKs with the mapping GRs.
+type gvk2gr map[schema.GroupVersionKind]schema.GroupResource
 
 // checkPeriod is the period that the config reconciler checks if it needs to reconcile the
 // `config` singleton.
@@ -78,6 +93,10 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 	inst.Status.Conditions = nil
+
+	if err := r.reconcileTypes(inst); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Create or sync corresponding ObjectReconcilers, if needed.
 	syncErr := r.syncObjectReconcilers(ctx, inst)
@@ -96,6 +115,47 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Retry reconciliation if there is a sync error.
 	return ctrl.Result{}, syncErr
+}
+
+// reconcileTypes makes sure there's no dup and the types exist. Update the type
+// set with GR to GVK mappings.
+func (r *ConfigReconciler) reconcileTypes(inst *api.HNCConfiguration) error {
+	// Get all resources for all groups.
+	allRes, err := GetAllResources(r.Manager.GetConfig())
+	if err != nil {
+		r.Log.Error(err, "while trying to get all resources")
+		return err
+	}
+
+	// Get valid settings in the `config` singleton.
+	r.activeGVKMode = gr2gvkMode{}
+	r.activeGR = gvk2gr{}
+	for _, t := range inst.Spec.Types {
+		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
+		grm := fmt.Sprintf("Group: %s, Resource: %s, Mode: %s", t.Group, t.Resource, t.Mode)
+		// If there are multiple configurations of the same type, we will follow the
+		// first configuration and ignore the rest.
+		if _, exist := r.activeGVKMode[gr]; exist {
+			msg := fmt.Sprintf("Ignore the configuration: %q because the configuration of the type already exists; "+
+				"only the first configuration will be applied", grm)
+			r.Log.Info(msg)
+			r.writeCondition(inst, api.MultipleConfigurationsForOneType, msg)
+			continue
+		}
+
+		// Look if the resource exists in the API server.
+		gvk, err := GVKFor(gr, allRes)
+		if err != nil {
+			// If the type is not found, log error and write conditions but don't
+			// early exit since the other types can still be reconciled.
+			r.Log.Error(err, "while trying to reconcile the configuration", "configuration", grm)
+			r.writeCondition(inst, api.TypeNotFound, err.Error())
+			continue
+		}
+		r.activeGVKMode[gr] = gvkMode{gvk, t.Mode}
+		r.activeGR[gvk] = gr
+	}
+	return nil
 }
 
 // getSingleton returns the singleton if it exists, or creates a default one if it doesn't.
@@ -163,11 +223,11 @@ func (r *ConfigReconciler) validateRBACTypes(inst *api.HNCConfiguration) {
 }
 
 func (r *ConfigReconciler) isRole(t api.TypeSynchronizationSpec) bool {
-	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "Role"
+	return t.Group == api.RBACGroup && t.Resource == api.RoleResource
 }
 
 func (r *ConfigReconciler) isRoleBinding(t api.TypeSynchronizationSpec) bool {
-	return t.APIVersion == "rbac.authorization.k8s.io/v1" && t.Kind == "RoleBinding"
+	return t.Group == api.RBACGroup && t.Resource == api.RoleBindingResource
 }
 
 // writeSingleton creates a singleton on the apiserver if it does not exist.
@@ -232,71 +292,43 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 		return err
 	}
 
-	if err := r.syncRemovedReconcilers(ctx, inst); err != nil {
+	if err := r.syncRemovedReconcilers(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// syncActiveReconcilers syncs object reconcilers for types that are in the Spec. If an object reconciler exists, it sets
-// its mode according to the Spec; otherwise, it creates the object reconciler.
+// syncActiveReconcilers syncs object reconcilers for types that are in the Spec
+// and exists in the API server. If an object reconciler exists, it sets its
+// mode according to the Spec; otherwise, it creates the object reconciler.
 func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
-	// exist keeps track of existing types in the `config` singleton.
-	exist := gvkSet{}
-	r.activeGVKs = gvkSet{}
-	for _, t := range inst.Spec.Types {
-		// If there are multiple configurations of the same type, we will follow the first
-		// configuration and ignore the rest.
-		if !r.ensureNoDuplicateTypeConfigurations(inst, t, exist) {
-			continue
-		}
-		gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
-		r.activeGVKs[gvk] = true
-		if ts := r.Forest.GetTypeSyncer(gvk); ts != nil {
-			if err := ts.SetMode(ctx, t.Mode, r.Log); err != nil {
+	for _, gvkMode := range r.activeGVKMode {
+		if ts := r.Forest.GetTypeSyncer(gvkMode.gvk); ts != nil {
+			if err := ts.SetMode(ctx, gvkMode.mode, r.Log); err != nil {
 				return err // retry the reconciliation
 			}
 		} else {
-			r.createObjectReconciler(gvk, t.Mode, inst)
+			r.createObjectReconciler(gvkMode.gvk, gvkMode.mode, inst)
 		}
 	}
 	return nil
 }
 
-// ensureNoDuplicateTypeConfigurations checks whether the configuration of a type already exists and sets
-// a condition in the status if the type exists. The method returns true if the type configuration does not exist;
-// otherwise, returns false.
-func (r *ConfigReconciler) ensureNoDuplicateTypeConfigurations(inst *api.HNCConfiguration, t api.TypeSynchronizationSpec,
-	mp gvkSet) bool {
-	gvk := schema.FromAPIVersionAndKind(t.APIVersion, t.Kind)
-	if !mp[gvk] {
-		mp[gvk] = true
-		return true
-	}
-	specMsg := fmt.Sprintf("APIVersion: %s, Kind: %s, Mode: %s", t.APIVersion, t.Kind, t.Mode)
-	r.Log.Info(fmt.Sprintf("Ignoring the configuration: %s", specMsg))
-	condition := api.HNCConfigurationCondition{
-		Code: api.MultipleConfigurationsForOneType,
-		Msg: fmt.Sprintf("Ignore the configuration: %s because the configuration of the type already exists; "+
-			"only the first configuration will be applied", specMsg),
-	}
-	inst.Status.Conditions = append(inst.Status.Conditions, condition)
-	return false
-}
-
-// syncRemovedReconcilers sets object reconcilers to "ignore" mode for types that are removed from the Spec.
-func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
-	// If a type exists in the forest but not exists in the Spec, we will
-	// set the mode of corresponding object reconciler to "ignore".
+// syncRemovedReconcilers sets object reconcilers to "ignore" mode for types
+// that are removed from the Spec. No longer existing types in the Spec are also
+// considered as removed.
+func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context) error {
+	// If a type exists in the forest but not exists in the latest type set, we
+	// will set the mode of corresponding object reconciler to "ignore".
 	// TODO: Ideally, we should shut down the corresponding object
 	// reconciler. Gracefully terminating an object reconciler is still under
 	// development (https://github.com/kubernetes-sigs/controller-runtime/issues/764).
 	// We will revisit the code below once the feature is released.
 	for _, ts := range r.Forest.GetTypeSyncers() {
 		exist := false
-		for _, t := range inst.Spec.Types {
-			if ts.GetGVK() == schema.FromAPIVersionAndKind(t.APIVersion, t.Kind) {
+		for _, gvkMode := range r.activeGVKMode {
+			if ts.GetGVK() == gvkMode.gvk {
 				exist = true
 				break
 			}
@@ -313,20 +345,14 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context, inst *api
 	return nil
 }
 
-// createObjectReconciler creates an ObjectReconciler for the given GVK and informs forest about the reconciler.
+// createObjectReconciler creates an ObjectReconciler for the given GVK and
+// informs forest about the reconciler.
+// After upgrading sigs.k8s.io/controller-runtime version to v0.5.0, we can
+// create reconciler successfully even when the resource does not exist in the
+// cluster. Therefore, the caller should check if the resource exists before
+// creating the reconciler.
 func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode api.SynchronizationMode, inst *api.HNCConfiguration) {
 	r.Log.Info("Creating an object reconciler", "gvk", gvk, "mode", mode)
-
-	// After upgrading sigs.k8s.io/controller-runtime version to v0.5.0, we can create
-	// reconciler successfully even when the resource does not exist in the cluster.
-	// Therefore, we explicitly check if the resource exists before creating the
-	// reconciler.
-	_, err := r.Manager.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		r.Log.Error(err, "Error while trying to get resource", "gvk", gvk)
-		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
-		return
-	}
 
 	or := &ObjectReconciler{
 		Client: r.Client,
@@ -344,7 +370,8 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
-		r.writeObjectReconcilerCreationFailedCondition(inst, gvk, err)
+		msg := fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err)
+		r.writeCondition(inst, api.ObjectReconcilerCreationFailed, msg)
 		return
 	}
 
@@ -352,18 +379,17 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	r.Forest.AddTypeSyncer(or)
 }
 
-func (r *ConfigReconciler) writeObjectReconcilerCreationFailedCondition(inst *api.HNCConfiguration,
-	gvk schema.GroupVersionKind, err error) {
+func (r *ConfigReconciler) writeCondition(inst *api.HNCConfiguration, code api.HNCConfigurationCode, msg string) {
 	condition := api.HNCConfigurationCondition{
-		Code: api.ObjectReconcilerCreationFailed,
-		Msg:  fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err),
+		Code: code,
+		Msg:  msg,
 	}
 	inst.Status.Conditions = append(inst.Status.Conditions, condition)
 }
 
-// setTypeStatuses adds Status.Types for types configured in the spec. Only the status of
-// types in `propagate` and `remove` modes will be recorded. The Status.Types
-// is sorted in alphabetical order based on APIVersion and Kind.
+// setTypeStatuses adds Status.Types for types configured in the spec. Only the
+// status of types in `Propagate` and `Remove` modes will be recorded. The
+// Status.Types is sorted in alphabetical order based on Group and Resource.
 func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 	// We lock the forest here so that other reconcilers cannot modify the
 	// forest while we are reading from the forest.
@@ -372,18 +398,20 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 
 	statuses := []api.TypeSynchronizationStatus{}
 	for _, ts := range r.Forest.GetTypeSyncers() {
-		// Don't output a status for any reconciler that isn't explicitly listed in the spec
+		// Don't output a status for any reconciler that isn't explicitly listed in
+		// the Spec
 		gvk := ts.GetGVK()
-		if !r.activeGVKs[ts.GetGVK()] {
+		gr, exist := r.activeGR[ts.GetGVK()]
+		if !exist {
 			continue
 		}
 
 		// Initialize status
-		apiVersion, kind := gvk.ToAPIVersionAndKind()
 		status := api.TypeSynchronizationStatus{
-			APIVersion: apiVersion,
-			Kind:       kind,
-			Mode:       ts.GetMode(), // may be different from the spec if it's implicit
+			Group:    gr.Group,
+			Version:  gvk.Version,
+			Resource: gr.Resource,
+			Mode:     ts.GetMode(), // may be different from the spec if it's implicit
 		}
 
 		// Only add NumPropagatedObjects if we're not ignoring this type
@@ -409,10 +437,10 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 
 	// Alphabetize
 	sort.Slice(statuses, func(i, j int) bool {
-		if statuses[i].APIVersion != statuses[j].APIVersion {
-			return statuses[i].APIVersion < statuses[j].APIVersion
+		if statuses[i].Group != statuses[j].Group {
+			return statuses[i].Group < statuses[j].Group
 		}
-		return statuses[i].Kind < statuses[j].Kind
+		return statuses[i].Resource < statuses[j].Resource
 	})
 
 	// Record the final list
@@ -550,4 +578,47 @@ func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	go r.periodicTrigger()
 
 	return nil
+}
+
+// GetAllResources creates a discovery client to get all the resources for all
+// groups from the apiserver.
+func GetAllResources(config *rest.Config) ([]*restmapper.APIGroupResources, error) {
+	dc, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	return restmapper.GetAPIGroupResources(dc)
+}
+
+// GVKFor searches the GR in apiserver and returns the mapping GVK. If the GR
+// doesn't exist, return an empty GVK and the error.
+func GVKFor(gr schema.GroupResource, allRes []*restmapper.APIGroupResources) (schema.GroupVersionKind, error) {
+	// Look for a matching resource from all resources.
+	for _, groupedResources := range allRes {
+		group := groupedResources.Group
+		// Skip resources from a different group.
+		if group.Name != gr.Group {
+			continue
+		}
+		// Search in the grouped resources by version. We will use the first version
+		// that the resource exists in. It's safe because the resource is supported
+		// in that GroupVersion and apiserver will do the api conversion if needed.
+		for _, version := range group.Versions {
+			for _, resource := range groupedResources.VersionedResources[version.Version] {
+				if resource.Name == gr.Resource {
+					// Please note that we cannot use resource.group or resource.version
+					// here because they are preferred group/version and they are default
+					// to empty to imply this current containing group/version. Therefore,
+					// resource.group and resource.version are always empty in this case.
+					gvk := schema.GroupVersionKind{
+						Group:   gr.Group,
+						Version: version.Version,
+						Kind:    resource.Kind,
+					}
+					return gvk, nil
+				}
+			}
+		}
+	}
+	return schema.GroupVersionKind{}, fmt.Errorf("Resource %q not found", gr)
 }
