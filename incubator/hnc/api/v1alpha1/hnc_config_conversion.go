@@ -38,15 +38,15 @@ func (src *HNCConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 
 	// Spec
 	srcSpecTypes := src.Spec.Types
-	dstSpecTypes := []v1a2.TypeSynchronizationSpec{}
+	dstSpecRscs := []v1a2.ResourceSpec{}
 	for _, st := range srcSpecTypes {
-		dt := v1a2.TypeSynchronizationSpec{}
+		dr := v1a2.ResourceSpec{}
 		// Hack the group from APIVersion by removing the version, e.g.
 		// 1) "rbac.authorization.k8s.io/v1" => "rbac.authorization.k8s.io";
 		// 2) "v1" => "" (for core type).
 		gv := strings.Split(st.APIVersion, "/")
 		if len(gv) == 2 {
-			dt.Group = gv[0]
+			dr.Group = gv[0]
 		}
 		// Hack the resource from Kind by using the lower case and plural form, e.g.
 		// 1) "Role" => "roles"
@@ -55,16 +55,16 @@ func (src *HNCConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 		if strings.HasSuffix(lk, "y") {
 			lk = strings.TrimSuffix(lk, "y") + "ie"
 		}
-		dt.Resource = lk + "s"
+		dr.Resource = lk + "s"
 		dtm, ok := toV1A2[st.Mode]
 		if !ok {
 			// This should never happen with the enum schema validation.
 			dtm = v1a2.Ignore
 		}
-		dt.Mode = dtm
-		dstSpecTypes = append(dstSpecTypes, dt)
+		dr.Mode = dtm
+		dstSpecRscs = append(dstSpecRscs, dr)
 	}
-	dst.Spec.Types = dstSpecTypes
+	dst.Spec.Resources = dstSpecRscs
 
 	// We don't need to convert status because controllers will update it.
 	dst.Status = v1a2.HNCConfigurationStatus{}

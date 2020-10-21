@@ -66,12 +66,12 @@ func TestRBACTypes(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		configs []api.TypeSynchronizationSpec
+		configs []api.ResourceSpec
 		allow   bool
 	}{
 		{
 			name: "Correct RBAC config with Propagate mode",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
@@ -79,7 +79,7 @@ func TestRBACTypes(t *testing.T) {
 		},
 		{
 			name: "Correct RBAC config with unset mode",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource},
 			},
@@ -87,33 +87,33 @@ func TestRBACTypes(t *testing.T) {
 		},
 		{
 			name: "Missing role",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Missing rolebinding",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Incorrect role mode",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Ignore"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 			},
 			allow: false,
 		}, {
 			name: "Incorrect rolebinding mode",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Ignore"},
 			},
 			allow: false,
 		}, {
-			name: "Duplicate RBAC types with different modes",
-			configs: []api.TypeSynchronizationSpec{
+			name: "Duplicate RBAC resources with different modes",
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleResource},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
@@ -121,8 +121,8 @@ func TestRBACTypes(t *testing.T) {
 			allow: false,
 		},
 		{
-			name: "Duplicate RBAC types with the same mode",
-			configs: []api.TypeSynchronizationSpec{
+			name: "Duplicate RBAC resources with the same mode",
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
@@ -134,7 +134,7 @@ func TestRBACTypes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
-			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
+			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 
 			got := config.handle(context.Background(), c)
@@ -149,13 +149,13 @@ func TestNonRBACTypes(t *testing.T) {
 	f := fakeGRTranslator{"crontabs"}
 	tests := []struct {
 		name      string
-		configs   []api.TypeSynchronizationSpec
+		configs   []api.ResourceSpec
 		validator fakeGRTranslator
 		allow     bool
 	}{
 		{
-			name: "Correct Non-RBAC types config",
-			configs: []api.TypeSynchronizationSpec{
+			name: "Correct Non-RBAC resources config",
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
@@ -166,7 +166,7 @@ func TestNonRBACTypes(t *testing.T) {
 		},
 		{
 			name: "Resource does not exist",
-			configs: []api.TypeSynchronizationSpec{
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				// "crontabs" resource does not exist in ""
@@ -175,8 +175,8 @@ func TestNonRBACTypes(t *testing.T) {
 			validator: f,
 			allow:     false,
 		}, {
-			name: "Duplicate types with different modes",
-			configs: []api.TypeSynchronizationSpec{
+			name: "Duplicate resources with different modes",
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
@@ -185,8 +185,8 @@ func TestNonRBACTypes(t *testing.T) {
 			validator: f,
 			allow:     false,
 		}, {
-			name: "Duplicate types with the same mode",
-			configs: []api.TypeSynchronizationSpec{
+			name: "Duplicate resources with the same mode",
+			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
@@ -199,7 +199,7 @@ func TestNonRBACTypes(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
-			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: tc.configs}}
+			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 			config := &HNCConfig{translator: tc.validator, Forest: forest.NewForest()}
 
@@ -229,11 +229,11 @@ func TestPropagateConflict(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
-			configs := []api.TypeSynchronizationSpec{
+			configs := []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Propagate"}}
-			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Types: configs}}
+			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: configs}}
 			c.Name = api.HNCConfigSingleton
 			// Create a forest with "a" as the parent and "b" and "c" as the children.
 			f := foresttest.Create("-aa")

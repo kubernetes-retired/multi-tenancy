@@ -31,5 +31,5 @@ func newConfigCmd() *cobra.Command {
 func init() {
 	configCmd.AddCommand(newConfigDescribeCmd())
 	configCmd.AddCommand(newConfigDeleteCmd())
-	configCmd.AddCommand(newSetTypeCmd())
+	configCmd.AddCommand(newSetResourceCmd())
 }

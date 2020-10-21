@@ -224,12 +224,12 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify default types in the new version.
+		// Verify default resources in the new version.
 		FieldShouldContainWithTimeout(configCRD, "", configSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.types", []string{"roles", "rolebindings"})
+		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.resources", []string{"roles", "rolebindings"})
 	})
 
-	It("should convert HNCConfig types", func() {
+	It("should convert HNCConfig resources", func() {
 		// Create a tree with A as the root and B as the child
 		createSampleV1alpha1Tree()
 		// Delete the webhook to apply unsupported modes in v1alpha1.
@@ -242,27 +242,31 @@ metadata:
   name: config
 spec:
   types:
-  - apiVersion: rbac.authorization.k8s.io/v1
+  - apiVersion: rbac.authorization.k8s.io/v1 #### RBAC resources
     kind: Role
     mode: propagate
   - apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     mode: propagate
-  - apiVersion: v1
+  - apiVersion: v1                           #### Other builtin resources we think people will want to use
     kind: Secret
     mode: propagate
+  - apiVersion: v1
+    kind: ConfigMap
+    mode: foobar                             #### this should be converted to 'ignore'
   - apiVersion: v1
     kind: ResourceQuota
     mode: remove
   - apiVersion: v1
-    kind: WrongType
+    kind: LimitRange
     mode: remove
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     mode: remove
-  - apiVersion: v1
-    kind: ConfigMap
-    mode: foobar`
+  - apiVersion: v1                           #### Try a custom type too. It will cause a condition since it doesn't exist.
+    kind: WrongResource
+    mode: remove
+`
 		MustApplyYAML(cfg)
 		// Create a secret in ns A and make sure it's propagated to ns B.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-1 --from-literal=password=iama")
@@ -271,22 +275,24 @@ spec:
 		// Convert
 		setupV1alpha2()
 
-		// Verify type conversion. Look for some text that was legal in v1alpha1 but
+		// Verify resources conversion. Look for some text that was legal in v1alpha1 but
 		// isn't legal in v1alpha2 as a good first check to ensure conversion.
 		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "apiVersion")
 		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "kind")
 		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "v1")
-		// Check NetworkPolicy to networkpolicies conversion
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:networking.k8s.io mode:Remove resource:networkpolicies")
-		// Check WrongType conversion with TypeNotFound condition.
-		FieldShouldNotContain(configCRD, "", configSingleton, ".status.types", "wrongtypes")
-		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "message:Resource \"wrongtypes\" not found reason:TypeNotFound status:True type:BadConfiguration")
-		// Check all other type conversions
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:roles")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:rolebindings")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Propagate resource:secrets")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Remove resource:resourcequotas")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group: mode:Ignore resource:configmaps")
+
+		// Check all builtin resources conversions (same order as above)
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "group:rbac.authorization.k8s.io mode:Propagate resource:roles")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "group:rbac.authorization.k8s.io mode:Propagate resource:rolebindings")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Propagate resource:secrets")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Ignore resource:configmaps")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Remove resource:resourcequotas")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Remove resource:limitranges")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "group:networking.k8s.io mode:Remove resource:networkpolicies")
+
+		// Check WrongResource conversion with ResourceNotFound condition.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status.resources", "wrongresources")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "message:Resource \"wrongresources\" not found reason:ResourceNotFound")
 
 		// Verify sync mode behavior.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
@@ -364,12 +370,12 @@ spec:
 		setupV1alpha2()
 
 		// Verify sync mode conversion.
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Propagate")
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "propagate")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Ignore")
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "ignore")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "Remove")
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "remove")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "Propagate")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.resources", "propagate")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "Ignore")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.resources", "ignore")
+		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "Remove")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.resources", "remove")
 		// Verify sync mode behavior.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
 		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
@@ -397,8 +403,8 @@ spec:
 	// 3 more corner cases for v1a1 propagated objects with inheritedFrom label
 	// during conversion:
 	// 1) It may not clear v1a1 propagated objects if the source object is removed during conversion;
-	// 2) It may not clear v1a1 propagated objects if the type mode is changed from 'propagate' to 'remove' during conversion;
-	// 3) It should not clear previously propagated objects after conversion if the type mode was 'ignore'.
+	// 2) It may not clear v1a1 propagated objects if the resource mode is changed from 'propagate' to 'remove' during conversion;
+	// 3) It should not clear previously propagated objects after conversion if the resource mode was 'ignore'.
 	// The first two are possible race conditions and we hacked it in the tests
 	// below to make it consistent. The 3rd is always the case. We will add these
 	// to the user guide - https://github.com/kubernetes-sigs/multi-tenancy/issues/1210

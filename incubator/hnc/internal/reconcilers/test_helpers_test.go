@@ -201,10 +201,10 @@ func resetHNCConfigToDefault(ctx context.Context) {
 		if err != nil {
 			return err
 		}
-		c.Spec = api.HNCConfigurationSpec{Types: []api.TypeSynchronizationSpec{
+		c.Spec = api.HNCConfigurationSpec{Resources: []api.ResourceSpec{
 			config.GetDefaultRoleSpec(),
 			config.GetDefaultRoleBindingSpec()}}
-		c.Status.Types = nil
+		c.Status.Resources = nil
 		c.Status.Conditions = nil
 		return k8sClient.Update(ctx, c)
 	}).Should(Succeed(), "While resetting HNC config")
@@ -227,8 +227,8 @@ func addToHNCConfig(ctx context.Context, group, resource string, mode api.Synchr
 		if err != nil {
 			return err
 		}
-		spec := api.TypeSynchronizationSpec{Group: group, Resource: resource, Mode: mode}
-		c.Spec.Types = append(c.Spec.Types, spec)
+		spec := api.ResourceSpec{Group: group, Resource: resource, Mode: mode}
+		c.Spec.Resources = append(c.Spec.Resources, spec)
 		return updateHNCConfig(ctx, c)
 	}).Should(Succeed(), "While adding %s/%s=%s to HNC config", group, resource, mode)
 }

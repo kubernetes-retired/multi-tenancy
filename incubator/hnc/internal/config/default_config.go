@@ -20,10 +20,10 @@ var EX = map[string]bool{
 // By default, HNC configuration should always propagate Roles and RoleBindings.
 // See details in http://bit.ly/hnc-type-configuration
 
-func GetDefaultRoleSpec() api.TypeSynchronizationSpec {
-	return api.TypeSynchronizationSpec{Group: api.RBACGroup, Resource: api.RoleResource, Mode: api.Propagate}
+func GetDefaultRoleSpec() api.ResourceSpec {
+	return api.ResourceSpec{Group: api.RBACGroup, Resource: api.RoleResource, Mode: api.Propagate}
 }
 
-func GetDefaultRoleBindingSpec() api.TypeSynchronizationSpec {
-	return api.TypeSynchronizationSpec{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: api.Propagate}
+func GetDefaultRoleBindingSpec() api.ResourceSpec {
+	return api.ResourceSpec{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: api.Propagate}
 }

@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Constants for types and well-known names.
+// Constants for resources and well-known names.
 const (
 	HNCConfigSingleton  = "config"
 	HNCConfigSingletons = "hncconfigurations"
@@ -39,9 +39,9 @@ const (
 	// Propagate objects from ancestors to descendants and deletes obsolete descendants.
 	Propagate SynchronizationMode = "Propagate"
 
-	// Ignore the modification of this type. New or changed objects will not be propagated,
-	// and obsolete objects will not be deleted. The inheritedFrom label is not removed.
-	// Any unknown mode is treated as Ignore.
+	// Ignore the modification of this resource. New or changed objects will not be propagated, and
+	// obsolete objects will not be deleted. The inheritedFrom label is not removed.  Any unknown mode
+	// is treated as Ignore.
 	Ignore SynchronizationMode = "Ignore"
 
 	// Remove all existing propagated copies.
@@ -55,18 +55,18 @@ const (
 
 	// Condition reasons for BadConfiguration
 	ReasonMultipleConfigsForType = "MultipleConfigurationsForType"
-	ReasonTypeNotFound           = "TypeNotFound"
+	ReasonResourceNotFound       = "ResourceNotFound"
 
 	// Condition reason for OutOfSync, e.g. errors when creating a reconciler.
 	ReasonUnknown = "Unknown"
 )
 
-// TypeSynchronizationSpec defines the desired synchronization state of a
+// ResourceSpec defines the desired synchronization state of a
 // specific resource.
-type TypeSynchronizationSpec struct {
+type ResourceSpec struct {
 	// Group of the resource defined below. This is used to unambiguously identify
-	// the resource.
-	Group string `json:"group"`
+	// the resource. It may be omitted for core resources (e.g. "secrets").
+	Group string `json:"group,omitempty"`
 	// Resource to be configured.
 	Resource string `json:"resource"`
 	// Synchronization mode of the kind. If the field is empty, it will be treated
@@ -76,17 +76,20 @@ type TypeSynchronizationSpec struct {
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }
 
-// TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
-type TypeSynchronizationStatus struct {
-	// Group of the resource defined below.
+// ResourceStatus defines the actual synchronization state of a specific resource.
+type ResourceStatus struct {
+	// The API group of the resource being synchronized.
 	Group string `json:"group"`
-	// Version of the resource defined below.
+
+	// The API version used by HNC when propagating this resource.
 	Version string `json:"version"`
-	// Resource to be configured.
+
+	// The resource being synchronized.
 	Resource string `json:"resource"`
+
 	// Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode
-	// in the spec, except when the reconciler has fallen behind or when the mode is omitted from the
-	// spec and the default is chosen.
+	// in the spec, except when the reconciler has fallen behind or for resources with an enforced
+	// default synchronization mode, such as RBAC objects.
 	Mode SynchronizationMode `json:"mode,omitempty"`
 
 	// Tracks the number of objects that are being propagated to descendant namespaces. The propagated
@@ -127,14 +130,15 @@ type HNCConfiguration struct {
 
 // HNCConfigurationSpec defines the desired state of HNC configuration.
 type HNCConfigurationSpec struct {
-	// Types indicates the desired synchronization states of kinds, if any.
-	Types []TypeSynchronizationSpec `json:"types,omitempty"`
+	// Resources defines the cluster-wide settings for resource synchronization. To learn more, see
+	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
+	Resources []ResourceSpec `json:"resources,omitempty"`
 }
 
 // HNCConfigurationStatus defines the observed state of HNC configuration.
 type HNCConfigurationStatus struct {
-	// Types indicates the observed synchronization states of kinds, if any.
-	Types []TypeSynchronizationStatus `json:"types,omitempty"`
+	// Resources indicates the observed synchronization states of the resources.
+	Resources []ResourceStatus `json:"resources,omitempty"`
 
 	// Conditions describes the errors, if any.
 	Conditions []Condition `json:"conditions,omitempty"`

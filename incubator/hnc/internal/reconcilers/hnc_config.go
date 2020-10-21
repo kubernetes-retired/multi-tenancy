@@ -130,8 +130,8 @@ func (r *ConfigReconciler) reconcileTypes(inst *api.HNCConfiguration) error {
 	// Get valid settings in the `config` singleton.
 	r.activeGVKMode = gr2gvkMode{}
 	r.activeGR = gvk2gr{}
-	for _, t := range inst.Spec.Types {
-		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
+	for _, rsc := range inst.Spec.Resources {
+		gr := schema.GroupResource{Group: rsc.Group, Resource: rsc.Resource}
 		// If there are multiple configurations of the same type, we will follow the
 		// first configuration and ignore the rest.
 		if gvkMode, exist := r.activeGVKMode[gr]; exist {
@@ -146,11 +146,11 @@ func (r *ConfigReconciler) reconcileTypes(inst *api.HNCConfiguration) error {
 		if err != nil {
 			// If the type is not found, log error and write conditions but don't
 			// early exit since the other types can still be reconciled.
-			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", t.Mode)
-			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound, err.Error())
+			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound, err.Error())
 			continue
 		}
-		r.activeGVKMode[gr] = gvkMode{gvk, t.Mode}
+		r.activeGVKMode[gr] = gvkMode{gvk, rsc.Mode}
 		r.activeGR[gvk] = gr
 	}
 	return nil
@@ -189,20 +189,20 @@ func (r *ConfigReconciler) validateRBACTypes(inst *api.HNCConfiguration) {
 
 	// Check the mode of Role and RoleBinding. The mode can be either the default mode
 	// or not set; otherwise, we will change the mode to the default mode.
-	for i := 0; i < len(inst.Spec.Types); i++ {
-		t := &inst.Spec.Types[i]
-		if r.isRole(*t) {
+	for i := 0; i < len(inst.Spec.Resources); i++ {
+		rsc := &inst.Spec.Resources[i]
+		if isRole(*rsc) {
 			mode := config.GetDefaultRoleSpec().Mode
-			if t.Mode != mode && t.Mode != "" {
-				r.Log.Info(fmt.Sprintf("Invalid mode for Role. Changing the mode from %s to %s", t.Mode, mode))
-				t.Mode = mode
+			if rsc.Mode != mode && rsc.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for Role. Changing the mode from %s to %s", rsc.Mode, mode))
+				rsc.Mode = mode
 			}
 			roleExists = true
-		} else if r.isRoleBinding(*t) {
+		} else if isRoleBinding(*rsc) {
 			mode := config.GetDefaultRoleBindingSpec().Mode
-			if t.Mode != mode && t.Mode != "" {
-				r.Log.Info(fmt.Sprintf("Invalid mode for RoleBinding. Changing the mode from %s to %s", t.Mode, mode))
-				t.Mode = mode
+			if rsc.Mode != mode && rsc.Mode != "" {
+				r.Log.Info(fmt.Sprintf("Invalid mode for RoleBinding. Changing the mode from %s to %s", rsc.Mode, mode))
+				rsc.Mode = mode
 			}
 			roleBindingsExists = true
 		}
@@ -212,20 +212,20 @@ func (r *ConfigReconciler) validateRBACTypes(inst *api.HNCConfiguration) {
 	// the default configuration in the spec for each of them.
 	if !roleExists {
 		r.Log.Info("Adding default configuration for Role")
-		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleSpec())
+		inst.Spec.Resources = append(inst.Spec.Resources, config.GetDefaultRoleSpec())
 	}
 	if !roleBindingsExists {
 		r.Log.Info("Adding default configuration for RoleBinding")
-		inst.Spec.Types = append(inst.Spec.Types, config.GetDefaultRoleBindingSpec())
+		inst.Spec.Resources = append(inst.Spec.Resources, config.GetDefaultRoleBindingSpec())
 	}
 }
 
-func (r *ConfigReconciler) isRole(t api.TypeSynchronizationSpec) bool {
-	return t.Group == api.RBACGroup && t.Resource == api.RoleResource
+func isRole(r api.ResourceSpec) bool {
+	return r.Group == api.RBACGroup && r.Resource == api.RoleResource
 }
 
-func (r *ConfigReconciler) isRoleBinding(t api.TypeSynchronizationSpec) bool {
-	return t.Group == api.RBACGroup && t.Resource == api.RoleBindingResource
+func isRoleBinding(r api.ResourceSpec) bool {
+	return r.Group == api.RBACGroup && r.Resource == api.RoleBindingResource
 }
 
 // writeSingleton creates a singleton on the apiserver if it does not exist.
@@ -245,7 +245,7 @@ func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConf
 			return err
 		}
 	} else {
-		r.Log.Info("Updating the singleton on apiserver")
+		r.Log.V(1).Info("Updating the singleton on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
 			r.Log.Error(err, "while updating apiserver")
 			return err
@@ -381,16 +381,16 @@ func (r *ConfigReconciler) writeCondition(inst *api.HNCConfiguration, tp, reason
 	inst.Status.Conditions = append(inst.Status.Conditions, api.NewCondition(tp, reason, msg))
 }
 
-// setTypeStatuses adds Status.Types for types configured in the spec. Only the
-// status of types in `Propagate` and `Remove` modes will be recorded. The
-// Status.Types is sorted in alphabetical order based on Group and Resource.
+// setTypeStatuses adds Status.Resources for types configured in the spec. Only the status of types
+// in `Propagate` and `Remove` modes will be recorded. The Status.Resources is sorted in
+// alphabetical order based on Group and Resource.
 func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 	// We lock the forest here so that other reconcilers cannot modify the
 	// forest while we are reading from the forest.
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
-	statuses := []api.TypeSynchronizationStatus{}
+	statuses := []api.ResourceStatus{}
 	for _, ts := range r.Forest.GetTypeSyncers() {
 		// Don't output a status for any reconciler that isn't explicitly listed in
 		// the Spec
@@ -401,7 +401,7 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 		}
 
 		// Initialize status
-		status := api.TypeSynchronizationStatus{
+		status := api.ResourceStatus{
 			Group:    gr.Group,
 			Version:  gvk.Version,
 			Resource: gr.Resource,
@@ -438,7 +438,7 @@ func (r *ConfigReconciler) setTypeStatuses(inst *api.HNCConfiguration) {
 	})
 
 	// Record the final list
-	inst.Status.Types = statuses
+	inst.Status.Resources = statuses
 }
 
 // loadNamespaceConditions collects every condition on every namespace in the forest. With an
@@ -520,7 +520,7 @@ func (r *ConfigReconciler) triggerReconcileIfNeeded() {
 
 	// Log all reasons
 	for reason, count := range r.enqueueReasons {
-		r.Log.Info("Updating HNCConfig", "reason", reason, "count", count)
+		r.Log.V(1).Info("Updating HNCConfig", "reason", reason, "count", count)
 	}
 
 	// Clear the flag and actually trigger the reconcile.

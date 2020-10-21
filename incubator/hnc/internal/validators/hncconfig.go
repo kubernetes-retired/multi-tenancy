@@ -91,11 +91,11 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
 	roleExist := false
 	roleBindingExist := false
-	for _, t := range inst.Spec.Types {
+	for _, r := range inst.Spec.Resources {
 		// Validate the type exists in the apiserver. If yes, convert GR to GVK. We
 		// use GVK because we will need to checkForest() later to avoid source
 		// overwriting conflict (forest uses GVK as the key for object reconcilers).
-		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
+		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
 		gvk, err := c.translator.GVKFor(gr)
 		if err != nil {
 			return deny(metav1.StatusReasonInvalid,
@@ -107,21 +107,21 @@ func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		if _, exists := ts[gvk]; exists {
 			return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gr))
 		}
-		ts[gvk] = t.Mode
+		ts[gvk] = r.Mode
 
 		// ValidateThe mode of Role and RoleBinding should be either unset or set to
 		// the propagate mode.
-		if t.Group == api.RBACGroup && t.Resource == api.RoleResource {
+		if r.Group == api.RBACGroup && r.Resource == api.RoleResource {
 			roleExist = true
-			if t.Mode != api.Propagate && t.Mode != "" {
-				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", t.Resource, t.Mode, api.Propagate))
+			if r.Mode != api.Propagate && r.Mode != "" {
+				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", r.Resource, r.Mode, api.Propagate))
 			}
 		}
 
-		if t.Group == api.RBACGroup && t.Resource == api.RoleBindingResource {
+		if r.Group == api.RBACGroup && r.Resource == api.RoleBindingResource {
 			roleBindingExist = true
-			if t.Mode != api.Propagate && t.Mode != "" {
-				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", t.Resource, t.Mode, api.Propagate))
+			if r.Mode != api.Propagate && r.Mode != "" {
+				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", r.Resource, r.Mode, api.Propagate))
 			}
 		}
 	}
@@ -145,7 +145,7 @@ func (c *HNCConfig) checkForest(inst *api.HNCConfiguration, ts gvkSet) admission
 	gvks := c.getNewPropagateTypes(ts)
 
 	// Check if user-created objects would be overwritten by these mode changes.
-	for gvk, _ := range gvks {
+	for gvk := range gvks {
 		conflicts := c.checkConflictsForGVK(gvk)
 		if len(conflicts) != 0 {
 			msg := fmt.Sprintf("Cannot update configuration because setting type %q to 'Propagate' mode would overwrite user-created object(s):\n", gvk)

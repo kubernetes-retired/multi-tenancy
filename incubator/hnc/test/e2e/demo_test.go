@@ -81,7 +81,7 @@ var _ = Describe("Demo", func() {
 
 	It("Should propagate different types", func() {
 		// ignore Secret in case this demo is run twice and the secret has been set to 'Propagate'
-		MustRun("kubectl hns config set-type --resource secrets Ignore")
+		MustRun("kubectl hns config set-resource secrets --mode Ignore")
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
@@ -92,7 +92,7 @@ var _ = Describe("Demo", func() {
 		time.Sleep(2 * time.Second)
 		// secret does not show up in service-1 because we haven’t configured HNC to propagate secrets in HNCConfiguration.
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
-		MustRun("kubectl hns config set-type --resource secrets Propagate --force")
+		MustRun("kubectl hns config set-resource secrets --mode Propagate --force")
 		// this command is not needed here, just to check that user can run it without error
 		MustRun("kubectl get hncconfiguration config -oyaml")
 		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
@@ -141,7 +141,7 @@ spec:
 		defer RemoveFile(filename)
 		MustRun("kubectl apply -f", filename)
 		// ensure this policy can be propagated to its descendants
-		MustRun("kubectl hns config set-type --group networking.k8s.io --resource networkpolicies Propagate --force")
+		MustRun("kubectl hns config set-resource networkpolicies --group networking.k8s.io --mode Propagate --force")
 		expected := "deny-from-other-namespaces"
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsOrg)
 		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
