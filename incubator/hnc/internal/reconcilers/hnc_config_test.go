@@ -114,34 +114,34 @@ var _ = Describe("HNCConfiguration", func() {
 		// Group of ConfigMap should be ""
 		addToHNCConfig(ctx, "wrong", "configmaps", api.Propagate)
 
-		Eventually(getHNCConfigCondition(ctx, api.TypeNotFound)).Should(ContainSubstring("configmaps"))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(ContainSubstring("configmaps"))
 
 		removeTypeConfig(ctx, "wrong", "configmaps")
 
-		Eventually(getHNCConfigCondition(ctx, api.TypeNotFound)).Should(Equal(""))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(Equal(""))
 	})
 
-	It("should set MultipleConfigurationsForOneType if there are multiple configurations for one type", func() {
+	It("should set MultipleConfigurationsForType if there are multiple configurations for one type", func() {
 		// Add multiple configurations for a type.
 		addToHNCConfig(ctx, "", "secrets", api.Propagate)
 		addToHNCConfig(ctx, "", "secrets", api.Remove)
 
-		// The second configuration should be identified
-		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
-			Should(ContainSubstring("Group: , Resource: secrets, Mode: %s", api.Remove))
+		// The first configuration should be applied.
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).
+			Should(ContainSubstring("secrets has multiple synchronization modes; all but one (%s) will be ignored.", api.Propagate))
 	})
 
-	It("should unset MultipleConfigurationsForOneType if extra configurations are later removed", func() {
+	It("should unset MultipleConfigurationsForType if extra configurations are later removed", func() {
 		// Add multiple configurations for a type.
 		addToHNCConfig(ctx, "", "secrets", api.Propagate)
 		addToHNCConfig(ctx, "", "secrets", api.Remove)
 
-		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
-			Should(ContainSubstring("Group: , Resource: secrets, Mode: %s", api.Remove))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).
+			Should(ContainSubstring("secrets has multiple synchronization modes; all but one (%s) will be ignored.", api.Propagate))
 
 		removeTypeConfigWithMode(ctx, "", "secrets", api.Remove)
 
-		Eventually(getHNCConfigCondition(ctx, api.MultipleConfigurationsForOneType)).
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).
 			ShouldNot(ContainSubstring("Group: , Resource: secrets, Mode: %s", api.Remove))
 	})
 
@@ -274,7 +274,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "stable.example.com", "crontabs", api.Propagate)
 
 		// The corresponding object reconciler should not be created because the type does not exist.
-		Eventually(getHNCConfigCondition(ctx, api.TypeNotFound)).
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).
 			Should(ContainSubstring("crontabs"))
 
 		// Add the CRD for CronTab to the apiserver.
@@ -282,7 +282,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// The object reconciler for CronTab should be created successfully, which means all conditions
 		// should be cleared.
-		Eventually(getHNCConfigCondition(ctx, api.TypeNotFound)).Should(Equal(""))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(Equal(""))
 
 		// Give foo a CronTab object.
 		setParent(ctx, barName, fooName)
@@ -411,11 +411,11 @@ func makeRoleBinding(ctx context.Context, nsName, roleName, userName, roleBindin
 	ExpectWithOffset(1, k8sClient.Create(ctx, roleBinding)).Should(Succeed())
 }
 
-func getHNCConfigCondition(ctx context.Context, code api.HNCConfigurationCode) func() string {
-	return getNamedHNCConfigCondition(ctx, api.HNCConfigSingleton, code)
+func getHNCConfigCondition(ctx context.Context, tp, reason string) func() string {
+	return getNamedHNCConfigCondition(ctx, api.HNCConfigSingleton, tp, reason)
 }
 
-func getNamedHNCConfigCondition(ctx context.Context, nm string, code api.HNCConfigurationCode) func() string {
+func getNamedHNCConfigCondition(ctx context.Context, nm, tp, reason string) func() string {
 	return func() string {
 		c, err := getHNCConfigWithName(ctx, nm)
 		if err != nil {
@@ -423,8 +423,8 @@ func getNamedHNCConfigCondition(ctx context.Context, nm string, code api.HNCConf
 		}
 		msg := ""
 		for _, cond := range c.Status.Conditions {
-			if cond.Code == code {
-				msg += cond.Msg + "\n"
+			if cond.Type == tp && cond.Reason == reason {
+				msg += cond.Message + "\n"
 			}
 		}
 		return msg

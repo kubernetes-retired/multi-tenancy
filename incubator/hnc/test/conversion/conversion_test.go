@@ -210,22 +210,23 @@ spec:
 		FieldShouldContain(hierCRD, nsA, hierSingleton, ".spec", "allowCascadingDeletion:true")
 	})
 
-	It("should still have HC condition if it exists in v1alpha1", func() {
+	It("should still have HC condition if it exists in v1alpha1, but with a new schema", func() {
 		// Before conversion, create namespace B with a missing parent A (have to
 		// create A first and then delete it because otherwise the webhook will deny
 		// setting a non-existing namespace as parent).
 		createSampleV1alpha1Tree()
 		MustRun("kubectl delete ns", nsA)
-		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
+		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "code:CritParentMissing")
 
 		// Convert
 		setupV1alpha2()
 
-		// Verify conditions in the new version.
+		// Verify conditions in the new version replacing code with type and reason.
 		FieldShouldContainWithTimeout(hierCRD, nsB, hierSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "ActivitiesHalted")
-		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "ParentMissing")
+		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "type:ActivitiesHalted")
+		FieldShouldContain(hierCRD, nsB, hierSingleton, ".status.conditions", "reason:ParentMissing")
 		FieldShouldNotContain(hierCRD, nsB, hierSingleton, ".status.conditions", "CritParentMissing")
+		FieldShouldNotContain(hierCRD, nsB, hierSingleton, ".status.conditions", "code")
 	})
 
 	It("should convert HNCConfig", func() {
@@ -288,7 +289,7 @@ spec:
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:networking.k8s.io mode:Remove resource:networkpolicies")
 		// Check WrongType conversion with TypeNotFound condition.
 		FieldShouldNotContain(configCRD, "", configSingleton, ".status.types", "wrongtypes")
-		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:TypeNotFound msg:Resource \"wrongtypes\" not found")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "message:Resource \"wrongtypes\" not found reason:TypeNotFound status:True type:BadConfiguration")
 		// Check all other type conversions
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:roles")
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.types", "group:rbac.authorization.k8s.io mode:Propagate resource:rolebindings")
@@ -299,6 +300,40 @@ spec:
 		// Verify sync mode behavior.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
 		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
+	})
+
+	It("should still have HNCConfig condition if it exists in v1alpha1, but with a new schema", func() {
+		// Create a tree with A as the root and B as the child
+		createSampleV1alpha1Tree()
+		// Delete the webhook to apply mulitple configurations for one type.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		// Set 'propagate', 'remove', unknown ('ignore') modes in v1alpha1
+		cfg := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  types:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: remove`
+		MustApplyYAML(cfg)
+		// Verify v1a1 condition with 'MultipleConfigurationsForOneType' code.
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:MultipleConfigurationsForOneType")
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify v1a2 condition that replaces code with type and reason.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status.conditions", "code")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "reason:MultipleConfigurationsForType status:True type:BadConfiguration")
 	})
 
 	It("should convert HNCConfig sync modes", func() {
