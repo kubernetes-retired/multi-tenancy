@@ -320,7 +320,7 @@ func objectInheritedFrom(ctx context.Context, resource string, nsName, name stri
 	if inst.GetLabels() == nil {
 		return ""
 	}
-	lif, _ := inst.GetLabels()["hnc.x-k8s.io/inheritedFrom"]
+	lif, _ := inst.GetLabels()[api.LabelInheritedFrom]
 	return lif
 }
 

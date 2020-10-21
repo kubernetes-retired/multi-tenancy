@@ -30,7 +30,7 @@ const (
 // Constants for labels and annotations
 const (
 	MetaGroup                 = "hnc.x-k8s.io"
-	LabelInheritedFrom        = MetaGroup + "/inheritedFrom"
+	LabelInheritedFrom        = MetaGroup + "/inherited-from"
 	FinalizerHasSubnamespace  = MetaGroup + "/hasSubnamespace"
 	LabelTreeDepthSuffix      = ".tree." + MetaGroup + "/depth"
 	AnnotationManagedBy       = MetaGroup + "/managed-by"
