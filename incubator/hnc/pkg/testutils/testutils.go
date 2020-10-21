@@ -193,7 +193,7 @@ func runShouldNotContainMultiple(offset int, substrs []string, seconds float64, 
 
 		for _, substr := range substrs {
 			if strings.Contains(stdout, substr) == true {
-				return "produced the undesired output: "+substr
+				return fmt.Sprintf("included the undesired output %q:\n%s", substr, stdout)
 			}
 		}
 

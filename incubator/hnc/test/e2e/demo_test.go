@@ -66,10 +66,15 @@ var _ = Describe("Demo", func() {
 		// set up roles in team-b
 		MustRun("kubectl -n", nsTeamB, "create role", nsTeamB+"-wizard", "--verb=update --resource=deployments")
 		MustRun("kubectl -n", nsTeamB, "create rolebinding", nsTeamB+"-wizards", "--role", nsTeamB+"-wizard", "--serviceaccount="+nsTeamB+":default")
-		// assign the service to the new team, and check that all the RBAC roles get updated
+
+		// Assign the service to a new team. To confirm this has taken effect, use the 'tree' command,
+		// not the 'describe' command, since the latter includes recent events that may include the term
+		// "service1" when it shouldn't.
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamB)
-		RunShouldNotContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamA)
-		RunShouldContain(nsService1, propogationTimeout, "kubectl hns describe", nsTeamB)
+		RunShouldNotContain(nsService1, propogationTimeout, "kubectl hns tree", nsTeamA)
+		RunShouldContain(nsService1, propogationTimeout, "kubectl hns tree", nsTeamB)
+
+		// Check that all the RBAC roles get updated
 		RunShouldContain(nsTeamB+"-wizard", propogationTimeout, "kubectl -n", nsService1, "get roles")
 		RunShouldNotContain(nsTeamA+"-wizard", propogationTimeout, "kubectl -n", nsService1, "get roles")
 	})
@@ -245,6 +250,6 @@ spec:
 			nsTeamA + "\n" +
 			"└── [s] " + nsService2
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
-		RunShouldContain("ActivitiesHalted: ParentMissing: missing parent", defTimeout, "kubectl hns describe", nsStaging)
+		RunShouldContain("ActivitiesHalted (ParentMissing): missing parent", defTimeout, "kubectl hns describe", nsStaging)
 	})
 })
