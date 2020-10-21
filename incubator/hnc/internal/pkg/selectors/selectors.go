@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
@@ -18,6 +19,11 @@ func GetSelectorAnnotation(inst *unstructured.Unstructured) string {
 	return annot[api.AnnotationSelector]
 }
 
+func GetTreeSelectorAnnotation(inst *unstructured.Unstructured) string {
+	annot := inst.GetAnnotations()
+	return annot[api.AnnotationTreeSelector]
+}
+
 // GetTreeSelector is similar to a regular selector, except that it adds the LabelTreeDepthSuffix to every string
 // To transform a tree selector into a regular label selector, we follow these steps:
 // 1. get the treeSelector annotation if it exists
@@ -25,24 +31,48 @@ func GetSelectorAnnotation(inst *unstructured.Unstructured) string {
 // 3. append the LabelTreeDepthSuffix to each of the treeSelector string
 // 4. combine them into a single string connected by comma
 func GetTreeSelector(inst *unstructured.Unstructured) (labels.Selector, error) {
-	annot := inst.GetAnnotations()
-	treeSelectorStr, ok := annot[api.AnnotationTreeSelector]
-	if !ok {
+	treeSelectorStr := GetTreeSelectorAnnotation(inst)
+	if treeSelectorStr == "" {
 		return nil, nil
 	}
-	strs := strings.Split(treeSelectorStr, ",")
+
+	segs := strings.Split(treeSelectorStr, ",")
 	selectorStr := ""
-	for i, str := range strs {
-		selectorStr = selectorStr + str + api.LabelTreeDepthSuffix
-		if i < len(strs)-1 {
+	for i, seg := range segs {
+		// check if it's a valid namespace name
+		if err := validateTreeSelectorSegment(seg); err != nil {
+			return nil, err
+		}
+
+		selectorStr = selectorStr + seg + api.LabelTreeDepthSuffix
+		if i < len(segs)-1 {
 			selectorStr = selectorStr + ", "
 		}
 	}
 	treeSelector, err := getSelectorFromString(selectorStr)
 	if err != nil {
-		return nil, fmt.Errorf("while parsing %q: %w", api.AnnotationTreeSelector, err)
+		// In theory this should never happen because we already checked DNS label before.
+		// If this happens, it's more likely that we have a bug in our code
+		return nil, fmt.Errorf("internal error while parsing %q: %w", api.AnnotationTreeSelector, err)
 	}
 	return treeSelector, nil
+}
+
+func validateTreeSelectorSegment(seg string) error {
+	seg = strings.TrimSpace(seg)
+	ns := ""
+	if seg[0] == '!' {
+		ns = seg[1:]
+	} else {
+		ns = seg
+	}
+	errStrs := validation.IsDNS1123Label(ns)
+	if len(errStrs) != 0 {
+		// If IsDNS1123Label() returns multiple errors, it will look like:
+		// "ns" is not a valid namespace name: err1; err2
+		return fmt.Errorf("%q is not a valid namespace name: %s", ns, strings.Join(errStrs, "; "))
+	}
+	return nil
 }
 
 // GetSelector returns the selector on a given object if it exists
