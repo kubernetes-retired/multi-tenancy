@@ -7,46 +7,36 @@ import (
 
 var _ = Describe("Acting-as", func() {
 	const (
-		nsTarget = "target"
-		saTeamA  = "team-a"
-		saTeamB  = "team-b"
+		parent = "parent"
+		child  = "child"
 	)
 
 	BeforeEach(func() {
-		CleanupNamespaces(nsTarget)
+		CleanupNamespaces(parent, child)
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsTarget)
+		CleanupNamespaces(parent, child)
 	})
 
 	It("should allow acting as different service accounts", func() {
-		MustRun("kubectl create ns", nsTarget)
-		MustRun("kubectl get ns", nsTarget)
-		MustRun("kubectl get sa -n", nsTarget)
+		// create the namespaces
+		MustRun("kubectl create ns", parent)
+		MustRun("kubectl create ns", child)
 
-		// create service accounts
-		MustRun("kubectl -n", nsTarget, "create sa", saTeamA)
-		MustRun("kubectl -n", nsTarget, "create sa", saTeamB)
+		// fail to set parent
+		MustNotRun("kubectl hns set", child, "--parent", parent, "--as system:serviceaccount:"+child+":default")
 
-		// fail to create secret
-		MustNotRun("kubectl -n", nsTarget, "create secret generic hnc-secret --from-literal=password=testingsa --as system:serviceaccount:"+nsTarget+":"+saTeamA)
+		// set the proper roles giving the required permissions
+		MustRun("kubectl -n", child, "create role "+child+"-hnc-role --verb=get,create,update --resource=HierarchyConfiguration")
+		MustRun("kubectl -n", child, "create rolebinding "+child+"-hnc-rolebinding --role "+child+"-hnc-admin --serviceaccount="+child+":default")
+		MustRun("kubectl -n", parent, "create role "+parent+"hnc-role --verb=update --resource=HierarchyConfiguration")
+		MustRun("kubectl -n", parent, "create rolebinding "+parent+"hnc-rolebinding --role "+parent+"-hnc-admin --serviceaccount="+child+":default")
+		MustRun("kubectl -n", child, "create role "+child+"-ns-role --verb=get --resource=namespaces")
+		MustRun("kubectl -n", child, "create rolebinding "+child+"-ns-rolebinding --role "+child+"-ns-get --serviceaccount="+child+":default")
 
-		// allow creation of secret using team-a service account
-		MustRun("kubectl -n", nsTarget, "create role "+saTeamA+"-sre --verb=create --resource=secrets")
-		MustRun("kubectl -n", nsTarget, "create rolebinding "+saTeamA+"-sres --role "+saTeamA+"-sre --serviceaccount="+nsTarget+":"+saTeamA)
+		// after setting the above permissions, now able to set the parent
+		MustRun("kubectl hns set", child, "--parent", parent, "--as system:serviceaccount:"+child+":default")
 
-		// secret should get created
-		MustRun("kubectl -n", nsTarget, "create secret generic hnc-secret --from-literal=password=testingsa --as system:serviceaccount:"+nsTarget+":"+saTeamA)
-
-		// fail to delete secret
-		MustNotRun("kubectl -n", nsTarget, "delete secret hnc-secret --as system:serviceaccount:"+nsTarget+":"+saTeamB)
-
-		// allow deletion of secret using team-b service account
-		MustRun("kubectl -n", nsTarget, "create role "+saTeamB+"-sre --verb=delete --resource=secrets")
-		MustRun("kubectl -n", nsTarget, "create rolebinding "+saTeamB+"-sres --role "+saTeamB+"-sre --serviceaccount="+nsTarget+":"+saTeamB)
-
-		// secret should get deleted
-		MustRun("kubectl -n", nsTarget, "delete secret hnc-secret --as system:serviceaccount:"+nsTarget+":"+saTeamB)
 	})
 })
