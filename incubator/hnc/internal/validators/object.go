@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/object"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
 )
 
 // ObjectsServingPath is where the validator will run. Must be kept in sync with the
@@ -111,6 +112,15 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	// If the object wasn't and isn't inherited, we will check to see if the
 	// source can be created without causing any conflict.
 	if !oldInherited && !newInherited {
+		// check selector format
+		err := validateSelectorChange(inst, oldInst)
+		// If this is a selector change, and the new selector is not valid, we'll deny this operation
+		if err != nil {
+			msg := fmt.Sprintf("Invalid Kubernetes labelSelector: %s", err)
+			return deny(metav1.StatusReasonInvalid, msg)
+		}
+
+		// TODO(@ginnyji): modify hasConflict so that it's aware of selectors
 		if yes, dnses := o.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, "\n  * ")
 			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)
@@ -118,11 +128,24 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 		}
 		return allow("source object")
 	}
+	// This is a propagated object.
+	return o.handleInherited(op, newSource, oldSource, inst, oldInst)
+}
 
-	// This is a propagated object. Propagated objects cannot be created or deleted (except by the HNC
-	// SA, but the HNC SA never gets this far in the validation). They *can* have their statuses
-	// updated, so if this is an update, make sure that the canonical form of the object hasn't
-	// changed.
+func validateSelectorChange(inst, oldInst *unstructured.Unstructured) error {
+	oldSelectorStr := selectors.GetSelectorAnnotation(oldInst)
+	newSelectorStr := selectors.GetSelectorAnnotation(inst)
+	if newSelectorStr == "" || oldSelectorStr == newSelectorStr {
+		return nil
+	}
+	_, err := selectors.GetSelector(inst)
+	return err
+}
+
+func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
+	// Propagated objects cannot be created or deleted (except by the HNC SA, but the HNC SA
+	// never gets this far in the validation). They *can* have their statuses updated, so
+	// if this is an update, make sure that the canonical form of the object hasn't changed.
 	switch op {
 	case admissionv1beta1.Create:
 		return deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
