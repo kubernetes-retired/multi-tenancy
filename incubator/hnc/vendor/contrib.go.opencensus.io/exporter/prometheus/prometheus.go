@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/metric/metricdata"
@@ -44,6 +45,8 @@ type Exporter struct {
 type Options struct {
 	Namespace   string
 	Registry    *prometheus.Registry
+	Registerer  prometheus.Registerer
+	Gatherer    prometheus.Gatherer
 	OnError     func(err error)
 	ConstLabels prometheus.Labels // ConstLabels will be set as labels on all views.
 }
@@ -53,12 +56,19 @@ func NewExporter(o Options) (*Exporter, error) {
 	if o.Registry == nil {
 		o.Registry = prometheus.NewRegistry()
 	}
-	collector := newCollector(o, o.Registry)
+	if o.Registerer == nil {
+		o.Registerer = o.Registry
+	}
+	if o.Gatherer == nil {
+		o.Gatherer = o.Registry
+	}
+
+	collector := newCollector(o, o.Registerer)
 	e := &Exporter{
 		opts:    o,
-		g:       o.Registry,
+		g:       o.Gatherer,
 		c:       collector,
-		handler: promhttp.HandlerFor(o.Registry, promhttp.HandlerOpts{}),
+		handler: promhttp.HandlerFor(o.Gatherer, promhttp.HandlerOpts{}),
 	}
 	collector.ensureRegisteredOnce()
 
@@ -112,7 +122,7 @@ type collector struct {
 	registerOnce sync.Once
 
 	// reg helps collector register views dynamically.
-	reg *prometheus.Registry
+	reg prometheus.Registerer
 
 	// reader reads metrics from all registered producers.
 	reader *metricexport.Reader
@@ -132,7 +142,7 @@ func (c *collector) Collect(ch chan<- prometheus.Metric) {
 	c.reader.ReadAndExport(me)
 }
 
-func newCollector(opts Options, registrar *prometheus.Registry) *collector {
+func newCollector(opts Options, registrar prometheus.Registerer) *collector {
 	return &collector{
 		reg:    registrar,
 		opts:   opts,
