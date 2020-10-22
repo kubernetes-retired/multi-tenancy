@@ -146,8 +146,8 @@ var _ = Describe("Issues", func() {
 		MustNotRun("kubectl hns tree", nsParent)
 		MustNotRun("kubectl hns tree", nsSub1)
 		MustNotRun("kubectl hns tree", nsSub2)
-		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns tree", nsChild)
-		RunShouldContain("ActivitiesHalted: AncestorHaltActivities", defTimeout, "kubectl hns describe", nsSubChild)
+		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns tree", nsChild)
+		RunShouldContain("ActivitiesHalted (AncestorHaltActivities)", defTimeout, "kubectl hns describe", nsSubChild)
 	})
 
 	It("Should have ParentMissing condition when parent namespace is deleted - issue #716", func() {
@@ -158,7 +158,7 @@ var _ = Describe("Issues", func() {
 		// Test: Remove parent namespace 'a'
 		// Expected: b should have 'ParentMissing' condition
 		MustRun("kubectl delete ns", nsParent)
-		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns describe", nsChild)
+		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns describe", nsChild)
 	})
 
 	It("Should delete namespace with ParentMissing condition - issue #716", func() {
@@ -168,7 +168,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		// create and verify ParentMissing condition
 		MustRun("kubectl delete ns", nsParent)
-		RunShouldContain("ActivitiesHalted: ParentMissing", defTimeout, "kubectl hns describe", nsChild)
+		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns describe", nsChild)
 		// test: delete namespace
 		MustRun("kubectl delete ns", nsChild)
 	})
