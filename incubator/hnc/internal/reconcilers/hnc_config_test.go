@@ -110,15 +110,15 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
 	})
 
-	It("should unset TypeNotFound condition if a bad type spec is removed", func() {
+	It("should unset ResourceNotFound condition if a bad type spec is removed", func() {
 		// Group of ConfigMap should be ""
 		addToHNCConfig(ctx, "wrong", "configmaps", api.Propagate)
 
-		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(ContainSubstring("configmaps"))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound)).Should(ContainSubstring("configmaps"))
 
 		removeTypeConfig(ctx, "wrong", "configmaps")
 
-		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(Equal(""))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound)).Should(Equal(""))
 	})
 
 	It("should set MultipleConfigurationsForType if there are multiple configurations for one type", func() {
@@ -274,7 +274,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "stable.example.com", "crontabs", api.Propagate)
 
 		// The corresponding object reconciler should not be created because the type does not exist.
-		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound)).
 			Should(ContainSubstring("crontabs"))
 
 		// Add the CRD for CronTab to the apiserver.
@@ -282,7 +282,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// The object reconciler for CronTab should be created successfully, which means all conditions
 		// should be cleared.
-		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound)).Should(Equal(""))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound)).Should(Equal(""))
 
 		// Give foo a CronTab object.
 		setParent(ctx, barName, fooName)
@@ -365,7 +365,7 @@ func typeSpecMode(ctx context.Context, group, resource string) func() api.Synchr
 		if err != nil {
 			return (api.SynchronizationMode)(err.Error())
 		}
-		for _, t := range config.Spec.Types {
+		for _, t := range config.Spec.Resources {
 			if t.Group == group && t.Resource == resource {
 				return t.Mode
 			}
@@ -380,7 +380,7 @@ func typeStatusMode(ctx context.Context, group, resource string) func() api.Sync
 		if err != nil {
 			return (api.SynchronizationMode)(err.Error())
 		}
-		for _, t := range config.Status.Types {
+		for _, t := range config.Status.Resources {
 			if t.Group == group && t.Resource == resource {
 				return t.Mode
 			}
@@ -457,9 +457,9 @@ func updateTypeConfigWithOffset(offset int, ctx context.Context, group, resource
 
 		// Modify the existing spec. We should find the thing we were looking for.
 		found := false
-		for i := 0; i < len(c.Spec.Types); i++ { // don't use range-for since that creates copies of the objects
-			if c.Spec.Types[i].Group == group && c.Spec.Types[i].Resource == resource {
-				c.Spec.Types[i].Mode = mode
+		for i := 0; i < len(c.Spec.Resources); i++ { // don't use range-for since that creates copies of the objects
+			if c.Spec.Resources[i].Group == group && c.Spec.Resources[i].Resource == resource {
+				c.Spec.Resources[i].Mode = mode
 				found = true
 				break
 			}
@@ -488,18 +488,18 @@ func removeTypeConfigWithOffset(offset int, ctx context.Context, group, resource
 			return err
 		}
 		i := 0
-		for ; i < len(c.Spec.Types); i++ {
-			if c.Spec.Types[i].Group == group && c.Spec.Types[i].Resource == resource {
+		for ; i < len(c.Spec.Resources); i++ {
+			if c.Spec.Resources[i].Group == group && c.Spec.Resources[i].Resource == resource {
 				break
 			}
 		}
 		// The type does not exist. Nothing to remove.
-		if i == len(c.Spec.Types) {
+		if i == len(c.Spec.Resources) {
 			return nil
 		}
 		GinkgoT().Logf("Removing type config for %s/%s", group, resource)
-		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
-		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
+		c.Spec.Resources[i] = c.Spec.Resources[len(c.Spec.Resources)-1]
+		c.Spec.Resources = c.Spec.Resources[:len(c.Spec.Resources)-1]
 		return updateHNCConfig(ctx, c)
 	}).Should(Succeed(), "While removing type config for %s/%s", group, resource)
 }
@@ -511,17 +511,17 @@ func removeTypeConfigWithMode(ctx context.Context, group, resource string, mode 
 			return err
 		}
 		i := 0
-		for ; i < len(c.Spec.Types); i++ {
-			if c.Spec.Types[i].Group == group && c.Spec.Types[i].Resource == resource && c.Spec.Types[i].Mode == mode {
+		for ; i < len(c.Spec.Resources); i++ {
+			if c.Spec.Resources[i].Group == group && c.Spec.Resources[i].Resource == resource && c.Spec.Resources[i].Mode == mode {
 				break
 			}
 		}
 		// The type does not exist. Nothing to remove.
-		if i == len(c.Spec.Types) {
+		if i == len(c.Spec.Resources) {
 			return nil
 		}
-		c.Spec.Types[i] = c.Spec.Types[len(c.Spec.Types)-1]
-		c.Spec.Types = c.Spec.Types[:len(c.Spec.Types)-1]
+		c.Spec.Resources[i] = c.Spec.Resources[len(c.Spec.Resources)-1]
+		c.Spec.Resources = c.Spec.Resources[:len(c.Spec.Resources)-1]
 		return updateHNCConfig(ctx, c)
 	}).Should(Succeed(), "While removing type config for %s/%s with mode %s", group, resource, mode)
 }
@@ -559,7 +559,7 @@ func getNumPropagatedObjects(ctx context.Context, group, resource string) func()
 		if err != nil {
 			return -1, err
 		}
-		for _, t := range c.Status.Types {
+		for _, t := range c.Status.Resources {
 			if t.Group == group && t.Resource == resource {
 				if t.NumPropagatedObjects != nil {
 					return *t.NumPropagatedObjects, nil
@@ -580,7 +580,7 @@ func hasNumSourceObjects(ctx context.Context, group, resource string) func() (bo
 		if err != nil {
 			return false, err
 		}
-		for _, t := range c.Status.Types {
+		for _, t := range c.Status.Resources {
 			if t.Group == group && t.Resource == resource {
 				return t.NumSourceObjects != nil, nil
 			}
@@ -597,7 +597,7 @@ func getNumSourceObjects(ctx context.Context, group, resource string) func() (in
 		if err != nil {
 			return -1, err
 		}
-		for _, t := range c.Status.Types {
+		for _, t := range c.Status.Resources {
 			if t.Group == group && t.Resource == resource {
 				if t.NumSourceObjects != nil {
 					return *t.NumSourceObjects, nil

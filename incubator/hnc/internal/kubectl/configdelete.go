@@ -36,13 +36,13 @@ var configDeleteCmd = &cobra.Command{
 		resource, _ := flags.GetString("resource")
 		config := client.getHNCConfig()
 
-		var newTypes []api.TypeSynchronizationSpec
+		var newRscs []api.ResourceSpec
 		exist := false
-		for _, t := range config.Spec.Types {
-			if t.Group == group && t.Resource == resource {
+		for _, r := range config.Spec.Resources {
+			if r.Group == group && r.Resource == resource {
 				exist = true
 			} else {
-				newTypes = append(newTypes, t)
+				newRscs = append(newRscs, r)
 			}
 		}
 		if !exist {
@@ -50,7 +50,7 @@ var configDeleteCmd = &cobra.Command{
 				"resource: %s\n", group, resource)
 			return
 		}
-		config.Spec.Types = newTypes
+		config.Spec.Resources = newRscs
 		client.updateHNCConfig(config)
 		fmt.Printf("Configuration for type with group: %s, resource: %s is deleted\n", group, resource)
 	},

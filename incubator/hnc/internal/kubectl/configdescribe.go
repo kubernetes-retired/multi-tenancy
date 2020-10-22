@@ -29,10 +29,10 @@ var configDescribeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		config := client.getHNCConfig()
 
-		fmt.Println("Synchronized types:")
-		for _, t := range config.Status.Types {
+		fmt.Println("Synchronized resources:")
+		for _, r := range config.Status.Resources {
 			action := ""
-			switch t.Mode {
+			switch r.Mode {
 			case api.Propagate:
 				action = "Propagating"
 			case api.Remove:
@@ -40,7 +40,7 @@ var configDescribeCmd = &cobra.Command{
 			default:
 				action = "Ignoring"
 			}
-			fmt.Printf("* %s: %s (%s/%s)\n", action, t.Resource, t.Group, t.Version)
+			fmt.Printf("* %s: %s (%s/%s)\n", action, r.Resource, r.Group, r.Version)
 		}
 		fmt.Print("\nConditions:\n")
 		for _, c := range config.Status.Conditions {

@@ -24,28 +24,29 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
-var setTypeCmd = &cobra.Command{
-	Use: fmt.Sprintf("set-type --group X --resource Y <%s|%s|%s>",
+var setResourceCmd = &cobra.Command{
+	Use: fmt.Sprintf("set-resource RESOURCE [--group GROUP] [--force] --mode <%s|%s|%s>",
 		api.Propagate, api.Remove, api.Ignore),
-	Short: "Sets the HNC configuration of a specific resources type",
+	Short: "Sets the HNC configuration of a specific resource",
 	Example: fmt.Sprintf("  # Set configuration of a core type\n" +
-		"  kubectl hns config set-type --resource secrets Ignore\n\n" +
+		"  kubectl hns config set-resource secrets --mode Ignore\n\n" +
 		"  # Set configuration of a custom type\n" +
-		"  kubectl hns config set-type --group stable.example.com --resource crontabs Propagate"),
+		"  kubectl hns config set-resource crontabs --group stable.example.com --mode Propagate"),
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		mode := api.SynchronizationMode(args[0])
+		resource := args[0]
 		flags := cmd.Flags()
 		group, _ := flags.GetString("group")
-		resource, _ := flags.GetString("resource")
+		modeStr, _ := flags.GetString("mode")
+		mode := api.SynchronizationMode(modeStr)
 		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
 		exist := false
-		for i := 0; i < len(config.Spec.Types); i++ {
-			t := &config.Spec.Types[i]
-			if t.Group == group && t.Resource == resource {
-				if t.Mode == api.Ignore && mode == api.Propagate && !force {
+		for i := 0; i < len(config.Spec.Resources); i++ {
+			r := &config.Spec.Resources[i]
+			if r.Group == group && r.Resource == resource {
+				if r.Mode == api.Ignore && mode == api.Propagate && !force {
 					fmt.Printf("Switching directly from 'Ignore' to 'Propagate' mode could cause existing %q objects in "+
 						"child namespaces to be overwritten by objects from ancestor namespaces.\n", resource)
 					fmt.Println("If you are sure you want to proceed with this operation, use the '--force' flag.")
@@ -54,15 +55,15 @@ var setTypeCmd = &cobra.Command{
 						"https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types")
 					os.Exit(1)
 				}
-				t.Mode = mode
+				r.Mode = mode
 				exist = true
 				break
 			}
 		}
 
 		if !exist {
-			config.Spec.Types = append(config.Spec.Types,
-				api.TypeSynchronizationSpec{
+			config.Spec.Resources = append(config.Spec.Resources,
+				api.ResourceSpec{
 					Group:    group,
 					Resource: resource,
 					Mode:     mode,
@@ -73,9 +74,9 @@ var setTypeCmd = &cobra.Command{
 	},
 }
 
-func newSetTypeCmd() *cobra.Command {
-	setTypeCmd.Flags().String("group", "", "group of the resource")
-	setTypeCmd.Flags().String("resource", "", "resource to be configured")
-	setTypeCmd.Flags().BoolP("force", "f", false, "Force to set the propagation mode")
-	return setTypeCmd
+func newSetResourceCmd() *cobra.Command {
+	setResourceCmd.Flags().String("group", "", "The group of the resource; may be omitted for core resources (or explicitly set to the empty string)")
+	setResourceCmd.Flags().String("mode", "", "The synchronization mode: one of Propagate, Remove or Ignore")
+	setResourceCmd.Flags().BoolP("force", "f", false, "Allow the synchronization mode to be changed directly from Ignore to Propagate despite the dangers of doing so")
+	return setResourceCmd
 }

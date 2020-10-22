@@ -151,13 +151,13 @@ spec:
           spec:
             description: HNCConfigurationSpec defines the desired state of HNC configuration.
             properties:
-              types:
-                description: Types indicates the desired synchronization states of kinds, if any.
+              resources:
+                description: Resources defines the cluster-wide settings for resource synchronization. To learn more, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
                 items:
-                  description: TypeSynchronizationSpec defines the desired synchronization state of a specific resource.
+                  description: ResourceSpec defines the desired synchronization state of a specific resource.
                   properties:
                     group:
-                      description: Group of the resource defined below. This is used to unambiguously identify the resource.
+                      description: Group of the resource defined below. This is used to unambiguously identify the resource. It may be omitted for core resources (e.g. "secrets").
                       type: string
                     mode:
                       description: Synchronization mode of the kind. If the field is empty, it will be treated as "Propagate".
@@ -170,7 +170,6 @@ spec:
                       description: Resource to be configured.
                       type: string
                   required:
-                  - group
                   - resource
                   type: object
                 type: array
@@ -243,16 +242,16 @@ spec:
                   - type
                   type: object
                 type: array
-              types:
-                description: Types indicates the observed synchronization states of kinds, if any.
+              resources:
+                description: Resources indicates the observed synchronization states of the resources.
                 items:
-                  description: TypeSynchronizationStatus defines the observed synchronization state of a specific kind.
+                  description: ResourceStatus defines the actual synchronization state of a specific resource.
                   properties:
                     group:
-                      description: Group of the resource defined below.
+                      description: The API group of the resource being synchronized.
                       type: string
                     mode:
-                      description: Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode in the spec, except when the reconciler has fallen behind or when the mode is omitted from the spec and the default is chosen.
+                      description: Mode describes the synchronization mode of the kind. Typically, it will be the same as the mode in the spec, except when the reconciler has fallen behind or for resources with an enforced default synchronization mode, such as RBAC objects.
                       type: string
                     numPropagatedObjects:
                       description: Tracks the number of objects that are being propagated to descendant namespaces. The propagated objects are created by HNC.
@@ -263,10 +262,10 @@ spec:
                       minimum: 0
                       type: integer
                     resource:
-                      description: Resource to be configured.
+                      description: The resource being synchronized.
                       type: string
                     version:
-                      description: Version of the resource defined below.
+                      description: The API version used by HNC when propagating this resource.
                       type: string
                   required:
                   - group
