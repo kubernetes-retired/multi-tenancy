@@ -132,14 +132,12 @@ func (r *ConfigReconciler) reconcileTypes(inst *api.HNCConfiguration) error {
 	r.activeGR = gvk2gr{}
 	for _, t := range inst.Spec.Types {
 		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
-		grm := fmt.Sprintf("Group: %s, Resource: %s, Mode: %s", t.Group, t.Resource, t.Mode)
 		// If there are multiple configurations of the same type, we will follow the
 		// first configuration and ignore the rest.
-		if _, exist := r.activeGVKMode[gr]; exist {
-			msg := fmt.Sprintf("Ignore the configuration: %q because the configuration of the type already exists; "+
-				"only the first configuration will be applied", grm)
+		if gvkMode, exist := r.activeGVKMode[gr]; exist {
+			msg := fmt.Sprintf("%s has multiple synchronization modes; all but one (%s) will be ignored.", gr, gvkMode.mode)
 			r.Log.Info(msg)
-			r.writeCondition(inst, api.MultipleConfigurationsForOneType, msg)
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType, msg)
 			continue
 		}
 
@@ -148,8 +146,8 @@ func (r *ConfigReconciler) reconcileTypes(inst *api.HNCConfiguration) error {
 		if err != nil {
 			// If the type is not found, log error and write conditions but don't
 			// early exit since the other types can still be reconciled.
-			r.Log.Error(err, "while trying to reconcile the configuration", "configuration", grm)
-			r.writeCondition(inst, api.TypeNotFound, err.Error())
+			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", t.Mode)
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonTypeNotFound, err.Error())
 			continue
 		}
 		r.activeGVKMode[gr] = gvkMode{gvk, t.Mode}
@@ -371,7 +369,7 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
 		msg := fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err)
-		r.writeCondition(inst, api.ObjectReconcilerCreationFailed, msg)
+		r.writeCondition(inst, api.ConditionOutOfSync, api.ReasonUnknown, msg)
 		return
 	}
 
@@ -379,12 +377,8 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	r.Forest.AddTypeSyncer(or)
 }
 
-func (r *ConfigReconciler) writeCondition(inst *api.HNCConfiguration, code api.HNCConfigurationCode, msg string) {
-	condition := api.HNCConfigurationCondition{
-		Code: code,
-		Msg:  msg,
-	}
-	inst.Status.Conditions = append(inst.Status.Conditions, condition)
+func (r *ConfigReconciler) writeCondition(inst *api.HNCConfiguration, tp, reason, msg string) {
+	inst.Status.Conditions = append(inst.Status.Conditions, api.NewCondition(tp, reason, msg))
 }
 
 // setTypeStatuses adds Status.Types for types configured in the spec. Only the

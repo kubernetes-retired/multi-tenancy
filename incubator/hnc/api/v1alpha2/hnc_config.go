@@ -48,12 +48,17 @@ const (
 	Remove SynchronizationMode = "Remove"
 )
 
-// HNCConfigurationCondition codes. *All* codes must also be documented in the
-// comment to HNCConfigurationCondition.Code.
 const (
-	TypeNotFound                     HNCConfigurationCode = "TypeNotFound"
-	ObjectReconcilerCreationFailed   HNCConfigurationCode = "ObjectReconcilerCreationFailed"
-	MultipleConfigurationsForOneType HNCConfigurationCode = "MultipleConfigurationsForOneType"
+	// Condition types.
+	ConditionBadTypeConfiguration = "BadConfiguration"
+	ConditionOutOfSync            = "OutOfSync"
+
+	// Condition reasons for BadConfiguration
+	ReasonMultipleConfigsForType = "MultipleConfigurationsForType"
+	ReasonTypeNotFound           = "TypeNotFound"
+
+	// Condition reason for OutOfSync, e.g. errors when creating a reconciler.
+	ReasonUnknown = "Unknown"
 )
 
 // TypeSynchronizationSpec defines the desired synchronization state of a
@@ -132,7 +137,7 @@ type HNCConfigurationStatus struct {
 	Types []TypeSynchronizationStatus `json:"types,omitempty"`
 
 	// Conditions describes the errors, if any.
-	Conditions []HNCConfigurationCondition `json:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
 
 	// NamespaceConditions is a map of namespace condition types and reasons to
 	// the affected namespaces. If HNC is operating normally, no conditions will
@@ -151,36 +156,6 @@ type HNCConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HNCConfiguration `json:"items"`
-}
-
-// HNCConfigurationCode is the machine-readable, enum-like type of `HNCConfigurationCondition.Code`.
-// See that field for more information.
-type HNCConfigurationCode string
-
-// HNCConfigurationCondition specifies the code and the description of an error condition.
-type HNCConfigurationCondition struct {
-	// Describes the condition in a machine-readable string value. The currently valid values are
-	// shown below, but new values may be added over time. This field is always present in a
-	// condition.
-	//
-	// Conditions typically indicate some kinds of error that HNC itself can ignore. However,
-	// the behaviors of some types might be out-of-sync with the users' expectations.
-	//
-	// Currently, the supported values are:
-	//
-	// - "TypeNotFound": the type in the spec is not found in the API server.
-	//
-	// - "ObjectReconcilerCreationFailed": an error exists when creating the object
-	// reconciler for the type specified in Msg.
-	//
-	// - "MultipleConfigurationsForOneType": Multiple configurations exist for the type specified
-	// in the Msg. One type should only have one configuration.
-	Code HNCConfigurationCode `json:"code"`
-
-	// A human-readable description of the condition, if the `code` field is not
-	// sufficiently clear on their own. If the condition is only for specific types,
-	// Msg will include information about the types (e.g., GVK).
-	Msg string `json:"msg,omitempty"`
 }
 
 func init() {

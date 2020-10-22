@@ -44,7 +44,7 @@ var configDescribeCmd = &cobra.Command{
 		}
 		fmt.Print("\nConditions:\n")
 		for _, c := range config.Status.Conditions {
-			fmt.Printf("[%s] %s\n", string(c.Code), c.Msg)
+			fmt.Printf("%s (%s): %s\n", c.Type, c.Reason, c.Message)
 		}
 	},
 }

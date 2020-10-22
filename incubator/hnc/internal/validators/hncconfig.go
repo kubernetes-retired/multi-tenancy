@@ -105,7 +105,7 @@ func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		// Validate if the configuration of a type already exists. Each type should
 		// only have one configuration.
 		if _, exists := ts[gvk]; exists {
-			return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gvk))
+			return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gr))
 		}
 		ts[gvk] = t.Mode
 
