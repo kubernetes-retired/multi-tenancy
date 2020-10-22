@@ -152,7 +152,7 @@ spec:
             description: HNCConfigurationSpec defines the desired state of HNC configuration.
             properties:
               resources:
-                description: Resources defines the cluster-wide settings for resource synchronization. To learn more, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
+                description: Resources defines the cluster-wide settings for resource synchronization. Note that 'roles' and 'rolebindings' are pre-configured by HNC with 'Propagate' mode and are omitted in the spec. Any configuration of 'roles' or 'rolebindings' are not allowed. To learn more, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
                 items:
                   description: ResourceSpec defines the desired synchronization state of a specific resource.
                   properties:

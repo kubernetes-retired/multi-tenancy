@@ -89,13 +89,19 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 }
 
 func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
-	roleExist := false
-	roleBindingExist := false
 	for _, r := range inst.Spec.Resources {
+		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
+
+		// Validate the type configured is not an HNC enforced type.
+		if api.IsEnforcedType(r) {
+			return deny(metav1.StatusReasonInvalid,
+				fmt.Sprintf("Invalid configuration of %s in the spec, because it's enforced by HNC "+
+					"with 'Propagate' mode. Please remove it from the spec.", gr))
+		}
+
 		// Validate the type exists in the apiserver. If yes, convert GR to GVK. We
 		// use GVK because we will need to checkForest() later to avoid source
 		// overwriting conflict (forest uses GVK as the key for object reconcilers).
-		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
 		gvk, err := c.translator.GVKFor(gr)
 		if err != nil {
 			return deny(metav1.StatusReasonInvalid,
@@ -108,31 +114,6 @@ func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 			return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gr))
 		}
 		ts[gvk] = r.Mode
-
-		// ValidateThe mode of Role and RoleBinding should be either unset or set to
-		// the propagate mode.
-		if r.Group == api.RBACGroup && r.Resource == api.RoleResource {
-			roleExist = true
-			if r.Mode != api.Propagate && r.Mode != "" {
-				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", r.Resource, r.Mode, api.Propagate))
-			}
-		}
-
-		if r.Group == api.RBACGroup && r.Resource == api.RoleBindingResource {
-			roleBindingExist = true
-			if r.Mode != api.Propagate && r.Mode != "" {
-				return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Invalid mode of %s; current mode: %s; expected mode %s", r.Resource, r.Mode, api.Propagate))
-			}
-		}
-	}
-	// Validate Role and RoleBinding exists in the Spec.
-	// TODO this validation will be removed when we remove the configuration from
-	//  Spec and only show them in the status.
-	if !roleExist {
-		return deny(metav1.StatusReasonInvalid, "Configuration for Role is missing")
-	}
-	if !roleBindingExist {
-		return deny(metav1.StatusReasonInvalid, "Configuration for RoleBinding is missing")
 	}
 	return allow("")
 }

@@ -70,62 +70,15 @@ func TestRBACTypes(t *testing.T) {
 		allow   bool
 	}{
 		{
-			name: "Correct RBAC config with Propagate mode",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
-			},
-			allow: true,
+			name:    "No redundant enforced resources configured",
+			configs: []api.ResourceSpec{},
+			allow:   true,
 		},
 		{
-			name: "Correct RBAC config with unset mode",
+			name: "Configure redundant enforced resources",
 			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource},
-			},
-			allow: true,
-		},
-		{
-			name: "Missing role",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
-			},
-			allow: false,
-		}, {
-			name: "Missing rolebinding",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-			},
-			allow: false,
-		}, {
-			name: "Incorrect role mode",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Ignore"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
-			},
-			allow: false,
-		}, {
-			name: "Incorrect rolebinding mode",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Ignore"},
-			},
-			allow: false,
-		}, {
-			name: "Duplicate RBAC resources with different modes",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleResource},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
-			},
-			allow: false,
-		},
-		{
-			name: "Duplicate RBAC resources with the same mode",
-			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
+				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: api.Propagate},
+				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: api.Propagate},
 			},
 			allow: false,
 		},
@@ -156,8 +109,6 @@ func TestNonRBACTypes(t *testing.T) {
 		{
 			name: "Correct Non-RBAC resources config",
 			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
 				{Group: "", Resource: "resourcequotas"},
 			},
@@ -167,8 +118,6 @@ func TestNonRBACTypes(t *testing.T) {
 		{
 			name: "Resource does not exist",
 			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				// "crontabs" resource does not exist in ""
 				{Group: "", Resource: "crontabs", Mode: "Ignore"},
 			},
@@ -177,8 +126,6 @@ func TestNonRBACTypes(t *testing.T) {
 		}, {
 			name: "Duplicate resources with different modes",
 			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
 				{Group: "", Resource: "secrets", Mode: "Propagate"},
 			},
@@ -187,8 +134,6 @@ func TestNonRBACTypes(t *testing.T) {
 		}, {
 			name: "Duplicate resources with the same mode",
 			configs: []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
 				{Group: "", Resource: "secrets", Mode: "Ignore"},
 			},
@@ -230,8 +175,6 @@ func TestPropagateConflict(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 			configs := []api.ResourceSpec{
-				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: "Propagate"},
-				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: "Propagate"},
 				{Group: "", Resource: "secrets", Mode: "Propagate"}}
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: configs}}
 			c.Name = api.HNCConfigSingleton

@@ -61,8 +61,25 @@ const (
 	ReasonUnknown = "Unknown"
 )
 
-// ResourceSpec defines the desired synchronization state of a
-// specific resource.
+// EnforcedTypes are the types enforced by HNC that they should not show up in
+// the spec and only in the status. Any configurations of the enforced types in
+// the spec would cause 'MultipleConfigurationsForType' condition.
+var EnforcedTypes = []ResourceSpec{
+	{Group: RBACGroup, Resource: RoleResource, Mode: Propagate},
+	{Group: RBACGroup, Resource: RoleBindingResource, Mode: Propagate},
+}
+
+// IsEnforcedType returns true if configuration is on an enforced type.
+func IsEnforcedType(grm ResourceSpec) bool {
+	for _, tp := range EnforcedTypes {
+		if tp.Group == grm.Group && tp.Resource == grm.Resource {
+			return true
+		}
+	}
+	return false
+}
+
+// ResourceSpec defines the desired synchronization state of a specific resource.
 type ResourceSpec struct {
 	// Group of the resource defined below. This is used to unambiguously identify
 	// the resource. It may be omitted for core resources (e.g. "secrets").
@@ -130,7 +147,10 @@ type HNCConfiguration struct {
 
 // HNCConfigurationSpec defines the desired state of HNC configuration.
 type HNCConfigurationSpec struct {
-	// Resources defines the cluster-wide settings for resource synchronization. To learn more, see
+	// Resources defines the cluster-wide settings for resource synchronization.
+	// Note that 'roles' and 'rolebindings' are pre-configured by HNC with
+	// 'Propagate' mode and are omitted in the spec. Any configuration of 'roles'
+	// or 'rolebindings' are not allowed. To learn more, see
 	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
 	Resources []ResourceSpec `json:"resources,omitempty"`
 }
