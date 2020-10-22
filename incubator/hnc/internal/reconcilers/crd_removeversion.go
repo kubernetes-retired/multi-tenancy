@@ -2,7 +2,6 @@ package reconcilers
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -31,7 +30,7 @@ type nameSet map[string]bool
 // Reconcile is the entry point to the reconciler.
 func (r *RemoveObsoleteCRDVersionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("crd", req.Name, "oldVersion", r.ObsoleteVersion)
+	log := loggerWithRID(r.Log).WithValues("crd", req.Name, "oldVersion", r.ObsoleteVersion)
 
 	// Early exit if the CRD is not the ones we want to remove the version.
 	if !r.CRDNames[req.Name] {
@@ -39,17 +38,16 @@ func (r *RemoveObsoleteCRDVersionReconciler) Reconcile(req ctrl.Request) (ctrl.R
 	}
 
 	nm := req.Name
-	log.Info("Reconciling")
 
 	// Get CRD.
 	inst, err := r.Client.ApiextensionsV1beta1().CustomResourceDefinitions().Get(ctx, nm, v1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// The CRD is deleted
-			log.Info("The CRD is deleted. No action is needed.")
+			log.V(1).Info("The CRD is deleted. No action is needed.")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "couldn't read CRD")
+		log.Error(err, "Couldn't read CRD")
 		return ctrl.Result{}, err
 	}
 
@@ -67,12 +65,13 @@ func (r *RemoveObsoleteCRDVersionReconciler) removeVersion(ctx context.Context, 
 	for _, v := range inst.Status.StoredVersions {
 		if v == r.ObsoleteVersion {
 			found = true
+			log.Info("Obsolete CRD version found", "version", v)
 			continue
 		}
 		vs = append(vs, v)
 	}
 	if !found {
-		log.Info("The old version is not found. No action is needed.")
+		log.V(1).Info("The old version is not found. No action is needed.")
 		return nil
 	}
 	inst.Status.StoredVersions = vs
@@ -80,11 +79,10 @@ func (r *RemoveObsoleteCRDVersionReconciler) removeVersion(ctx context.Context, 
 }
 
 func (r *RemoveObsoleteCRDVersionReconciler) updateCRDStatus(ctx context.Context, log logr.Logger, inst *apiextensions.CustomResourceDefinition) error {
-	msg := fmt.Sprintf("Write CRD status.storedVersions: %v", inst.Status.StoredVersions)
-	log.Info(msg)
+	log.Info("Updated status.storedVersions", "storedVersions", inst.Status.StoredVersions)
 	inst, err := r.Client.ApiextensionsV1beta1().CustomResourceDefinitions().UpdateStatus(ctx, inst, v1.UpdateOptions{})
 	if err != nil {
-		log.Error(err, "while updating apiserver")
+		log.Error(err, "Could not update status.storedVersions", "storedVersions", inst.Status.StoredVersions)
 		return err
 	}
 	return nil

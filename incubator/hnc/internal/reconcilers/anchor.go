@@ -54,7 +54,7 @@ type AnchorReconciler struct {
 // only handles the creation of the namespaces but no deletion or state reporting yet.
 func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	log := r.Log.WithValues("trigger", req.NamespacedName)
+	log := loggerWithRID(r.Log).WithValues("trigger", req.NamespacedName)
 	log.V(1).Info("Reconciling anchor")
 
 	// Get names of the hierarchical namespace and the current namespace.
@@ -130,26 +130,26 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 	// means HNC is being uninstalled and we shouldn't delete _any_ namespaces.
 	deletingCRD, err := isDeletingCRD(ctx, r, api.Anchors)
 	if err != nil {
-		log.Info("Couldn't determine if CRD is being deleted")
+		log.Error(err, "Couldn't determine if CRD is being deleted")
 		return false, err
 	}
-	log.Info("Anchor is being deleted", "deletingCRD", deletingCRD)
+	log.V(1).Info("Anchor is being deleted", "deletingCRD", deletingCRD)
 
 	// Check if we need to perform step 1 (delete subns), step 2 (allow finalization) or just wait for
 	// something to happen. See method-level comments for details.
 	switch {
 	case r.shouldDeleteSubns(log, inst, snsInst, deletingCRD):
-		log.Info("Deleting subnamespace")
+		log.Info("Deleting subnamespace due to anchor being deleted")
 		return true, r.deleteNamespace(ctx, log, snsInst)
 	case r.shouldFinalizeAnchor(log, inst, snsInst):
-		log.Info("Removing finalizer")
+		log.V(1).Info("Unblocking deletion") // V(1) since we'll very shortly show an "anchor deleted" message
 		inst.ObjectMeta.Finalizers = nil
 		return true, r.writeInstance(ctx, log, inst)
 	default:
 		// There's nothing to do; we're just waiting for something to happen. Print out a log message
 		// indicating what we're waiting for.
 		if len(inst.ObjectMeta.Finalizers) > 0 {
-			log.Info("Waiting for subnamespace to be fully purged")
+			log.Info("Waiting for subnamespace to be fully purged before letting the anchor be deleted")
 		} else {
 			// I doubt we'll ever get here but I suppose it's possible
 			log.Info("Waiting for K8s to delete this anchor (all finalizers are removed)")
@@ -242,7 +242,7 @@ func (r *AnchorReconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.Subna
 		// be deleted with this namespace. If the subns *isn't* being deleted at this point, we can
 		// infer that it's not going to be, and the anchor is safe to finalize now.
 		if snsInst.DeletionTimestamp.IsZero() {
-			log.Info("Subnamespace will not be deleted; allowing anchor to be finalized")
+			log.V(1).Info("Subnamespace will not be deleted; allowing anchor to be finalized")
 			return true
 		}
 		log.V(1).Info("Subnamespace is being deleted; cannot finalize anchor yet")
@@ -259,12 +259,12 @@ func (r *AnchorReconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.Subna
 		// concurrency problem. But even if this isn't true, the worst that could happen (in this corner
 		// case of a corner case) is that the namespace gets created with a Missing Anchor condition,
 		// which really isn't the end of the world. So I don't think it's worth worrying about too much.
-		log.Info("Subnamespace does not exist; allowing anchor to be finalized")
+		log.V(1).Info("Subnamespace does not exist; allowing anchor to be finalized")
 		return true
 
 	case api.Conflict:
 		// Bad anchors can always be removed.
-		log.Info("Anchor is in the conflicted state; allowing it to be finalized")
+		log.Info("Anchor is in the Conflict state; allowing it to be deleted")
 		return true
 
 	default:
@@ -275,15 +275,14 @@ func (r *AnchorReconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.Subna
 }
 
 func (r *AnchorReconciler) updateState(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) {
-	nm := inst.Name
 	pnm := inst.Namespace
 	sOf := snsInst.Annotations[api.SubnamespaceOf]
 	switch {
 	case snsInst.Name == "":
-		log.Info("The subnamespace does not exist; anchor state is Missing", "subnamespace", nm)
+		log.Info("Subnamespace does not (yet) exist; setting anchor state to Missing")
 		inst.Status.State = api.Missing
 	case sOf != pnm:
-		log.Info("The subnamespaceOf annotation does not match parent; anchor state is Conflict", "annotation", sOf)
+		log.Info("The would-be subnamespace has a conflicting subnamespace-of annotation; setting anchor state to Conflict", "annotation", sOf)
 		inst.Status.State = api.Conflict
 	default:
 		if inst.Status.State != api.Ok {
@@ -302,7 +301,7 @@ func (r *AnchorReconciler) enqueue(log logr.Logger, nm, pnm, reason string) {
 		inst := &api.SubnamespaceAnchor{}
 		inst.ObjectMeta.Name = nm
 		inst.ObjectMeta.Namespace = pnm
-		log.Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm, "reason", reason)
+		log.V(1).Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm, "reason", reason)
 		r.Affected <- event.GenericEvent{Meta: inst}
 	}()
 }
@@ -355,9 +354,9 @@ func (r *AnchorReconciler) writeNamespace(ctx context.Context, log logr.Logger, 
 	// else while this reconciler is running, returning an error will trigger a
 	// retry. The reconciler will set the 'Conflict' state instead of recreating
 	// this namespace. All other transient problems should trigger a retry too.
-	log.Info("Creating namespace on apiserver")
+	log.Info("Creating subnamespace")
 	if err := r.Create(ctx, inst); err != nil {
-		log.Error(err, "while creating on apiserver")
+		log.Error(err, "While creating subnamespace")
 		return err
 	}
 	return nil
@@ -365,7 +364,7 @@ func (r *AnchorReconciler) writeNamespace(ctx context.Context, log logr.Logger, 
 
 func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
 	if err := r.Delete(ctx, inst); err != nil {
-		log.Error(err, "while deleting on apiserver")
+		log.Error(err, "While deleting subnamespace")
 		return err
 	}
 	return nil

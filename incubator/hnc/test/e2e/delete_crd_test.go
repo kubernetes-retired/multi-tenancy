@@ -33,9 +33,10 @@ var _ = Describe("When deleting CRDs", func() {
 		// set up
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl hns create", nsChild, "-n", nsParent)
-		// test
+		MustRun("kubectl get ns", nsChild)
+		// delete the CRD
 		MustRun("kubectl delete customresourcedefinition/subnamespaceanchors.hnc.x-k8s.io")
-		// verify
+		// verify that the child wasn't deleted with the CRDs
 		MustRun("kubectl get ns", nsChild)
 	})
 
