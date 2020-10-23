@@ -9,8 +9,8 @@ import (
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
 
-var _ = Describe("Demo", func() {
-	// Test for https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64
+var _ = Describe("Quickstart", func() {
+	// Tests for the HNC user guide quickstarts
 	const (
 		nsOrg      = "acme-org"
 		nsTeamA    = "team-a"
@@ -31,7 +31,7 @@ var _ = Describe("Demo", func() {
 		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1, nsService2, nsService3, nsService4, nsDev, nsStaging)
 	})
 
-	It("Should test basic functionalities in demo", func() {
+	It("Should test basic functionalities in quickstart", func() {
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl create ns", nsTeamA)
 		MustRun("kubectl create ns", nsService1)
@@ -80,7 +80,7 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("Should propagate different types", func() {
-		// ignore Secret in case this demo is run twice and the secret has been set to 'Propagate'
+		// ignore Secret in case this quickstart is run twice and the secret has been set to 'Propagate'
 		MustRun("kubectl hns config set-resource secrets --mode Ignore")
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
@@ -124,7 +124,7 @@ var _ = Describe("Demo", func() {
 			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 
 		// create a default network policy that blocks any ingress from other namespaces 
-		policy := `# temp file created by demo_test.go
+		policy := `# temp file created by quickstart_test.go
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
@@ -159,11 +159,11 @@ spec:
 			return err
 		}).Should(Succeed())
 		if !strings.Contains(netpolTestStdout, "wget: download timed out") {
-			Skip("Basic network policies don't appear to be working; skipping the netpol demo")
+			Skip("Basic network policies don't appear to be working; skipping the netpol quickstart")
 		}
 
 		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
-		policy = `# temp file created by demo_test.go
+		policy = `# temp file created by quickstart_test.go
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
