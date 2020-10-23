@@ -228,7 +228,10 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
-	ns.UpdateAllowCascadingDeletion(inst.Spec.AllowCascadingDeletion)
+	if ns.UpdateAllowCascadingDeletion(inst.Spec.AllowCascadingDeletion) {
+		// Added to help debug #1155 if it ever reoccurs
+		log.Info("Updated allowCascadingDeletion", "newValue", inst.Spec.AllowCascadingDeletion)
+	}
 
 	// Sync the status
 	inst.Status.Children = ns.ChildNames()

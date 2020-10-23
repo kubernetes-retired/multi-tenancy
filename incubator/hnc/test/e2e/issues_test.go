@@ -245,7 +245,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl get rolebinding foo -n", nsChild, "-oyaml")
 	})
 
-	PIt("should reset allowCascadingDeletion value after the namespace is deleted and recreated - issue #1155", func() {
+	It("should reset allowCascadingDeletion value after the namespace is deleted and recreated - issue #1155", func() {
 		// Create a parent namespace and a subnamespace for it.
 		MustRun("kubectl create ns", nsParent)
 		MustRun("kubectl get ns", nsParent)
@@ -263,8 +263,10 @@ var _ = Describe("Issues", func() {
 		// Now recreate the parent again.
 		MustRun("kubectl create ns", nsParent)
 
-		// Verify the default is not set to "allowCascadingDeletion:true".
-		FieldShouldNotContain("hierarchyconfigurations.hnc.x-k8s.io", nsParent, "hierarchy", ".spec", "allowCascadingDeletion:true")
+		// Since nsParent is new, it should not have any kind of hierarchy config in it. So let's ensure
+		// that a 'get' fails. We'll get the full YAML so that if it succees, the _contents_ of the
+		// config will be in the failure log and we can see what's happened.
+		MustNotRun("kubectl get -oyaml hierarchyconfiguration hierarchy -n", nsParent)
 	})
 })
 
