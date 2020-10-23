@@ -124,6 +124,10 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 			msg := fmt.Sprintf("Invalid HNC %q value: %s", api.AnnotationTreeSelector, err)
 			return deny(metav1.StatusReasonBadRequest, msg)
 		}
+		err = validateNoneSelectorChange(inst, oldInst)
+		if err != nil {
+			return deny(metav1.StatusReasonBadRequest, err.Error())
+		}
 		// TODO(@ginnyji): modify hasConflict so that it's aware of selectors
 		if yes, dnses := o.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, "\n  * ")
@@ -153,6 +157,16 @@ func validateTreeSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 		return nil
 	}
 	_, err := selectors.GetTreeSelector(inst)
+	return err
+}
+
+func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error {
+	oldSelectorStr := selectors.GetNoneSelectorAnnotation(oldInst)
+	newSelectorStr := selectors.GetNoneSelectorAnnotation(inst)
+	if newSelectorStr == "" || oldSelectorStr == newSelectorStr {
+		return nil
+	}
+	_, err := selectors.GetNoneSelector(inst)
 	return err
 }
 

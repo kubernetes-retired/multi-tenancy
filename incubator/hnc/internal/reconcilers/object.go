@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -658,15 +657,19 @@ func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger,
 // - Objects have a selector that doesn't match the destination namespace
 // - Service Account token secrets
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
-	selector, err := selectors.GetSelector(inst)
-	if err != nil {
-		log.Error(err, "Invalid value")
+	selector, errSelector := selectors.GetSelector(inst)
+	// TODO: generate events for the errors
+	if errSelector != nil {
+		log.Error(errSelector, "Cannot propagate")
 	}
-	treeSelector, err := selectors.GetTreeSelector(inst)
-	if err != nil {
-		log.Error(err, "Invalid value")
+	treeSelector, errTreeSelector := selectors.GetTreeSelector(inst)
+	if errTreeSelector != nil {
+		log.Error(errTreeSelector, "Cannot propagate")
 	}
-	noneSelector := r.getNoneSelector(log, inst)
+	noneSelector, errNoneSelector := selectors.GetNoneSelector(inst)
+	if errNoneSelector != nil {
+		log.Error(errNoneSelector, "Cannot propagate")
+	}
 	nsLabels := r.Forest.Get(dst).GetLabels()
 
 	switch {
@@ -677,6 +680,10 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 
 	// Object with nonempty finalizer list is not propagated
 	case hasFinalizers(inst):
+		return false
+
+	// Invalid selectors
+	case errSelector != nil || errTreeSelector != nil || errNoneSelector != nil:
 		return false
 
 	// None selector is set to true
@@ -708,29 +715,6 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 		// Everything else is propagated
 		return true
 	}
-}
-
-// getNoneSelector returns true indicates that user do not want this object to be propagated
-func (r *ObjectReconciler) getNoneSelector(log logr.Logger, inst *unstructured.Unstructured) bool {
-	annot := inst.GetAnnotations()
-	noneSelectorStr, ok := annot[api.AnnotationNoneSelector]
-	if !ok {
-		return false
-	}
-	// Empty string is treated as 'false'. In other selector cases, the empty string is auto converted to
-	// a selector that matches everything.
-	if noneSelectorStr == "" {
-		return false
-	}
-	noneSelector, err := strconv.ParseBool(noneSelectorStr)
-	if err != nil {
-		// TODO: surface the error
-		log.Error(err, "Invalid noneSelector value", "It should be either true or false, but got", noneSelectorStr)
-		// When the user put an invalid noneSelector, we choose not to propagate this object to any child
-		// namespace to protect any object in the child namespaces to be overwritten
-		return true
-	}
-	return noneSelector
 }
 
 // recordPropagatedObject records the fact that this object has been propagated, so we can report

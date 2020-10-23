@@ -58,7 +58,7 @@ var _ = Describe("Exceptions", func() {
 			// we choose not to propagate this object to any child namespace to protect any object in the child
 			// namespaces to be overwritten. Same for treeSelectors and noneSelector.
 			name:     "not propagate to any namespace with a bad selector",
-			selector: "random",
+			selector: "$foo",
 			want:     []string{},
 			notWant:  []string{c1, c2, c3},
 		}, {
@@ -73,7 +73,7 @@ var _ = Describe("Exceptions", func() {
 			notWant:      []string{c1, c2},
 		}, {
 			name:         "not propagate to any namespace with a bad treeSelector",
-			treeSelector: "random",
+			treeSelector: "$foo",
 			want:         []string{},
 			notWant:      []string{c1, c2, c3},
 		}, {
@@ -100,7 +100,7 @@ var _ = Describe("Exceptions", func() {
 			notWant:      []string{},
 		}, {
 			name:         "not propagate to any child namespace with a bad noneSelector",
-			noneSelector: "random",
+			noneSelector: "$foo",
 			want:         []string{},
 			notWant:      []string{c1, c2, c3},
 		}, {
