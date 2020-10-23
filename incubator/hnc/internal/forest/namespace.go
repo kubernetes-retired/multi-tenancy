@@ -111,9 +111,14 @@ func (ns *Namespace) clean() {
 	delete(ns.forest.namespaces, ns.name)
 }
 
-// UpdateAllowCascadingDeletion updates if this namespace allows cascading deletion.
-func (ns *Namespace) UpdateAllowCascadingDeletion(acd bool) {
+// UpdateAllowCascadingDeletion updates if this namespace allows cascading deletion. It returns true
+// if the value has changed, false otherwise.
+func (ns *Namespace) UpdateAllowCascadingDeletion(acd bool) bool {
+	if ns.allowCascadingDeletion == acd {
+		return false
+	}
 	ns.allowCascadingDeletion = acd
+	return true
 }
 
 // AllowsCascadingDeletion returns true if the namespace's or any of the ancestors'
