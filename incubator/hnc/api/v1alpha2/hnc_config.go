@@ -52,6 +52,10 @@ const (
 	// Condition types.
 	ConditionBadTypeConfiguration = "BadConfiguration"
 	ConditionOutOfSync            = "OutOfSync"
+	// NamespaceCondition is set if there are namespace conditions, which are set
+	// in the HierarchyConfiguration objects. The condition reasons would be the
+	// condition types in HierarchyConfiguration, e.g. "ActivitiesHalted".
+	ConditionNamespace = "NamespaceCondition"
 
 	// Condition reasons for BadConfiguration
 	ReasonMultipleConfigsForType = "MultipleConfigurationsForType"
@@ -104,17 +108,6 @@ type ResourceStatus struct {
 	NumSourceObjects *int `json:"numSourceObjects,omitempty"`
 }
 
-type ConditionAndAffectedNamespaces struct {
-	// Type is a namespace condition type
-	Type string `json:"type"`
-
-	// Reason is a namespace condition reason
-	Reason string `json:"reason"`
-
-	// Namespaces is the list of namespaces affected by this code
-	Namespaces []string `json:"namespaces"`
-}
-
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hncconfigurations,scope=Cluster
 // +kubebuilder:storageversion
@@ -140,17 +133,12 @@ type HNCConfigurationStatus struct {
 	// Resources indicates the observed synchronization states of the resources.
 	Resources []ResourceStatus `json:"resources,omitempty"`
 
-	// Conditions describes the errors, if any.
+	// Conditions describes the errors, if any. If there are any conditions with
+	// "ActivitiesHalted" reason, this means that HNC cannot function in the
+	// affected namespaces. The HierarchyConfiguration object in each of the
+	// affected namespaces will have more information. To learn more about
+	// conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
 	Conditions []Condition `json:"conditions,omitempty"`
-
-	// NamespaceConditions is a map of namespace condition types and reasons to
-	// the affected namespaces. If HNC is operating normally, no conditions will
-	// be present; if there are any conditions with "ActivitiesHalted" type, this
-	// means that HNC cannot function in the affected namespaces. The
-	// HierarchyConfiguration object in each of the affected namespaces will have
-	// more information. To learn more about conditions, see
-	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
-	NamespaceConditions []ConditionAndAffectedNamespaces `json:"namespaceConditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

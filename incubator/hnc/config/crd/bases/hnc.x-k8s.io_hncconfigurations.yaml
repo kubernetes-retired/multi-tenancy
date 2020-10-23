@@ -178,7 +178,7 @@ spec:
             description: HNCConfigurationStatus defines the observed state of HNC configuration.
             properties:
               conditions:
-                description: Conditions describes the errors, if any.
+                description: Conditions describes the errors, if any. If there are any conditions with "ActivitiesHalted" reason, this means that HNC cannot function in the affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will have more information. To learn more about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
                 items:
                   description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, type FooStatus struct{     // Represents the observations of a foo's current state.     // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     // +patchStrategy=merge     // +listType=map     // +listMapKey=type     Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n     // other fields }"
                   properties:
@@ -218,27 +218,6 @@ spec:
                   - message
                   - reason
                   - status
-                  - type
-                  type: object
-                type: array
-              namespaceConditions:
-                description: NamespaceConditions is a map of namespace condition types and reasons to the affected namespaces. If HNC is operating normally, no conditions will be present; if there are any conditions with "ActivitiesHalted" type, this means that HNC cannot function in the affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will have more information. To learn more about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
-                items:
-                  properties:
-                    namespaces:
-                      description: Namespaces is the list of namespaces affected by this code
-                      items:
-                        type: string
-                      type: array
-                    reason:
-                      description: Reason is a namespace condition reason
-                      type: string
-                    type:
-                      description: Type is a namespace condition type
-                      type: string
-                  required:
-                  - namespaces
-                  - reason
                   - type
                   type: object
                 type: array
