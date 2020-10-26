@@ -85,12 +85,11 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 
 	// Run the actual logic.
 	resp := o.handle(ctx, log, req.Operation, inst, oldInst)
-
-	level := 1
 	if !resp.Allowed {
-		level = 0
+		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	} else {
+		log.V(1).Info("Allowed", "message", resp.Result.Message)
 	}
-	log.V(level).Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	return resp
 }
 

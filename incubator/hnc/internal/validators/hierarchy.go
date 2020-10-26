@@ -94,7 +94,7 @@ func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission
 	if !resp.Allowed {
 		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	} else {
-		log.V(1).Info("Allowed")
+		log.V(1).Info("Allowed", "message", resp.Result.Message)
 	}
 	return resp
 }

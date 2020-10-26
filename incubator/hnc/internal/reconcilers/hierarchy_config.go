@@ -43,6 +43,20 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
 )
 
+// reconcileID is used purely to set the "rid" field in the log, so we can tell which log messages
+// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
+// simply hard to tell when one ends and another begins).
+//
+// The ID is shared among all reconcilers so that each log message gets a unique ID across all of
+// HNC.
+var nextReconcileID int64
+
+// loggerWithRID adds a reconcile ID (rid) to the given logger.
+func loggerWithRID(log logr.Logger) logr.Logger {
+	rid := atomic.AddInt64(&nextReconcileID, 1)
+	return log.WithValues("rid", rid)
+}
+
 // HierarchyConfigReconciler is responsible for determining the forest structure from the Hierarchy CRs,
 // as well as ensuring all objects in the forest are propagated correctly when the hierarchy
 // changes. It can also set the status of the Hierarchy CRs, as well as (in rare cases) override
@@ -60,11 +74,6 @@ type HierarchyConfigReconciler struct {
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional namespaces that need updating.
 	Affected chan event.GenericEvent
-
-	// reconcileID is used purely to set the "rid" field in the log, so we can tell which log messages
-	// were part of the same reconciliation attempt, even if multiple are running parallel (or it's
-	// simply hard to tell when one ends and another begins).
-	reconcileID int32
 
 	// sar is the Subnamespace Anchor Reconciler
 	sar *AnchorReconciler
@@ -86,8 +95,7 @@ func (r *HierarchyConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, er
 	ctx := context.Background()
 	ns := req.NamespacedName.Namespace
 
-	rid := (int)(atomic.AddInt32(&r.reconcileID, 1))
-	log := r.Log.WithValues("ns", ns, "rid", rid)
+	log := loggerWithRID(r.Log).WithValues("ns", ns)
 
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
@@ -114,7 +122,7 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	// Don't _create_ the singleton if its CRD is being deleted. But if the singleton is already
 	// _present_, we may need to update it to remove finalizers (see #824).
 	if deletingCRD && inst.CreationTimestamp.IsZero() {
-		log.Info("Skipping reconcile due to CRD deletion")
+		log.Info("HierarchyConfiguration CRD is being deleted; will not sync")
 		return nil
 	}
 	origHC := inst.DeepCopy()
@@ -146,8 +154,8 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	// NB: if writeInstance didn't actually write anything - that is, if the hierarchy didn't change -
 	// this update is skipped. Otherwise, we can get into infinite loops because both objects and
 	// hierarchy reconcilers are enqueuing too freely. TODO: only call updateObjects when we make the
-	// *kind* of changes that *should* cause objects to be updated (eg add/remove critical conditions,
-	// change subtree parents, etc).
+	// *kind* of changes that *should* cause objects to be updated (eg add/remove the ActivitiesHalted
+	// condition, change subtree parents, etc).
 	return r.updateObjects(ctx, log, nm)
 }
 
@@ -159,7 +167,7 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 	if ns.Exists() {
 		r.enqueueAffected(log, "relative of deleted namespace", ns.RelativesNames()...)
 		ns.UnsetExists()
-		log.Info("Removed namespace")
+		log.Info("Namespace has been deleted")
 	}
 }
 
@@ -174,7 +182,7 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 	case len(anms) == 0:
 		// There are no subnamespaces in this namespace. The HC instance can be safely deleted anytime.
 		if len(inst.ObjectMeta.Finalizers) > 0 {
-			log.Info("Removing finalizers since there are no longer any anchors in the namespace.")
+			log.V(1).Info("Removing finalizers since there are no longer any anchors in the namespace.")
 		}
 		inst.ObjectMeta.Finalizers = nil
 	case !inst.DeletionTimestamp.IsZero() && nsInst.DeletionTimestamp.IsZero():
@@ -343,7 +351,7 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	// probably should), but this prevents us from getting into a war with K8s and is sufficient for
 	// v0.5.
 	if pnm != "" && !nsInst.DeletionTimestamp.IsZero() {
-		log.Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
+		log.V(1).Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
 		pnm = ""
 	}
 
@@ -354,7 +362,14 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	ns.IsSub = true
 
 	if inst.Spec.Parent != pnm {
-		log.Info("The parent doesn't match the subnamespace annotation; overwriting parent", "oldParent", inst.Spec.Parent, "parent", pnm)
+		if inst.Spec.Parent == "" {
+			// Print a friendlier log message for when a subns is first reconciled. Technically, a user
+			// _could_ manually clear the parent field, in which case they'll see this message again, but
+			// that's enough of a corner case that it's probably not worth fixing.
+			log.Info("Inserting newly created subnamespace into the hierarchy", "parent", pnm)
+		} else {
+			log.Info("The parent doesn't match the subnamespace annotation; overwriting parent", "oldParent", inst.Spec.Parent, "parent", pnm)
+		}
 		inst.Spec.Parent = pnm
 	}
 
@@ -378,10 +393,10 @@ func (r *HierarchyConfigReconciler) markExisting(log logr.Logger, ns *forest.Nam
 	if !ns.SetExists() {
 		return false
 	}
-	log.Info("Reconciling new namespace")
-	r.enqueueAffected(log, "relative of newly synced/created namespace", ns.RelativesNames()...)
+	log.Info("New namespace found")
+	r.enqueueAffected(log, "relative of newly found namespace", ns.RelativesNames()...)
 	if ns.IsSub {
-		r.enqueueAffected(log, "parent of the newly synced/created subnamespace", ns.Parent().Name())
+		r.enqueueAffected(log, "parent of the newly found subnamespace", ns.Parent().Name())
 		r.sar.enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
 	}
 	return true
@@ -396,8 +411,8 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 	// Sync this namespace with its current parent.
 	curParent := r.Forest.Get(inst.Spec.Parent)
 	if curParent != nil && !curParent.Exists() {
-		log.Info("Missing parent", "parent", inst.Spec.Parent)
-		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, "missing parent")
+		log.Info("The parent doesn't appear to exist (or hasn't been synced yet)", "parent", inst.Spec.Parent)
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, fmt.Sprintf("Parent %q does not exist", inst.Spec.Parent))
 	}
 
 	// If the parent hasn't changed, there's nothing more to do.
@@ -502,17 +517,20 @@ func (r *HierarchyConfigReconciler) syncCritConditions(log logr.Logger, ns *fore
 		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all syncing is disabled.")
 	}
 
-	// Early exit if there's no need to enqueue relatives.
+	// Early exit if nothing's changed and there's no need to enqueue relatives.
 	if hadCrit == ns.HasLocalCritCondition() {
 		return
 	}
 
-	msg := "added"
-	if hadCrit == true {
+	msg := ""
+	if hadCrit {
+		log.Info("ActivitiesHalted condition removed")
 		msg = "removed"
+	} else {
+		log.Info("Setting ActivitiesHalted on namespace", "conditions", ns.Conditions())
+		msg = "added"
 	}
-	log.Info("Critical conditions are "+msg, "conditions", ns.Conditions())
-	r.enqueueAffected(log, "descendant of a namespace with critical conditions "+msg, ns.DescendantNames()...)
+	r.enqueueAffected(log, "descendant of a namespace with ActivitiesHalted "+msg, ns.DescendantNames()...)
 }
 
 func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
@@ -525,8 +543,8 @@ func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration,
 			ans = ans.Parent()
 			continue
 		}
-		log.Info("Ancestor has a critical condition", "ancestor", ans.Name())
-		msg := fmt.Sprintf("Propagation paused in the subtree of %s due to a critical condition", ans.Name())
+		log.Info("Ancestor has a ActivitiesHalted condition", "ancestor", ans.Name())
+		msg := fmt.Sprintf("Propagation paused in the subtree of %q due to ActivitiesHalted condition", ans.Name())
 		condition := api.NewCondition(api.ConditionActivitiesHalted, api.ReasonAncestor, msg)
 		inst.Status.Conditions = append(inst.Status.Conditions, condition)
 		return
@@ -545,7 +563,7 @@ func (r *HierarchyConfigReconciler) enqueueAffected(log logr.Logger, reason stri
 			if nm == (*forest.Namespace)(nil).Name() {
 				continue
 			}
-			log.Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
+			log.V(1).Info("Enqueuing for reconcilation", "affected", nm, "reason", reason)
 			// The watch handler doesn't care about anything except the metadata.
 			inst := &api.HierarchyConfiguration{}
 			inst.ObjectMeta.Name = api.Singleton
@@ -578,19 +596,19 @@ func (r *HierarchyConfigReconciler) writeHierarchy(ctx context.Context, log logr
 	}
 	exists := !inst.CreationTimestamp.IsZero()
 	if !exists && isDeletingNS {
-		log.Info("Will not create singleton since namespace is being deleted")
+		log.Info("Will not create hierarchyconfiguration since namespace is being deleted")
 		return false, nil
 	}
 
 	stats.WriteHierConfig()
 	if !exists {
-		log.Info("Creating singleton on apiserver", "conditions", len(inst.Status.Conditions))
+		log.Info("Creating hierarchyconfiguration", "conditions", len(inst.Status.Conditions))
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
 			return false, err
 		}
 	} else {
-		log.Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
+		log.V(1).Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
 			return false, err
@@ -607,7 +625,7 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 
 	// NB: HCR can't create namespaces, that's only in anchor reconciler
 	stats.WriteNamespace()
-	log.Info("Updating namespace on apiserver")
+	log.V(1).Info("Updating namespace on apiserver")
 	if err := r.Update(ctx, inst); err != nil {
 		log.Error(err, "while updating apiserver")
 		return false, err
@@ -618,7 +636,7 @@ func (r *HierarchyConfigReconciler) writeNamespace(ctx context.Context, log logr
 
 // updateObjects calls all type reconcillers in this namespace.
 func (r *HierarchyConfigReconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
-	log.Info("Namespace modified; updating all objects")
+	log.V(1).Info("Syncing all objects (hierarchy updated or new namespace found)")
 	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
 	// from modifying the list at the same time.
 	r.Forest.Lock()

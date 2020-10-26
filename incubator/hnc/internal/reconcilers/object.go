@@ -137,10 +137,10 @@ func GetValidateMode(mode api.SynchronizationMode, log logr.Logger) api.Synchron
 	case api.Propagate, api.Ignore, api.Remove:
 		return mode
 	case "":
-		log.Info("Unset mode; using 'propagate'")
+		log.Info("Sync mode is unset; using default 'Propagate'")
 		return api.Propagate
 	default:
-		log.Info("Unrecognized mode; using 'ignore'", "mode", mode)
+		log.Info("Unrecognized sync mode; will interpret as 'Ignore'", "mode", mode)
 		return api.Ignore
 	}
 }
@@ -154,7 +154,7 @@ func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.Synchronization
 	if newMode == oldMode {
 		return nil
 	}
-	log.Info("Changing mode of the object reconciler", "old", oldMode, "new", newMode)
+	log.Info("Changing sync mode of the object reconciler", "old", oldMode, "new", newMode)
 	r.Mode = newMode
 	// If the new mode is not "ignore", we need to update objects in the cluster
 	// (e.g., propagate or remove existing objects).
@@ -191,7 +191,7 @@ func (r *ObjectReconciler) enqueueAllObjects(ctx context.Context, log logr.Logge
 func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	resp := ctrl.Result{}
 	ctx := context.Background()
-	log := r.Log.WithValues("trigger", req.NamespacedName)
+	log := loggerWithRID(r.Log).WithValues("trigger", req.NamespacedName)
 
 	if config.EX[req.Namespace] {
 		return resp, nil
@@ -250,7 +250,7 @@ func (r *ObjectReconciler) syncWithForest(ctx context.Context, log logr.Logger, 
 	// are added and removed, so we can sync them properly if the critical condition is resolved, but
 	// don't do anything else for now.
 	if ca := r.Forest.Get(inst.GetNamespace()).GetCritAncestor(); ca != "" {
-		log.Info("Suppressing action due to critical condition", "critAncestor", ca, "action", action)
+		log.Info("Namespace has 'ActivitiesHalted' condition; will not touch propagated object", "affectedNamespace", ca, "suppressedAction", action)
 		return actionNop, nil
 	}
 
@@ -360,7 +360,7 @@ func (r *ObjectReconciler) shouldSyncAsPropagated(log logr.Logger, inst *unstruc
 	// the type has 'Propagate' mode, the object will be overwritten.
 	mode := r.Forest.GetTypeSyncer(r.GVK).GetMode()
 	if mode == api.Propagate && srcInst != nil {
-		log.Info("Will be overwritten by the conflicting source in the ancestor", "conflictingAncestor", srcInst.GetNamespace())
+		log.Info("Conflicting object found in ancestors namespace; will overwrite this object", "conflictingAncestor", srcInst.GetNamespace())
 		return true, srcInst
 	}
 
@@ -444,27 +444,16 @@ func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logg
 	if ca := sns.GetCritAncestor(); ca != "" {
 		// There's no point enqueuing anything if the source namespace has a crit condition since we'll
 		// just skip any action anyway.
-		log.Info("Will not enqueue descendants due to crit ancestor", "critAncestor", ca, "oldReason", reason)
+		log.V(1).Info("Will not enqueue descendants due to crit ancestor", "critAncestor", ca, "oldReason", reason)
 		return
 	}
-	log.Info("Enqueuing descendant objects", "reason", reason)
+	log.V(1).Info("Enqueuing descendant objects", "reason", reason)
 	for _, ns := range sns.DescendantNames() {
 		dc := object.Canonical(src)
 		dc.SetNamespace(ns)
-		log.V(1).Info("Enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", reason)
+		log.V(1).Info("... enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", reason)
 		r.Affected <- event.GenericEvent{Meta: dc}
 	}
-}
-
-func (r *ObjectReconciler) enqueueHC(log logr.Logger, nnm, reason string) {
-	go func() {
-		log.Info("Enqueuing HierarchyConfiguration for reconciliation", "ns", nnm, "reason", reason)
-		// The handler only cares about the metadata
-		inst := &api.HierarchyConfiguration{}
-		inst.ObjectMeta.Name = api.Singleton
-		inst.ObjectMeta.Namespace = nnm
-		r.AffectedNamespace <- event.GenericEvent{Meta: inst}
-	}()
 }
 
 // enqueueLocalObjects enqueues all the objects (with the same GVK) in the namespace.
@@ -527,7 +516,7 @@ func (r *ObjectReconciler) operate(ctx context.Context, log logr.Logger, act syn
 }
 
 func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
-	log.V(1).Info("Deleting obsolete copy")
+	log.Info("Deleted propagated object")
 	stats.WriteObject(r.GVK)
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
@@ -542,7 +531,6 @@ func (r *ObjectReconciler) deleteObject(ctx context.Context, log logr.Logger, in
 
 	// Remove the propagated object from the map because we are confident that the object was successfully deleted
 	// on the apiserver.
-	log.Info("Deleted")
 	r.recordRemovedObject(log, inst.GetNamespace(), inst.GetName())
 	return nil
 }
@@ -559,7 +547,7 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	var err error = nil
 	stats.WriteObject(r.GVK)
 	if exist {
-		log.Info("Updating object")
+		log.Info("Updating propagated object")
 		err = r.Update(ctx, inst)
 		// RoleBindings can't have their Roles changed after they're created
 		// (see  https://github.com/kubernetes-sigs/multi-tenancy/issues/798).
@@ -578,19 +566,21 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 		// The error type is 'Invalid' after I tested it out with different error types
 		// from https://godoc.org/k8s.io/apimachinery/pkg/api/errors
 		if err != nil && errors.IsInvalid(err) {
+			// Log this error because we're about to throw it away.
+			log.Error(err, "Couldn't update propagated object; will try to delete and recreate instead")
 			if err = r.Delete(ctx, inst); err == nil {
 				err = r.Create(ctx, inst)
 				if err != nil {
-					log.Info("Unable to create new object.") // error is handles below
+					log.Info("Couldn't recreate propagated object after deleting it") // error is handles below
 				} else {
-					log.Info("Couldn't update object but delete and re-create it.")
+					log.Info("Successfully recreated propagated object")
 				}
 			} else {
-				log.Info("Unable to delete the existing object.") // error is handles below
+				log.Info("Couldn't delete propagated object that we couldn't update") // error is handles below
 			}
 		}
 	} else {
-		log.Info("Creating object")
+		log.Info("Propagating object")
 		err = r.Create(ctx, inst)
 	}
 	if err != nil {

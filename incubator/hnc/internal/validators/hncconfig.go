@@ -46,6 +46,7 @@ type grTranslator interface {
 type gvkSet map[schema.GroupVersionKind]api.SynchronizationMode
 
 func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission.Response {
+	log := c.Log.WithValues("NamespaceName", req.Name)
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
 		return allow("HNC SA")
 	}
@@ -64,12 +65,16 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 
 	inst := &api.HNCConfiguration{}
 	if err := c.decoder.Decode(req, inst); err != nil {
-		c.Log.Error(err, "Couldn't decode request")
+		log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 
 	resp := c.handle(ctx, inst)
-	c.Log.Info("Handled", "allowed", resp.Allowed, "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	if !resp.Allowed {
+		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
+	} else {
+		log.V(1).Info("Allowed", "message", resp.Result.Message)
+	}
 	return resp
 }
 

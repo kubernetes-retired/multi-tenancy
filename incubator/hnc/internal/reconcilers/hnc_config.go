@@ -173,12 +173,16 @@ func (r *ConfigReconciler) reconcileConfigTypes(inst *api.HNCConfiguration, allR
 		// If there are multiple configurations of the same type, we will follow the
 		// first configuration and ignore the rest.
 		if gvkMode, exist := r.activeGVKMode[gr]; exist {
-			msg := fmt.Sprintf("%s has multiple synchronization modes; all but one (%s) will be ignored.", gr, gvkMode.mode)
+			log := r.Log.WithValues("resource", gr, "appliedMode", gvkMode.mode)
+			msg := ""
 			// Set a different message if the type is enforced by HNC.
 			if api.IsEnforcedType(rsc) {
-				msg = fmt.Sprintf("%s is enforced by HNC to have the %s mode; any configuration on it is not allowed.", gr, api.Propagate)
+				msg = fmt.Sprintf("The sync mode for %q is enforced by HNC as %q and cannot be overridden", gr, api.Propagate)
+				log.Info("The sync mode for this resource is enforced by HNC and cannot be overridden")
+			} else {
+				log.Info("Multiple sync mode settings found; only one is allowed")
+				msg = fmt.Sprintf("Multiple sync mode settings found for %q; all but one (%q) will be ignored", gr, gvkMode.mode)
 			}
-			r.Log.Info(msg)
 			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType, msg)
 			continue
 		}
@@ -216,7 +220,7 @@ func (r *ConfigReconciler) validateSingleton(inst *api.HNCConfiguration) {
 	// It is possible that the singleton does not exist on the apiserver. In this
 	// case its name hasn't been set yet.
 	if inst.ObjectMeta.Name == "" {
-		r.Log.Info(fmt.Sprintf("Setting the object name to be %s", api.HNCConfigSingleton))
+		r.Log.Info("Setting HNCConfiguration name", "name", api.HNCConfigSingleton)
 		inst.ObjectMeta.Name = api.HNCConfigSingleton
 	}
 }
@@ -232,15 +236,15 @@ func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConf
 			r.Log.Info("CRD is being deleted (or CRD deletion status couldn't be determined); skip update")
 			return err
 		}
-		r.Log.Info("Creating a default singleton on apiserver")
+		r.Log.Info("Creating the default HNCConfiguration object")
 		if err := r.Create(ctx, inst); err != nil {
-			r.Log.Error(err, "while creating on apiserver")
+			r.Log.Error(err, "Could not create HNCConfiguration object")
 			return err
 		}
 	} else {
 		r.Log.V(1).Info("Updating the singleton on apiserver")
 		if err := r.Update(ctx, inst); err != nil {
-			r.Log.Error(err, "while updating apiserver")
+			r.Log.Error(err, "Could not update HNCConfiguration object")
 			return err
 		}
 	}
@@ -328,7 +332,7 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context) error {
 			continue
 		}
 		// The type does not exist in the Spec. Ignore subsequent reconciliations.
-		r.Log.Info("Type config removed", "gvk", ts.GetGVK())
+		r.Log.Info("Resource config removed, will no longer update objects", "gvk", ts.GetGVK())
 		if err := ts.SetMode(ctx, api.Ignore, r.Log); err != nil {
 			return err // retry the reconciliation
 		}
@@ -343,7 +347,7 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context) error {
 // cluster. Therefore, the caller should check if the resource exists before
 // creating the reconciler.
 func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode api.SynchronizationMode, inst *api.HNCConfiguration) {
-	r.Log.Info("Creating an object reconciler", "gvk", gvk, "mode", mode)
+	r.Log.Info("Starting to sync objects", "gvk", gvk, "mode", mode)
 
 	or := &ObjectReconciler{
 		Client: r.Client,
@@ -361,7 +365,7 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
-		msg := fmt.Sprintf("Couldn't create ObjectReconciler for type %s: %s", gvk, err)
+		msg := fmt.Sprintf("Cannot sync objects of type %s: %s", gvk, err)
 		r.writeCondition(inst, api.ConditionOutOfSync, api.ReasonUnknown, msg)
 		return
 	}

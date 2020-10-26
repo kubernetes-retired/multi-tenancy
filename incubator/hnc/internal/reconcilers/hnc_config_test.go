@@ -122,7 +122,7 @@ var _ = Describe("HNCConfiguration", func() {
 
 		// The first configuration should be applied.
 		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).
-			Should(ContainSubstring("secrets has multiple synchronization modes; all but one (%s) will be ignored.", api.Propagate))
+			Should(ContainSubstring("Multiple sync mode settings found for \"secrets\"; all but one (%q) will be ignored", api.Propagate))
 	})
 
 	It("should unset MultipleConfigurationsForType if extra configurations are later removed", func() {
@@ -131,7 +131,7 @@ var _ = Describe("HNCConfiguration", func() {
 		addToHNCConfig(ctx, "", "secrets", api.Remove)
 
 		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).
-			Should(ContainSubstring("secrets has multiple synchronization modes; all but one (%s) will be ignored.", api.Propagate))
+			Should(ContainSubstring("Multiple sync mode settings found for \"secrets\"; all but one (%q) will be ignored", api.Propagate))
 
 		removeTypeConfigWithMode(ctx, "", "secrets", api.Remove)
 

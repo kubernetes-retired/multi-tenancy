@@ -250,6 +250,6 @@ spec:
 			nsTeamA + "\n" +
 			"└── [s] " + nsService2
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
-		RunShouldContain("ActivitiesHalted (ParentMissing): missing parent", defTimeout, "kubectl hns describe", nsStaging)
+		RunShouldContain("ActivitiesHalted (ParentMissing):", defTimeout, "kubectl hns describe", nsStaging)
 	})
 })

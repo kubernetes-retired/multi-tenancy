@@ -9,6 +9,7 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
@@ -29,12 +30,11 @@ var (
 func TestDeletingConfigObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
 		g := NewGomegaWithT(t)
-		req := admission.Request{
-			AdmissionRequest: v1beta1.AdmissionRequest{
-				Operation: v1beta1.Delete,
-				Name:      api.HNCConfigSingleton,
-			}}
-		config := &HNCConfig{}
+		req := admission.Request{AdmissionRequest: v1beta1.AdmissionRequest{
+			Operation: v1beta1.Delete,
+			Name:      api.HNCConfigSingleton,
+		}}
+		config := &HNCConfig{Log: zap.Logger(false)}
 
 		got := config.Handle(context.Background(), req)
 
@@ -46,12 +46,11 @@ func TestDeletingConfigObject(t *testing.T) {
 func TestDeletingOtherObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
 		g := NewGomegaWithT(t)
-		req := admission.Request{
-			AdmissionRequest: v1beta1.AdmissionRequest{
-				Operation: v1beta1.Delete,
-				Name:      "other",
-			}}
-		config := &HNCConfig{}
+		req := admission.Request{AdmissionRequest: v1beta1.AdmissionRequest{
+			Operation: v1beta1.Delete,
+			Name:      "other",
+		}}
+		config := &HNCConfig{Log: zap.Logger(false)}
 
 		got := config.Handle(context.Background(), req)
 
@@ -62,7 +61,11 @@ func TestDeletingOtherObject(t *testing.T) {
 
 func TestRBACTypes(t *testing.T) {
 	f := forest.NewForest()
-	config := &HNCConfig{translator: fakeGRTranslator{}, Forest: f}
+	config := &HNCConfig{
+		translator: fakeGRTranslator{},
+		Forest:     f,
+		Log:        zap.Logger(false),
+	}
 
 	tests := []struct {
 		name    string
@@ -146,7 +149,11 @@ func TestNonRBACTypes(t *testing.T) {
 			g := NewGomegaWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
-			config := &HNCConfig{translator: tc.validator, Forest: forest.NewForest()}
+			config := &HNCConfig{
+				translator: tc.validator,
+				Forest:     forest.NewForest(),
+				Log:        zap.Logger(false),
+			}
 
 			got := config.handle(context.Background(), c)
 
@@ -180,7 +187,11 @@ func TestPropagateConflict(t *testing.T) {
 			c.Name = api.HNCConfigSingleton
 			// Create a forest with "a" as the parent and "b" and "c" as the children.
 			f := foresttest.Create("-aa")
-			config := &HNCConfig{translator: fakeGRTranslator{}, Forest: f}
+			config := &HNCConfig{
+				translator: fakeGRTranslator{},
+				Forest:     f,
+				Log:        zap.Logger(false),
+			}
 
 			// Add source objects to the forest.
 			inst := &unstructured.Unstructured{}
