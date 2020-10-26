@@ -21,6 +21,7 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -304,15 +305,20 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster
 	}
 	caGroup.APIServer = apiserverCAPair
 
-	finalAPIAddress := apiserverDomain
+	finalAPIDomain := apiserverDomain
 	if clusterIP != "" {
-		finalAPIAddress = clusterIP
+		if strings.Contains(clusterIP, ":") {
+			// ipv6 domain
+			finalAPIDomain = "[" + clusterIP + "]"
+		} else {
+			finalAPIDomain = clusterIP
+		}
 	}
 
 	// create kubeconfig for controller-manager
 	ctrlmgrKbCfg, err := kubeconfig.GenerateKubeconfig(
 		"system:kube-controller-manager",
-		vc.Name, finalAPIAddress, []string{}, rootCAPair)
+		vc.Name, finalAPIDomain, []string{}, rootCAPair)
 	if err != nil {
 		return err
 	}
@@ -320,7 +326,7 @@ func (mpn *MasterProvisionerNative) createPKI(vc *tenancyv1alpha1.VirtualCluster
 
 	// create kubeconfig for admin user
 	adminKbCfg, err := kubeconfig.GenerateKubeconfig(
-		"admin", vc.Name, finalAPIAddress,
+		"admin", vc.Name, finalAPIDomain,
 		[]string{"system:masters"}, rootCAPair)
 	if err != nil {
 		return err
