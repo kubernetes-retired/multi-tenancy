@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	crds      = []string{anchorCRD, hierCRD, configCRD}
+	crds = []string{anchorCRD, hierCRD, configCRD}
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	// v1alpha1 from CRD status.storedVersions after CRD conversion because it can
 	// be removed only if all the v1alpha1 CRs are reconciled and converted to v1alpha2.
 	crdConversionTime = 7
-	propagationTime = 5
+	propagationTime   = 5
 
 	anchorCRD       = "subnamespaceanchors.hnc.x-k8s.io"
 	hierCRD         = "hierarchyconfigurations.hnc.x-k8s.io"
@@ -32,6 +32,9 @@ const (
 	namspacePrefix = "e2e-conversion-test-"
 	nsA            = namspacePrefix + "a"
 	nsB            = namspacePrefix + "b"
+	nsC            = namspacePrefix + "c"
+	nsD            = namspacePrefix + "d"
+	nsE            = namspacePrefix + "e"
 )
 
 func TestConversion(t *testing.T) {
@@ -53,7 +56,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 		// is installed right now but our best bet to clean up namespaces safely is to hope that it is.
 		// TODO: make CleanupNamespaces work regardless of whether HNC is running or not (see that
 		// function for details).
-		CleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB, nsC, nsD, nsE)
 
 		// Almost all tests start with HNC v0.5 so just start there.
 		TearDownHNC(hncFromVersion)
@@ -63,7 +66,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 	AfterEach(func() {
 		// Restore to the initial starting point. Clean up namespaces before tearing down HNC to remove
 		// finalizers.
-		CleanupNamespaces(nsA, nsB)
+		CleanupNamespaces(nsA, nsB, nsC, nsD, nsE)
 		TearDownHNC("")
 	})
 
@@ -109,7 +112,6 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 		FieldShouldNotContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
 		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
 	})
-
 
 	It("should convert subnamespace anchors and subnamespace-of annotation", func() {
 		// Before conversion, create namespace A and a subnamespace B.
@@ -302,6 +304,33 @@ spec:
 		// Verify sync mode behavior.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
 		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
+	})
+
+	It("should convert HNCConfig namespaceConditions into just conditions", func() {
+		// Create a tree with A as the root and B as the child
+		createSampleV1alpha1Tree()
+		// Create namespaces C, D, E as the child of namespace A.
+		createV1alpha1Child(nsC, nsA)
+		createV1alpha1Child(nsD, nsA)
+		createV1alpha1Child(nsE, nsA)
+		// Delete namespace A to get 4 ParentMissing conditions for B, C, D, E
+		MustRun("kubectl delete ns", nsA)
+
+		// Verify v1a1 condition and all 4 affected namespaces.
+		FieldShouldContain(configCRD, "", configSingleton, ".status.namespaceConditions", "code:CritParentMissing")
+		FieldShouldContainMultiple(configCRD, "", configSingleton, ".status.namespaceConditions", []string{nsB, nsC, nsD, nsE})
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify "namespaceConditions" field is gone and converted to conditions.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status", "namespaceConditions")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "reason:ActivitiesHalted status:True type:NamespaceCondition")
+		// Verify the number of affected namespaces is 4.
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "4 namespaces")
+		// Verify only first 3 namespaces are listed.
+		FieldShouldContainMultiple(configCRD, "", configSingleton, ".status.conditions", []string{nsB, nsC, nsD})
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status.conditions", nsE)
 	})
 
 	It("should still have HNCConfig condition if it exists in v1alpha1, but with a new schema", func() {
@@ -508,7 +537,7 @@ spec:
 		FieldShouldContain("secrets", nsB, credA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
 		// Update mode to 'ignore' and verify the new mode is working.
 		setV1alpha1SecretMode("ignore")
-		time.Sleep(1*time.Second)
+		time.Sleep(1 * time.Second)
 		igSecA := "ignored-creds"
 		createSecret(igSecA, nsA)
 		RunShouldNotContain(igSecA, propagationTime, "kubectl get secrets -n", nsB)
@@ -524,9 +553,9 @@ spec:
 })
 
 // Install HNC and kubectl plugin with v1alpha1.
-func setupV1alpha1(hncVersion string){
+func setupV1alpha1(hncVersion string) {
 	GinkgoT().Log("Set up v1alpha1")
-	MustRun("kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-"+hncVersion+"/hnc-manager.yaml")
+	MustRun("kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-" + hncVersion + "/hnc-manager.yaml")
 	// Wait for the validating webhooks to be ready.
 	ensureVWHReady()
 
@@ -536,7 +565,7 @@ func setupV1alpha1(hncVersion string){
 }
 
 // Install HNC and kubectl plugin with v1alpha2.
-func setupV1alpha2(){
+func setupV1alpha2() {
 	GinkgoT().Log("Set up v1alpha2")
 	// Delete the deployment to force re-pulling the image. Without this line, a cached
 	// image may be used with the old IfNotPresent imagePullPolicy from 0.5 deployment.
@@ -546,7 +575,7 @@ func setupV1alpha2(){
 	verifyConversion()
 }
 
-func verifyConversion(){
+func verifyConversion() {
 	// Wait for the cert rotator to write caBundles in CRD conversion webhooks.
 	ensureCRDConvWHReady()
 
@@ -570,19 +599,19 @@ func checkCRDVersionInField(version, field string, expected bool) {
 
 // Just create a 'check-webhook' namespace to make sure it's not rejected. It
 // will be rejected if the validating webhook is not ready.
-func ensureVWHReady(){
+func ensureVWHReady() {
 	MustRunWithTimeout(certsReadyTime, "kubectl create ns check-webhook")
 	MustRun("kubectl delete ns check-webhook")
 }
 
-func ensureCRDConvWHReady(){
+func ensureCRDConvWHReady() {
 	for _, crd := range crds {
 		RunShouldNotContain("caBundle: Cg==", certsReadyTime, "kubectl get crd "+crd+" -oyaml")
 	}
 }
 
 // createSampleV1alpha1Tree creates a tree with 'a' as the root, 'b' as the child.
-func createSampleV1alpha1Tree(){
+func createSampleV1alpha1Tree() {
 	MustRun("kubectl create ns", nsA)
 	MustRun("kubectl create ns", nsB)
 	hierB := `# temp file created by conversion_test.go
@@ -590,22 +619,22 @@ apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HierarchyConfiguration
 metadata:
   name: hierarchy
-  namespace: `+nsB+`
+  namespace: ` + nsB + `
 spec:
-  parent: `+nsA+`
+  parent: ` + nsA + `
 `
 	MustApplyYAML(hierB)
 }
 
 // createSampleV1alpha1Subnamespace creates 'a' and a subnamespace 'b'.
-func createSampleV1alpha1Subnamespace(){
+func createSampleV1alpha1Subnamespace() {
 	MustRun("kubectl create ns", nsA)
 	subnsB := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: SubnamespaceAnchor
 metadata:
-  name: `+nsB+`
-  namespace: `+nsA+`
+  name: ` + nsB + `
+  namespace: ` + nsA + `
 `
 	MustApplyYAML(subnsB)
 	FieldShouldContain(anchorCRD, nsA, nsB, ".status.status", "ok")
@@ -613,25 +642,32 @@ metadata:
 }
 
 // createSampleV1alpha1ParentChildTree creates 'a' and a child 'b'.
-func createSampleV1alpha1ParentChildTree(){
+func createSampleV1alpha1ParentChildTree() {
 	MustRun("kubectl create ns", nsA)
-	MustRun("kubectl create ns", nsB)
-	hierB := `# temp file created by conversion_test.go
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: HierarchyConfiguration
-metadata:
-  name: hierarchy
-  namespace: `+nsB+`
-spec:
-  parent: `+nsA+`
-`
-	MustApplyYAML(hierB)
+	createV1alpha1Child(nsB, nsA)
 	FieldShouldContain(hierCRD, nsA, hierSingleton, ".status.children", nsB)
 	FieldShouldContain(hierCRD, nsB, hierSingleton, ".spec.parent", nsA)
 }
 
+// createV1alpha1Child creates a namespace and sets it as a child of another.
+func createV1alpha1Child(cnm, pnm string) {
+	MustRun("kubectl create ns", cnm)
+	hierChild := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HierarchyConfiguration
+metadata:
+  name: hierarchy
+  namespace: ` + cnm + `
+spec:
+  parent: ` + pnm + `
+`
+	MustApplyYAML(hierChild)
+	FieldShouldContain(hierCRD, pnm, hierSingleton, ".status.children", cnm)
+	FieldShouldContain(hierCRD, cnm, hierSingleton, ".spec.parent", pnm)
+}
+
 // setV1alpha1SecretMode sets the secret sync mode in v1alpah1.
-func setV1alpha1SecretMode(mode string){
+func setV1alpha1SecretMode(mode string) {
 	cfg := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HNCConfiguration
@@ -647,7 +683,7 @@ spec:
     mode: propagate
   - apiVersion: v1
     kind: Secret
-    mode: `+mode+`
+    mode: ` + mode + `
 `
 	MustApplyYAML(cfg)
 	// We cannot get the mode for a specific type, so this is a rough check since
@@ -656,13 +692,13 @@ spec:
 }
 
 // createRole creates a role in a namespace.
-func createRole(nm, nsnm string){
+func createRole(nm, nsnm string) {
 	role := `# temp file created by conversion_test.go
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: `+nm+`
-  namespace: `+nsnm+`
+  name: ` + nm + `
+  namespace: ` + nsnm + `
 rules:
 - apiGroups:
   - apps
@@ -675,15 +711,15 @@ rules:
 }
 
 // createSecret creates a secret in a namespace.
-func createSecret(nm, nsnm string){
+func createSecret(nm, nsnm string) {
 	sec := `# temp file created by conversion_test.go
 apiVersion: v1
 data:
   password: aWFtdGVhbWI=
 kind: Secret
 metadata:
-  name: `+nm+`
-  namespace: `+nsnm+`
+  name: ` + nm + `
+  namespace: ` + nsnm + `
 type: Opaque`
 	MustApplyYAML(sec)
 	RunShouldContain(nm, propagationTime, "kubectl get secrets -n", nsnm)

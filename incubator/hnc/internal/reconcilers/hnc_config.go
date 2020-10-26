@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -451,7 +452,6 @@ func (r *ConfigReconciler) loadNamespaceConditions(inst *api.HNCConfiguration) {
 		}
 	}
 
-	status := []api.ConditionAndAffectedNamespaces{}
 	// Use 'AllConditions' here to make sure we clear (set to 0) conditions in the
 	// metrics.
 	for tp, reasons := range api.AllConditions {
@@ -461,19 +461,25 @@ func (r *ConfigReconciler) loadNamespaceConditions(inst *api.HNCConfiguration) {
 			if len(nsnms) == 0 {
 				continue
 			}
+			// Sort namespaces and only set the first 3 namespaces in the condition if
+			// there are more than 3.
 			sort.Strings(nsnms)
-			status = append(status, api.ConditionAndAffectedNamespaces{
-				Type:       tp,
-				Reason:     reason,
-				Namespaces: nsnms,
-			})
+			l := len(nsnms)
+			// Message for 2 or 3 affected namespaces, e.g.
+			// 2 namespaces "d", "e" are affected by "ParentMissing"
+			msg := fmt.Sprintf("%d namespaces \"%s\" are affected by %q", l, strings.Join(nsnms, "\", \""), reason)
+			switch {
+			case l > 3:
+				nsnms = nsnms[:3]
+				// Message for more than 3 affected namespaces, e.g.
+				// 4 namespaces "b", "c", "d" ... are affected by "ParentMissing"
+				msg = fmt.Sprintf("%d namespaces \"%s\" ... are affected by %q", l, strings.Join(nsnms, "\", \""), reason)
+			case l == 1:
+				// Message for 1 affected namespace.
+				msg = fmt.Sprintf("Namespaces %q is affected by %q", nsnms[0], reason)
+			}
+			r.writeCondition(inst, api.ConditionNamespace, tp, msg)
 		}
-	}
-
-	if len(status) > 0 {
-		inst.Status.NamespaceConditions = status
-	} else {
-		inst.Status.NamespaceConditions = nil
 	}
 }
 
