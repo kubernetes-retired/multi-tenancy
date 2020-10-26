@@ -147,7 +147,7 @@ func enterVCShell(kbFilePath, ns, name string) error {
 	c := exec.Command(os.Getenv("SHELL"))
 	c.Env = append(os.Environ(),
 		fmt.Sprintf("KUBECONFIG=%v", kbFilePath),
-		fmt.Sprintf("PS1=[\\u@vc:\033[01;32m%s/%s\033[00m \\W]\\$ ", ns, name),
+		fmt.Sprintf("PS1=[\\u@vc:\\[\033[01;32m\\]%s/%s\\[\033[00m\\] \\W]\\$ ", ns, name),
 	)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
