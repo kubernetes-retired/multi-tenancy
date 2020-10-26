@@ -117,9 +117,13 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 		// If this is a selector change, and the new selector is not valid, we'll deny this operation
 		if err != nil {
 			msg := fmt.Sprintf("Invalid Kubernetes labelSelector: %s", err)
-			return deny(metav1.StatusReasonInvalid, msg)
+			return deny(metav1.StatusReasonBadRequest, msg)
 		}
-
+		err = validateTreeSelectorChange(inst, oldInst)
+		if err != nil {
+			msg := fmt.Sprintf("Invalid HNC %q value: %s", api.AnnotationTreeSelector, err)
+			return deny(metav1.StatusReasonBadRequest, msg)
+		}
 		// TODO(@ginnyji): modify hasConflict so that it's aware of selectors
 		if yes, dnses := o.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, "\n  * ")
@@ -139,6 +143,16 @@ func validateSelectorChange(inst, oldInst *unstructured.Unstructured) error {
 		return nil
 	}
 	_, err := selectors.GetSelector(inst)
+	return err
+}
+
+func validateTreeSelectorChange(inst, oldInst *unstructured.Unstructured) error {
+	oldSelectorStr := selectors.GetTreeSelectorAnnotation(oldInst)
+	newSelectorStr := selectors.GetTreeSelectorAnnotation(inst)
+	if newSelectorStr == "" || oldSelectorStr == newSelectorStr {
+		return nil
+	}
+	_, err := selectors.GetTreeSelector(inst)
 	return err
 }
 

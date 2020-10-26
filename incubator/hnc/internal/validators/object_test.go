@@ -336,6 +336,79 @@ func TestUserChanges(t *testing.T) {
 				},
 			},
 		},
+	}, {
+		name: "Deny creation of object with invalid treeSelect annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationTreeSelector: "foo, $bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with valid treeSelect annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationTreeSelector: "foo, !bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny creation of object with invalid selector and valid treeSelect annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationSelector:     "$foo",
+						api.AnnotationTreeSelector: "!bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny creation of object with valid selector and invalid treeSelect annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationSelector:     "foo",
+						api.AnnotationTreeSelector: "$bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with valid selector and treeSelect annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationSelector:     "foo",
+						api.AnnotationTreeSelector: "!bar",
+					},
+				},
+			},
+		},
 	}}
 
 	for _, tc := range tests {
