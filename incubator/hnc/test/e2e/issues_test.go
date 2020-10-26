@@ -270,7 +270,7 @@ var _ = Describe("Issues", func() {
 	})
 })
 
-var _ = Describe("Issues that require repairing HNC", func() {
+var _ = Describe("Issues with bad anchors", func() {
 
 	const (
 		nsParent   = "parent"
@@ -336,5 +336,45 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 		MustNotRun("kubectl get ns", nsChild, "-o yaml")
 		MustNotRun("kubectl get ns", nsSubChild, "-o yaml")
+	})
+})
+
+var _ = Describe("Issues that require repairing HNC", func() {
+	const (
+		nsParent   = "parent"
+		nsChild    = "child"
+	)
+
+	BeforeEach(func() {
+		CheckHNCPath()
+		CleanupNamespaces(nsParent, nsChild)
+
+		// Ensure we're in a good state
+		RecoverHNC()
+	})
+
+	AfterEach(func() {
+		CleanupNamespaces(nsParent, nsChild)
+		RecoverHNC()
+	})
+
+	It("Should allow deletion of namespaces with propagated objects that can't be removed - issue #1214", func() {
+		// Create a simple structure and get an object propagated
+		MustRun("kubectl create ns", nsParent)
+		MustRun("kubectl create ns", nsChild)
+		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
+		MustRun("kubectl create role foo --verb get --resource pods -n", nsParent)
+		MustRun("kubectl get role foo -n", nsChild)
+
+		// Disable the webhook and put the child into an ActivitiesHalted state so that the secret can't
+		// be removed.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		MustRun("kubectl hns set", nsChild, "--parent nonexistent")
+		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns tree", nsChild)
+
+		// Restore the webhooks and verify that the namespace can be deleted
+		RecoverHNC()
+		MustRun("kubectl delete ns", nsChild)
+		MustNotRun("kubectl get ns", nsChild)
 	})
 })
