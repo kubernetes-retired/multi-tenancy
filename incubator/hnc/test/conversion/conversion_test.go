@@ -220,13 +220,17 @@ spec:
 		FieldShouldNotContain(hierCRD, nsB, hierSingleton, ".status.conditions", "code")
 	})
 
-	It("should convert HNCConfig", func() {
+	It("should convert default HNCConfig and remove all enforced types from spec and only show them in the status", func() {
 		// Convert
 		setupV1alpha2()
 
-		// Verify default resources in the new version.
+		// Verify new apiverison.
 		FieldShouldContainWithTimeout(configCRD, "", configSingleton, ".apiVersion", "v1alpha2", crdConversionTime)
-		FieldShouldContainMultiple(configCRD, "", configSingleton, ".spec.resources", []string{"roles", "rolebindings"})
+		// Verify the empty spec.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec", "resources")
+		// Verify the enforced resources are still in the new status.
+		FieldShouldContain(configCRD, "", configSingleton, ".status.resources", "resource:roles")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.resources", "resource:rolebindings")
 	})
 
 	It("should convert HNCConfig resources", func() {
@@ -277,13 +281,14 @@ spec:
 
 		// Verify resources conversion. Look for some text that was legal in v1alpha1 but
 		// isn't legal in v1alpha2 as a good first check to ensure conversion.
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "apiVersion")
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "kind")
-		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.types", "v1")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec", "apiVersion")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec", "kind")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec", "v1")
 
-		// Check all builtin resources conversions (same order as above)
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "group:rbac.authorization.k8s.io mode:Propagate resource:roles")
-		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "group:rbac.authorization.k8s.io mode:Propagate resource:rolebindings")
+		// Check all builtin resources conversions (same order as above). Note that
+		// enforced resources 'roles' and 'rolebindings' are omitted in v1a2 spec.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.resources", "resource:roles")
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec.resources", "resource:rolebindings")
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Propagate resource:secrets")
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Ignore resource:configmaps")
 		FieldShouldContain(configCRD, "", configSingleton, ".spec.resources", "mode:Remove resource:resourcequotas")
@@ -318,19 +323,19 @@ spec:
   - apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     mode: propagate
-  - apiVersion: rbac.authorization.k8s.io/v1
-    kind: Role
+  - apiVersion: v1
+    kind: WrongType
     mode: remove`
 		MustApplyYAML(cfg)
 		// Verify v1a1 condition with 'MultipleConfigurationsForOneType' code.
-		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:MultipleConfigurationsForOneType")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:ObjectReconcilerCreationFailed")
 
 		// Convert
 		setupV1alpha2()
 
 		// Verify v1a2 condition that replaces code with type and reason.
 		FieldShouldNotContain(configCRD, "", configSingleton, ".status.conditions", "code")
-		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "reason:MultipleConfigurationsForType status:True type:BadConfiguration")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "reason:ResourceNotFound status:True type:BadConfiguration")
 	})
 
 	It("should convert HNCConfig sync modes", func() {
@@ -379,6 +384,43 @@ spec:
 		// Verify sync mode behavior.
 		MustRun("kubectl -n", nsA, "create secret generic my-creds-2 --from-literal=password=iama")
 		RunShouldContainMultiple([]string{"my-creds-1", "my-creds-2"}, propagationTime, "kubectl get secrets -n", nsB)
+	})
+
+	It("should remove all enforced resources from HNCConfig spec and clear BadConfiguration conditions on them specifically if there's any", func() {
+		// Delete the webhook to introduce 'MultipleConfigurationsForOneType'
+		// condition in v1alpha1.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
+		// Set 'propagate', 'remove', unknown ('ignore') modes in v1alpha1
+		cfg := `# temp file created by conversion_test.go
+apiVersion: hnc.x-k8s.io/v1alpha1
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  types:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    mode: propagate`
+		MustApplyYAML(cfg)
+		// Verify condition
+		FieldShouldContain(configCRD, "", configSingleton, ".status.conditions", "code:MultipleConfigurationsForOneType")
+
+		// Convert
+		setupV1alpha2()
+
+		// Verify all (enforced) resources are gone in the spec, thus empty spec.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".spec", "resources")
+		// Verify all enforced resources are in the status.resources
+		FieldShouldContain(configCRD, "", configSingleton, ".status.resources", "resource:roles")
+		FieldShouldContain(configCRD, "", configSingleton, ".status.resources", "resource:rolebindings")
+		// Verify no conditions now since we don't convert any enforced types in spec.
+		FieldShouldNotContain(configCRD, "", configSingleton, ".status", "conditions")
 	})
 
 	It("should convert inheritedFrom label to 'inherited-from' on propagated objects", func() {

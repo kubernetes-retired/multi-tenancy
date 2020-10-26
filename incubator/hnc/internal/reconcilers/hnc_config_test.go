@@ -63,12 +63,14 @@ var _ = Describe("HNCConfiguration", func() {
 		cleanupObjects(ctx)
 	})
 
-	It("should set mode of Roles and RoleBindings as propagate by default", func() {
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
+	It("should have empty spec, and Roles and RoleBindings in propagate mode in status by default", func() {
+		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(testModeMisssing))
+		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(testModeMisssing))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
 	})
 
-	It("should propagate Roles by default", func() {
+	It("should propagate `roles` by default", func() {
 		setParent(ctx, barName, fooName)
 		// Give foo a role.
 		makeObject(ctx, api.RoleResource, fooName, "foo-role")
@@ -77,16 +79,12 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
 	})
 
-	It("should insert Roles if it does not exist", func() {
-		removeTypeConfig(ctx, api.RBACGroup, api.RoleResource)
+	It("should ignore the `roles` configuration in the spec and set `MultipleConfigurationsForType` condition", func() {
+		addToHNCConfig(ctx, api.RBACGroup, api.RoleResource, api.Ignore)
 
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
-	})
-
-	It("should set the mode of Roles to `propagate` if the mode is not `propagate`", func() {
-		updateTypeConfig(ctx, api.RBACGroup, api.RoleResource, api.Ignore)
-
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleResource))
 	})
 
 	It("should propagate RoleBindings by default", func() {
@@ -98,16 +96,12 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, api.RoleBindingResource, barName, "foo-role-binding")).Should(Equal(fooName))
 	})
 
-	It("should insert RoleBindings if it does not exist", func() {
-		removeTypeConfig(ctx, api.RBACGroup, api.RoleBindingResource)
+	It("should ignore the `rolebindings` configuration in the spec and set `MultipleConfigurationsForType` condition", func() {
+		addToHNCConfig(ctx, api.RBACGroup, api.RoleBindingResource, api.Ignore)
 
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
-	})
-
-	It("should set the mode of RoleBindings to `propagate` if the mode is not `propagate`", func() {
-		updateTypeConfig(ctx, api.RBACGroup, api.RoleBindingResource, api.Ignore)
-
-		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
+		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleBindingResource))
 	})
 
 	It("should unset ResourceNotFound condition if a bad type spec is removed", func() {

@@ -62,7 +62,12 @@ func (src *HNCConfiguration) ConvertTo(dstRaw conversion.Hub) error {
 			dtm = v1a2.Ignore
 		}
 		dr.Mode = dtm
-		dstSpecRscs = append(dstSpecRscs, dr)
+		// We will only convert non-enforced types since in v1a2 we removed the
+		// enforced types from spec. Having enforced types configured in the spec
+		// would cause 'MultipleConfigurationsForType' condition.
+		if !v1a2.IsEnforcedType(dr) {
+			dstSpecRscs = append(dstSpecRscs, dr)
+		}
 	}
 	dst.Spec.Resources = dstSpecRscs
 

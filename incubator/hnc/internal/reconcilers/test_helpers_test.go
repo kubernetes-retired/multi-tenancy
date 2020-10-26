@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
 // GVKs maps a resource to its corresponding GVK.
@@ -201,9 +200,7 @@ func resetHNCConfigToDefault(ctx context.Context) {
 		if err != nil {
 			return err
 		}
-		c.Spec = api.HNCConfigurationSpec{Resources: []api.ResourceSpec{
-			config.GetDefaultRoleSpec(),
-			config.GetDefaultRoleBindingSpec()}}
+		c.Spec.Resources = nil
 		c.Status.Resources = nil
 		c.Status.Conditions = nil
 		return k8sClient.Update(ctx, c)
