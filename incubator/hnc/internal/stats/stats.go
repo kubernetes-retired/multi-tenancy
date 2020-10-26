@@ -14,6 +14,7 @@ type object struct {
 	totalReconciles counter
 	curReconciles   counter
 	apiWrites       counter
+	totalOverwrites counter
 }
 
 type objects map[schema.GroupKind]*object
@@ -106,6 +107,14 @@ func WriteObject(gvk schema.GroupVersionKind) {
 	recordObjectMetric(stats.objects[gk].apiWrites, objectWritesTotal, gk)
 }
 
+// OverwriteObject updates the object stats by GK when writing the object.
+func OverwriteObject(gvk schema.GroupVersionKind) {
+	gk := gvk.GroupKind()
+	stats.objects[gk].totalOverwrites.incr()
+
+	recordObjectMetric(stats.objects[gk].totalOverwrites, objectOverwritesTotal, gk)
+}
+
 func init() {
 	objects := make(map[schema.GroupKind]*object)
 	peak = periodicPeak{
@@ -166,7 +175,8 @@ func logActivity(log logr.Logger, status string) {
 		"TotalHierConfigReconciles", stats.totalHierConfigReconciles,
 		"CurHierConfigReconciles", stats.curHierConfigReconciles,
 		"TotalObjReconciles", getTotalObjReconciles(),
-		"CurObjReconciles", getCurObjReconciles())
+		"CurObjReconciles", getCurObjReconciles(),
+		"ObjectOverwrites", getObjOverwrites())
 }
 
 func getTotalObjReconciles() counter {
@@ -191,6 +201,14 @@ func getObjWrites() counter {
 		writes += obj.apiWrites
 	}
 	return writes
+}
+
+func getObjOverwrites() counter {
+	var overwrites counter
+	for _, obj := range stats.objects {
+		overwrites += obj.totalOverwrites
+	}
+	return overwrites
 }
 
 func max(a counter, b counter) counter {

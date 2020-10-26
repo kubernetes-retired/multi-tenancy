@@ -377,7 +377,7 @@ func (r *ObjectReconciler) getTopSourceToPropagate(log logr.Logger, inst *unstru
 	for _, obj := range objs {
 		// If the source cannot propagate, ignore it.
 		// TODO: add a webhook rule to prevent e.g. removing a source finalizer that
-		//  would cause overwrting the source objects in the descendents.
+		//  would cause overwriting the source objects in the descendents.
 		//  See https://github.com/kubernetes-sigs/multi-tenancy/issues/1120
 		if !r.shouldPropagateSource(log, obj, inst.GetNamespace()) {
 			continue
@@ -394,6 +394,7 @@ func (r *ObjectReconciler) syncPropagated(log logr.Logger, inst, srcInst *unstru
 	// Delete this local source object from the forest if it exists. (This could
 	// only happen when we are trying to overwrite a conflicting source).
 	ns.DeleteSourceObject(r.GVK, inst.GetName())
+	stats.OverwriteObject(r.GVK)
 
 	// If no source object exists, delete this object. This can happen when the source was deleted by
 	// users or the admin decided this type should no longer be propagated.
