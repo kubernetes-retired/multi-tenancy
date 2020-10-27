@@ -171,8 +171,8 @@ make this feasible.
 > other at exactly the same time; the admission controller would allow this
 > (since neither is yet the parent of the other), leading to a cycle.
 > Alternatively, an admin might simply accidentally disable the admission
-> controllers. In such cases, HNC will put a critical condition on the
-> namespaces until the cycle is resolved._
+> controllers. In such cases, HNC will put an `ActivitiesHalted`
+> [condition](#admin-conditions) on the namespaces until the cycle is resolved._
 
 In the command line, you may set a namespace’s parent using the `kubectl-hns`
 plugin as follows: `kubectl hns set <child> --parent <parent>`. You can also
@@ -266,12 +266,14 @@ updated or deleted as quickly as possible. Similarly, if you change the parent
 of a namespace, any objects that no longer exist in the namespace’s ancestry
 will be deleted, and any new objects from that ancestry will be added.
 
-Every propagated object in HNC is given the `hnc.x-k8s.io/inheritedFrom` label.
+Every propagated object in HNC is given the `hnc.x-k8s.io/inherited-from` label.
 The value of this label indicates the namespace that contains the original
 object. The HNC admission controller will prevent you from adding or removing
 this label, but if you manage to add it, HNC will likely promptly delete the
 object (believing that the source object has been deleted), while if you manage
 to delete it, HNC will simply overwrite the object anyway.
+
+> _Note: in HNC v0.5, the `inherited-from` label was called `inheritedFrom`.
 
 <a name="basic-labels"/>
 
@@ -392,27 +394,42 @@ admin of B privileges to N, then ask that admin to make N a child of B.
 
 <a name="admin-conditions">
 
-### Conditions
+### Conditions and events
 
 As mentioned above, a **_condition_** is some kind of problem affecting a
-namespace or a propagated object. Conditions are reported as part of the status
-of the `HierarchicalConfiguration` object in each namespace, are summarized
-across the entire cluster in the status of the `HNCConfiguration` object, and
-are exposed via the `hnc/namespace_conditions` metric.
+namespace or cluster. Namespaces without any problems have all conditions
+removed.  Generally speaking, HNC's validating admission webhooks should prevent
+most conditions from ever occurring, but there some exceptions and corner cases.
+Conditions generally require human intervention to resolve, except as described
+below.
 
-Every condition contains a machine-readable code, a human-readable message, and
-an optional list of objects that are affected by the condition. For example:
+Namespace conditions are reported as part of the status of the
+`HierarchicalConfiguration` object in each namespace and are exposed via the
+`hnc/namespace_conditions` metric. Cluster conditions are reported as part of
+the status of the `HNCConfiguration` cluster-wide object; cluster conditions can
+either be caused by problems with the cluster-wide configuration, and are also
+used to summarize the _namespace_ conditions across the cluster.
 
-* The `CritCycle` condition is used if you somehow bypass the validating webhook
-  and create a cycle.
-* The `CannotPropagate` condition indicates that an object in this namespace
-  cannot be propagated to other namespaces. This condition is displayed in the
-  source namespace.
+HNC conditions follow a subset of the [standard Kubernetes condition
+schema](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition) with
+the following fields:
 
-Any condition that begins with the `Crit` prefix is a **_critical condition_**,
-and indicates that there’s a serious problem with the namespace that prevents
-normal HNC operation. Namespaces with critical conditions have the following
-properties:
+* **Type:** one of `ActivitiesHalted` or `BadConfiguration`. The former
+  indicates that there's a serious problem that prevents normal HNC operations
+  (see more details below), the latter informs cluster admins of a bad set of
+  configuration.
+* **Reason:** a machine-readable code such as `InCycle` or `ParentMissing` that
+  explains why the condition is present.
+* **Message:** a human-readable message with more information.
+
+Other standard condition fields, such as `LastTransitionTime` and `Status`, are
+unused.
+
+> _Note: HNC v0.5 used a non-standard condition schema with only one
+> machine-readable code. All codes that started with the `Crit` prefix
+> correspond to an `ActivitiesHalted` code in HNC v0.6._
+
+Namespaces with an `ActivitiesHalted` condition have the following properties:
 
 * Object propagation is disabled. That is, new objects will not be copied in,
   and obsolete objects will not be removed.
@@ -422,9 +439,21 @@ properties:
 When the condition is resolved, object propagation resumes.
 
 When the HNC restarts, there can be a short period during which spurious
-critical conditions may appear on namespaces as HNC restores its internal view
-of the cluster’s hierarchy. These are harmless and generally resolve themselves
-within 10-30 seconds for reasonably sized hierarchies.
+conditions may appear on namespaces as HNC restores its internal view of the
+cluster’s hierarchy. These are harmless and generally resolve themselves within
+10-30 seconds for reasonably sized hierarchies. In all other cases, conditions
+require human intervention to resolve.
 
-In all other cases, conditions require human intervention to resolve.
+In addition to problems with the namespaces themselves, HNC may encounter
+problems propagating (copying) objects out of source namespaces, or copying them
+into destination namespace. In such cases, HNC will generate a standard
+[`Event`](https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#event-v1-core)
+for that object, with the `.source.component` field set to `hnc.x-k8s.io`. You
+can either query such objects directly, or via `kubectl hns describe NAMESPACE`.
+The event will include machine-readable and human-readable information about the
+problem, and will generally require human intervention to resolve.
+
+> _Note: HNC v0.5 reported issues with objects as part of the non-standard
+> condition schema. These have been removed and replaced by standard Events in
+> HNC v0.6 since events are more standard, scalable and loggable.
 

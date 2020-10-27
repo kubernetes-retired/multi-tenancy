@@ -18,7 +18,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Uninstall HNC from a cluster](#admin-uninstall)
   * [Backing up and restoring HNC data](#admin-backup-restore)
   * [Administer who has access to HNC properties](#admin-access)
-  * [Modify the object types propagated by HNC](#admin-types)
+  * [Modify the resources propagated by HNC](#admin-resources)
   * [Gather metrics](#admin-metrics)
 
 <a name="use"/>
@@ -118,9 +118,35 @@ status: {}
 
 ### Inspect namespace hierarchies
 
-This section is under construction (as of May 2020). TL;DR: `kubectl hns tree <name>` and `kubectl hns describe <name>`.
+To get an overview of the hierarchy of your entire cluster, use one of the
+following variants of the `tree` command:
 
-TODO: explain conditions (eg get HNC to try to propagate a `cluster-admin` rolebinding).
+```bash
+kubectl hns tree --all-namespaces
+kubectl hns tree -A
+```
+
+You can also limit this display to a single subtree via:
+
+```bash
+kubectl hns tree ROOT_NAMESPACE
+```
+
+In addition to showing you the structure of your hierarchy, it will also give
+you high-level information on any problems with the hierarchies, known as
+[conditions](concepts.md#admin-conditions).
+
+For detailed information on any one namespace, including:
+
+* Its children
+* Its conditions
+* Any HNC problems with objects in the namespace
+
+Use the more detailed `describe` command:
+
+```bash
+kubectl hns describe NAMESPACE
+```
 
 <a name="use-propagate"/>
 
@@ -137,9 +163,9 @@ because this would result in the objects in the descendants being silently
 overwritten. HNC will also prevent you from changing the parent of a namespace
 if this would result in objects being overwritten.
 
-**WARNING: this guard against creating ancestor objects was only introduced in
-HNC v0.5.3. Earlier versions of HNC have inconsistent behaviour; see #1076 for
-details.**
+> **WARNING:** this guard against creating ancestor objects was only introduced in
+> HNC v0.5.3. Earlier versions of HNC have inconsistent behaviour; see #1076 for
+> details.
 
 However, if you bypass these admission controllers - for example, by updating
 objects while HNC is being upgraded - HNC _will_ overwrite conflicting objects
@@ -148,7 +174,7 @@ create a policy in an ancestor namespace, you can be confident that it will be
 uniformly applied to all descendant namespaces.
 
 HNC can also propagate objects other than RBAC objects, but only cluster
-administrators can modify this. See [here](#admin-types) for instructions.
+administrators can modify this. See [here](#admin-resources) for instructions.
 
 Occasionally, objects might fail to be propagated to descendant namespaces for a
 variety of reasons - e.g., HNC itself might not have sufficient RBAC
@@ -173,12 +199,6 @@ This section is under construction (as of Oct 2020). For now, please see the
 In order to delete a subnamespace, you must first have permissions to delete its
 anchor in its parent namespace. Ask your cluster administrator to give you this
 permission if you do not have it.
-
-**WARNING: the protections described in this section only work on clusters with
-Kubernetes 1.15 and higher installed. See [issue
-#688](https://github.com/kubernetes-sigs/multi-tenancy/issues/688) for details.
-In Kubernetes 1.14 and earlier, HNC is unable to stop you from deleting
-namespaces.**
 
 Subnamespaces are _always_ manipulated via their anchors. For example, you
 cannot delete a subnamespace by deleting it directly:
@@ -218,13 +238,13 @@ implicitly deleted, or any of their ancestors.
 
 The `allowCascadingDeletion` field is a bit like `rm -rf` in a Linux shell.
 
-> **WARNING: this option is very dangerous, so you should only set it on the lowest
-possible level of the hierarchy.**
+> **WARNING:** this option is very dangerous, so you should only set it on the
+> lowest possible level of the hierarchy.
 
-> **WARNING: any subnamespaces of the namespace you are deleting will also be
-deleted, and so will any subnamespaces of those namespaces, and so on. However,
-any _full_ namespaces that are descendants of a subnamespace will not be
-deleted.**
+> **WARNING:** any subnamespaces of the namespace you are deleting will also be
+> deleted, and so will any subnamespaces of those namespaces, and so on.
+> However, any _full_ namespaces that are descendants of a subnamespace will not
+> be deleted.
 
 > _Note: In HNC v0.5.x and earlier, HNC uses v1alpha1 API and this field is
 > called `allowCascadingDelete`._
@@ -348,7 +368,6 @@ export HNC_IMG_TAG=test-img
 #
 # NB: in HNC v0.5, you need `controller-gen` installed via kubebuilder.io for
 # this to work; this is not required in HNC v0.6.
-
 make deploy
 ```
 
@@ -365,10 +384,10 @@ kubectl delete validatingwebhookconfiguration.admissionregistration.k8s.io hnc-v
 
 You may also completely delete HNC, including its CRDs and namespaces. However,
 **this is a destructive process that results in some data loss.** In particular,
-you will lose any cluster-wide configuration in your `HNCConfig` object, as well
-as any hierarchical relationships between different namespaces, _excluding_
-subnamespaces (subnamespace relationships are saved as annotations on the
-namespaces themselves, and so can be recreated when HNC is reinstalled).
+you will lose any cluster-wide configuration in your `HNCConfiguration` object,
+as well as any hierarchical relationships between different namespaces,
+_excluding_ subnamespaces (subnamespace relationships are saved as annotations
+on the namespaces themselves, and so can be recreated when HNC is reinstalled).
 
 To avoid data loss, consider [backing up](#admin-backup-restore) your HNC
 objects so they can later be restored.
@@ -439,11 +458,12 @@ recreate recreate the anchors manually by typing `kubectl hns create <subns> -n
 HNC has three significant objects whose access administrators should carefully
 control:
 
-* The `HNCConfig` object. This is a single non-namespaced object (called `config`)
-  that defines the behaviour of the entire cluster. It should only be modifiable
-  by cluster administrators. In addition, since it may contain information about
-  any namespace in the cluster, it should only be readable by users trusted with
-  this information.
+* The `HNCConfiguration` object. This is a single non-namespaced object (named
+  `config`) that defines the behaviour of the entire cluster. It should only be
+  modifiable by cluster administrators. In addition, since it may contain
+  information about any namespace in the cluster, it should only be readable by
+  users trusted with this information. This object is automatically created by
+  HNC when it's installed.
 * The `HierarchyConfiguration` objects. There’s either zero or one of these in
   each namespace, with the name `hierarchy` if it exists. Any user with `update`
   access to this object is known as an [administrator](concepts.md#admin) of
@@ -470,50 +490,62 @@ would require them to set the `allowCascadingDeletion` property of the child
 namespace.
 
 <a name="admin-types"/>
+<a name="admin-resources"/>
 
-### Modify the object types propagated by HNC
+### Modify the resources propagated by HNC
 
-Starting from HNC v0.6, HNC supports the following propagation modes for each
-resource:
-* `Propagate`: propagates objects from ancestors to descendants and deletes
+HNC is configured via the [`HNCConfiguration`](#admin-access) object.  You can
+inspect this object directly via `kubectl get -oyaml hncconfiguration config`,
+or with the HNS plugin via `kubectl hns config describe`.
+
+The most important type of configuration is the way each object type
+("resource") is synchronized across namespace hierarchies. This is known as the
+"synchronization mode," and has the following options:
+
+* **Propagate:** propagates objects from ancestors to descendants and deletes
   obsolete descendants.
-* `Remove`: deletes all existing propagated copies.
-* `Ignore`: stops modifying this resource. New or changed objects will not be
-  propagated, and obsolete objects will not be deleted. The `inherited-from`
-  label is not removed. Any unknown mode is treated as `Ignore`.
+* **Remove:** deletes all existing propagated copies, but does not touch source
+  objects.
+* **Ignore:** stops modifying this resource. New or changed objects will not be
+  propagated, and obsolete objects will not be deleted. The
+  `hnc.x-k8s.io/inherited-from` label is not removed. Any unknown mode is
+  treated as `Ignore`. This is the default if a resource is not listed at all in
+  the config, except for RBAC roles and role bindings (see below).
 
 HNC enforces `roles` and `rolebindings` RBAC resources to have `Propagate` mode.
 Thus they are omitted in the `HNCConfiguration` spec and only show up in the
 status. You can also set any Kubernetes resource to any of the propagation modes
-discussed above. To do so, you need cluster privileges.
+discussed above. To do so, you need permission to update the `HNCConfiguration`
+object.
 
-Note: Before HNC v0.6, the propagation modes were in lower case (`propagate`,
-`remove`, `ignore`). The modes were set on types by `apiVersion` and `kind` instead
-of `group` and `resource`. The `Role` and `RoleBinding` RBAC kinds were also
-enforced but they were still left in the `HNCConfiguration` spec.
+> _Note: Before HNC v0.6, the propagation modes were in lower case (`propagate`,
+> `remove`, `ignore`). The modes were set on types by `apiVersion` and `kind`
+> instead of `group` and `resource`. The `Role` and `RoleBinding` RBAC kinds
+> were also enforced but they were still left in the `HNCConfiguration` spec._
 
-**WARNING: If you start propagating a new object type, HNC _cannot_ check
-whether there are conflicting objects in descendant namespaces, and will
-overwrite them. This will be fixed in HNC v0.6 (see #1102).**
+You can view the current set of resources being propagated, along with
+statistics, by saying `kubectl hns config describe`, or alternatively `kubectl
+get -oyaml hncconfiguration config`. This object is automatically created for
+you when HNC is first installed.
 
-To configure an object type using the kubectl plugin:
+To configure an object resource using the kubectl plugin:
 
 ```
-# Starting from HNC v0.6:
+# HNC v0.6:
 # "--group" can be omitted if the resource is a core K8s resource
 kubectl hns config set-resource [resource] --group [group] --mode [Propagate|Remove|Ignore]
 
-# Before HNC v0.6:
+# HNC v0.5:
 kubectl hns config set-type --apiVersion [apiVersion] --kind [kind] [propagate|remove|ignore]
 ```
 
 For example:
 
 ```
-# Starting from HNC v0.6:
+# HNC v0.6:
 kubectl hns config set-resource secrets --mode Propagate
 
-# Before HNC v0.6:
+# HNC v0.5:
 kubectl hns config set-type --apiVersion v1 --kind Secret propagate
 ```
 
@@ -521,30 +553,25 @@ To verify that this worked:
 
 ```
 kubectl hns config describe
-# Output starting from HNC v0.6:
+
+# Output from HNC v0.6:
 Synchronized types:
 * Propagating: roles (rbac.authorization.k8s.io/v1)
 * Propagating: rolebindings (rbac.authorization.k8s.io/v1)
 * Propagating: secrets (v1) # <<<< This should be added
 
-# Output before HNC v0.6:
+# Output from HNC v0.5:
 Synchronized types:
 * Propagating: Role (rbac.authorization.k8s.io/v1)
 * Propagating: RoleBinding (rbac.authorization.k8s.io/v1)
 * Propagating: Secret (v1) # <<<< This should be added
 ```
 
-To configure an object type without using the kubectl plugin, edit the existing
-`HNCConfiguration` object (HNC will autocreate it for you when it’s installed):
+You can also modify the config directly to include custom configurations via
+`kubectl edit hncconfiguration config`:
 
-```
-kubectl edit hncconfiguration config
-```
-
-Modify the config to include custom configurations:
-
-```
-# Starting from HNC v0.6:
+```yaml
+# HNC v0.6:
 apiVersion: hnc.x-k8s.io/v1alpha2
 kind: HNCConfiguration
 metadata:
@@ -555,8 +582,8 @@ spec:
     ...
     - resource: secrets   <<< This should be added
       mode: Propagate     <<<
-      
-# Before HNC v0.6:
+
+# HNC v0.5:
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HNCConfiguration
 metadata:
@@ -569,6 +596,27 @@ spec:
       kind: Secret     <<< This should be added
       mode: propagate  <<<
 ```
+
+Adding a new resource in the `Propagate` mode is potentially dangerous, since
+there could be existing objects of that resource type that would be overwritten
+by objects of the same name from ancestor namespaces. In HNC v0.5, it is up to
+the cluster administrator to avoid making any mistakes, but in HNC v0.6, the HNS
+plugin will not allow you to add a new resource in the `Propagate` mode.
+Instead, to do so safely:
+
+* Add the new resource in the `Remove` mode. This will remove any propagated
+  copies (of which there should be none) but will force HNC to start
+  synchronizing all known source objects.
+* Wait until `kubectl hns config describe` looks like it's identified the
+  correct number of objects of the newly added resource in its status.
+* Change the propagation mode from `Remove` to `Propagate`. HNC will then check
+  to see if any objects will be overwritten, and will not allow you to change
+  the propagation mode until all such conflicts are resolved.
+
+Alternatively, if you're certain you want to start propagating objects
+immediately, you can use the `--force` flag with `kubectl hns config
+set-resource` to add a resource directly in the `Propagate` mode. You can also
+edit the `config` object directly, which will bypass this protection.
 
 <a name="admin-metrics"/>
 
@@ -583,7 +631,7 @@ metrics to ensure that HNC stays healthy.
 
 |Metric                                                |Description   |
 |:---------------------------------------------------- |:-------------|
-| `hnc/namespace_conditions`                           | The number of namespaces affected by [conditions](concepts.md#admin-conditions), tagged by the condition code and whether or not the conditions are critical or not |
+| `hnc/namespace_conditions`                           | The number of namespaces affected by [conditions](concepts.md#admin-conditions), tagged with information about the condition |
 | `hnc/reconcilers/hierconfig/total`                   | The total number of HierarchyConfiguration (HC) reconciliations happened |
 | `hnc/reconcilers/hierconfig/concurrent_peak`         | The peak concurrent HC reconciliations happened in the past 60s, which is also the minimum Stackdriver reporting period and the one we're using |
 | `hnc/reconcilers/hierconfig/hierconfig_writes_total` | The number of HC writes happened during HC reconciliations |
@@ -603,38 +651,45 @@ Explorer](https://cloud.google.com/monitoring/charts/metrics-explorer) by
 searching the metrics keywords (e.g. `namespace_conditions`).
 
 In order to monitor metrics via Stackdriver:
+1. Save your some key information as environment variables. You may adjust these
+   values to suit your needs; there's nothing magical about them.
+   ```bash
+   GSA_NAME=hnc-metric-writer
+   PROJECT_ID=my-gcp-project
+
+   ```
 1. Enable Workload Identity (WI) on either a
    [new](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#enable_workload_identity_on_a_new_cluster)
    or
    [existing](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#enable_workload_identity_on_an_existing_cluster)
    cluster.
-2. Install HNC as described [above](#admin-install).
-3. [Create a Google service account (GSA)](https://cloud.google.com/docs/authentication/production#creating_a_service_account):
+1. Install HNC as described [above](#admin-install).
+1. [Create a Google service account (GSA)](https://cloud.google.com/docs/authentication/production#creating_a_service_account):
     ```bash
-    gcloud iam service-accounts create [GSA_NAME]
+    gcloud iam service-accounts create ${GSA_NAME}
     ```
-4. Grant “[Monitoring Metric Writer](https://cloud.google.com/monitoring/access-control#mon_roles_desc)”
+1. Grant “[Monitoring Metric Writer](https://cloud.google.com/monitoring/access-control#mon_roles_desc)”
 role to the GSA:
     ```bash
-    gcloud projects add-iam-policy-binding [PROJECT_ID] --member \
-      "serviceAccount:[GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com" \
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} --member \
+      "serviceAccount:${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
       --role "roles/monitoring.metricWriter"
     ```
-5. Create an [Cloud IAM policy binding](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/add-iam-policy-binding)
+1. Create an [Cloud IAM policy binding](https://cloud.google.com/sdk/gcloud/reference/iam/service-accounts/add-iam-policy-binding)
 between `hnc-system/default` KSA and the newly created GSA:
      ```
      gcloud iam service-accounts add-iam-policy-binding \
        --role roles/iam.workloadIdentityUser \
-       --member "serviceAccount:[PROJECT_ID].svc.id.goog[hnc-system/default]" \
-       [GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com
+       --member "serviceAccount:${PROJECT_ID}.svc.id.goog[hnc-system/default]" \
+       ${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
    ```
-6. Add the `iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID]` annotation to
+1. Add the `iam.gke.io/gcp-service-account=${GSA_NAME}@${PROJECT_ID}` annotation to
 the KSA, using the email address of the Google service account:
      ```
      kubectl annotate serviceaccount \
        --namespace hnc-system \
        default \
-       iam.gke.io/gcp-service-account=[GSA_NAME]@[PROJECT_ID].iam.gserviceaccount.com
+       iam.gke.io/gcp-service-account=${GSA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
    ```
 
 If everything is working properly, you should start to see metrics in the
