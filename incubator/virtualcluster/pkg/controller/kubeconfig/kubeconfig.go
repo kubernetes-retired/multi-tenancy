@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"strings"
 	"text/template"
 
@@ -84,7 +85,14 @@ func encodePrivateKeyPEM(private *rsa.PrivateKey) []byte {
 func generateKubeconfigUseCertAndKey(clusterName string, ips []string, apiserverCA *x509.Certificate, caPair *vcpki.CrtKeyPair, username string) (string, error) {
 	urls := make([]string, 0, len(ips))
 	for _, ip := range ips {
-		urls = append(urls, fmt.Sprintf("https://%v:6443", ip))
+		addr := net.ParseIP(ip)
+		if addr.To4() != nil {
+			// is ipv4
+			urls = append(urls, fmt.Sprintf("https://%v:6443", ip))
+		} else {
+			// is ipv6
+			urls = append(urls, fmt.Sprintf("https://[%v]:6443", ip))
+		}
 	}
 	ctx := map[string]string{
 		"ca":       base64.StdEncoding.EncodeToString(encodeCertPEM(apiserverCA)),
