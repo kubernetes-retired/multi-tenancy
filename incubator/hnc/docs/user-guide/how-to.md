@@ -163,8 +163,8 @@ destination (descendant) namespace.
 HNC inserts labels onto your namespaces to allow trees (and subtrees) of
 namespaces to be selected by policies such as `NetworkPolicy`.
 
-This section is under construction (as of Apr 2020). For now, please see
-[this demo](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64/edit#heading=h.9j9w6spvzkdn).
+This section is under construction (as of Oct 2020). For now, please see the
+[quickstart](quickstart.md#netpol).
 
 <a name="use-subns-delete"/>
 
@@ -324,17 +324,11 @@ namespaces (see [#680](https://github.com/kubernetes-sigs/multi-tenancy/issues/6
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
-#### Install an official release
+#### Install an official release and the kubectl plugin
 
 [The most recent official release is
 v0.5.3](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.3).
 Please see that page for release notes and installation instructions.
-
-#### Download the kubectl plugin
-
-The `kubectl-hns` plugin makes most HNC use and administration much easier; we
-strongly recommend installing it. To install it, please follow the instruction 
-on [Prepare to use hierarchical namespaces](#use-prepare).
 
 #### Install from source
 
@@ -348,9 +342,13 @@ export PROJECT_ID=my-gcp-project
 # A tag for the image you want to build (default is 'latest')
 export HNC_IMG_TAG=test-img
 
-# Build and deploy. Note: you need kubebuilder.io installed for this. This will
-# also build the kubectl-hns plugin and install it at ${GOPATH}/bin/kubectl-hns;
+# Build and deploy to the cluster identified by your current kubectl context. This will
+# also build the kubectl-hns plugin and install it at # ${GOPATH}/bin/kubectl-hns;
 # please ensure this path is in your PATH env var in order to use it.
+#
+# NB: in HNC v0.5, you need `controller-gen` installed via kubebuilder.io for
+# this to work; this is not required in HNC v0.6.
+
 make deploy
 ```
 
@@ -388,11 +386,6 @@ relationships and configuration settings:
 # if you delete the deployment first, the finalizers will never be removed
 # and you won't be able to delete the objects without explicitly removing
 # the finalizers first.
-#
-# NB: this process is somewhat broken in HNC v0.4.x. Upgrade to v0.5.x
-# before attempting this, or else be prepared to look for resources that
-# aren't deleted and manually remove their finalizers. See issue #824 for
-# more information.
 kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete crd
 
 # Delete the rest of HNC.
