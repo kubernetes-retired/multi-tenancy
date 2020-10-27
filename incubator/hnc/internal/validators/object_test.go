@@ -365,6 +365,34 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
+		name: "Deny creation of object with invalid noneSelect annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationNoneSelector: "foo",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with valid noneSelect annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationNoneSelector: "true",
+					},
+				},
+			},
+		},
+	}, {
 		name: "Deny creation of object with invalid selector and valid treeSelect annotation",
 		fail: true,
 		inst: &unstructured.Unstructured{

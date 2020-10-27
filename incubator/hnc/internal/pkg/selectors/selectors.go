@@ -4,6 +4,7 @@ package selectors
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +23,11 @@ func GetSelectorAnnotation(inst *unstructured.Unstructured) string {
 func GetTreeSelectorAnnotation(inst *unstructured.Unstructured) string {
 	annot := inst.GetAnnotations()
 	return annot[api.AnnotationTreeSelector]
+}
+
+func GetNoneSelectorAnnotation(inst *unstructured.Unstructured) string {
+	annot := inst.GetAnnotations()
+	return annot[api.AnnotationNoneSelector]
 }
 
 // GetTreeSelector is similar to a regular selector, except that it adds the LabelTreeDepthSuffix to every string
@@ -96,4 +102,25 @@ func getSelectorFromString(str string) (labels.Selector, error) {
 		return nil, err
 	}
 	return selector, nil
+}
+
+// GetNoneSelector returns true indicates that user do not want this object to be propagated
+func GetNoneSelector(inst *unstructured.Unstructured) (bool, error) {
+	noneSelectorStr := GetNoneSelectorAnnotation(inst)
+	// Empty string is treated as 'false'. In other selector cases, the empty string is auto converted to
+	// a selector that matches everything.
+	if noneSelectorStr == "" {
+		return false, nil
+	}
+	noneSelector, err := strconv.ParseBool(noneSelectorStr)
+	if err != nil {
+		// Returning false here in accordance to the Go standard
+		return false,
+			fmt.Errorf("invalid %s value: %w",
+				api.AnnotationNoneSelector,
+				err,
+			)
+
+	}
+	return noneSelector, nil
 }
