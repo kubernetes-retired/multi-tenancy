@@ -20,6 +20,7 @@ see below.
 * [How-to](how-to.md): Perform common tasks when working with HNC
 * [Concepts](concepts.md): Learn more about the ideas behind HNC
 * [Best practices](best-practices.md): learn about the best ways to deploy HNC
+* [FAQs](faq.md): contact us, requirements, limitations and whatnot
 
 ## Older user guides
 
