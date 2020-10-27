@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -749,6 +751,18 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int)
 	target.SetGroupVersionKind(r.GVK)
 	opts := controller.Options{
 		MaxConcurrentReconciles: maxReconciles,
+
+		// Unlike the other HNC reconcilers, the object reconciler can easily be affected by objects
+		// that do not directly cause reconciliations when they're modified - see, e.g.,
+		// https://github.com/kubernetes-sigs/multi-tenancy/issues/1154. To address this, replace the
+		// default exponential backoff with one with a 10s cap.
+		//
+		// I wanted to pick five seconds since I feel like that's about how much time it would take you to check
+		// to see if something's wrong, realize it hasn't been propagated, and then try again. However,
+		// the default etcd timeout is 10s, which apparently is a more realistic measure of how K8s can
+		// behave under heavy load, so I raised it to 10s during the PR review. The _average_ delay seen
+		// by users should still be about 5s though.
+		RateLimiter: workqueue.NewItemExponentialFailureRateLimiter(250*time.Millisecond, 10*time.Second),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(target).
