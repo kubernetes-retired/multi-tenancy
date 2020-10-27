@@ -650,20 +650,14 @@ func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger,
 // - Objects have a selector that doesn't match the destination namespace
 // - Service Account token secrets
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
-	selector, errSelector := selectors.GetSelector(inst)
-	// TODO: generate events for the errors
-	if errSelector != nil {
-		log.Error(errSelector, "Cannot propagate")
-	}
-	treeSelector, errTreeSelector := selectors.GetTreeSelector(inst)
-	if errTreeSelector != nil {
-		log.Error(errTreeSelector, "Cannot propagate")
-	}
-	noneSelector, errNoneSelector := selectors.GetNoneSelector(inst)
-	if errNoneSelector != nil {
-		log.Error(errNoneSelector, "Cannot propagate")
-	}
 	nsLabels := r.Forest.Get(dst).GetLabels()
+	if ok, err := selectors.ShouldPropagate(inst, nsLabels); err != nil {
+		// TODO: generate events for the errors
+		log.Error(err, "Cannot propagate")
+		return false
+	} else if !ok {
+		return false
+	}
 
 	switch {
 	// Users can set the mode of a type to "remove" to exclude objects of the type
@@ -673,22 +667,6 @@ func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstruct
 
 	// Object with nonempty finalizer list is not propagated
 	case hasFinalizers(inst):
-		return false
-
-	// Invalid selectors
-	case errSelector != nil || errTreeSelector != nil || errNoneSelector != nil:
-		return false
-
-	// None selector is set to true
-	case noneSelector:
-		return false
-
-	// Selector does not match
-	case selector != nil && !selector.Matches(nsLabels):
-		return false
-
-	// treeSelector does not match
-	case treeSelector != nil && !treeSelector.Matches(nsLabels):
 		return false
 
 	case r.GVK.Group == "" && r.GVK.Kind == "Secret":

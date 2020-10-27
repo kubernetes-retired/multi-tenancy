@@ -471,6 +471,7 @@ func TestCreatingConflictSource(t *testing.T) {
 		conflictNamespace string
 		newInstName       string
 		newInstNamespace  string
+		newInstAnnotation map[string]string
 		fail              bool
 	}{{
 		name:              "Deny creation of source objects with conflict in child",
@@ -492,6 +493,33 @@ func TestCreatingConflictSource(t *testing.T) {
 		name:             "Allow creation of source objects with no conflict",
 		newInstName:      "secret-a",
 		newInstNamespace: "a",
+	}, {
+		name:              "Allow creation of source objects with treeSelector not matching the conflicting child",
+		forest:            "-aa",
+		conflictInstName:  "secret-b",
+		conflictNamespace: "b",
+		newInstName:       "secret-b",
+		newInstNamespace:  "a",
+		newInstAnnotation: map[string]string{api.AnnotationTreeSelector: "c"},
+		fail:              false,
+	}, {
+		name:              "Allow creation of source objects with selector not matching the conflicting child",
+		forest:            "-aa",
+		conflictInstName:  "secret-b",
+		conflictNamespace: "b",
+		newInstName:       "secret-b",
+		newInstNamespace:  "a",
+		newInstAnnotation: map[string]string{api.AnnotationSelector: "c" + api.LabelTreeDepthSuffix},
+		fail:              false,
+	}, {
+		name:              "Allow creation of source objects with noneSelector set",
+		forest:            "-aa",
+		conflictInstName:  "secret-b",
+		conflictNamespace: "b",
+		newInstName:       "secret-b",
+		newInstNamespace:  "a",
+		newInstAnnotation: map[string]string{api.AnnotationNoneSelector: "true"},
+		fail:              false,
 	}}
 
 	for _, tc := range tests {
@@ -507,6 +535,7 @@ func TestCreatingConflictSource(t *testing.T) {
 			inst.SetName(tc.newInstName)
 			inst.SetNamespace(tc.newInstNamespace)
 			inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+			inst.SetAnnotations(tc.newInstAnnotation)
 			// Test
 			got := o.handle(context.Background(), l, op, inst, &unstructured.Unstructured{})
 			// Report

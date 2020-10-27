@@ -246,7 +246,12 @@ func (o *Object) hasConflict(inst *unstructured.Unstructured) (bool, []string) {
 	// Get a list of conflicting descendants if there's any.
 	for _, desc := range descs {
 		if o.Forest.Get(desc).HasSourceObject(gvk, nm) {
-			conflicts = append(conflicts, desc)
+			// If the user have chosen not to propagate the object to this descendant,
+			// there shouldn't be any conflict reported here
+			nsLabels := o.Forest.Get(inst.GetNamespace()).GetLabels()
+			if ok, _ := selectors.ShouldPropagate(inst, nsLabels); ok {
+				conflicts = append(conflicts, desc)
+			}
 		}
 	}
 
