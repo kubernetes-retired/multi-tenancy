@@ -480,17 +480,24 @@ namespace.
 
 ### Modify the object types propagated by HNC
 
-HNC supports following propagation modes for each object type:
-* propagate (the default): propagates objects from ancestors to descendants and
-  deletes obsolete descendants.
-* remove: deletes all existing propagated copies.
-* ignore: stops modifying this type. New or changed objects will not be
-  propagated, and obsolete objects will not be deleted. The `inheritedFrom` label
-  is not removed. Any unknown mode is treated as `ignore`.
+Starting from HNC v0.6, HNC supports the following propagation modes for each
+resource:
+* `Propagate`: propagates objects from ancestors to descendants and deletes
+  obsolete descendants.
+* `Remove`: deletes all existing propagated copies.
+* `Ignore`: stops modifying this resource. New or changed objects will not be
+  propagated, and obsolete objects will not be deleted. The `inherited-from`
+  label is not removed. Any unknown mode is treated as `Ignore`.
 
-HNC propagates `Roles` and `RoleBindings` by default. You can also set any type
-of Kubernetes resource to any of the propagation modes discussed above. To do
-so, you need cluster privileges.
+HNC enforces `roles` and `rolebindings` RBAC resources to have `Propagate` mode.
+Thus they are omitted in the `HNCConfiguration` spec and only show up in the
+status. You can also set any Kubernetes resource to any of the propagation modes
+discussed above. To do so, you need cluster privileges.
+
+Note: Before HNC v0.6, the propagation modes were in lower case (`propagate`,
+`remove`, `ignore`). The modes were set on types by `apiVersion` and `kind` instead
+of `group` and `resource`. The `Role` and `RoleBinding` RBAC kinds were also
+enforced but they were still left in the `HNCConfiguration` spec.
 
 **WARNING: If you start propagating a new object type, HNC _cannot_ check
 whether there are conflicting objects in descendant namespaces, and will
@@ -499,12 +506,22 @@ overwrite them. This will be fixed in HNC v0.6 (see #1102).**
 To configure an object type using the kubectl plugin:
 
 ```
-kubectl hns config set-type --apiVersion apiVersion --kind kind [propagate|remove|ignore]
+# Starting from HNC v0.6:
+# "--group" can be omitted if the resource is a core K8s resource
+kubectl hns config set-resource [resource] --group [group] --mode [Propagate|Remove|Ignore]
+
+# Before HNC v0.6:
+kubectl hns config set-type --apiVersion [apiVersion] --kind [kind] [propagate|remove|ignore]
 ```
 
 For example:
 
 ```
+# Starting from HNC v0.6:
+# "--group" can be omitted if the resource is a core K8s resource
+kubectl hns config set-resource secrets --mode Propagate
+
+# Before HNC v0.6:
 kubectl hns config set-type --apiVersion v1 --kind Secret propagate
 ```
 
@@ -512,7 +529,13 @@ To verify that this worked:
 
 ```
 kubectl hns config describe
-# Output:
+# Output starting from HNC v0.6:
+Synchronized types:
+* Propagating: roles (rbac.authorization.k8s.io/v1)
+* Propagating: rolebindings (rbac.authorization.k8s.io/v1)
+* Propagating: secrets (v1) # <<<< This should be added
+
+# Output before HNC v0.6:
 Synchronized types:
 * Propagating: Role (rbac.authorization.k8s.io/v1)
 * Propagating: RoleBinding (rbac.authorization.k8s.io/v1)
@@ -526,9 +549,22 @@ To configure an object type without using the kubectl plugin, edit the existing
 kubectl edit hncconfiguration config
 ```
 
-Modify the config to include custom type configurations:
+Modify the config to include custom configurations:
 
 ```
+# Starting from HNC v0.6:
+apiVersion: hnc.x-k8s.io/v1alpha2
+kind: HNCConfiguration
+metadata:
+  name: config
+spec:
+  resources:
+    # Spec for other resources
+    ...
+    - resource: secrets   <<< This should be added
+      mode: Propagate     <<<
+      
+# Before HNC v0.6:
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HNCConfiguration
 metadata:
