@@ -217,6 +217,9 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearConditions()
 
+	// Record whether the namespace is being deleted; this is useful for object validators.
+	ns.IsDeleting = !nsInst.DeletionTimestamp.IsZero()
+
 	// If there are any traces of v1alpha1 still around, fix them now (they'll be written back to the
 	// apiserver after this function's finished). Do this before reconciling anything else so that the
 	// rest of this function can assume that only v1alpha2 is present.
@@ -350,7 +353,7 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	// We could also add an exception to allow K8s SAs to override the object validator (and we
 	// probably should), but this prevents us from getting into a war with K8s and is sufficient for
 	// v0.5.
-	if pnm != "" && !nsInst.DeletionTimestamp.IsZero() {
+	if pnm != "" && ns.IsDeleting {
 		log.V(1).Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
 		pnm = ""
 	}

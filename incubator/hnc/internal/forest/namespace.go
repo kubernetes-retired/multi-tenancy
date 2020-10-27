@@ -51,6 +51,10 @@ type Namespace struct {
 	// tree label of itself. The key is the tree label without ".tree.hnc.x-k8s.io/depth" suffix.
 	// The value is the depth.
 	ExternalTreeLabels map[string]int
+
+	// IsDeleting is set to true if the namespace has a non-zero deletion timestamp. This allows the
+	// object validators to skip certain checks to allow the objects in a namespace to be emptied out.
+	IsDeleting bool
 }
 
 // Name returns the name of the namespace, of "<none>" if the namespace is nil.

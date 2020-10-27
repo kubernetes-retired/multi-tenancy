@@ -164,6 +164,16 @@ func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSo
 		return deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
 
 	case admissionv1beta1.Delete:
+		if o.isDeletingNS(oldInst) {
+			// There are few things more irritating in (K8s) life than having some stupid controller stop
+			// your namespace from being deleted. If there's an object in here and we've decided that the
+			// namespace should be deleted, then don't block anything!
+			//
+			// It's probably slightly safer to create a K8s client, actually load the namespace and check
+			// its deletion timestamp here. But it's much easier to just record this information in the
+			// namespace/HC reconciler and read it here.
+			return allow("allowing deletion of propagated object since namespace is being deleted")
+		}
 		return deny(metav1.StatusReasonForbidden, "Cannot delete object propagated from namespace \""+oldSource+"\"")
 
 	case admissionv1beta1.Update:
@@ -188,6 +198,18 @@ func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSo
 	// If you get here, it means the webhook config is misconfigured to include an operation that we
 	// actually don't support.
 	return deny(metav1.StatusReasonInternalError, "unknown operation: "+string(op))
+}
+
+// isDeletingNS returns true if the namespace of the object is already being deleted, based on the
+// in-memory forest.
+func (o *Object) isDeletingNS(inst *unstructured.Unstructured) bool {
+	o.Forest.Lock()
+	defer o.Forest.Unlock()
+	ns := o.Forest.Get(inst.GetNamespace())
+	if ns == nil {
+		return false
+	}
+	return ns.IsDeleting
 }
 
 // hasConflict checks if there's any conflicting objects in the descendants. Returns
