@@ -518,7 +518,6 @@ For example:
 
 ```
 # Starting from HNC v0.6:
-# "--group" can be omitted if the resource is a core K8s resource
 kubectl hns config set-resource secrets --mode Propagate
 
 # Before HNC v0.6:
