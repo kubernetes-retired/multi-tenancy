@@ -68,7 +68,7 @@ var treeCmd = &cobra.Command{
 		}
 
 		if hasSubnamespace {
-			fmt.Printf("[s] indicates subnamespaces.\n")
+			fmt.Printf("\n[s] indicates subnamespaces\n")
 		}
 
 		if len(footnotes) > 0 {
