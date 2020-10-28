@@ -202,8 +202,8 @@ func runShouldNotContainMultiple(offset int, substrs []string, seconds float64, 
 }
 
 func MustApplyYAML(s string){
-	filename := WriteTempFile(s)
-	defer RemoveFile(filename)
+	filename := writeTempFile(s)
+	defer removeFile(filename)
 	MustRun("kubectl apply -f", filename)
 }
 
@@ -336,7 +336,7 @@ func RecoverHNC() {
 	CleanupNamespaces(a, b)
 }
 
-func WriteTempFile(cxt string) string {
+func writeTempFile(cxt string) string {
 	f, err := ioutil.TempFile(os.TempDir(), "e2e-test-*.yaml")
 	Expect(err).Should(BeNil())
 	defer f.Close()
@@ -344,7 +344,7 @@ func WriteTempFile(cxt string) string {
 	return f.Name()
 }
 
-func RemoveFile(path string) {
+func removeFile(path string) {
 	Expect(os.Remove(path)).Should(BeNil())
 }
 

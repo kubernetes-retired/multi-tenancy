@@ -5,7 +5,6 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
 
@@ -104,8 +103,6 @@ var _ = Describe("Quickstart", func() {
 	})
 
 	It("Should intergrate hierarchical network policy", func(){
-		GinkgoT().Log("WARNING: IF THIS TEST FAILS, PLEASE CHECK THAT THE NETWORK POLICY IS ENABLED ON THE TEST CLUSTER")
-
 		MustRun("kubectl create ns", nsOrg)
 		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
 		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
@@ -113,18 +110,23 @@ var _ = Describe("Quickstart", func() {
 		MustRun("kubectl hns create", nsService2, "-n", nsTeamA)
 		// create a web service s2 in namespace service-2, and a client pod client-s1 in namespace service-1 that can access this web service
 		MustRun("kubectl run s2 -n", nsService2, "--image=nginx --restart=Never --expose --port 80")
-		clientArgs := "-i --image=alpine --restart=Never --rm -- sh -c"
-		cmdln := "\"wget -qO- --timeout 2 http://s2.service-2\""
-		// at least 20 seconds is needed here from experiments 
-		RunShouldContain("Welcome to nginx!", 20, 
-			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
-			"kubectl run client -n", nsTeamA, clientArgs, cmdln)
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
-			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
 
-		// create a default network policy that blocks any ingress from other namespaces 
-		policy := `# temp file created by quickstart_test.go
+		// Ensure that we can access the service from various other namespaces
+		const (
+			clientCmd = "kubectl run client -n"
+			alpineArgs = "-i --image=alpine --restart=Never --rm -- sh -c"
+
+			// These need to be separate from alpineArgs because RunCommand only understands quoted args
+			// if the double-quotes appears at the beginning and end of a single string.
+			wgetArgs = "\"wget -qO- --timeout 2 http://s2.service-2\""
+		)
+		// Up to 20 seconds is needed for the service to first come up from experiments
+		RunShouldContain("Welcome to nginx!", 20, clientCmd, nsService1, alpineArgs, wgetArgs)
+		RunShouldContain("Welcome to nginx!", defTimeout, clientCmd, nsTeamA, alpineArgs, wgetArgs)
+		RunShouldContain("Welcome to nginx!", defTimeout, clientCmd, nsTeamB, alpineArgs, wgetArgs)
+
+		// create a default network policy in the root namespace that blocks any ingress from other namespaces
+		policy := `# quickstart_test.go: netpol to block access across namespaces
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
@@ -137,33 +139,35 @@ spec:
   - from:
     - podSelector: {}`
 
-		filename := WriteTempFile(policy)
-		defer RemoveFile(filename)
-		MustRun("kubectl apply -f", filename)
-		// ensure this policy can be propagated to its descendants
+		MustApplyYAML(policy)
+		// Enable propagation for netpols and wait for it to get propagated at least to service-1
 		MustRun("kubectl hns config set-resource networkpolicies --group networking.k8s.io --mode Propagate --force")
-		expected := "deny-from-other-namespaces"
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsOrg)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamB)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService1)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
+		RunShouldContain("deny-from-other-namespaces", defTimeout, "kubectl get netpol -n", nsService1)
 
 		// Now we’ll see that we can no longer access service-2 from the client in service-1. If we can,
 		// that probably means that network policies aren't enabled on this cluster (e.g. Kind, GKE by
 		// default) and we should skip the rest of this test.
-		netpolTestStdout := ""
-		Eventually(func() error {
-			stdout, err := RunCommand("kubectl run client -n", nsService1, clientArgs, cmdln)
-			netpolTestStdout = stdout
-			return err
-		}).Should(Succeed())
-		if !strings.Contains(netpolTestStdout, "wget: download timed out") {
+		//
+		// The standard matching functions won't work here because we're looking for a particular error
+		// string, but we don't want to fail if we've found it. So use the default timeout (2s) by
+		// trying up to three times with a 1s gap in between.
+		netpolWorks := false
+		for i:=0; !netpolWorks && i<3; i++ {
+			// This command will return a non-nil error if it works correctly
+			stdout, _ := RunCommand(clientCmd, nsService1, alpineArgs, wgetArgs)
+			if strings.Contains(stdout, "wget: download timed out") {
+				netpolWorks = true
+			}
+			time.Sleep(1 * time.Second)
+		}
+		if !netpolWorks {
 			Skip("Basic network policies don't appear to be working; skipping the netpol quickstart")
 		}
 
-		// create a second network policy that will allow all namespaces within team-a to be able to communicate with each other
-		policy = `# temp file created by quickstart_test.go
+		// create a second network policy that will allow all namespaces within team-a to be able to
+		// communicate with each other, and wait for it to be propagated to the descendant we want to
+		// test.
+		policy = `# quickstart_test.go: netpol to allow communication within team-a subtree
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
@@ -178,21 +182,12 @@ spec:
         matchExpressions:
           - key: 'team-a.tree.hnc.x-k8s.io/depth'
             operator: Exists`
-
-		filename2 := WriteTempFile(policy)
-		defer RemoveFile(filename2)
-		MustRun("kubectl apply -f", filename2)
-
-		expected = "allow-team-a"
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsTeamA)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService1)
-		RunShouldContain(expected, defTimeout, "kubectl get netpol -n", nsService2)
+		MustApplyYAML(policy)
+		RunShouldContain("allow-team-a", defTimeout, "kubectl get netpol -n", nsService1)
 
 		// Now, we can access the service from other namespaces in team-a, but not outside of it:
-		RunShouldContain("Welcome to nginx!", cleanupTimeout, 
-			"kubectl run client -n", nsService1, clientArgs, cmdln)
-		RunErrorShouldContain("wget: download timed out", cleanupTimeout, 
-			"kubectl run client -n", nsTeamB, clientArgs, cmdln)
+		RunShouldContain("Welcome to nginx!", defTimeout, clientCmd, nsService1, alpineArgs, wgetArgs)
+		RunErrorShouldContain("wget: download timed out", defTimeout, clientCmd, nsTeamB, alpineArgs, wgetArgs)
 	})
 
 	It("Should create and delete subnamespaces", func(){
