@@ -247,7 +247,6 @@ spec:
                       description: The API version used by HNC when propagating this resource.
                       type: string
                   required:
-                  - group
                   - resource
                   - version
                   type: object

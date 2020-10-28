@@ -100,7 +100,7 @@ type ResourceSpec struct {
 // ResourceStatus defines the actual synchronization state of a specific resource.
 type ResourceStatus struct {
 	// The API group of the resource being synchronized.
-	Group string `json:"group"`
+	Group string `json:"group,omitempty"`
 
 	// The API version used by HNC when propagating this resource.
 	Version string `json:"version"`
