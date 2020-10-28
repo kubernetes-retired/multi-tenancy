@@ -36,7 +36,7 @@ greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin.
 
 You can install the plugin by following the instructions for the [latest
-release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.3).
+release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.6.0).
 
 <a name="use-subns-create">
 
@@ -347,7 +347,7 @@ release notes for that version.
 #### Install an official release and the kubectl plugin
 
 [The most recent official release is
-v0.5.3](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.5.3).
+v0.6.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.6.0).
 Please see that page for release notes and installation instructions.
 
 #### Install from source
