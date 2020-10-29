@@ -38,9 +38,14 @@ that anyone can use, but without leaking personal access tokens._
 
 Ensure that the [user guide](user-guide/) is up-to-date with all the latest or
 changed features. _This must be done on the master branch **before** creating
-the release branch._ The user guide should contain instructions for at least the
-last two minor releases of HNC - e.g., if you're about to release v0.6, do not
-remove documentation for HNC v0.4 yet.
+the release branch._ The user guide should usually contain instructions for at
+least the last two minor releases of HNC - e.g., if the current version is v0.5,
+it should contain instructions for both v0.4 and v0.5. But if you're _about_ to
+release v0.6, then you should:
+
+* In the master docs README, add a link to the v0.4 version of the user guide.
+* Delete everything about v0.4
+* Add all new information for v0.6.
 
 ## Create a release branch
 
@@ -80,9 +85,10 @@ names apply to this repo, which includes non-HNC projects.
 ### Create a release in Github
 
 1. Ensure that the Github tag name is `hnc-$HNC_IMG_TAG`, like `hnc-v0.1.0-rc1`.
-2. Follow the pattern in earlier releases in the description - e.g. include
-   installation instructions, key new features, a detailed change log, and known
-   issues.
+2. Start by copying the text from earlier releases - e.g., include installation
+   instructions, key new features, a detailed change log, known issues, and a
+   test signoff grid. Modify it as appropriate for your new release. The test
+   signoff grid will start out empty.
 3. Add a "**RELEASE IN PROGRESS, DO NOT USE**" warning to the top of the
    description.
 4. If this is a release candidate, mark the release as pre-production.
@@ -114,16 +120,27 @@ this](https://cloud.google.com/cloud-build/docs/securing-builds/use-encrypted-se
 
 ## Test
 
-Test! At a minimum, install it onto a cluster, download the kubectl plugin, and
-run:
+Fill in the test signoff grid in the release notes. We generally test on the
+three GKE channels (rapid, regular and stable) as well as the latest KIND
+version.
+
+To test GKE, ensure you've (manually) downloaded the kubectl plugin according to
+your release instructions, set your kubectl context to point to the cluster
+you're testing, install HNC, then run:
 
 ```bash
 export HNC_REPAIR=<path to installable YAML; https is fine>
-make e2e-test
+make test-e2e
 ```
 
-This will take around 15m or so. It might also be prudent to run through the
-demo (soon to be part of the e2e test as well).
+This will take up to 30m per cluster. As each cluster passes, update the test
+grid.
+
+If you've previously tested a release candidate and then have built a new
+"final" image with no changes, you don't have to fully re-test - just copy the
+signoff grid from the RC notes, modify their results to say "(as RC1)" (for
+example), and then rerun the e2e tests on _one_ cluster. That should be enough
+coverage.
 
 ## Update docs
 
@@ -133,27 +150,39 @@ warning. If this was a release candidate, you're done.
 Otherwise, update the [README](../README.md#start) and [user
 guide](user-guide/how-to.md#admin-install) to refer to your new release.
 
-Finally, if this is a minor (not patch) release, remove any obsolete
-documentation from the guide - e.g., if you've just released 0.6, you can remove
-references to 0.4. Add a link in the [front page](user-guide/README.md) to the
-guide on the branch that you've just removed.
-
-On the other hand, if this was a patch release _and you need to document
-something_, ensure you document it on _both_ the master _and_ the release
-branch.
-
-We may revise this guidance as HNC matures.
+If this was a patch release _and you need to document something_, ensure you
+document it on _both_ the master _and_ the release branch.
 
 ## Update Krew
 
 Starting with HNC v0.6.x, the build process also generates a Krew tarball and
 manifest. This manifest should be downloaded and checked into the Krew index,
-*if* it's for the latest branch. E.g. if you've already released HNC v0.7.0 and
-have to release HNC v0.6.1, do *not* update the Krew index; Krew can only
-support one version of a plugin at a time so we should only support the most
-recent branch.
+*if* it's for the latest branch (and is not a release candidate). E.g. if you've
+already released HNC v0.7.0 and have to release HNC v0.6.1, do *not* update the
+Krew index; Krew can only support one version of a plugin at a time so we should
+only support the most recent branch.
 
-More details on updating Krew TBD.
+Once the Krew manifest has been generated, [test it
+locally](https://krew.sigs.k8s.io/docs/developer-guide/testing-locally/):
+download the manifest and try to install it via `kubectl krew install
+--manifest=FILENAME` (do _not_ override the archive as you want to use the
+released archive). Once it's working, create a PR to
+https://github.com/kubernetes-sigs/krew-index, such as [this
+one](https://github.com/kubernetes-sigs/krew-index/pull/890).
+
+If you like, you can strike out the Krew installation instructions on the
+release notes until this PR is approved (include a link to the PR in the release
+notes page until that's done). You don't have to do this if the _last_ version
+of the Krew plugin will still work with the newest version of HNC.
+
+## Mark the release as ready
+
+In the Github UI, go back to the release notes and remove the "do not use"
+warning message. If this is not an RC, remove the "this is prerelease" checkmark
+so that this becomes the default release shown to users.
+
+If you're still waiting for the Krew PR to be approved, remember to go back and
+update the release notes once that's done.
 
 ## Track usage
 

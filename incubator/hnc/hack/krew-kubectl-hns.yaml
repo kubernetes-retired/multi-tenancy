@@ -5,8 +5,37 @@ metadata:
 spec:
   shortDescription: Manage hierarchical namespaces (part of HNC)
   description: |
-    Manipulates hierarchical namespaces provided by the Hierarchical Namespace Controller (HNC).
+    Manipulates hierarchical namespaces provided by the Hierarchical Namespace
+    Controller (HNC).
+
+    HNC allows you to arrange your namespaces into hierarchies, which enables
+    two key benefits:
+    * Users without cluster-level permissions to create namespaces can create
+      restricted "subnamespaces" instead.
+    * Owners of parent namespaces can create policies that are enforced on
+      all descendant namespaces.
+
+    HNC is controlled via regular Kubernetes objects, but this plugin makes it
+    easy to create subnamespaces, arrange regular (full) namespaces into
+    hierarchies, and configure HNC to propagate different kinds of objects.
   version: HNC_IMG_TAG
+  caveats: |
+    This plugin requires the most recent minor version of HNC on your cluster. Get it at:
+      https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-HNC_IMG_TAG
+    or via:
+      kubectl apply -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-HNC_IMG_TAG/hnc-manager.yaml
+
+    This version of the plugin uses the HNC v1alpha2 API, and is not compatible
+    with HNC v0.5.x, which only provides v1alpha1. If you need the plugin for
+    HNC v0.5.x, please follow the installation directions from the release page
+    for your version.
+
+    Watch out for the following common misconceptions when using HNC:
+
+    * Not all child namespaces are subnamespaces!
+    * Only RBAC Roles and RoleBindings are propagated by default, but you can configure more
+
+    The user guide contains much more information.
   homepage: https://github.com/HNC_RELEASE_REPO_OWNER/multi-tenancy/tree/master/incubator/hnc/docs/user-guide
   platforms:
   - uri: https://github.com/HNC_RELEASE_REPO_OWNER/multi-tenancy/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
