@@ -3,6 +3,7 @@ package validators
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -165,17 +166,37 @@ func TestNonRBACTypes(t *testing.T) {
 
 func TestPropagateConflict(t *testing.T) {
 	tests := []struct {
-		name         string
-		inNamespaces string
-		allow        bool
+		name   string
+		forest string
+		// inNamespace contains the namespaces we are creating the objects in
+		inNamespace string
+		// noPropagation contains the namespaces where the objects would have a noneSelector
+		noPropogation string
+		allow         bool
+		errContain    string
 	}{{
-		name:         "Objects with the same name existing in namespaces that one is not an ancestor of the other would not cause overwriting conflict",
-		inNamespaces: "bc",
-		allow:        true,
+		name:        "Objects with the same name existing in namespaces that one is not an ancestor of the other would not cause overwriting conflict",
+		forest:      "-aa",
+		inNamespace: "bc",
+		allow:       true,
 	}, {
-		name:         "Objects with the same name existing in namespaces that one is an ancestor of the other would have overwriting conflict",
-		inNamespaces: "ab",
-		allow:        false,
+		name:        "Objects with the same name existing in namespaces that one is an ancestor of the other would have overwriting conflict",
+		forest:      "-aa",
+		inNamespace: "ab",
+		allow:       false,
+	}, {
+		name:          "Should not cause a conflict if the object in the parent namespace has an exceptions selector that choose not to propagate to the conflicting child namespace",
+		forest:        "-aa",
+		inNamespace:   "ab",
+		noPropogation: "a",
+		allow:         true,
+	}, {
+		name:          "Should identify the real conflicting source when there are multiple conflicting sources but only one gets propagated",
+		forest:        "-ab",
+		inNamespace:   "abc",
+		noPropogation: "a",
+		allow:         false,
+		errContain:    "Object \"my-creds\" in namespace \"b\" would overwrite the one in \"c\"",
 	}}
 
 	for _, tc := range tests {
@@ -185,8 +206,7 @@ func TestPropagateConflict(t *testing.T) {
 				{Group: "", Resource: "secrets", Mode: "Propagate"}}
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: configs}}
 			c.Name = api.HNCConfigSingleton
-			// Create a forest with "a" as the parent and "b" and "c" as the children.
-			f := foresttest.Create("-aa")
+			f := foresttest.Create(tc.forest)
 			config := &HNCConfig{
 				translator: fakeGRTranslator{},
 				Forest:     f,
@@ -194,16 +214,22 @@ func TestPropagateConflict(t *testing.T) {
 			}
 
 			// Add source objects to the forest.
-			inst := &unstructured.Unstructured{}
-			inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
-			inst.SetName("my-creds")
-			for _, c := range tc.inNamespaces {
-				f.Get(string(c)).SetSourceObject(inst)
+			for _, ns := range tc.inNamespace {
+				inst := &unstructured.Unstructured{}
+				inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+				inst.SetName("my-creds")
+				if strings.Contains(tc.noPropogation, string(ns)) {
+					inst.SetAnnotations(map[string]string{api.AnnotationNoneSelector: "true"})
+				}
+				f.Get(string(ns)).SetSourceObject(inst)
 			}
 			got := config.handle(context.Background(), c)
 
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))
+			if tc.errContain != "" {
+				g.Expect(strings.Contains(got.AdmissionResponse.Result.Message, tc.errContain))
+			}
 		})
 	}
 }
