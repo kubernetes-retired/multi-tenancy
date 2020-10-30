@@ -15,6 +15,23 @@ import (
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 )
 
+func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set) (bool, error) {
+	if sel, err := GetSelector(inst); err != nil {
+		return false, err
+	} else if sel != nil && !sel.Matches(nsLabels) {
+		return false, nil
+	}
+	if sel, err := GetTreeSelector(inst); err != nil {
+		return false, err
+	} else if sel != nil && !sel.Matches(nsLabels) {
+		return false, nil
+	}
+	if none, err := GetNoneSelector(inst); err != nil || none {
+		return false, err
+	}
+	return true, nil
+}
+
 func GetSelectorAnnotation(inst *unstructured.Unstructured) string {
 	annot := inst.GetAnnotations()
 	return annot[api.AnnotationSelector]
