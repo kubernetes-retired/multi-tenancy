@@ -28,3 +28,8 @@ Create a pod or container that sets `allowPrivilegeEscalation` to `true` in its 
 
 Define a `PodSecurityPolicy` with `allowPrivilegeEscalation` set to `false` and map the policy to each tenant&#39;s namespace,  or use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to prevent privilege escalation. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 
+
+**namespaceRequired:** 
+
+1
+

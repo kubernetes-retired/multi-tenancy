@@ -19,6 +19,7 @@ type Benchmark struct {
 	Status        string `yaml:"status"`
 	Rationale     string `yaml:"rationale"`
 	Audit         string `yaml:"audit"`
+	NamespaceRequired int `yaml:"namespaceRequired"`
 	PreRun        func(types.RunOptions) error
 	Run           func(types.RunOptions) error
 	PostRun       func(types.RunOptions) error

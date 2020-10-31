@@ -28,3 +28,8 @@ Create a deployment and an associated service exposing a NodePort. The service c
 
 Use a policy engine such as [OPA/Gatekeeper](https://github.com/open-policy-agent/gatekeeper) or [Kyverno](https://kyverno.io) to block NodePort Services. You can use the policies present [here](https://github.com/kubernetes-sigs/multi-tenancy/tree/master/benchmarks/kubectl-mtb/test/policies).
 
+
+**namespaceRequired:** 
+
+1
+

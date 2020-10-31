@@ -17,6 +17,7 @@ package kubectl
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"strings"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
@@ -102,7 +102,7 @@ func reportSuiteDidEnd(suiteSummary *reporter.SuiteSummary, reportersArray []rep
 }
 
 func removeBenchmarksWithIDs(ids []string) {
-	temp := []*benchmark.Benchmark{}
+	var temp []*benchmark.Benchmark
 	for _, benchmark := range benchmarks {
 		found := false
 		for _, id := range ids {
@@ -143,10 +143,7 @@ func validateFlags(cmd *cobra.Command) error {
 	return nil
 }
 
-func runTests(cmd *cobra.Command, args []string) error {
-
-	benchmarkRunOptions.Label, _ = cmd.Flags().GetString("labels")
-	// Get log level
+func setupLogger(cmd *cobra.Command) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	if debug {
 		benchmarkRunOptions.Logger = log.GetLogger(true)
@@ -154,11 +151,70 @@ func runTests(cmd *cobra.Command, args []string) error {
 		// default mode production
 		benchmarkRunOptions.Logger = log.GetLogger(false)
 	}
+}
 
+func setupReporters(cmd *cobra.Command) ([]reporter.Reporter, error) {
 	// Get reporters from the user
 	reporterFlag, _ := cmd.Flags().GetString("out")
 	reporters := strings.Split(reporterFlag, ",")
-	reportersArray, err := reporter.GetReporters(reporters)
+	return reporter.GetReporters(reporters)
+}
+
+func executePreRun(b *benchmark.Benchmark, suiteSummary *reporter.SuiteSummary, ts *reporter.TestSummary) {
+	err := b.PreRun(benchmarkRunOptions)
+	if err != nil {
+		benchmarkRunOptions.Logger.Debug(err.Error())
+		suiteSummary.NumberOfFailedValidations++
+		ts.Validation = false
+		ts.ValidationError = err
+		b.Status = "Error"
+	}
+}
+
+func executeRun(b *benchmark.Benchmark, suiteSummary *reporter.SuiteSummary, ts *reporter.TestSummary) {
+	if ts.Validation {
+		err := b.Run(benchmarkRunOptions)
+		if err != nil {
+			benchmarkRunOptions.Logger.Debug(err.Error())
+			suiteSummary.NumberOfFailedTests++
+			ts.Test = false
+			ts.TestError = err
+			b.Status = "Fail"
+		} else {
+			suiteSummary.NumberOfPassedTests++
+			b.Status = "Pass"
+		}
+	}
+}
+
+func executePostRun(b *benchmark.Benchmark, suiteSummary *reporter.SuiteSummary, ts *reporter.TestSummary) {
+	if ts.Test {
+		if b.PostRun != nil {
+			err := b.PostRun(benchmarkRunOptions)
+			if err != nil {
+				fmt.Print(err.Error())
+			}
+		}
+	}
+}
+
+func shouldSkipTest(b *benchmark.Benchmark, suiteSummary *reporter.SuiteSummary, ts *reporter.TestSummary) bool {
+	if b.NamespaceRequired > 1 {
+		if benchmarkRunOptions.OtherNamespace != "" && benchmarkRunOptions.OtherTenant != "" {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func runTests(cmd *cobra.Command, args []string) error {
+
+	benchmarkRunOptions.Label, _ = cmd.Flags().GetString("labels")
+	// Get log level
+	setupLogger(cmd)
+
+	reportersArray, err := setupReporters(cmd)
 	if err != nil {
 		return err
 	}
@@ -192,40 +248,17 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 		startTest := time.Now()
 
-		//Run Prerun
-		err = b.PreRun(benchmarkRunOptions)
-		if err != nil {
-			benchmarkRunOptions.Logger.Debug(err.Error())
-			suiteSummary.NumberOfFailedValidations++
-			ts.Validation = false
-			ts.ValidationError = err
-			b.Status = "Error"
+		if shouldSkipTest(b, suiteSummary, ts) {
+			continue
 		}
 
-		// Check PreRun status
-		if ts.Validation {
-			err = b.Run(benchmarkRunOptions)
-			if err != nil {
-				benchmarkRunOptions.Logger.Debug(err.Error())
-				suiteSummary.NumberOfFailedTests++
-				ts.Test = false
-				ts.TestError = err
-				b.Status = "Fail"
-			} else {
-				suiteSummary.NumberOfPassedTests++
-				b.Status = "Pass"
-			}
-		}
+		// Lifecycles
+		executePreRun(b, suiteSummary, ts)
 
-		// Check Run status
-		if ts.Test {
-			if b.PostRun != nil {
-				err = b.PostRun(benchmarkRunOptions)
-				if err != nil {
-					fmt.Print(err.Error())
-				}
-			}
-		}
+		executeRun(b, suiteSummary, ts)
+
+		executePostRun(b, suiteSummary, ts)
+
 		elapsed := time.Since(startTest)
 		ts.RunTime = elapsed
 		reportTestWillRun(ts, reportersArray)
@@ -245,6 +278,8 @@ func newRunCmd() *cobra.Command {
 	runCmd.Flags().String("as", "", "(required) user name to impersonate")
 	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")
 	runCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
+	runCmd.Flags().String("other-namespace", "", "(optional) other tenant namespace")
+	runCmd.Flags().String("other-tenant-admin","", "(optional) other tenant admin")
 	runCmd.Flags().StringP("labels", "l", "", "(optional) labels")
 
 	return runCmd

@@ -32,3 +32,8 @@ kubectl --kubeconfig=tenant-a -n a1 describe quota
 
 Create ResourceQuota object, you can use the configuration file present in `quotas` directory, example `kubectl apply -f test/quotas/ns_quota.yaml`
 
+
+**namespaceRequired:** 
+
+1
+
