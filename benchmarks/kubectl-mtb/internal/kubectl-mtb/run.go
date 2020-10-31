@@ -17,7 +17,6 @@ package kubectl
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"strings"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/internal/reporter"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/log"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
