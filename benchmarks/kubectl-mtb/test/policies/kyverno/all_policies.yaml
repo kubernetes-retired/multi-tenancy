@@ -212,8 +212,27 @@ spec:
           kinds:
             - Pod
       validate:
+        message: "image pull policy should be Always"
         pattern:
           spec:
             containers:
               - (name): "*"
                 imagePullPolicy: "Always"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: pvc-reclaim-policy-as-delete
+spec:
+  validationFailureAction: enforce
+  rules:
+    - name: pvc-reclaim-policy-as-delete
+      match:
+        resources:
+          kinds:
+            - PersistentVolume
+      validate:
+        message: "persistentVolumeReclaimPolicy should be Delete"
+        pattern:
+          spec:
+            =(persistentVolumeReclaimPolicy): "Delete"
