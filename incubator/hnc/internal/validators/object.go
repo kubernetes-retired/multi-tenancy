@@ -112,21 +112,22 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	// source can be created without causing any conflict.
 	if !oldInherited && !newInherited {
 		// check selector format
-		err := validateSelectorChange(inst, oldInst)
 		// If this is a selector change, and the new selector is not valid, we'll deny this operation
-		if err != nil {
+		if err := validateSelectorChange(inst, oldInst); err != nil {
 			msg := fmt.Sprintf("Invalid Kubernetes labelSelector: %s", err)
 			return deny(metav1.StatusReasonBadRequest, msg)
 		}
-		err = validateTreeSelectorChange(inst, oldInst)
-		if err != nil {
+		if err := validateTreeSelectorChange(inst, oldInst); err != nil {
 			msg := fmt.Sprintf("Invalid HNC %q value: %s", api.AnnotationTreeSelector, err)
 			return deny(metav1.StatusReasonBadRequest, msg)
 		}
-		err = validateNoneSelectorChange(inst, oldInst)
-		if err != nil {
+		if err := validateNoneSelectorChange(inst, oldInst); err != nil {
 			return deny(metav1.StatusReasonBadRequest, err.Error())
 		}
+		if msg := validateSelectorUniqueness(inst, oldInst); msg != "" {
+			return deny(metav1.StatusReasonBadRequest, msg)
+		}
+
 		if yes, dnses := o.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, "\n  * ")
 			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)
@@ -136,6 +137,36 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	}
 	// This is a propagated object.
 	return o.handleInherited(op, newSource, oldSource, inst, oldInst)
+}
+
+func validateSelectorUniqueness(inst, oldInst *unstructured.Unstructured) string {
+	sel := selectors.GetSelectorAnnotation(inst)
+	treeSel := selectors.GetTreeSelectorAnnotation(inst)
+	noneSel := selectors.GetNoneSelectorAnnotation(inst)
+
+	oldSel := selectors.GetSelectorAnnotation(oldInst)
+	oldTreeSel := selectors.GetTreeSelectorAnnotation(oldInst)
+	oldNoneSel := selectors.GetNoneSelectorAnnotation(oldInst)
+
+	isSelectorChange := oldSel != sel || oldTreeSel != treeSel || oldNoneSel != noneSel
+	if !isSelectorChange {
+		return ""
+	}
+	found := []string{}
+	if sel != "" {
+		found = append(found, api.AnnotationSelector)
+	}
+	if treeSel != "" {
+		found = append(found, api.AnnotationTreeSelector)
+	}
+	if noneSel != "" {
+		found = append(found, api.AnnotationNoneSelector)
+	}
+	if len(found) <= 1 {
+		return ""
+	}
+	msg := "cannot have more than one selector at the same time, but got multiple: %v"
+	return fmt.Sprintf(msg, strings.Join(found, ", "))
 }
 
 func validateSelectorChange(inst, oldInst *unstructured.Unstructured) error {
