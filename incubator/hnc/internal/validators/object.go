@@ -127,7 +127,6 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 		if err != nil {
 			return deny(metav1.StatusReasonBadRequest, err.Error())
 		}
-		// TODO(@ginnyji): modify hasConflict so that it's aware of selectors
 		if yes, dnses := o.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, "\n  * ")
 			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)

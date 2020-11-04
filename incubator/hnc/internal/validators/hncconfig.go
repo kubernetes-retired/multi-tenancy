@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
@@ -153,19 +154,23 @@ func (c *HNCConfig) checkConflictsForGVK(gvk schema.GroupVersionKind) []string {
 	return conflicts
 }
 
+// checkConflictsForTree check for all the gvk objects in the given namespaces, to see if they
+// will be potentially overwritten by the objects on the ancestor namespaces
 func (c *HNCConfig) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancestorObjects, ns *forest.Namespace) []string {
 	conflicts := []string{}
+	// make a local copy of the ancestorObjects so that the original copy doesn't get modified
 	objs := ao.copy()
 	for _, o := range ns.GetSourceObjects(gvk) {
 		onm := o.GetName()
-		objs.add(onm, ns)
-		// If there are more than just the one (current) namespace we just added,
-		// there may be conflicts.
-		if objs.hasConflict(onm) {
-			// Currently the top conflicting ancestor would overwrite the object.
-			// TODO: check if this is a real conflict
-			conflicts = append(conflicts, fmt.Sprintf("  Object %q in namespace %q would overwrite the one in %q", onm, objs.top(onm), ns.Name()))
+		// If there exists objects with the same name and gvk, check if there will be overwriting conflict
+		for _, nnm := range objs[onm] {
+			// check if the existing ns will propagate this object to the current ns
+			inst := c.Forest.Get(nnm).GetSourceObject(gvk, onm)
+			if ok, _ := selectors.ShouldPropagate(inst, ns.GetLabels()); ok {
+				conflicts = append(conflicts, fmt.Sprintf("  Object %q in namespace %q would overwrite the one in %q", onm, nnm, ns.Name()))
+			}
 		}
+		objs.add(onm, ns)
 	}
 	// This is cycle-free and safe because we only start the
 	// "checkConflictsForTree" from roots in the forest with cycles omitted and
@@ -213,14 +218,6 @@ func (a ancestorObjects) copy() ancestorObjects {
 
 func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
 	a[onm] = append(a[onm], ns.Name())
-}
-
-func (a ancestorObjects) hasConflict(onm string) bool {
-	return len(a[onm]) > 1
-}
-
-func (a ancestorObjects) top(onm string) string {
-	return a[onm][0]
 }
 
 // realGRTranslator implements grTranslator, and is not used during unit tests.
