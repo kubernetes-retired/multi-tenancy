@@ -423,8 +423,8 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
-		name: "Allow creation of object with valid selector and treeSelect annotation",
-		fail: false,
+		name: "Deny creation of object with both selector and treeSelect annotation",
+		fail: true,
 		inst: &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "v1",
@@ -433,6 +433,36 @@ func TestUserChanges(t *testing.T) {
 					"annotations": map[string]interface{}{
 						api.AnnotationSelector:     "foo",
 						api.AnnotationTreeSelector: "!bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow object with multiple selectors if it's not a selector change",
+		fail: false,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationSelector:     "foo",
+						api.AnnotationTreeSelector: "!bar",
+					},
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationSelector:     "foo",
+						api.AnnotationTreeSelector: "!bar",
+					},
+					"status": map[string]interface{}{
+						"message": "hello",
 					},
 				},
 			},
