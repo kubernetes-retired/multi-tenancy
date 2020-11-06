@@ -100,9 +100,9 @@ func TestDeleteOwnerNamespace(t *testing.T) {
 		c.UpdateAllowCascadingDeletion(true)
 		// Test
 		got = vns.handle(req)
-		// Report - Should allow deleting the parent namespace since both subnamespaces allow cascading deletion.
+		// Report - Shouldn't allow deleting the parent namespace since parent namespace is not set to allow cascading deletion.
 		logResult(t, got.AdmissionResponse.Result)
-		g.Expect(got.AdmissionResponse.Allowed).Should(BeTrue())
+		g.Expect(got.AdmissionResponse.Allowed).Should(BeFalse())
 
 		// Unset allowCascadingDeletion on one child but set allowCascadingDeletion on the parent itself.
 		c.UpdateAllowCascadingDeletion(false)
