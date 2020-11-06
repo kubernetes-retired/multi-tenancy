@@ -36,7 +36,7 @@ var wellKnownNodeLabelsMap = map[string]struct{}{
 	v1.LabelHostname:   {},
 }
 
-func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
+func NewVirtualNode(superMasterNode *v1.Node, vnAgentPort int32) *v1.Node {
 	now := metav1.Now()
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -68,8 +68,7 @@ func NewVirtualNode(superMasterNode *v1.Node) *v1.Node {
 	n.Status.NodeInfo.OperatingSystem = "Linux"
 	n.Status.DaemonEndpoints = v1.NodeDaemonEndpoints{
 		KubeletEndpoint: v1.DaemonEndpoint{
-			// vn-agent service port. Hard coded for now.
-			Port: 10550,
+			Port: vnAgentPort,
 		},
 	}
 

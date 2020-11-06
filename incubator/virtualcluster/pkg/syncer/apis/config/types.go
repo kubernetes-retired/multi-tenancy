@@ -51,6 +51,9 @@ type SyncerConfiguration struct {
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
 
+	// VNAgentPort defines the port that the VN Agent is running on per host
+	VNAgentPort int32
+
 	// Super master rest config
 	RestConfig *rest.Config
 }

@@ -106,7 +106,7 @@ func (c *controller) BackPopulate(key string) error {
 			if !errors.IsNotFound(err) {
 				return err
 			}
-			_, err = tenantClient.CoreV1().Nodes().Create(context.TODO(), node.NewVirtualNode(n), metav1.CreateOptions{})
+			_, err = tenantClient.CoreV1().Nodes().Create(context.TODO(), node.NewVirtualNode(n, c.config.VNAgentPort), metav1.CreateOptions{})
 			if err != nil && !errors.IsAlreadyExists(err) {
 				return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
 			}
