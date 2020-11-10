@@ -50,7 +50,6 @@ func init() {
 		configmap.NewConfigMapController,
 		endpoints.NewEndpointsController,
 		event.NewEventController,
-		ingress.NewIngressController,
 		namespace.NewNamespaceController,
 		node.NewNodeController,
 		persistentvolume.NewPVController,
