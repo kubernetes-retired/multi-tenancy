@@ -42,6 +42,8 @@ import (
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
 )
 
 type controller struct {
@@ -68,6 +70,8 @@ type controller struct {
 	clusterVNodePodMap map[string]map[string]map[string]struct{}
 	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
 	vNodeGCGracePeriod time.Duration
+	// vnodeProvider manages vnode object.
+	vnodeProvider vnode.VirtualNodeProvider
 }
 
 type VirtulNodeDeletionPhase string
@@ -95,6 +99,7 @@ func NewPodController(config *config.SyncerConfiguration,
 		clusterVNodePodMap: make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:  make(map[string]map[string]VNodeGCStatus),
 		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
+		vnodeProvider:      native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
 	var mcOptions *mc.Options
 	if options == nil || options.MCOptions == nil {
@@ -273,6 +278,12 @@ func (c *controller) updateClusterVNodePodMap(clusterName, nodeName, requestUID 
 			klog.Warningf("The nodename %s of deleted pod %s in cluster (%s) is not found in clusterVNodePodMap", nodeName, requestUID, clusterName)
 		}
 	}
+}
+
+func (c *controller) SetVNodeProvider(provider vnode.VirtualNodeProvider) {
+	c.Lock()
+	c.vnodeProvider = provider
+	c.Unlock()
 }
 
 func (c *controller) AddCluster(cluster mc.ClusterInterface) {

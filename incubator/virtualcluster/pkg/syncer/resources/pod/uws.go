@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/node"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
 )
 
 // StartUWS starts the upward syncer
@@ -106,7 +106,11 @@ func (c *controller) BackPopulate(key string) error {
 			if !errors.IsNotFound(err) {
 				return err
 			}
-			_, err = tenantClient.CoreV1().Nodes().Create(context.TODO(), node.NewVirtualNode(n, c.config.VNAgentPort), metav1.CreateOptions{})
+			vn, err := vnode.NewVirtualNode(c.vnodeProvider, n)
+			if err != nil {
+				return fmt.Errorf("failed to create virtual node %s in cluster %s from provider: %v", pPod.Spec.NodeName, clusterName, err)
+			}
+			_, err = tenantClient.CoreV1().Nodes().Create(context.TODO(), vn, metav1.CreateOptions{})
 			if err != nil && !errors.IsAlreadyExists(err) {
 				return fmt.Errorf("failed to create virtual node %s in cluster %s with err: %v", pPod.Spec.NodeName, clusterName, err)
 			}
