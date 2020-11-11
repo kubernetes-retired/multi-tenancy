@@ -22,9 +22,10 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
 )
 
 // StartUWS starts the upward syncer
@@ -98,13 +99,8 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 		return
 	}
 
-	vNode := vNodeObj.(*v1.Node)
-	newVNode := vNode.DeepCopy()
-	newVNode.Status.Conditions = node.Status.Conditions
-
-	_, _, err = patchNodeStatus(tenantClient.CoreV1().Nodes(), types.NodeName(node.Name), vNode, newVNode)
-	if err != nil {
+	if err := vnode.UpdateNodeStatus(tenantClient.CoreV1().Nodes(), node, vNodeObj.(*v1.Node)); err != nil {
 		klog.Errorf("failed to update node %s/%s's heartbeats: %v", clusterName, node.Name, err)
-		return
 	}
+	return
 }

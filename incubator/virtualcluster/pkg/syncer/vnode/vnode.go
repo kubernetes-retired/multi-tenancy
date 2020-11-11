@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2020 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,13 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package node
+package vnode
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	pkgerr "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,17 +31,17 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
-var wellKnownNodeLabelsMap = map[string]struct{}{
-	v1.LabelOSStable:   {},
-	v1.LabelArchStable: {},
-	v1.LabelHostname:   {},
+// NodeProvider is the interface used for registering the node address.
+type VirtualNodeProvider interface {
+	GetNodeDaemonEndpoints(node *v1.Node) (v1.NodeDaemonEndpoints, error)
+	GetNodeAddress(node *v1.Node) ([]v1.NodeAddress, error)
 }
 
-func NewVirtualNode(superMasterNode *v1.Node, vnAgentPort int32) *v1.Node {
+func NewVirtualNode(provider VirtualNodeProvider, node *v1.Node) (vnode *v1.Node, err error) {
 	now := metav1.Now()
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: superMasterNode.Name,
+			Name: node.Name,
 		},
 		Spec: v1.NodeSpec{
 			Unschedulable: true,
@@ -57,35 +58,39 @@ func NewVirtualNode(superMasterNode *v1.Node, vnAgentPort int32) *v1.Node {
 	labels := map[string]string{
 		constants.LabelVirtualNode: "true",
 	}
-	for k, v := range superMasterNode.GetLabels() {
+	for k, v := range node.GetLabels() {
 		if _, isWellKnown := wellKnownNodeLabelsMap[k]; isWellKnown {
 			labels[k] = v
 		}
 	}
 	n.SetLabels(labels)
 
+	// fill in status
 	n.Status.Conditions = nodeConditions()
 	n.Status.NodeInfo.OperatingSystem = "Linux"
-	n.Status.DaemonEndpoints = v1.NodeDaemonEndpoints{
-		KubeletEndpoint: v1.DaemonEndpoint{
-			Port: vnAgentPort,
-		},
+	de, err := provider.GetNodeDaemonEndpoints(node)
+	if err != nil {
+		return nil, pkgerr.Wrapf(err, "get node daemon endpoints from provider")
+	}
+	n.Status.DaemonEndpoints = de
+
+	na, err := provider.GetNodeAddress(node)
+	if err != nil {
+		return nil, pkgerr.Wrapf(err, "get node address from provider")
 	}
 
-	var addresses []v1.NodeAddress
-	for _, a := range superMasterNode.Status.Addresses {
-		// notes: drop host name address because tenant apiserver using cluster dns.
-		// It could not find the node by hostname through this dns.
-		if a.Type != v1.NodeHostName {
-			addresses = append(addresses, a)
-		}
-	}
-	n.Status.Addresses = addresses
-	n.Status.NodeInfo = superMasterNode.Status.NodeInfo
-	n.Status.Capacity = superMasterNode.Status.Capacity
-	n.Status.Allocatable = superMasterNode.Status.Allocatable
+	n.Status.Addresses = na
+	n.Status.NodeInfo = node.Status.NodeInfo
+	n.Status.Capacity = node.Status.Capacity
+	n.Status.Allocatable = node.Status.Allocatable
 
-	return n
+	return n, nil
+}
+
+var wellKnownNodeLabelsMap = map[string]struct{}{
+	v1.LabelOSStable:   {},
+	v1.LabelArchStable: {},
+	v1.LabelHostname:   {},
 }
 
 func nodeConditions() []v1.NodeCondition {
@@ -131,6 +136,14 @@ func nodeConditions() []v1.NodeCondition {
 			Message:            "RouteController created a route",
 		},
 	}
+}
+
+func UpdateNodeStatus(client v1core.NodeInterface, node, vNode *v1.Node) error {
+	newVNode := vNode.DeepCopy()
+	newVNode.Status.Conditions = node.Status.Conditions
+
+	_, _, err := patchNodeStatus(client, types.NodeName(node.Name), vNode, newVNode)
+	return err
 }
 
 // patchNodeStatus patches node status.
