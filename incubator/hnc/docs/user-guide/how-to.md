@@ -51,7 +51,7 @@ To create a subnamespace “child” underneath parent “parent” using the ku
 plugin:
 
 ```
-$ kubectl hns create child -nparent
+$ kubectl hns create child -n parent
 ```
 
 This creates an object called a subnamespace anchor in the parent namespace. HNC
