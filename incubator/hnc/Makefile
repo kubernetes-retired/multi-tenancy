@@ -54,10 +54,18 @@ else
 	HNC_IMG = ${HNC_IMG_NAME}:${HNC_IMG_TAG}
 endif
 
+# Determine the OS Name, linux/darwin
+OS_NAME := $(shell go env GOOS)
+
 # `make` must be called from the HNC root, or all kinds of things will break
 # (starting with this).
 CURDIR = $(shell pwd)
 KUSTOMIZE ?= ${CURDIR}/hack/kustomize-3.8.1
+
+ifeq ($(OS_NAME),darwin)
+	KUSTOMIZE = $(shell which kustomize)
+endif
+
 CONTROLLER_GEN ?= ${CURDIR}/bin/controller-gen
 
 # Enable CRD per-version validation. As of Kubernetes 1.13, we can have multiple
@@ -107,7 +115,7 @@ clean: krew-uninstall
 
 # Installs the Linux kubectl plugin to $GOPATH/bin, assume that this is in your PATH already.
 kubectl: build
-	cp bin/kubectl/kubectl-hns_linux_amd64 ${GOPATH}/bin/kubectl-hns
+	cp bin/kubectl/kubectl-hns_$(OS_NAME)_amd64 $(GOBIN)/kubectl-hns
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: build

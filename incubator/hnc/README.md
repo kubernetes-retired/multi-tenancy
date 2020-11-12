@@ -121,6 +121,12 @@ is configured to use the project containing the registry you want to use, and
 that you've previously run `gcloud auth configure-docker` so that Docker can use
 your GCP credentials.
 
+If you are developing on MacOS, you will need gnu-sed. Instructions are below:
+```
+brew install gnu-sed
+ln -s $(which gsed) /usr/local/bin/sed # sym link sed to gsed
+```
+
 ### Development Workflow
 
 Once HNC is installed via `make deploy` (see next sections), the development
