@@ -38,7 +38,7 @@ HNC is also supported by the following vendors:
 * Anthos: [install via ACM](https://cloud.google.com/anthos-config-management/docs/how-to/installing-hierarchy-controller)
 
 Once HNC is installed, you can try out the [HNC
-demos](https://docs.google.com/document/d/1tKQgtMSf0wfT3NOGQx9ExUQ-B8UkkdVZB6m4o3Zqn64)
+quickstart](https://bit.ly/hnc-quickstart)
 to get an idea of what HNC can do. Or, feel free to dive right into the [user
 guide](docs/user-guide) instead.
 
