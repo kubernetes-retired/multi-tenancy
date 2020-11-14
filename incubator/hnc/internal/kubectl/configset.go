@@ -18,6 +18,7 @@ package kubectl
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -38,7 +39,7 @@ var setResourceCmd = &cobra.Command{
 		flags := cmd.Flags()
 		group, _ := flags.GetString("group")
 		modeStr, _ := flags.GetString("mode")
-		mode := api.SynchronizationMode(modeStr)
+		mode := api.SynchronizationMode(normalizeModeString(modeStr))
 		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
@@ -72,6 +73,12 @@ var setResourceCmd = &cobra.Command{
 
 		client.updateHNCConfig(config)
 	},
+}
+
+// normalizeModeString corrects format of input Synchronization Mode string
+func normalizeModeString(modeStr string) string {
+	low := strings.ToLower(modeStr)
+	return strings.Title(low)
 }
 
 func newSetResourceCmd() *cobra.Command {
