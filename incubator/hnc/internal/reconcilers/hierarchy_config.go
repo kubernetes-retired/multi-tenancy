@@ -220,13 +220,6 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	// Record whether the namespace is being deleted; this is useful for object validators.
 	ns.IsDeleting = !nsInst.DeletionTimestamp.IsZero()
 
-	// If there are any traces of v1alpha1 still around, fix them now (they'll be written back to the
-	// apiserver after this function's finished). Do this before reconciling anything else so that the
-	// rest of this function can assume that only v1alpha2 is present.
-	// TODO: remove this after v0.6 branches.
-	r.upgradeV1A1SubnamespaceAnnotation(nsInst)
-	r.upgradeV1A1ManagedBy(nsInst)
-
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
 
@@ -288,50 +281,9 @@ func (r *HierarchyConfigReconciler) syncExternalNamespace(log logr.Logger, nsIns
 	ns.ExternalTreeLabels = etls
 }
 
-// upgradeV1A1SubnamespaceAnnotation replaces the deprecated "subnamespaceOf" annotation from v0.5.x
-// with the new "subnamespace-of" annotation used in v0.6.x and beyond. If both exist, we will only
-// delete the deprecated annotation.
-func (r *HierarchyConfigReconciler) upgradeV1A1SubnamespaceAnnotation(inst *corev1.Namespace) {
-	a := inst.GetAnnotations()
-	oldSubnsOf, oldExists := a[api.SubnamespaceOfV1A1]
-	if !oldExists {
-		return
-	}
-
-	// Remove old annotation
-	delete(a, api.SubnamespaceOfV1A1)
-
-	// Add new annotation key with the old value if it doesn't exist. There's a
-	// corner case if the namespace has the new (unknown to HNC v0.5) annotation
-	// before upgrading API, the new annotation will take over after upgrading.
-	if _, newExists := a[api.SubnamespaceOf]; !newExists {
-		a[api.SubnamespaceOf] = oldSubnsOf
-	}
-
-	inst.SetAnnotations(a)
-}
-
-// upgradeV1A1ManagedBy replaces the v1alpha1 `managedBy` annotation with the v1alpha2 `managed-by`
-// annotation. If there's a conflict, the old one is ignored.
-func (r *HierarchyConfigReconciler) upgradeV1A1ManagedBy(inst *corev1.Namespace) {
-	// Get old annotation
-	a := inst.GetAnnotations()
-	oldMB, oldExists := a[api.AnnotationManagedByV1A1]
-	if !oldExists {
-		return
-	}
-
-	// Add new annotation if it doesn't already exist
-	if _, newExists := a[api.AnnotationManagedBy]; !newExists {
-		a[api.AnnotationManagedBy] = oldMB
-	}
-
-	inst.SetAnnotations(a)
-}
-
 // syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
 // condition if the anchor is missing in the parent namespace according to the forest. The
-// subnamespaceOf annotation is the source of truth of the ownership (e.g. being a subnamespace),
+// subnamespace-of annotation is the source of truth of the ownership (e.g. being a subnamespace),
 // since modifying a namespace has higher privilege than what HNC users can do.
 func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	if ns.IsExternal() {

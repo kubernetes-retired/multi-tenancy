@@ -248,19 +248,6 @@ endif
 	go clean -testcache
 	go test -v -timeout 0 ./test/e2e/...
 
-# This test is for conversion from v1alpha1 to v1alpha2. It will run on any
-# cluster w/o HNC. It will tear down any existing HNC deployment before and
-# after the test.
-#
-# Note the `-timeout 0` that's passed to the `go test` command - by default, a
-# Go test suite has a 10m timeout, and the flag disables that timeout.
-.PHONY: test-conversion
-# Have the manifests and kubectl plugin ready for the current change but do not
-# apply it. It will be applied in the test.
-test-conversion: docker-push kubectl manifests
-	go clean -testcache
-	go test -v -timeout 0 ./test/conversion/...
-
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
 HNC_RELEASE_REGISTRY ?= gcr.io/k8s-staging-multitenancy

@@ -170,7 +170,7 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, fooName, fooName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
 
 		// Convert foo from an internal namespace to an external namespace by adding
-		// the "managedBy: others" annotation.
+		// the "managed-by: others" annotation.
 		ns := getNamespace(ctx, fooName)
 		ns.SetAnnotations(map[string]string{api.AnnotationManagedBy: "others"})
 		l := map[string]string{
@@ -216,7 +216,7 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, bazName, bazName+api.LabelTreeDepthSuffix)).Should(Equal("0"))
 
 		// Convert baz from an external namespace to an internal namespace by removing
-		// the "managedBy: others" annotation.
+		// the "managed-by: others" annotation.
 		ns := getNamespace(ctx, bazName)
 		ns.SetAnnotations(map[string]string{})
 		updateNamespace(ctx, ns)

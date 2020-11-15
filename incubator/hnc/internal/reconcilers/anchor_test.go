@@ -28,7 +28,7 @@ var _ = Describe("Anchor", func() {
 		foo_anchor_bar := newAnchor(barName, fooName)
 		updateAnchor(ctx, foo_anchor_bar)
 
-		// It should create the namespace 'bar' with 'foo' in the subnamespaceOf annotation.
+		// It should create the namespace 'bar' with 'foo' in the subnamespace-of annotation.
 		Eventually(func() string {
 			return getNamespace(ctx, barName).GetAnnotations()[api.SubnamespaceOf]
 		}).Should(Equal(fooName))

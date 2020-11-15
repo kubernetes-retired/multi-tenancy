@@ -70,7 +70,7 @@ To create a subnamespace without the plugin, create the following resource:
 
 ```
 $ kubectl apply -f - <<EOF
-apiVersion: hnc.x-k8s.io/v1alpha1
+apiVersion: hnc.x-k8s.io/v1alpha2
 kind: SubnamespaceAnchor
 metadata:
   namespace: parent
@@ -88,7 +88,7 @@ child  Active   1m
 
 $ kubectl get -oyaml -nparent subns child
 # Output:
-apiVersion: hnc.x-k8s.io/v1alpha1
+apiVersion: hnc.x-k8s.io/v1alpha2
 kind: SubnamespaceAnchor
 metadata:
   name: child
@@ -103,7 +103,7 @@ You can also look inside the new namespace to confirm its set up correctly:
 ```
 $ kubectl get -oyaml -nchild hierarchyconfiguration hierarchy
 # Output:
-apiVersion: hnc.x-k8s.io/v1alpha1
+apiVersion: hnc.x-k8s.io/v1alpha2
 kind: HierarchyConfiguration
 metadata:
   name: hierarchy
@@ -571,7 +571,7 @@ You can also modify the config directly to include custom configurations via
 `kubectl edit hncconfiguration config`:
 
 ```yaml
-# HNC v0.6:
+# HNC v0.6 and later:
 apiVersion: hnc.x-k8s.io/v1alpha2
 kind: HNCConfiguration
 metadata:

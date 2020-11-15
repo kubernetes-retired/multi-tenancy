@@ -253,13 +253,6 @@ func CleanupNamespaces(nses ...string) {
 
 		// If this is a subnamespace, turn it into a normal namespace so we can delete it directly.
 		MustRunWithTimeout(cleanupTimeout, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespace-of-")
-		// NB: 'subnamespaceOf' is the old subnamespace annotation used in v0.5. We still need to
-		// clean up this old annotation because this util func is also used in the API conversion
-		// test to clean up namespaces in v0.5.
-		//
-		// TODO: remove this line after v0.6 branches and we are no longer supporting v1alpha1
-		// conversion.
-		MustRunWithTimeout(cleanupTimeout, "kubectl annotate ns", ns, "hnc.x-k8s.io/subnamespaceOf-")
 	}
 
 	// Now, actually delete them

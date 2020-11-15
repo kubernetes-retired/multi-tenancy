@@ -23,21 +23,21 @@ func TestDeleteSubNamespace(t *testing.T) {
 		fail           bool
 	}{
 		// There's no test case for when parent and annotation don't match, since the
-		// reconciler always sets the parent to match the subnamespaceOf annotation.
-		// - a (subnamespaceOf b)
+		// reconciler always sets the parent to match the subnamespace-of annotation.
+		// - a (subnamespace-of b)
 		{name: "when parent is missing", forest: "-", subnamespaceOf: "b"},
-		// - a (subnamespaceOf b) -> b (no anchor)
+		// - a (subnamespace-of b) -> b (no anchor)
 		{name: "when anchor is missing", forest: "b-", subnamespaceOf: "b"},
-		// - a (subnamespaceOf c) -> c (has anchor a), b
+		// - a (subnamespace-of c) -> c (has anchor a), b
 		{name: "when annotation and anchor match", forest: "c--", subnamespaceOf: "c", fail: true},
-		// - a (subnamespaceOf b) -> b, c(has anchor a)
+		// - a (subnamespace-of b) -> b, c(has anchor a)
 		{name: "when annotation and anchor don't match", forest: "b--", subnamespaceOf: "b"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewGomegaWithT(t)
 
-			// Create a namespace instance a and add the subnamespaceOf annotation.
+			// Create a namespace instance a and add the subnamespace-of annotation.
 			sub := &corev1.Namespace{}
 			sub.Name = "a"
 			setSubAnnotation(sub, tc.subnamespaceOf)
@@ -50,7 +50,7 @@ func TestDeleteSubNamespace(t *testing.T) {
 			// Construct the forest
 			f := foresttest.Create(tc.forest)
 			// Add anchor "a" to namespace "c" if it exists. This is to test the cases
-			// when the subnamespaceOf annotation in "a" matches/dismatches "c".
+			// when the subnamespace-of annotation in "a" matches/dismatches "c".
 			if f.Get("c").Exists() {
 				f.Get("c").SetAnchors([]string{"a"})
 			}
@@ -157,13 +157,13 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 	bInst := &corev1.Namespace{}
 	bInst.Name = "b"
 
-	// Add 'hnc.x-k8s.io/managedBy: other' annotation on c.
+	// Add 'hnc.x-k8s.io/managed-by: other' annotation on c.
 	cInst := &corev1.Namespace{}
 	cInst.Name = "c"
 	cInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
 
 	// ** Please note this will make d in an *illegal* state. **
-	// Add 'hnc.x-k8s.io/managedBy: other' annotation on d.
+	// Add 'hnc.x-k8s.io/managed-by: other' annotation on d.
 	dInst := &corev1.Namespace{}
 	dInst.Name = "d"
 	dInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
@@ -211,7 +211,7 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 	}
 }
 
-// setSubAnnotations sets subnamespaceOf annotation with a parent name on the
+// setSubAnnotations sets subnamespace-of annotation with a parent name on the
 // namespace. If the parent name is empty, it removes the annotation.
 func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 	a := make(map[string]string)
