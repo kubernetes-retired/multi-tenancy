@@ -3,7 +3,7 @@
 This demo illustrates how to setup a VirtualCluster in an existing lightweight environment, 
 be it [`minikube`](https://minikube.sigs.k8s.io/) or [`kind`](https://kind.sigs.k8s.io/docs/) Kubernetes cluster.
 
-It should work exactly the same if you're working on any other Kubernetes distrubitions too.
+It should work exactly the same if you were working on any other Kubernetes distrubitions too.
 
 For example, to spin up a `minukube` cluster:
 
@@ -69,7 +69,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy
 Let's check out what we've installed:
 
 ```bash
-# a dedicated namespace named "vc-manager" is created
+# A dedicated namespace named "vc-manager" is created
 $ kubectl get ns
 NAME              STATUS   AGE
 default           Active   14m
@@ -78,7 +78,7 @@ kube-public       Active   14m
 kube-system       Active   14m
 vc-manager        Active   74s
 
-# and the components, including vc-manager, vc-syncer and vn-agent are installed within namespace `vc-manager`
+# And the components, including vc-manager, vc-syncer and vn-agent are installed within namespace `vc-manager`
 $ kubectl get all -n vc-manager
 NAME                              READY   STATUS    RESTARTS   AGE
 pod/vc-manager-76c5878465-mv4nv   1/1     Running   0          92s
@@ -111,8 +111,7 @@ Please note that we need to make sure the client cert/key files are imported as 
 ### Create `kubelet` client secrete in `minikube` cluster
 
 If you're using `minikube`, the client PKI files are located in `~/.minikube/`.
-
-So we can create `vc-kubelet-client` secert using the following cmd:
+So we can create `vc-kubelet-client` secret using the following commands:
 
 ```bash
 # Copy the files over
@@ -123,7 +122,8 @@ kubectl create secret generic vc-kubelet-client --from-file=client.crt --from-fi
 
 ### Create `kubelet` client secrete in `kind` cluster:
 
-If you're using `kind`, the client PKI files are located in its control plane Docker container, so we can retrieve it back and create `vc-kubelet-client` secert using the following cmd:
+If you're using `kind`, the client PKI files are located in its control plane Docker container.
+So we can retrieve them back and create `vc-kubelet-client` secret using the following commands:
 
 ```bash
 # Retrieve the kubelet client key/cert files
@@ -135,14 +135,14 @@ kubectl create secret generic vc-kubelet-client --from-file=client.crt --from-fi
 
 ### Update `vn-agent`
 
-To apply this secret to `vn-agent` Pod, one can patch the `vn-agent` DaemonSet to change the secret name of the `kubelet-client-cert` volume to newly created `vc-kubelet-client`:
+To apply this secret to `vn-agent` Pod(s), one can patch the `vn-agent` DaemonSet to change the secret name of the `kubelet-client-cert` volume to the newly created `vc-kubelet-client`:
 
 ```bash
 $ kubectl -n vc-manager patch daemonset/vn-agent --type json \
     -p='[{"op": "replace", "path": "/spec/template/spec/volumes/0/secret/secretName", "value":"vc-kubelet-client"}]'
 ```
 
-The `vn-agent` Pod will be recreated in every node and `vn-agent` can directly talk with `kubelet` from now onwards.
+The `vn-agent` Pod(s) will be recreated in every node to talk with `kubelet` directly from now onwards.
 
 
 ## Create ClusterVersion
@@ -164,7 +164,7 @@ $ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenan
 
 We can now create a `VirtualCluster` CR, which refers to the `ClusterVersion` that we just created.
 
-The `vc-manager` will create a tenant master, where its tenant apiserver is exposed through nodeport service.
+The `vc-manager` will create a tenant master, where its tenant apiserver can be exposed through nodeport, or load balancer.
 
 ```bash
 $ kubectl vc create -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/virtualcluster_1_nodeport.yaml -o vc-1.kubeconfig
@@ -174,7 +174,7 @@ $ kubectl vc create -f https://raw.githubusercontent.com/kubernetes-sigs/multi-t
 2020/11/15 11:14:12 VirtualCluster default/vc-sample-1 setup successfully
 ```
 
-The command will create a tenant master named `vc-sample-1`.
+The command will create a tenant master named `vc-sample-1`, exposed by NotePort.
 
 Once it's created, a kubeconfig file specified by `-o`, namely `vc-1.kubeconfig`, will be created in the current directory.
 
@@ -183,7 +183,7 @@ Once it's created, a kubeconfig file specified by `-o`, namely `vc-1.kubeconfig`
 
 The generated `vc-1.kubeconfig` can be used as a normal `kubeconfig` to access the tenant virtual cluster.
 
-Please note that if you're working on `kind` cluster, which, by default, exposes one random host port pointing to Kubernetes' default `6443`. In this case, we need to work around it and the simplest way is to deploy a "sidecar" container as the proxy to route management traffic to the service:
+Please note that if you're working on `kind` cluster which, by default, exposes one random host port pointing to Kubernetes' default API Server port `6443`. In this case, we need to work around it and the simplest way is to deploy a "sidecar" container as the proxy to route management traffic to the service:
 
 ```bash
 # Do this only when you're wroking in `kind`:
@@ -233,10 +233,10 @@ $ kubectl get namespace
 NAME                                         STATUS   AGE
 default                                      Active   30m
 default-532c0e-vc-sample-1                   Active   10m
-default-532c0e-vc-sample-1-default           Active   8m53s
-default-532c0e-vc-sample-1-kube-node-lease   Active   8m53s
-default-532c0e-vc-sample-1-kube-public       Active   8m53s
-default-532c0e-vc-sample-1-kube-system       Active   8m53s
+default-532c0e-vc-sample-1-default           Active   9m53s
+default-532c0e-vc-sample-1-kube-node-lease   Active   9m53s
+default-532c0e-vc-sample-1-kube-public       Active   9m53s
+default-532c0e-vc-sample-1-kube-system       Active   9m53s
 kube-node-lease                              Active   30m
 kube-public                                  Active   30m
 kube-system                                  Active   30m
@@ -283,7 +283,7 @@ test-deploy-5f4bcd8c-9thn7   1/1     Running   0          4m44s
 $ VC_NAMESPACE="$(kubectl get VirtualCluster vc-sample-1 -o json | jq -r '.status.clusterNamespace')"
 $ kubectl get pod -n "${VC_NAMESPACE}-default"
 NAME                         READY   STATUS    RESTARTS   AGE
-test-deploy-5f4bcd8c-9thn7   1/1     Running   0          4m56
+test-deploy-5f4bcd8c-9thn7   1/1     Running   0          4m56s
 
 # Also, a new virtual node is created in the tenant master and tenant cannot schedule Pod on it.
 $ kubectl get node --kubeconfig vc-1.kubeconfig
