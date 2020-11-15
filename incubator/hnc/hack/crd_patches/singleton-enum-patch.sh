@@ -29,11 +29,17 @@
 #                  enum:
 #                    - config
 #              type: object
-# There are 3 "metadata" in each CRD manifest. The top-level one is the metadata
-# for the CRD and the other two are the metadata for each per-version schema
-# for v1alpah1 and v1alpha2. We only want to add the singleton enum validation
-# for each version, so we will insert the patch after the "metadata" per-version
-# (with space " " before "metadata:") and skip the top-level "metadata" (without
-# space before "metadata:").
+# There are several "metadata" fields in each CRD manifest. The top-level one is
+# the metadata for the CRD itself; the others are the metadata for each
+# per-version schema (there may be only one if we only support one version in a
+# given release). We only want to add the singleton enum validation for each
+# version, so we will insert the patch after the "metadata" per-version (with
+# space " " before "metadata:") and skip the top-level "metadata" (without space
+# before "metadata:").
+#
+# NB: controller-gen puts the validation at the top-level of the CRD for
+# single-version CRDs, and in a lower level for multiversion CRDs. So if you
+# switch from one to the other, you may need to adjust the indenting in the two
+# yaml files in this directory.
 sed -i -e "/ metadata:/ r hack/crd_patches/hierarchy_singleton_enum.yaml" config/crd/bases/hnc.x-k8s.io_hierarchyconfigurations.yaml
 sed -i -e "/ metadata:/ r hack/crd_patches/config_singleton_enum.yaml" config/crd/bases/hnc.x-k8s.io_hncconfigurations.yaml

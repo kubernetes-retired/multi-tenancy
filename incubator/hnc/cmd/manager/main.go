@@ -35,7 +35,6 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	v1a1 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha1"
 	v1a2 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
@@ -66,7 +65,6 @@ func init() {
 	defer setupLog.Info("Finished main.go:init()")
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = v1a1.AddToScheme(scheme)
 	_ = v1a2.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = v1beta1.AddToScheme(scheme)
@@ -192,26 +190,9 @@ func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
 		validators.Create(mgr, f)
 	}
 
-	// Create CRD conversion webhooks.
-	if err := (&v1a2.HNCConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.HNCConfigSingletons)
-		os.Exit(1)
-	}
-
-	if err := (&v1a2.HierarchyConfiguration{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.HierarchyConfigurations)
-		os.Exit(1)
-	}
-
-	if err := (&v1a2.SubnamespaceAnchor{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create CRD convension webhook", v1a2.Anchors)
-		os.Exit(1)
-	}
-
 	// Create all reconciling controllers
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	removeOldCRDVersion := true
-	if err := reconcilers.Create(mgr, f, maxReconciles, removeOldCRDVersion); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}
