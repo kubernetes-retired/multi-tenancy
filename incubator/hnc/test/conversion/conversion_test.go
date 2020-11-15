@@ -16,7 +16,7 @@ var (
 )
 
 const (
-	certsReadyTime = 20
+	certsReadyTime = 30
 	// Some reconciliation may take longer so we have it as 7 seconds, e.g. removing
 	// v1alpha1 from CRD status.storedVersions after CRD conversion because it can
 	// be removed only if all the v1alpha1 CRs are reconciled and converted to v1alpha2.
@@ -94,8 +94,8 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 		// Convert
 		setupV1alpha2()
 
-		// Only the new value should be present
-		FieldShouldNotContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
+		// The old annotation isn't removed and the new value should be unchanged
+		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
 		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
 	})
 
@@ -108,8 +108,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managed-by=bar")
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo") // deprecated in v0.6
 
-		// Verify that the deprecated version is removed
-		FieldShouldNotContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managedBy:foo")
+		// Verify that the deprecated version is not copied to the current version
 		FieldShouldContain("ns", "", nsA, ".metadata.annotations", "hnc.x-k8s.io/managed-by:bar")
 	})
 
@@ -471,6 +470,7 @@ spec:
 		// Verify the v1a1 label is gone.
 		FieldShouldNotContain("roles", nsB, roleA, ".metadata.labels", "inheritedFrom")
 	})
+
 	// 3 more corner cases for v1a1 propagated objects with inheritedFrom label
 	// during conversion:
 	// 1) It may not clear v1a1 propagated objects if the source object is removed during conversion;
@@ -491,6 +491,9 @@ spec:
 		// Delete the deployment before deleting the source to make sure the HNC
 		// v1a1 object reconciler won't remove the propagated object in v1a1.
 		MustRun("kubectl -n hnc-system delete deployment hnc-controller-manager")
+		// Wait a bit before deleting the role (this test is flaky without this, and probably a bit
+		// flaky with it too but these tests are too slow to rerun often).
+		time.Sleep(5 * time.Second)
 		MustRun("kubectl delete role", roleA, "-n", nsA)
 
 		// Convert
@@ -500,6 +503,7 @@ spec:
 		// Verify the v1a1 propagated object is still there.
 		FieldShouldContain("roles", nsB, roleA, ".metadata.labels", "hnc.x-k8s.io/inheritedFrom:"+nsA)
 	})
+
 	It("may not clear v1a1 propagated objects if the type mode is changed from 'propagate' to 'remove' during conversion", func() {
 		// Set 'Secret' to 'propagate' in v1a1, create a secret and let it propagate.
 		// Then change the mode to 'remove' right before conversion (hacked by
@@ -584,6 +588,9 @@ func verifyConversion() {
 	checkCRDVersionInField("v1alpha2", ".spec.versions", true)
 	checkCRDVersionInField("v1alpha1", ".status.storedVersions", false)
 	checkCRDVersionInField("v1alpha2", ".status.storedVersions", true)
+
+	// Make sure HNC is up and running again
+	ensureVWHReady()
 }
 
 // Check if a specific version exists in the field as expected for a list of CRDs.
