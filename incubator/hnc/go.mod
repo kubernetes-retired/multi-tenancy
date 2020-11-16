@@ -17,6 +17,7 @@ require (
 	github.com/open-policy-agent/cert-controller v0.0.0-20200921224206-24b87bbc4b6e
 	github.com/spf13/cobra v0.0.5
 	go.opencensus.io v0.22.3
+	go.uber.org/zap v1.10.0
 	k8s.io/api v0.18.6
 	k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery v0.18.6

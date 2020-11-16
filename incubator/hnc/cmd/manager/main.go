@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
+	"go.uber.org/zap/zapcore"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -80,7 +81,7 @@ func main() {
 	flag.StringVar(&leaderElectionId, "leader-election-id", "controller-leader-election-helper",
 		"Leader election id determines the name of the configmap that leader election will use for holding the leader lock.")
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
-	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs in a human-friendly format.")
+	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.BoolVar(&internalCert, "enable-internal-cert-management", false, "Enables internal cert management.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
@@ -126,7 +127,12 @@ func main() {
 	}
 
 	setupLog.Info("Configuring controller-manager")
-	ctrl.SetLogger(zap.Logger(debugLogs))
+	logLevel := zapcore.InfoLevel
+	if debugLogs {
+		logLevel = zapcore.DebugLevel
+	}
+	log := zap.New(zap.Level(logLevel), zap.StacktraceLevel(zapcore.PanicLevel))
+	ctrl.SetLogger(log)
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = float32(qps)
 	// By default, Burst is about 2x QPS, but since HNC's "bursts" can last for ~minutes
