@@ -174,7 +174,7 @@ $ kubectl vc create -f https://raw.githubusercontent.com/kubernetes-sigs/multi-t
 2020/11/15 11:14:12 VirtualCluster default/vc-sample-1 setup successfully
 ```
 
-The command will create a tenant master named `vc-sample-1`, exposed by NotePort.
+The command will create a tenant master named `vc-sample-1`, exposed by NodePort.
 
 Once it's created, a kubeconfig file specified by `-o`, namely `vc-1.kubeconfig`, will be created in the current directory.
 
@@ -327,7 +327,7 @@ Load average: 0.45 0.47 0.54 1/1308 23
   PID  PPID USER     STAT   VSZ %VSZ CPU %CPU COMMAND
 ```
 
-## Cleanup
+## Clean Up
 
 By deleting the VirtualCluster CR, all the tenant resources created in the super master will be deleted.
 
