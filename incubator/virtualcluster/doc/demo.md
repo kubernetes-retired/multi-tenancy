@@ -248,8 +248,9 @@ vc-manager                                   Active   20m
 
 From now on, we can view the virtual cluster as a normal cluster to work with.
 
+Firstly, let's create a deployment.
+
 ```bash
-# Let's create a deployment
 $ kubectl apply --kubeconfig vc-1.kubeconfig -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -273,33 +274,52 @@ spec:
         command:
         - top
 EOF
+```
 
-# Upon successful creation, there are newly created Pods in both tenant master and super master.
-# a view from the tenant master
+Upon successful creation, there are newly Pods created.
+
+We can view it from the tenant master:
+
+```bash
 $ kubectl get pod --kubeconfig vc-1.kubeconfig
 NAME                         READY   STATUS    RESTARTS   AGE
 test-deploy-5f4bcd8c-9thn7   1/1     Running   0          4m44s
-# a view from the super master
+```
+
+Or from the super master:
+
+```
 $ VC_NAMESPACE="$(kubectl get VirtualCluster vc-sample-1 -o json | jq -r '.status.clusterNamespace')"
 $ kubectl get pod -n "${VC_NAMESPACE}-default"
 NAME                         READY   STATUS    RESTARTS   AGE
 test-deploy-5f4bcd8c-9thn7   1/1     Running   0          4m56s
+```
 
-# Also, a new virtual node is created in the tenant master and tenant cannot schedule Pod on it.
+Also, a new virtual node is created in the tenant master but the tenant cannot schedule Pods on it.
+
+```bash
 $ kubectl get node --kubeconfig vc-1.kubeconfig
 NAME       STATUS                     ROLES    AGE   VERSION
 minikube   Ready,SchedulingDisabled   <none>   16m   v1.19.4                    # we see this in minikube cluster
 virtual-cluster-worker   NotReady,SchedulingDisabled   <none>   5m8s   v1.19.1  # and this in kind cluster
+```
 
-# The kubelet APIs such as `logs` or `exec` should work in the tenant master.
+The `kubectl exec` and `kubectl logs` should work in the tenant master, as usual.
+
+Let's try out `kubectl exec`:
+
+```bash
 $ VC_POD="$(kubectl get pod -l app='vc-test' --kubeconfig vc-1.kubeconfig -o jsonpath="{.items[0].metadata.name}")"
-
-# Let's try kubectl exec
 $ kubectl exec -it "${VC_POD}" --kubeconfig vc-1.kubeconfig -- /bin/sh
+
+# We're now in the container
 / # ls
 bin   dev   etc   home  proc  root  sys   tmp   usr   var
+```
 
-# And kubectl logs, yes we can see the logs from output of container's command "top"
+And `kubectl logs` as well, yes we can see the logs from output of container's command `top`:
+
+```bash
 $ kubectl logs "${VC_POD}" --kubeconfig vc-1.kubeconfig
 Mem: 5349052K used, 739760K free, 35912K shrd, 203292K buff, 3140872K cached
 CPU:  7.0% usr  5.9% sys  0.0% nic 86.5% idle  0.0% io  0.0% irq  0.3% sirq
