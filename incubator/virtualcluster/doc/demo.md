@@ -3,7 +3,7 @@
 This demo illustrates how to setup a VirtualCluster in an existing lightweight environment, 
 be it [`minikube`](https://minikube.sigs.k8s.io/) or [`kind`](https://kind.sigs.k8s.io/docs/) Kubernetes cluster.
 
-It should work exactly the same if you were working on any other Kubernetes distrubitions too.
+It should work exactly the same if you were working on any other Kubernetes distributions too.
 
 For example, to spin up a `minukube` cluster:
 
