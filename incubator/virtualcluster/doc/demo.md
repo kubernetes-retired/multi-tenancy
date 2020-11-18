@@ -5,7 +5,7 @@ be it [`minikube`](https://minikube.sigs.k8s.io/) or [`kind`](https://kind.sigs.
 
 It should work exactly the same if you were working on any other Kubernetes distributions too.
 
-For example, to spin up a `minukube` cluster:
+For example, to spin up a `minikube` cluster:
 
 ```bash
 minikube start --driver=virtualbox --cpus=4 --memory='6g' --disk-size='10g'
@@ -108,7 +108,7 @@ A more efficient method is to communicate with `kubelet` directly using the clie
 The location of the client PKI files may vary based on the local setup.
 Please note that we need to make sure the client cert/key files are imported as `client.crt` and `client.key` so that they can be referenced to.
 
-### Create `kubelet` client secrete in `minikube` cluster
+### Create `kubelet` client secret in `minikube` cluster
 
 If you're using `minikube`, the client PKI files are located in `~/.minikube/`.
 So we can create `vc-kubelet-client` secret using the following commands:
@@ -186,7 +186,7 @@ The generated `vc-1.kubeconfig` can be used as a normal `kubeconfig` to access t
 Please note that if you're working on `kind` cluster which, by default, exposes one random host port pointing to Kubernetes' default API Server port `6443`. In this case, we need to work around it and the simplest way is to deploy a "sidecar" container as the proxy to route management traffic to the service:
 
 ```bash
-# Do this only when you're wroking in `kind`:
+# Do this only when you're working in `kind`:
 
 # Retrieve the tenant namespace
 $ VC_NAMESPACE="$(kubectl get VirtualCluster vc-sample-1 -o json | jq -r '.status.clusterNamespace')"
