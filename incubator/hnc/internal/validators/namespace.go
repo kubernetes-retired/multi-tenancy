@@ -137,12 +137,17 @@ func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response 
 }
 
 func (v *Namespace) illegalCascadingDeletion(ns *forest.Namespace) admission.Response {
-	if ns.AllowsCascadingDeletion() || len(ns.ChildNames()) == 0 {
+	if ns.AllowsCascadingDeletion() {
 		return allow("")
 	}
 
-	msg := fmt.Sprintf("Please set allowCascadingDeletion in the parent namespace.")
-	return deny(metav1.StatusReasonForbidden, msg)
+	for _, cnm := range ns.ChildNames() {
+		if v.Forest.Get(cnm).IsSub {
+			msg := "This namespaces contains subnamespaces. Please remove all subnamespaces before deleting this namespace, or set 'allowCascadingDeletion' to delete them automatically."
+			return deny(metav1.StatusReasonForbidden, msg)
+		}
+	}
+	return allow("no subnamespaces found")
 }
 
 // decodeRequest gets the information we care about into a simple struct that's easy to both a) use

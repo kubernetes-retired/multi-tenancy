@@ -161,18 +161,6 @@ var _ = Describe("Issues", func() {
 		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns describe", nsChild)
 	})
 
-	It("Should delete namespace with ParentMissing condition - issue #716", func() {
-		// Setting up a 2-level tree with 'a' as the root and 'b' as a child of 'a'"
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl create ns", nsChild)
-		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
-		// create and verify ParentMissing condition
-		MustRun("kubectl delete ns", nsParent)
-		RunShouldContain("ActivitiesHalted (ParentMissing)", defTimeout, "kubectl hns describe", nsChild)
-		// test: delete namespace
-		MustRun("kubectl delete ns", nsChild)
-	})
-
 	It("Should not delete a parent of a subnamespace if allowCascadingDeletion is not set -issue #716", func() {
 		// Setting up a 2-level tree
 		MustRun("kubectl create ns", nsParent)

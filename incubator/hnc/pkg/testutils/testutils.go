@@ -287,11 +287,16 @@ func TearDownHNC(hncVersion string) {
 	runShouldNotContain(1, ".hnc.x-k8s.io", 10, "kubectl get crd")
 }
 
-// CheckHNCPath return true if we'll be able to successfully call RecoverHNC, and false otherwise.
+// CheckHNCPath skips the test if we are not able to successfully call RecoverHNC
 func CheckHNCPath() {
 	if hncRecoverPath == "" {
 		Skip("Environment variable HNC_REPAIR not set. Skipping tests that require repairing HNC.")
 	}
+}
+
+// HasHNCPath returns true if we'll be able to successfully call RecoverHNC, and false otherwise. 
+func HasHNCPath() bool {
+	return hncRecoverPath != ""
 }
 
 // RecoverHNC assumes that HNC has been damaged in some way and repairs by re-applying its manifest
