@@ -13,6 +13,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Select namespaces based on their hierarchies](#use-select)
   * [Delete a subnamespace](#use-subns-delete)
   * [Organize full namespaces into a hierarchy](#use-full)
+  * [Resolve conditions on a namespace](#use-resolve-cond)
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
@@ -327,6 +328,21 @@ changes the permissions you require to change the parent of `ns-bar` to `ns-foo`
 Similarly, if you want to make `ns-bar` a root again, you must be an
 administrator of the root namespace that is an ancestor of `ns-bar`, since the
 admins of that namespace will lose access to `ns-bar` once it becomes a root.
+
+<a name="use-resolve-cond"/>
+
+### Resolve conditions on a namespace
+
+If the namespace has the following condition:
+```
+ActivitiesHalted (ParentMissing): Parent "<namespace>" does not exist
+```
+It means that this namespace is orphaned and its parent has been deleted. To fix
+ this, you need to either create the parent, or mark this namespace as a root
+ namespace by using:
+```
+$ kubectl hns set --root <namespace>
+```
 
 <a name="admin"/>
 
