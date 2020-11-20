@@ -61,10 +61,16 @@ func GetTreeSelector(inst *unstructured.Unstructured) (labels.Selector, error) {
 
 	segs := strings.Split(treeSelectorStr, ",")
 	selectorStr := ""
+	nonNegatedNses := []string{}
 	for i, seg := range segs {
+		seg = strings.TrimSpace(seg)
 		// check if it's a valid namespace name
 		if err := validateTreeSelectorSegment(seg); err != nil {
 			return nil, err
+		}
+
+		if seg[0] != '!' {
+			nonNegatedNses = append(nonNegatedNses, seg)
 		}
 
 		selectorStr = selectorStr + seg + api.LabelTreeDepthSuffix
@@ -72,11 +78,18 @@ func GetTreeSelector(inst *unstructured.Unstructured) (labels.Selector, error) {
 			selectorStr = selectorStr + ", "
 		}
 	}
+
 	treeSelector, err := getSelectorFromString(selectorStr)
 	if err != nil {
 		// In theory this should never happen because we already checked DNS label before.
 		// If this happens, it's more likely that we have a bug in our code
 		return nil, fmt.Errorf("internal error while parsing %q: %w", api.AnnotationTreeSelector, err)
+	}
+
+	// If there are more than one non-negated namespace, this object will not be propagated to
+	// any child namespace. We want to warn and stop user from doing this.
+	if len(nonNegatedNses) > 1 {
+		return nil, fmt.Errorf("should only have one non-negated namespace, but got multiple: %v", nonNegatedNses)
 	}
 	return treeSelector, nil
 }

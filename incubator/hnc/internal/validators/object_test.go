@@ -351,6 +351,34 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
+		name: "Deny creation of object with multiple non-negated treeSelect annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationTreeSelector: "foo, bar",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with multiple negated treeSelect annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationTreeSelector: "!foo, !bar",
+					},
+				},
+			},
+		},
+	}, {
 		name: "Allow creation of object with valid treeSelect annotation",
 		fail: false,
 		inst: &unstructured.Unstructured{
