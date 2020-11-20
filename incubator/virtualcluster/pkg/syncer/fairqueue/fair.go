@@ -148,9 +148,7 @@ func (q *fairQueue) Get() (item interface{}, shutdown bool) {
 	var nextGroup string
 	for {
 		nextGroup = q.balancer.Next()
-		if q.queueGroup[nextGroup].Len() == 0 {
-			nextGroup = q.balancer.Next()
-		} else {
+		if q.queueGroup[nextGroup].Len() != 0 {
 			break
 		}
 	}
