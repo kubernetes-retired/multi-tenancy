@@ -24,7 +24,10 @@ var _ = Describe("When deleting CRDs", func() {
 		// running anymore, and the admission webhooks are operating off of bad information (e.g. that a
 		// subnamespace's annotation has been removed). So delete the VWC so we can clean up
 		// effectively; it'll be restored by RecoverHNC anyway.
-		MustRun("kubectl delete validatingwebhookconfigurations hnc-validating-webhook-configuration")
+		if HasHNCPath() {
+			MustRun("kubectl delete validatingwebhookconfigurations hnc-validating-webhook-configuration")
+		}
+
 		CleanupNamespaces(nsParent, nsChild)
 		RecoverHNC()
 	})
