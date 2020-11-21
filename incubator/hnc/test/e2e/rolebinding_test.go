@@ -16,11 +16,11 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 
 	BeforeEach(func() {
 		CheckHNCPath()
-		CleanupNamespaces(nsParent, nsChild)
+		CleanupTestNamespaces()
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsParent, nsChild)
+		CleanupTestNamespaces()
 		RecoverHNC()
 	})
 
@@ -29,8 +29,8 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 		// After recovering HNC, if nsChild gets reconciled first, the 'admin' rolebinding will
 		// be deleted, and the 'edit' rolebinding will be created when nsParent gets reconciled.
 		// In this case the rolebinding would not be considered as 'updated' and the test will pass
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+		CreateNamespace(nsParent)
+		CreateSubnamespace(nsChild, nsParent)
 		MustRun("kubectl create rolebinding test --clusterrole=admin --serviceaccount=default:default -n", nsParent)
 		FieldShouldContain("rolebinding", nsChild, "test", ".roleRef.name", "admin")
 
@@ -40,7 +40,7 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 		// 5s fairly arbitrarily, but it works well. Feel free to try lower values it you like.
 		//   - aludwin, Sep 2020
 		MustRun("kubectl delete deployment --all -n hnc-system")
-		time.Sleep(5*time.Second)
+		time.Sleep(5 * time.Second)
 
 		// Replace the source rolebinding
 		MustRun("kubectl delete rolebinding test -n", nsParent)

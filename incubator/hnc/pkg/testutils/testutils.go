@@ -15,6 +15,8 @@ import (
 // The time that Eventually() will keep retrying until timeout
 // we use 5 seconds here because some tests require deleting a namespace, and shorter time period might not be enough
 const eventuallyTimeout = 5
+// The testing label marked on all namespaces created using the testing phase, offering ease when doing cleanups
+const testingNamespaceLabel = "hnc.x-k8s.io/testNamespace"
 
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
@@ -230,7 +232,42 @@ func RunCommand(cmdln ...string) (string, error) {
 	return string(stdout), err
 }
 
-// CleanupNamespaces does everything it can to delete the passed-in namespaces. It also uses very
+// CreateNamespace creates the specified namespace with canned testing labels making it easier
+// to look up and delete later.
+func CreateNamespace( ns string)   {
+	MustRun("kubectl create ns", ns)
+	labelTestingNs(ns)
+}
+
+// CreateSubnamespace creates the specified namespace in the parent namespace with canned testing labels making it easier
+// to look up and delete later.
+func CreateSubnamespace( ns string,parent string)   {
+	MustRun( "kubectl hns create", ns, "-n", parent)
+	labelTestingNs(ns)
+}
+
+// marks testing namespaces with a label for future search and lookup.
+func labelTestingNs(ns string){
+	MustRun("kubectl label --overwrite ns", ns,testingNamespaceLabel+"=true")
+}
+
+// CleanupTestNamespaces finds the list of namespaces labeled as test namespaces and delegates
+// to cleanupNamespaces function.
+func CleanupTestNamespaces(){
+	nses := []string{}
+	EventuallyWithOffset(1, func() error {
+		labelQuery := testingNamespaceLabel+"=true"
+		out,err:=RunCommand("kubectl get ns -o custom-columns=:.metadata.name --no-headers=true", "-l", labelQuery)
+		if err != nil {
+			return err
+		}
+		nses= strings.Split(out,"\n")
+		return nil
+	}).Should(Succeed(), "while getting list of namespaces to clean up")
+	cleanupNamespaces(nses...)
+}
+
+// cleanupNamespaces does everything it can to delete the passed-in namespaces. It also uses very
 // high timeouts (30s) since this function is often called after HNC has just been reinstalled, and
 // it can take a while of HNC to start allowing changes to namespaces again.
 //
@@ -238,7 +275,7 @@ func RunCommand(cmdln ...string) (string, error) {
 // HNC doesn't put finalizers on namespaces themselves; it blocks namespace deletion by blocking
 // deletion of the objects in it, but if HNC is damaged or missing, this can result in namespaces
 // never being deleted without admin action.
-func CleanupNamespaces(nses ...string) {
+func cleanupNamespaces(nses ...string) {
 	const cleanupTimeout = 30
 
 	// Remove all objections HNC might have to deleting a namespace.
@@ -246,6 +283,9 @@ func CleanupNamespaces(nses ...string) {
 	for _, ns := range nses {
 		// Skip any namespace that doesn't actually exist. We only check once (e.g. no retries on
 		// errors) but reads are usually pretty reliable.
+
+		// TODO: This check should ideally be removed if we call this function only with a list of valid test namespaces
+		// found with the label search. But the RecoverHNC function has to call this with explicit namespaces for a specific test
 		if err := TryRunQuietly("kubectl get ns", ns); err != nil {
 			continue
 		}
@@ -332,13 +372,17 @@ func RecoverHNC() {
 		a = "recover-test-a"
 		b = "recover-test-b"
 	)
-	CleanupNamespaces(a, b)
+	// Need to explicitly call deleting these two namespaces because this function is called from the issues test
+	// ("Should allow deletion of namespaces with propagated objects that can't be removed - issue #1214", which tries
+	// to delete a specific namespace "child" . Cleaning up all namespaces using CleanupTestNamespaces will cause that
+	// test to fail.
+	cleanupNamespaces(a, b)
 	// Ensure validators work
 	mustRunWithTimeout(1, 30, "kubectl create ns", a)
 	// Ensure reconcilers work
 	mustRunWithTimeout(1, 30, "kubectl hns create", b, "-n", a)
 	mustRunWithTimeout(1, 30, "kubectl get ns", b)
-	CleanupNamespaces(a, b)
+	cleanupNamespaces(a, b)
 }
 
 func writeTempFile(cxt string) string {

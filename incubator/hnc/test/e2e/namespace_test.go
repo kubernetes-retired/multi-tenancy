@@ -16,16 +16,16 @@ var _ = Describe("Namespace", func() {
 	)
 
 	BeforeEach(func() {
-		CleanupNamespaces(nsA, nsB)
+		CleanupTestNamespaces()
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsA, nsB)
+		CleanupTestNamespaces()
 	})
 
 	It("should create and delete a namespace", func() {
 		// set up
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		MustRun("kubectl get ns", nsA)
 
 		// test
@@ -37,8 +37,8 @@ var _ = Describe("Namespace", func() {
 
 	It("should have 'ParentMissing' condition on orphaned namespace", func() {
 		// set up
-		MustRun("kubectl create ns", nsA)
-		MustRun("kubectl create ns", nsB)
+		CreateNamespace(nsA)
+		CreateNamespace(nsB)
 		MustRun("kubectl hns set", nsB, "--parent", nsA)
 		MustRun("kubectl delete ns", nsA)
 
