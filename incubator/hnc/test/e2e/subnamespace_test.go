@@ -13,18 +13,18 @@ var _ = Describe("Subnamespaces", func() {
 	)
 
 	BeforeEach(func() {
-		CleanupNamespaces(nsA, nsB)
+		CleanupTestNamespaces()
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsA, nsB)
+		CleanupTestNamespaces()
 	})
 
 	It("should create and delete a subnamespace", func() {
 		// set up
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		MustRun("kubectl get ns", nsA)
-		MustRun("kubectl hns create", nsB, "-n", nsA)
+		CreateSubnamespace(nsB, nsA)
 
 		// verify
 		FieldShouldContain("ns", "", nsB, ".metadata.annotations", "subnamespace-of:"+nsA)

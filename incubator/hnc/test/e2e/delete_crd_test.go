@@ -16,7 +16,7 @@ var _ = Describe("When deleting CRDs", func() {
 
 	BeforeEach(func() {
 		CheckHNCPath()
-		CleanupNamespaces(nsParent, nsChild)
+		CleanupTestNamespaces()
 	})
 
 	AfterEach(func() {
@@ -27,15 +27,14 @@ var _ = Describe("When deleting CRDs", func() {
 		if HasHNCPath() {
 			MustRun("kubectl delete validatingwebhookconfigurations hnc-validating-webhook-configuration")
 		}
-
-		CleanupNamespaces(nsParent, nsChild)
+		CleanupTestNamespaces()
 		RecoverHNC()
 	})
 
 	It("should not delete subnamespaces", func() {
 		// set up
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+		CreateNamespace(nsParent)
+		CreateSubnamespace(nsChild, nsParent)
 		MustRun("kubectl get ns", nsChild)
 		// delete the CRD
 		MustRun("kubectl delete customresourcedefinition/subnamespaceanchors.hnc.x-k8s.io")
@@ -45,8 +44,8 @@ var _ = Describe("When deleting CRDs", func() {
 
 	It("should create a rolebinding in parent and propagate to child", func() {
 		// set up
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl create ns", nsChild)
+		CreateNamespace(nsParent)
+		CreateNamespace(nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		// test
 		MustRun("kubectl create rolebinding --clusterrole=view --serviceaccount=default:default -n", nsParent, "foo")
@@ -63,8 +62,8 @@ var _ = Describe("When deleting CRDs", func() {
 
 	It("should fully delete all CRDs", func() {
 		// set up
-		MustRun("kubectl create ns", nsParent)
-		MustRun("kubectl hns create", nsChild, "-n", nsParent)
+		CreateNamespace(nsParent)
+		CreateSubnamespace(nsChild, nsParent)
 		// test
 		MustRun("kubectl delete crd hierarchyconfigurations.hnc.x-k8s.io")
 		time.Sleep(1 * time.Second)

@@ -52,11 +52,11 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 	)
 
 	BeforeEach(func() {
-		// CleanupNamespaces uses v1alpha2 which only exists in HNC v0.6. We don't know for sure if v0.6
+		// cleanupNamespaces uses v1alpha2 which only exists in HNC v0.6. We don't know for sure if v0.6
 		// is installed right now but our best bet to clean up namespaces safely is to hope that it is.
-		// TODO: make CleanupNamespaces work regardless of whether HNC is running or not (see that
+		// TODO: make cleanupNamespaces work regardless of whether HNC is running or not (see that
 		// function for details).
-		CleanupNamespaces(nsA, nsB, nsC, nsD, nsE)
+		CleanupTestNamespaces()
 
 		// Almost all tests start with HNC v0.5 so just start there.
 		TearDownHNC(hncFromVersion)
@@ -66,13 +66,13 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 	AfterEach(func() {
 		// Restore to the initial starting point. Clean up namespaces before tearing down HNC to remove
 		// finalizers.
-		CleanupNamespaces(nsA, nsB, nsC, nsD, nsE)
+		CleanupTestNamespaces()
 		TearDownHNC("")
 	})
 
 	It("should convert managedBy annotation", func() {
 		// Create externally managed namespace
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo")
 
 		// Convert
@@ -84,7 +84,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 
 	It("should always respect the new managed-by annotation even if both exists before conversion (very unlikely)", func() {
 		// Create externally managed namespace with conflicting values
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo")
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managed-by=bar") // unknown to v0.5
 		// Both should just sit there
@@ -104,7 +104,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 		setupV1alpha2()
 
 		// Create the namespace with both the correct and obsolete annotations
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managed-by=bar")
 		MustRun("kubectl annotate ns", nsA, "hnc.x-k8s.io/managedBy=foo") // deprecated in v0.6
 
@@ -183,7 +183,7 @@ var _ = Describe("Conversion from v1alpha1 to v1alpha2", func() {
 
 	It("should convert HCs allowCascadingDelete to allowCascadingDeletion", func() {
 		// Before conversion, create namespace A with allowCascadingDelete.
-		MustRun("kubectl create ns", nsA)
+		CreateNamespace(nsA)
 		hierA := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HierarchyConfiguration
@@ -612,8 +612,8 @@ func ensureCRDConvWHReady() {
 
 // createSampleV1alpha1Tree creates a tree with 'a' as the root, 'b' as the child.
 func createSampleV1alpha1Tree() {
-	MustRun("kubectl create ns", nsA)
-	MustRun("kubectl create ns", nsB)
+	CreateNamespace(nsA)
+	CreateNamespace(nsB)
 	hierB := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HierarchyConfiguration
@@ -628,7 +628,7 @@ spec:
 
 // createSampleV1alpha1Subnamespace creates 'a' and a subnamespace 'b'.
 func createSampleV1alpha1Subnamespace() {
-	MustRun("kubectl create ns", nsA)
+	CreateNamespace(nsA)
 	subnsB := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: SubnamespaceAnchor
@@ -643,7 +643,7 @@ metadata:
 
 // createSampleV1alpha1ParentChildTree creates 'a' and a child 'b'.
 func createSampleV1alpha1ParentChildTree() {
-	MustRun("kubectl create ns", nsA)
+	CreateNamespace(nsA)
 	createV1alpha1Child(nsB, nsA)
 	FieldShouldContain(hierCRD, nsA, hierSingleton, ".status.children", nsB)
 	FieldShouldContain(hierCRD, nsB, hierSingleton, ".spec.parent", nsA)
@@ -651,7 +651,7 @@ func createSampleV1alpha1ParentChildTree() {
 
 // createV1alpha1Child creates a namespace and sets it as a child of another.
 func createV1alpha1Child(cnm, pnm string) {
-	MustRun("kubectl create ns", cnm)
+	CreateNamespace(cnm)
 	hierChild := `# temp file created by conversion_test.go
 apiVersion: hnc.x-k8s.io/v1alpha1
 kind: HierarchyConfiguration

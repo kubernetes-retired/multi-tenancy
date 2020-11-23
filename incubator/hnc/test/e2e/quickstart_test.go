@@ -23,17 +23,17 @@ var _ = Describe("Quickstart", func() {
 	)
 
 	BeforeEach(func() {
-		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1, nsService2, nsService3, nsService4, nsDev, nsStaging)
+		CleanupTestNamespaces()
 	})
 
 	AfterEach(func() {
-		CleanupNamespaces(nsOrg, nsTeamA, nsTeamB, nsService1, nsService2, nsService3, nsService4, nsDev, nsStaging)
+		CleanupTestNamespaces()
 	})
 
 	It("Should test basic functionalities in quickstart", func() {
-		MustRun("kubectl create ns", nsOrg)
-		MustRun("kubectl create ns", nsTeamA)
-		MustRun("kubectl create ns", nsService1)
+		CreateNamespace(nsOrg)
+		CreateNamespace(nsTeamA)
+		CreateNamespace(nsService1)
 		MustRun("kubectl -n", nsTeamA, "create role", nsTeamA+"-sre", "--verb=update --resource=deployments")
 		MustRun("kubectl -n", nsTeamA, "create rolebinding", nsTeamA+"-sres", "--role", nsTeamA+"-sre", "--serviceaccount="+nsTeamA+":default")
 		MustRun("kubectl -n", nsOrg, "create role", nsOrg+"-sre", "--verb=update --resource=deployments")
@@ -58,7 +58,7 @@ var _ = Describe("Quickstart", func() {
 			propogationTimeout, "kubectl -n", nsService1, "describe roles")
 		RunShouldContainMultiple([]string{"acme-org-sre", "team-a-sre"}, propogationTimeout, "kubectl -n", nsService1, "get rolebindings")
 
-		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
+		CreateSubnamespace(nsTeamB, nsOrg)
 		MustRun("kubectl get ns", nsTeamB)
 		RunShouldContainMultiple([]string{nsTeamA, nsTeamB, nsService1}, propogationTimeout, "kubectl hns tree", nsOrg)
 
@@ -81,10 +81,10 @@ var _ = Describe("Quickstart", func() {
 	It("Should propagate different types", func() {
 		// ignore Secret in case this quickstart is run twice and the secret has been set to 'Propagate'
 		MustRun("kubectl hns config set-resource secrets --mode Ignore")
-		MustRun("kubectl create ns", nsOrg)
-		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
-		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
-		MustRun("kubectl create ns", nsService1)
+		CreateNamespace(nsOrg)
+		CreateSubnamespace(nsTeamA, nsOrg)
+		CreateSubnamespace(nsTeamB, nsOrg)
+		CreateNamespace(nsService1)
 		MustRun("kubectl hns set", nsService1, "--parent", nsTeamB)
 		MustRun("kubectl -n", nsTeamB, "create secret generic my-creds --from-literal=password=iamteamb")
 		// wait 2 seconds to give time for secret to propogate if it was to
@@ -102,18 +102,19 @@ var _ = Describe("Quickstart", func() {
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
 	})
 
-	It("Should intergrate hierarchical network policy", func(){
-		MustRun("kubectl create ns", nsOrg)
-		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
-		MustRun("kubectl hns create", nsTeamB, "-n", nsOrg)
-		MustRun("kubectl hns create", nsService1, "-n", nsTeamA)
-		MustRun("kubectl hns create", nsService2, "-n", nsTeamA)
+	It("Should intergrate hierarchical network policy", func() {
+		CreateNamespace(nsOrg)
+		CreateSubnamespace(nsTeamA, nsOrg)
+		CreateSubnamespace(nsTeamB, nsOrg)
+		CreateSubnamespace(nsService1, nsTeamA)
+		CreateSubnamespace(nsService2, nsTeamA)
+
 		// create a web service s2 in namespace service-2, and a client pod client-s1 in namespace service-1 that can access this web service
 		MustRun("kubectl run s2 -n", nsService2, "--image=nginx --restart=Never --expose --port 80")
 
 		// Ensure that we can access the service from various other namespaces
 		const (
-			clientCmd = "kubectl run client -n"
+			clientCmd  = "kubectl run client -n"
 			alpineArgs = "-i --image=alpine --restart=Never --rm -- sh -c"
 
 			// These need to be separate from alpineArgs because RunCommand only understands quoted args
@@ -152,7 +153,7 @@ spec:
 		// string, but we don't want to fail if we've found it. So use the default timeout (2s) by
 		// trying up to three times with a 1s gap in between.
 		netpolWorks := false
-		for i:=0; !netpolWorks && i<3; i++ {
+		for i := 0; !netpolWorks && i < 3; i++ {
 			// This command will return a non-nil error if it works correctly
 			stdout, _ := RunCommand(clientCmd, nsService1, alpineArgs, wgetArgs)
 			if strings.Contains(stdout, "wget: download timed out") {
@@ -190,13 +191,14 @@ spec:
 		RunErrorShouldContain("wget: download timed out", defTimeout, clientCmd, nsTeamB, alpineArgs, wgetArgs)
 	})
 
-	It("Should create and delete subnamespaces", func(){
+	It("Should create and delete subnamespaces", func() {
 		// set up initial structure
-		MustRun("kubectl create ns", nsOrg)
-		MustRun("kubectl hns create", nsTeamA, "-n", nsOrg)
-		MustRun("kubectl hns create", nsService1, "-n", nsTeamA)
-		MustRun("kubectl hns create", nsService2, "-n", nsTeamA)
-		MustRun("kubectl hns create", nsService3, "-n", nsTeamA)
+		CreateNamespace(nsOrg)
+		CreateSubnamespace(nsTeamA, nsOrg)
+		CreateSubnamespace(nsService1, nsTeamA)
+		CreateSubnamespace(nsService2, nsTeamA)
+		CreateSubnamespace(nsService3, nsTeamA)
+
 		expected := "" + // empty string make go fmt happy
 			nsTeamA + "\n" +
 			"├── [s] " + nsService1 + "\n" +
@@ -206,7 +208,7 @@ spec:
 		RunShouldContain(expected, propogationTimeout, "kubectl hns tree", nsTeamA)
 
 		// show that you can't re-use a subns name
-		MustRun("kubectl hns create", nsDev, "-n", nsService1)
+		CreateSubnamespace(nsDev, nsService1)
 		RunShouldContain("Children:\n  - "+nsDev, defTimeout, "kubectl hns describe", nsService1)
 		MustNotRun("kubectl hns create", nsDev, "-n", nsService2)
 		RunShouldContain("Children:\n  - "+nsDev, defTimeout, "kubectl hns describe", nsService1)
@@ -225,13 +227,13 @@ spec:
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
 
 		// Show the difference of a subns and regular child ns
-		MustRun("kubectl hns create", nsService4, "-n", nsTeamA)
+		CreateSubnamespace(nsService4, nsTeamA)
 		expected = "" +
 			nsTeamA + "\n" +
 			"├── [s] " + nsService2 + "\n" +
 			"└── [s] " + nsService4
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
-		MustRun("kubectl create ns", nsStaging)
+		CreateNamespace(nsStaging)
 		MustRun("kubectl hns set", nsStaging, "--parent", nsService4)
 		expected = "" +
 			nsService4 + "\n" +
