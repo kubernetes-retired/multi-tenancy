@@ -168,6 +168,7 @@ spec:
               - --v=2
               ports:
               - containerPort: 6443
+                protocol: TCP
                 name: api
               livenessProbe:
                 # since we set anonymous-auth to false, we use tcp instead of https

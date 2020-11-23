@@ -52,11 +52,7 @@ And then you can manage VirtualCluster by `kubectl vc` command tool.
 To install VirtualCluster CRDs:
 
 ```bash
-# There is known controller runtime code gen problem so the generated CRD for clusterversions doesn't work for now
-# So temporarily we use a simplified one.
-# Slack conversation: https://kubernetes.slack.com/archives/C8E6YA9S7/p1604903060089400
-#kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_clusterversions.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/tenancy.x-k8s.io_clusterversions.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_clusterversions.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_virtualclusters.yaml
 ```
 
@@ -192,21 +188,21 @@ Please note that if you're working on `kind` cluster which, by default, exposes 
 $ VC_NAMESPACE="$(kubectl get VirtualCluster vc-sample-1 -o json | jq -r '.status.clusterNamespace')"
 
 # The svc node port exposed
-$ VS_SVC_PORT="$(kubectl get -n ${VC_NAMESPACE} svc/apiserver-svc -o json | jq '.spec.ports[0].nodePort')"
+$ VC_SVC_PORT="$(kubectl get -n ${VC_NAMESPACE} svc/apiserver-svc -o json | jq '.spec.ports[0].nodePort')"
 
 # Remove the container if there is any
-#$ docker rm -f ${CLUSTER_NAME}-kind-proxy-${VS_SVC_PORT} || true
+#$ docker rm -f ${CLUSTER_NAME}-kind-proxy-${VC_SVC_PORT} || true
 # Create this sidecar container
 $ docker run -d --restart always \
-    --name ${CLUSTER_NAME}-kind-proxy-${VS_SVC_PORT} \
-    --publish 127.0.0.1:${VS_SVC_PORT}:${VS_SVC_PORT} \
+    --name ${CLUSTER_NAME}-kind-proxy-${VC_SVC_PORT} \
+    --publish 127.0.0.1:${VC_SVC_PORT}:${VC_SVC_PORT} \
     --link ${CLUSTER_NAME}-control-plane:target \
     --network kind \
     alpine/socat -dd \
-    tcp-listen:${VS_SVC_PORT},fork,reuseaddr tcp-connect:target:${VS_SVC_PORT}
+    tcp-listen:${VC_SVC_PORT},fork,reuseaddr tcp-connect:target:${VC_SVC_PORT}
   
 # And update the vc-1.kubeconfig
-$ sed -i".bak" "s|.*server:.*|    server: https://127.0.0.1:${VS_SVC_PORT}|" vc-1.kubeconfig
+$ sed -i".bak" "s|.*server:.*|    server: https://127.0.0.1:${VC_SVC_PORT}|" vc-1.kubeconfig
 ```
 
 Now let's take a look how Virtual Cluster looks like:
@@ -333,19 +329,19 @@ By deleting the VirtualCluster CR, all the tenant resources created in the super
 
 ```bash
 # The VirtualCluster
-$ kubectl delete VirtualCluster vc-sample-1
+kubectl delete VirtualCluster vc-sample-1
 ```
 
 Of course, you can delete all others VirtualCluster objects too to clean up everything:
 
 ```bash
 # The ClusterVersion
-$ kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/clusterversion_v1_nodeport.yaml
+kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/clusterversion_v1_nodeport.yaml
 
 # The Virtual Cluster components
-$ kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/setup/all_in_one.yaml
+kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/setup/all_in_one.yaml
 
 # The CRDs
-$ kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_virtualclusters.yaml
-$ kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/tenancy.x-k8s.io_clusterversions.yaml
+kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_virtualclusters.yaml
+kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/tenancy.x-k8s.io_clusterversions.yaml
 ```

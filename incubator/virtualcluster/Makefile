@@ -82,6 +82,24 @@ deploy: manifests
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role paths="./..." output:crd:artifacts:config=config/crds
 	hack/make-rules/replace-null.sh
+# To work around a known controller gen issue
+# https://github.com/kubernetes-sigs/kubebuilder/issues/1544
+ifeq (, $(shell which yq))
+	@echo "Please install yq for yaml patching. Get it from here: https://github.com/mikefarah/yq"
+	@exit
+else
+	@{ \
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.apiServer.properties.statefulset.properties.spec.properties.template.properties.spec.properties.containers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.controllerManager.properties.statefulset.properties.spec.properties.template.properties.spec.properties.containers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.etcd.properties.statefulset.properties.spec.properties.template.properties.spec.properties.containers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.apiServer.properties.statefulset.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.controllerManager.properties.statefulset.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.etcd.properties.statefulset.properties.spec.properties.template.properties.spec.properties.initContainers.items.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.apiServer.properties.service.properties.spec.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.controllerManager.properties.service.properties.spec.properties.ports.items.required[1]" protocol;\
+	yq w -i config/crds/tenancy.x-k8s.io_clusterversions.yaml "spec.validation.openAPIV3Schema.properties.spec.properties.etcd.properties.service.properties.spec.properties.ports.items.required[1]" protocol;\
+	}
+endif
 
 # Run go fmt against code
 fmt:
