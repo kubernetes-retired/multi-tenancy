@@ -30,7 +30,6 @@ require (
 	k8s.io/kubernetes v1.18.6
 	k8s.io/utils v0.0.0-20200619165400-6e3d28b6ed19
 	sigs.k8s.io/controller-runtime v0.6.1
-	sigs.k8s.io/yaml v1.2.0
 )
 
 // We use the replace directive to pin k8s.io dependencies that we don't directly

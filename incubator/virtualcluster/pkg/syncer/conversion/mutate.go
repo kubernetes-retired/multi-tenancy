@@ -24,11 +24,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
-	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
-	"k8s.io/kubernetes/pkg/kubelet/envvars"
 	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion/envvars"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
 
@@ -247,7 +246,7 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services 
 	for i := range services {
 		service := services[i]
 		// ignore services where ClusterIP is "None" or empty
-		if !v1helper.IsServiceIPSet(service) {
+		if !isServiceIPSet(service) {
 			continue
 		}
 		serviceName := service.Name
@@ -406,7 +405,7 @@ type serviceMutator struct {
 }
 
 func (s *serviceMutator) Mutate(vService *v1.Service) {
-	if v1helper.IsServiceIPSet(vService) {
+	if isServiceIPSet(vService) {
 		anno := s.pService.GetAnnotations()
 		if len(anno) == 0 {
 			anno = make(map[string]string)
@@ -418,6 +417,12 @@ func (s *serviceMutator) Mutate(vService *v1.Service) {
 	for i := range s.pService.Spec.Ports {
 		s.pService.Spec.Ports[i].NodePort = 0
 	}
+}
+
+// this function aims to check if the service's ClusterIP is set or not
+// the objective is not to perform validation here
+func isServiceIPSet(service *v1.Service) bool {
+	return service.Spec.ClusterIP != v1.ClusterIPNone && service.Spec.ClusterIP != ""
 }
 
 type SecretMutateInterface interface {
