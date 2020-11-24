@@ -21,9 +21,9 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 
 	vcpki "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/controller/pki"
+	pkiutil "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/pki"
 )
 
 const (

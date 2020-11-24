@@ -32,8 +32,9 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+
+	e2elog "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework/log"
+	e2epod "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework/pod"
 )
 
 const (
@@ -55,7 +56,7 @@ func ExpectNoError(err error, explain ...interface{}) {
 // (for example, for call chain f -> g -> ExpectNoErrorWithOffset(1, ...) error would be logged for "f").
 func ExpectNoErrorWithOffset(offset int, err error, explain ...interface{}) {
 	if err != nil {
-		Logf("Unexpected error occurred: %v", err)
+		e2elog.Logf("Unexpected error occurred: %v", err)
 	}
 	gomega.ExpectWithOffset(1+offset, err).NotTo(gomega.HaveOccurred(), explain...)
 }
@@ -68,7 +69,7 @@ func ExpectNoErrorWithRetries(fn func() error, maxRetries int, explain ...interf
 		if err == nil {
 			return
 		}
-		Logf("(Attempt %d of %d) Unexpected error occurred: %v", i+1, maxRetries, err)
+		e2elog.Logf("(Attempt %d of %d) Unexpected error occurred: %v", i+1, maxRetries, err)
 	}
 	gomega.ExpectWithOffset(1, err).NotTo(gomega.HaveOccurred(), explain...)
 }
@@ -102,7 +103,7 @@ func DumpEventsInNamespace(eventsLister EventsLister, namespace string) {
 		sort.Sort(byFirstTimestamp(sortedEvents))
 	}
 	for _, e := range sortedEvents {
-		Logf("At %v - event for %v: %v %v: %v", e.FirstTimestamp, e.InvolvedObject.Name, e.Source, e.Reason, e.Message)
+		e2elog.Logf("At %v - event for %v: %v %v: %v", e.FirstTimestamp, e.InvolvedObject.Name, e.Source, e.Reason, e.Message)
 	}
 	// Note that we don't wait for any Cleanup to propagate, which means
 	// that if you delete a bunch of pods right before ending your test,
@@ -133,7 +134,7 @@ func LoadConfig() (*restclient.Config, error) {
 
 // RestclientConfig returns a config holds the information needed to build connection to kubernetes clusters.
 func RestclientConfig(kubeContext string) (*clientcmdapi.Config, error) {
-	Logf(">>> kubeConfig: %s", TestContext.KubeConfig)
+	e2elog.Logf(">>> kubeConfig: %s", TestContext.KubeConfig)
 	if TestContext.KubeConfig == "" {
 		return nil, fmt.Errorf("KubeConfig must be specified to load client config")
 	}
@@ -142,7 +143,7 @@ func RestclientConfig(kubeContext string) (*clientcmdapi.Config, error) {
 		return nil, fmt.Errorf("error loading KubeConfig: %v", err.Error())
 	}
 	if kubeContext != "" {
-		Logf(">>> kubeContext: %s", kubeContext)
+		e2elog.Logf(">>> kubeContext: %s", kubeContext)
 		c.CurrentContext = kubeContext
 	}
 	return c, nil
@@ -151,43 +152,6 @@ func RestclientConfig(kubeContext string) (*clientcmdapi.Config, error) {
 // RunID is a unique identifier of the e2e run.
 // Beware that this ID is not the same for all tests in the e2e run, because each Ginkgo node creates it separately.
 var RunID = uuid.NewUUID()
-
-func nowStamp() string {
-	return time.Now().Format(time.StampMilli)
-}
-
-func log(level string, format string, args ...interface{}) {
-	fmt.Fprintf(ginkgo.GinkgoWriter, nowStamp()+": "+level+": "+format+"\n", args...)
-}
-
-// Logf logs the info.
-func Logf(format string, args ...interface{}) {
-	log("INFO", format, args...)
-}
-
-// Failf logs the fail info.
-func Failf(format string, args ...interface{}) {
-	FailfWithOffset(1, format, args...)
-}
-
-// FailfWithOffset calls "Fail" and logs the error at "offset" levels above its caller
-// (for example, for call chain f -> g -> FailfWithOffset(1, ...) error would be logged for "f").
-func FailfWithOffset(offset int, format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log("FAIL", msg)
-	ginkgowrapper.Fail(nowStamp()+": "+msg, 1+offset)
-}
-
-// Fail is a replacement for ginkgo.Fail which logs the problem as it occurs
-// and then calls ginkgowrapper.Fail.
-func Fail(msg string, callerSkip ...int) {
-	skip := 1
-	if len(callerSkip) > 0 {
-		skip += callerSkip[0]
-	}
-	log("FAIL", msg)
-	ginkgowrapper.Fail(nowStamp()+": "+msg, skip)
-}
 
 // findAvailableNamespaceName random namespace name starting with baseName.
 func findAvailableNamespaceName(baseName string, c clientset.Interface) (string, error) {
@@ -202,7 +166,7 @@ func findAvailableNamespaceName(baseName string, c clientset.Interface) (string,
 		if apierrs.IsNotFound(err) {
 			return true, nil
 		}
-		Logf("Unexpected error while getting namespace: %v", err)
+		e2elog.Logf("Unexpected error while getting namespace: %v", err)
 		return false, nil
 	})
 	return name, err
@@ -238,7 +202,7 @@ func CreateTestingNS(baseName string, c clientset.Interface, labels map[string]s
 		var err error
 		got, err = c.CoreV1().Namespaces().Create(context.TODO(), namespaceObj, metav1.CreateOptions{})
 		if err != nil {
-			Logf("Unexpected error while creating namespace: %v", err)
+			e2elog.Logf("Unexpected error while creating namespace: %v", err)
 			return false, nil
 		}
 		return true, nil

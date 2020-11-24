@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package server
+package test_test
 
 import (
 	"context"
@@ -61,6 +61,7 @@ import (
 	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/server"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/testcerts"
 )
 
@@ -87,7 +88,7 @@ func newTenantClient() (*http.Client, error) {
 }
 
 type serverTestFramework struct {
-	serverUnderTest *Server
+	serverUnderTest *server.Server
 	kubeletServer   *kubletServerTestFramework
 	testHTTPServer  *httptest.Server
 }
@@ -119,7 +120,7 @@ func newServerTestWithDebug(enableDebugging, redirectContainerStreaming bool, st
 		panic(errors.Wrap(err, "load kubelet client cert"))
 	}
 
-	server, err := NewServer(&config.Config{
+	server, err := server.NewServer(&config.Config{
 		KubeletClientCert: &kubeletClientCert,
 		KubeletServerHost: fv.kubeletServer.testHTTPServer.URL,
 	})

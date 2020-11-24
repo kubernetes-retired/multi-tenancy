@@ -21,9 +21,9 @@ import (
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/test/e2e/framework/ginkgowrapper"
 )
 
 // Similar to SynchronizedBeforeSuite, we want to run some operations only once (such as collecting cluster logs).

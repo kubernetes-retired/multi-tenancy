@@ -23,7 +23,6 @@ import (
 
 	"github.com/pkg/errors"
 	cliflag "k8s.io/component-base/cli/flag"
-	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
@@ -33,7 +32,7 @@ type Options struct {
 	// ServerOption
 	ServerOption
 	// KubeletOption
-	KubeletOption kubeletclient.KubeletClientConfig
+	KubeletOption KubeletClientConfig
 }
 
 type ServerOption struct {
@@ -52,9 +51,20 @@ type ServerOption struct {
 	Port uint
 }
 
+// Subset of the full options exposed in k8s.io/kubernetes/pkg/kubelet/client.KubeletClientConfig
+type KubeletClientConfig struct {
+	// Port specifies the default port - used if no information about Kubelet port can be found in Node.NodeStatus.DaemonEndpoints.
+	Port uint
+
+	// Server requires TLS client certificate authentication
+	CertFile string
+	// Server requires TLS client certificate authentication
+	KeyFile string
+}
+
 func NewVnAgentOptions() (*Options, error) {
 	return &Options{
-		KubeletOption: kubeletclient.KubeletClientConfig{},
+		KubeletOption: KubeletClientConfig{},
 	}, nil
 }
 
