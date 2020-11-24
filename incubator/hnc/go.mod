@@ -23,10 +23,6 @@ require (
 	k8s.io/apimachinery v0.18.6
 	k8s.io/cli-runtime v0.18.5
 	k8s.io/client-go v0.18.6
-	sigs.k8s.io/controller-runtime v0.6.3
+	sigs.k8s.io/controller-runtime v0.6.4
 	sigs.k8s.io/controller-tools v0.2.8
 )
-
-// Remove when https://github.com/kubernetes-sigs/controller-runtime/issues/1172
-// is fixed.
-replace sigs.k8s.io/controller-runtime => github.com/adrianludwin/controller-runtime v0.6.3-ts-fix
