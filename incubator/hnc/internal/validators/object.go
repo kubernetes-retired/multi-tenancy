@@ -8,9 +8,12 @@ import (
 
 	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -136,7 +139,7 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 		return allow("source object")
 	}
 	// This is a propagated object.
-	return o.handleInherited(op, newSource, oldSource, inst, oldInst)
+	return o.handleInherited(ctx, op, newSource, oldSource, inst, oldInst)
 }
 
 func validateSelectorUniqueness(inst, oldInst *unstructured.Unstructured) string {
@@ -199,7 +202,7 @@ func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 	return err
 }
 
-func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (o *Object) handleInherited(ctx context.Context, op admissionv1beta1.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
 	// Propagated objects cannot be created or deleted (except by the HNC SA, but the HNC SA
 	// never gets this far in the validation). They *can* have their statuses updated, so
 	// if this is an update, make sure that the canonical form of the object hasn't changed.
@@ -208,7 +211,7 @@ func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSo
 		return deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
 
 	case admissionv1beta1.Delete:
-		if o.isDeletingNS(oldInst) {
+		if o.isDeletingNS(ctx, oldInst) {
 			// There are few things more irritating in (K8s) life than having some stupid controller stop
 			// your namespace from being deleted. If there's an object in here and we've decided that the
 			// namespace should be deleted, then don't block anything!
@@ -244,16 +247,17 @@ func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSo
 	return deny(metav1.StatusReasonInternalError, "unknown operation: "+string(op))
 }
 
-// isDeletingNS returns true if the namespace of the object is already being deleted, based on the
-// in-memory forest.
-func (o *Object) isDeletingNS(inst *unstructured.Unstructured) bool {
-	o.Forest.Lock()
-	defer o.Forest.Unlock()
-	ns := o.Forest.Get(inst.GetNamespace())
-	if ns == nil {
-		return false
+// isDeletingNS returns true if the namespace of the object is already being deleted.
+func (o *Object) isDeletingNS(ctx context.Context, inst *unstructured.Unstructured) bool {
+	ns := &corev1.Namespace{}
+	nnm := types.NamespacedName{Name: inst.GetNamespace()}
+	err := o.client.Get(ctx, nnm, ns)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false
+		}
 	}
-	return ns.IsDeleting
+	return true
 }
 
 // hasConflict checks if there's any conflicting objects in the descendants. Returns

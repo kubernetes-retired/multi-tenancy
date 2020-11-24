@@ -2,13 +2,17 @@ package validators
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
@@ -144,14 +148,14 @@ func TestInheritedFromLabel(t *testing.T) {
 
 func TestUserChanges(t *testing.T) {
 	f := forest.NewForest()
-	o := &Object{Forest: f}
 	l := zap.Logger(false)
 
 	tests := []struct {
-		name    string
-		oldInst *unstructured.Unstructured
-		inst    *unstructured.Unstructured
-		fail    bool
+		name       string
+		oldInst    *unstructured.Unstructured
+		inst       *unstructured.Unstructured
+		fail       bool
+		isDeleting bool
 	}{{
 		name: "Allow changes to original objects",
 		oldInst: &unstructured.Unstructured{
@@ -273,8 +277,9 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
-		name: "Deny deletions of propagated objects",
-		fail: true,
+		name:       "Deny deletions of propagated objects",
+		fail:       true,
+		isDeleting: true,
 		oldInst: &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "v1",
@@ -481,6 +486,8 @@ func TestUserChanges(t *testing.T) {
 				op = admissionv1beta1.Create
 				tc.oldInst = &unstructured.Unstructured{}
 			}
+			c := fakeClient{isDeleting: tc.isDeleting}
+			o := &Object{Forest: f, client: c}
 			// Test
 			got := o.handle(context.Background(), l, op, tc.inst, tc.oldInst)
 			// Report
@@ -491,6 +498,59 @@ func TestUserChanges(t *testing.T) {
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
 		})
 	}
+}
+
+// fakeClient implements a fake client (https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client#Client).
+type fakeClient struct {
+	isDeleting bool
+}
+
+// Get returns error if the namespace is being deleted
+func (c fakeClient) Get(_ context.Context, key client.ObjectKey, obj runtime.Object) error {
+	if c.isDeleting {
+		return &errors.StatusError{
+			ErrStatus: metav1.Status{
+				Status:  metav1.StatusFailure,
+				Reason:  metav1.StatusReasonNotFound,
+				Message: fmt.Sprintf("%s not found", key),
+			}}
+	}
+	return nil
+}
+
+// Create fake implementation of client.Client
+func (c fakeClient) Create(_ context.Context, _ runtime.Object, _ ...client.CreateOption) error {
+	return nil
+}
+
+// Update fake implementation of client.Client
+func (c fakeClient) Update(_ context.Context, _ runtime.Object, _ ...client.UpdateOption) error {
+	return nil
+}
+
+// Delete fake implementation of client.Client
+func (c fakeClient) Delete(ctx context.Context, _ runtime.Object, _ ...client.DeleteOption) error {
+	return nil
+}
+
+// DeleteAllOf fake implementation of client.Client
+func (c fakeClient) DeleteAllOf(ctx context.Context, _ runtime.Object, _ ...client.DeleteAllOfOption) error {
+	return nil
+}
+
+// Patch fake implementation of client.Client
+func (c fakeClient) Patch(ctx context.Context, _ runtime.Object, _ client.Patch, _ ...client.PatchOption) error {
+	return nil
+}
+
+// List fake implementation of client.Client
+func (c fakeClient) List(ctx context.Context, _ runtime.Object, _ ...client.ListOption) error {
+	return nil
+}
+
+// Status fake implementation of client.StatusClient
+func (c fakeClient) Status() client.StatusWriter {
+	return nil
 }
 
 func TestCreatingConflictSource(t *testing.T) {
