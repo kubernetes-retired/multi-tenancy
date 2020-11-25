@@ -45,6 +45,7 @@ build:
 
 # Run tests
 .PHONY: test
+PWD = $(CURDIR)
 test: generate fmt vet manifests
 	@mkdir -p coverage
 	@( for pkg in ${COVERAGE_PACKAGES}; do \
@@ -54,9 +55,8 @@ test: generate fmt vet manifests
 	done )
 	@( cd ./pkg/vn-agent/server/test; \
 		go test ${TEST_FLAGS} \
-			-coverprofile=coverage/unit-test-pkg_vn-agent_server_test.out \
-			. || exit 1 ;\
-			done )
+			-coverprofile=${PWD}/coverage/unit-test-pkg_vn-agent_server_test.out )
+	@cd ${PWD}
 
 .PHONY: coverage
 coverage: ## combine coverage after test
