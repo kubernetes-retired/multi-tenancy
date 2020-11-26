@@ -87,9 +87,9 @@ func MustNotRun(cmdln ...string) {
 }
 
 func mustNotRun(offset int, cmdln ...string) {
-	EventuallyWithOffset(offset+1, func() error {
+	ExpectWithOffset(offset+1, func() error {
 		return TryRun(cmdln...)
-	}, eventuallyTimeout).ShouldNot(Succeed(), "Command: %s", cmdln)
+	}).ShouldNot(Equal(nil), "Command: %s", cmdln)
 }
 
 func TryRun(cmdln ...string) error {
