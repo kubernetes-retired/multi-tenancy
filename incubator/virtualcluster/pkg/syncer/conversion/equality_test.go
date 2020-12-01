@@ -471,3 +471,507 @@ func TestCheckActiveDeadlineSecondsEquality(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckUWPodStatusEquality(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		pObj       *v1.Pod
+		vObj       *v1.Pod
+		updatedVal *v1.PodStatus
+	}{
+		{
+			name: "equal",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			updatedVal: nil,
+		},
+		{
+			name: "not equal",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+				},
+			},
+		},
+		{
+			name: "no readiness condition in super",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+		{
+			name: "not equal in readiness",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test2",
+							Reason:  "test2",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+		{
+			name: "not equal in readiness and more conditions in super",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "c",
+							Message: "ccc",
+							Reason:  "ccc",
+						},
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test2",
+							Reason:  "test2",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "c",
+						Message: "ccc",
+						Reason:  "ccc",
+					},
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+		{
+			name: "readiness gate exists in super and doesn't exist in tenant",
+			pObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "super-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "c",
+							Message: "ccc",
+							Reason:  "ccc",
+						},
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test2",
+							Reason:  "test2",
+						},
+						{
+							Type:    "super-gate",
+							Message: "super",
+							Reason:  "super",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "c",
+						Message: "ccc",
+						Reason:  "ccc",
+					},
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(tc *testing.T) {
+			val := Equality(nil, nil).CheckUWPodStatusEquality(tt.pObj, tt.vObj)
+			if !equality.Semantic.DeepEqual(val, tt.updatedVal) {
+				tc.Errorf("expected val %v, got %v", tt.updatedVal, val)
+			}
+		})
+	}
+}
+
+func TestCheckDWPodConditionEquality(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		pObj       *v1.Pod
+		vObj       *v1.Pod
+		updatedVal *v1.PodStatus
+	}{
+		{
+			name: "equal",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			updatedVal: nil,
+		},
+		{
+			name: "not diff in readiness gate condition",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+					},
+				},
+			},
+			updatedVal: nil,
+		},
+		{
+			name: "diff in readiness gate condition",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test2",
+							Reason:  "test2",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+		{
+			name: "missing readiness gate condition in super",
+			pObj: &v1.Pod{
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "bbb",
+							Reason:  "bbb",
+						},
+					},
+				},
+			},
+			vObj: &v1.Pod{
+				Spec: v1.PodSpec{
+					ReadinessGates: []v1.PodReadinessGate{
+						{
+							ConditionType: "test-gate",
+						},
+					},
+				},
+				Status: v1.PodStatus{
+					Conditions: []v1.PodCondition{
+						{
+							Type:    "a",
+							Message: "aaa",
+							Reason:  "aaa",
+						},
+						{
+							Type:    "test-gate",
+							Message: "test",
+							Reason:  "test",
+						},
+					},
+				},
+			},
+			updatedVal: &v1.PodStatus{
+				Conditions: []v1.PodCondition{
+					{
+						Type:    "a",
+						Message: "bbb",
+						Reason:  "bbb",
+					},
+					{
+						Type:    "test-gate",
+						Message: "test",
+						Reason:  "test",
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(tc *testing.T) {
+			val := CheckDWPodConditionEquality(tt.pObj, tt.vObj)
+			if !equality.Semantic.DeepEqual(val, tt.updatedVal) {
+				tc.Errorf("expected val %v, got %v", tt.updatedVal, val)
+			}
+		})
+	}
+}

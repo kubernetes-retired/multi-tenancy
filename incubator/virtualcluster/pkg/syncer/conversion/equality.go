@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -63,6 +64,52 @@ func (e vcEquality) CheckPodEquality(pPod, vPod *v1.Pod) *v1.Pod {
 	}
 
 	return updatedPod
+}
+
+// CheckDWPodConditionEquality check whether super master Pod Status and virtual Pod Status
+// are logically equal.
+// In most cases, the source of truth is super pod status, because super master actually
+// own the physical resources, status is reported by **real** kubelet.
+// Besides, kubernetes allows user-defined conditions, such as pod readiness gate, it will
+// report readiness state to pod conditions. In other words, the source of truth for user-defined
+// pod conditions should be tenant side controller, only the condition reported by kubelet should
+// keep consistent with super.
+// It is not recommended that webhook in super append other readiness gate to pod. we left them unchanged
+// in super, don't sync them upward to tenant side.
+// ref https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-readiness-gate
+func CheckDWPodConditionEquality(pPod, vPod *v1.Pod) *v1.PodStatus {
+	readinessGateSet := sets.NewString()
+	for _, r := range vPod.Spec.ReadinessGates {
+		readinessGateSet.Insert(string(r.ConditionType))
+	}
+	vConditionMap := make(map[string]v1.PodCondition)
+	for _, c := range vPod.Status.Conditions {
+		if readinessGateSet.Has(string(c.Type)) {
+			vConditionMap[string(c.Type)] = c
+		}
+	}
+
+	newPStatus := pPod.Status.DeepCopy()
+	for i, c := range newPStatus.Conditions {
+		if !readinessGateSet.Has(string(c.Type)) {
+			continue
+		}
+		vc, exists := vConditionMap[string(c.Type)]
+		if exists {
+			delete(vConditionMap, string(c.Type))
+			newPStatus.Conditions[i] = *vc.DeepCopy()
+		}
+	}
+
+	// sync the readiness condition downward to super
+	for _, c := range vConditionMap {
+		newPStatus.Conditions = append(newPStatus.Conditions, c)
+	}
+
+	if !equality.Semantic.DeepEqual(pPod.Status, *newPStatus) {
+		return newPStatus
+	}
+	return nil
 }
 
 // checkDWObjectMetaEquality check whether super master object meta and virtual object meta
@@ -249,6 +296,58 @@ func (e vcEquality) isOpaquedKey(key string) bool {
 		}
 	}
 	return false
+}
+
+// CheckUWPodStatusEquality compute status upward to tenant.
+// User-defined readiness type condition unchanged in tenant, others
+// keep consistent with super.
+func (e vcEquality) CheckUWPodStatusEquality(pObj, vObj *v1.Pod) *v1.PodStatus {
+	newVStatus := pObj.Status.DeepCopy()
+
+	vReadinessGateSet := sets.NewString()
+	for _, r := range vObj.Spec.ReadinessGates {
+		vReadinessGateSet.Insert(string(r.ConditionType))
+	}
+	pReadinessGateSet := sets.NewString()
+	for _, r := range pObj.Spec.ReadinessGates {
+		pReadinessGateSet.Insert(string(r.ConditionType))
+	}
+	vConditionMap := make(map[string]v1.PodCondition)
+	for _, c := range vObj.Status.Conditions {
+		if vReadinessGateSet.Has(string(c.Type)) {
+			vConditionMap[string(c.Type)] = c
+		}
+	}
+
+	for i := 0; i < len(newVStatus.Conditions); i++ {
+		c := newVStatus.Conditions[i]
+		if !pReadinessGateSet.Has(string(c.Type)) && !vReadinessGateSet.Has(string(c.Type)) {
+			continue
+		}
+
+		// drop those readiness gate condition exist in super but don't exists in tenant
+		if !vReadinessGateSet.Has(string(c.Type)) {
+			newVStatus.Conditions = append(newVStatus.Conditions[:i], newVStatus.Conditions[i+1:]...)
+			i--
+			continue
+		}
+		pc, exists := vConditionMap[string(c.Type)]
+		if exists {
+			delete(vConditionMap, string(c.Type))
+			newVStatus.Conditions[i] = *pc.DeepCopy()
+		}
+	}
+
+	// readiness type condition may have not downward to super. keep them.
+	for _, c := range vConditionMap {
+		newVStatus.Conditions = append(newVStatus.Conditions, c)
+	}
+
+	if !equality.Semantic.DeepEqual(vObj.Status, *newVStatus) {
+		return newVStatus
+	}
+
+	return nil
 }
 
 // checkPodSpecEquality check the whether super master Pod Spec and virtual object

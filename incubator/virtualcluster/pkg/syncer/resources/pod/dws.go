@@ -312,6 +312,15 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 			return err
 		}
 	}
+	updatedPodStatus := conversion.CheckDWPodConditionEquality(pPod, vPod)
+	if updatedPodStatus != nil {
+		updatedPod = pPod.DeepCopy()
+		updatedPod.Status = *updatedPodStatus
+		pPod, err = c.client.Pods(targetNamespace).UpdateStatus(context.TODO(), updatedPod, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
