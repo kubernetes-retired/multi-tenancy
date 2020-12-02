@@ -19,6 +19,8 @@ namespaces are, and _why_ they behave the way they do.
   * [Hierarchical Configuration](#admin-hc)
   * [Namespaces administrators](#admin-admin)
   * [Conditions](#admin-conditions)
+  * [Labels and annotations read by HNC](#admin-labels-read)
+  * [Labels and annotations set by HNC](#admin-labels-set)
 
 <a name="why"/>
 
@@ -455,5 +457,117 @@ problem, and will generally require human intervention to resolve.
 
 > _Note: HNC v0.5 reported issues with objects as part of the non-standard
 > condition schema. These have been removed and replaced by standard Events in
-> HNC v0.6 since events are more standard, scalable and loggable.
+> HNC v0.6 since events are more standard, scalable and loggable._
 
+<a name="admin-labels-read">
+
+### Labels and annotations read by HNC
+
+You can modify the behaviour of HNC with various labels and annotations on
+objects, in addition to using the custom resources it defines.
+
+#### propagate.hnc.x-k8s.io/TYPE (annotation on objects)
+
+These annotations may be added to any namespaced object to define exceptions to
+propagation rules. More information to come.
+
+
+#### hnc.x-k8s.io/managed-by (annotation on namespaces)
+
+This annotation is mainly designed for use by external products such as GKE
+Config Sync or Anthos Config Management, not for human users. These products can
+set this annotation for two purposes:
+
+1. To ask HNC to respect _their_ understanding of hierarchy
+2. To ask HNC not to interfere with their management of the namespaces
+
+Config Sync and ACM both have their own concept of namespace hierarchy, which
+predates HNC's (HNC is actually based on these products). Unlike HNC, these
+products only instantiate the _leaf_ namespaces on a cluster, with all
+higher-level namespace (which they call _abstract namespaces_) only existing on
+a filesystem in a Git repo. However, they have adopted HNC's [tree
+labels](#basic-labels) to allow the leaf namespaces to be selected by subtree.
+
+Ordinarily, HNC removes any existing tree labels before replacing them with the
+labels it believes are correct, but by setting the `managed-by` annotation,
+external products such as ACM can suppress this behaviour and tell HNC to both
+_trust_ the existing tree labels, and _propagate_ them to any child namespaces
+that may later be created.
+
+Since tree labels are used for policy application, it's dangerous to allow users
+to change them simply by adding the `managed-by` annotation to the namespace.
+Therefore, HNC only allows this annotation to be added to namespaces that are
+roots (from HNC's perspective); similarly, it does not allow you to set a parent
+namespace if this annotation already exists. The two are mutually exclusive.
+
+We are considering replacing this with the standard
+`app.kubernetes.io/managed-by` label in the future.
+
+<a name="admin-labels-set">
+
+### Labels and annotations set by HNC
+
+HNC annotates and labels objects in several circumstances. Typically, most users
+(or admins) will never need to care about these, but occasionally they may cause
+some odd changes in behaviour that you need to be aware of.
+
+#### app.kubernetes.io/managed-by (label on objects)
+
+HNC sets this label on any object that it propagates, taking the place of any
+value that might have existed on the source object. It never touches this label
+on any source object, such as objects created by Helm or Config Sync.
+
+This label has no meaning _to_ HNC; it's only provided as a way for users to
+determine that HNC created an object.
+
+See also `hnc.x-k8s.io/inherited-from`.
+
+#### hnc.x-k8s.io/inherited-from (label on objects)
+
+HNC sets this label on any object that it propagates, similar to
+`app.kubernetes.io/managed-by`. Unlike `managed-by`, it identifies the namespace
+that held the original copy of this object.
+
+HNC will not allow you to set or modify this label. If you manage to set it on
+an object that wasn't originally propagated from a source, HNC will assume that
+the source object has been deleted and will therefore immediately delete this
+object as well.
+
+#### hnc.x-k8s.io/subnamespace-of (annotation on subnamespaces)
+
+This annotation is placed on any namespace that was created via a [subnamespace
+anchor](#basic-subns) and is therefore a subnamespace. It points to the parent
+of the subnamespace.
+
+HNC considers a namespace to be a subnamespace if:
+* An anchor exists in the parent namespace with the same name as the
+  subnamespace, _and_
+* The subnamespace contains this annotation pointing to the parent namespace.
+
+If an anchor exists but the subnamespace is missing or incorrect, the anchor
+will have its `status.state` set to `Conflict`; deleting a conflicted anchor
+will not delete the subnamespace. Conversely, a namespace with the
+`subnamespace-of` annotation but no anchor in the parent will have a condition
+with the `SubnamespaceAnchorMissing` code in its `HierarchyConfiguration`
+object; this can be resolved either by removing the annotation or creating the
+anchor in the parent namespace.
+
+Generally speaking, you should never have to look at or modify this annotation.
+The one exception is if you would like to convert a subnamespace into a full
+namespace - which is to say, you no longer want its lifetime to be controlled by
+its anchor. In such cases, you can do the following:
+
+1. Remove the `hnc.x-k8s.io/subnamespace-of` annotation from the subnamespace.
+2. Ensure that the anchor in the parent is in the `Conflict` state, and then
+   delete the anchor.
+
+At this point, the namespace will still be a _child_ of its parent, but you can
+now move it around the hierarchy (e.g. via `kubectl hns NS set --parent
+NEW_PARENT`). There is no need (and typically no good reason) to take a full
+namespace and turn it back into a subnamespace.
+
+#### NAMESPACE.tree.x-k8s.io/depth (label on namespaces)
+
+This is the [tree label](#basic-labels) which is documented above. It is set by
+HNC on namespaces and (unless `managed-by` was set first) cannot be modified by
+anyone other than HNC.
