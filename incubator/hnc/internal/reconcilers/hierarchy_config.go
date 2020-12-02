@@ -312,7 +312,7 @@ func (r *HierarchyConfigReconciler) upgradeV1A1SubnamespaceAnnotation(inst *core
 }
 
 // upgradeV1A1ManagedBy replaces the v1alpha1 `managedBy` annotation with the v1alpha2 `managed-by`
-// annotation. If there's a conflict, the old one is ignored and deleted.
+// annotation. If there's a conflict, the old one is ignored.
 func (r *HierarchyConfigReconciler) upgradeV1A1ManagedBy(inst *corev1.Namespace) {
 	// Get old annotation
 	a := inst.GetAnnotations()
@@ -320,9 +320,6 @@ func (r *HierarchyConfigReconciler) upgradeV1A1ManagedBy(inst *corev1.Namespace)
 	if !oldExists {
 		return
 	}
-
-	// Remove old annotation
-	delete(a, api.AnnotationManagedByV1A1)
 
 	// Add new annotation if it doesn't already exist
 	if _, newExists := a[api.AnnotationManagedBy]; !newExists {
