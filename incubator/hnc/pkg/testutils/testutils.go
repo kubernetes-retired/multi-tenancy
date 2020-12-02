@@ -15,28 +15,29 @@ import (
 // The time that Eventually() will keep retrying until timeout
 // we use 5 seconds here because some tests require deleting a namespace, and shorter time period might not be enough
 const eventuallyTimeout = 5
+
 // The testing label marked on all namespaces created using the testing phase, offering ease when doing cleanups
 const testingNamespaceLabel = "hnc.x-k8s.io/testNamespace"
 
 var hncRecoverPath = os.Getenv("HNC_REPAIR")
 
-func FieldShouldContain(resource, ns, nm, field, want string){
+func FieldShouldContain(resource, ns, nm, field, want string) {
 	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, eventuallyTimeout)
 }
 
-func FieldShouldContainMultiple(resource, ns, nm, field string, want []string){
+func FieldShouldContainMultiple(resource, ns, nm, field string, want []string) {
 	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, want, eventuallyTimeout)
 }
 
-func FieldShouldContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+func FieldShouldContainWithTimeout(resource, ns, nm, field, want string, timeout float64) {
 	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, timeout)
 }
 
-func FieldShouldContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+func FieldShouldContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64) {
 	fieldShouldContainMultipleWithTimeout(1, resource, ns, nm, field, want, timeout)
 }
 
-func fieldShouldContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64){
+func fieldShouldContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64) {
 	if ns != "" {
 		runShouldContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
 	} else {
@@ -44,23 +45,23 @@ func fieldShouldContainMultipleWithTimeout(offset int, resource, ns, nm, field s
 	}
 }
 
-func FieldShouldNotContain(resource, ns, nm, field, want string){
+func FieldShouldNotContain(resource, ns, nm, field, want string) {
 	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, eventuallyTimeout)
 }
 
-func FieldShouldNotContainMultiple(resource, ns, nm, field string, want []string){
+func FieldShouldNotContainMultiple(resource, ns, nm, field string, want []string) {
 	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, want, eventuallyTimeout)
 }
 
-func FieldShouldNotContainWithTimeout(resource, ns, nm, field, want string, timeout float64){
+func FieldShouldNotContainWithTimeout(resource, ns, nm, field, want string, timeout float64) {
 	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, []string{want}, timeout)
 }
 
-func FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64){
+func FieldShouldNotContainMultipleWithTimeout(resource, ns, nm, field string, want []string, timeout float64) {
 	fieldShouldNotContainMultipleWithTimeout(1, resource, ns, nm, field, want, timeout)
 }
 
-func fieldShouldNotContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64){
+func fieldShouldNotContainMultipleWithTimeout(offset int, resource, ns, nm, field string, want []string, timeout float64) {
 	if ns != "" {
 		runShouldNotContainMultiple(offset+1, want, timeout, "kubectl get", resource, nm, "-n", ns, "-o template --template={{"+field+"}}")
 	} else {
@@ -122,7 +123,7 @@ func runShouldContainMultiple(offset int, substrs []string, seconds float64, cmd
 	EventuallyWithOffset(offset+1, func() string {
 		missing, err := tryRunShouldContainMultiple(substrs, cmdln...)
 		if err != nil {
-			return "failed: "+err.Error()
+			return "failed: " + err.Error()
 		}
 		return missing
 	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
@@ -147,9 +148,9 @@ func runErrorShouldContainMultiple(offset int, substrs []string, seconds float64
 }
 
 func tryRunShouldContainMultiple(substrs []string, cmdln ...string) (string, error) {
-		stdout, err := RunCommand(cmdln...)
-		GinkgoT().Log("Output: ", stdout)
-		return missAny(substrs, stdout), err
+	stdout, err := RunCommand(cmdln...)
+	GinkgoT().Log("Output: ", stdout)
+	return missAny(substrs, stdout), err
 }
 
 // If any of the substrs are missing from teststring, returns a string of the form:
@@ -169,8 +170,8 @@ func missAny(substrs []string, teststring string) string {
 	// This looks *ok* if we're only missing a single multiline string, and ok if we're missing
 	// multiple single-line strings. It would look awful if we were missing multiple multiline strings
 	// but I think that's pretty rare.
-	msg := "did not output the expected substring(s): "+strings.Join(missing, ", ")+"\n"
-	msg += "and instead output: "+teststring
+	msg := "did not output the expected substring(s): " + strings.Join(missing, ", ") + "\n"
+	msg += "and instead output: " + teststring
 	return msg
 }
 
@@ -190,7 +191,7 @@ func runShouldNotContainMultiple(offset int, substrs []string, seconds float64, 
 	EventuallyWithOffset(offset+1, func() string {
 		stdout, err := RunCommand(cmdln...)
 		if err != nil {
-			return "failed: "+err.Error()
+			return "failed: " + err.Error()
 		}
 
 		for _, substr := range substrs {
@@ -203,7 +204,7 @@ func runShouldNotContainMultiple(offset int, substrs []string, seconds float64, 
 	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
 }
 
-func MustApplyYAML(s string){
+func MustApplyYAML(s string) {
 	filename := writeTempFile(s)
 	defer removeFile(filename)
 	MustRun("kubectl apply -f", filename)
@@ -234,34 +235,34 @@ func RunCommand(cmdln ...string) (string, error) {
 
 // CreateNamespace creates the specified namespace with canned testing labels making it easier
 // to look up and delete later.
-func CreateNamespace( ns string)   {
+func CreateNamespace(ns string) {
 	MustRun("kubectl create ns", ns)
 	labelTestingNs(ns)
 }
 
 // CreateSubnamespace creates the specified namespace in the parent namespace with canned testing labels making it easier
 // to look up and delete later.
-func CreateSubnamespace( ns string,parent string)   {
-	MustRun( "kubectl hns create", ns, "-n", parent)
+func CreateSubnamespace(ns string, parent string) {
+	MustRun("kubectl hns create", ns, "-n", parent)
 	labelTestingNs(ns)
 }
 
 // marks testing namespaces with a label for future search and lookup.
-func labelTestingNs(ns string){
-	MustRun("kubectl label --overwrite ns", ns,testingNamespaceLabel+"=true")
+func labelTestingNs(ns string) {
+	MustRun("kubectl label --overwrite ns", ns, testingNamespaceLabel+"=true")
 }
 
 // CleanupTestNamespaces finds the list of namespaces labeled as test namespaces and delegates
 // to cleanupNamespaces function.
-func CleanupTestNamespaces(){
+func CleanupTestNamespaces() {
 	nses := []string{}
 	EventuallyWithOffset(1, func() error {
-		labelQuery := testingNamespaceLabel+"=true"
-		out,err:=RunCommand("kubectl get ns -o custom-columns=:.metadata.name --no-headers=true", "-l", labelQuery)
+		labelQuery := testingNamespaceLabel + "=true"
+		out, err := RunCommand("kubectl get ns -o custom-columns=:.metadata.name --no-headers=true", "-l", labelQuery)
 		if err != nil {
 			return err
 		}
-		nses= strings.Split(out,"\n")
+		nses = strings.Split(out, "\n")
 		return nil
 	}).Should(Succeed(), "while getting list of namespaces to clean up")
 	cleanupNamespaces(nses...)
@@ -312,8 +313,8 @@ func TearDownHNC(hncVersion string) {
 	TryRunQuietly("k delete crd hierarchyconfigurations.hnc.x-k8s.io")
 	TryRunQuietly("k delete crd hncconfigurations.hnc.x-k8s.io")
 	TryRunQuietly("kubectl delete -f ../../manifests/hnc-manager.yaml")
-	if hncVersion != ""{
-		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-"+hncVersion+"/hnc-manager.yaml")
+	if hncVersion != "" {
+		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-" + hncVersion + "/hnc-manager.yaml")
 	}
 	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
 	runShouldNotContain(1, "hnc-system", 10, "kubectl get ns")
@@ -327,7 +328,7 @@ func CheckHNCPath() {
 	}
 }
 
-// HasHNCPath returns true if we'll be able to successfully call RecoverHNC, and false otherwise. 
+// HasHNCPath returns true if we'll be able to successfully call RecoverHNC, and false otherwise.
 func HasHNCPath() bool {
 	return hncRecoverPath != ""
 }
@@ -398,7 +399,8 @@ func removeFile(path string) {
 //
 // See https://onsi.github.io/gomega/#adding-your-own-matchers for details.
 type silencer struct{}
-func beQuiet() silencer {return silencer{}}
+
+func beQuiet() silencer { return silencer{} }
 func (_ silencer) Match(actual interface{}) (bool, error) {
 	diffs := actual.(string)
 	return diffs == "", nil
@@ -409,4 +411,3 @@ func (_ silencer) FailureMessage(actual interface{}) string {
 func (_ silencer) NegatedFailureMessage(actual interface{}) string {
 	return "!!!! you should not put beQuiet() in a ShouldNot matcher !!!!"
 }
-

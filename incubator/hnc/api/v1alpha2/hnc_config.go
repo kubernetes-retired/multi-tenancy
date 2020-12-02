@@ -146,6 +146,12 @@ type HNCConfigurationSpec struct {
 	// or 'rolebindings' are not allowed. To learn more, see
 	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
 	Resources []ResourceSpec `json:"resources,omitempty"`
+
+	// UnpropagatedAnnotations is a list of annotations that, if present on source objects, are
+	// removed in the propagated copies of those objects. This can be used to prevent products such as
+	// GKE Config Sync from thinking that it should manage objects owned by HNC (in this case, the
+	// configmanagement.gke.io/managed annotation).
+	UnpropagatedAnnotations []string `json:"unpropagatedAnnotations,omitempty"`
 }
 
 // HNCConfigurationStatus defines the observed state of HNC configuration.

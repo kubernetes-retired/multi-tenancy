@@ -39,13 +39,18 @@ type namedNamespaces map[string]*Namespace
 type TypeSyncer interface {
 	// SyncNamespace syncs objects of a namespace for a specific type.
 	SyncNamespace(context.Context, logr.Logger, string) error
+
 	// Provides the GVK that is handled by the reconciler who implements the interface.
 	GetGVK() schema.GroupVersionKind
-	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements the interface.
-	// The method also syncs objects in the cluster for the type handled by the reconciler if necessary.
-	SetMode(context.Context, api.SynchronizationMode, logr.Logger) error
+
+	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements
+	// the interface.  The method also syncs objects in the cluster for the type handled by the
+	// reconciler if necessary (or if the final boolean parameter is true).
+	SetMode(context.Context, logr.Logger, api.SynchronizationMode, bool) error
+
 	// GetMode gets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	GetMode() api.SynchronizationMode
+
 	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
 	GetNumPropagatedObjects() int
 }
