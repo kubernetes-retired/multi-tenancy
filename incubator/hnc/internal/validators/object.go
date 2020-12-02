@@ -41,7 +41,7 @@ type Object struct {
 }
 
 func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := o.Log.WithValues("nm", req.Name, "resource", req.Resource, "nnm", req.Namespace, "op", req.Operation)
+	log := o.Log.WithValues("resource", req.Resource, "ns", req.Namespace, "nm", req.Name, "op", req.Operation, "user", req.UserInfo.Username)
 
 	// Before even looking at the objects, early-exit for any changes we shouldn't be involved in.
 	// This reduces the chance we'll hose some aspect of the cluster we weren't supposed to touch.

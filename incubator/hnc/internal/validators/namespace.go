@@ -39,7 +39,7 @@ type nsRequest struct {
 
 // Handle implements the validation webhook.
 func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := v.Log.WithValues("NamespaceName", req.Name)
+	log := v.Log.WithValues("nm", req.Name, "op", req.Operation, "user", req.UserInfo.Username)
 	// Early exit since the HNC SA can do whatever it wants.
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
 		log.V(1).Info("Allowed change by HNC SA")

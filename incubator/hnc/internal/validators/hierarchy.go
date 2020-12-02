@@ -83,7 +83,7 @@ type request struct {
 //
 // Authz false positives are prevented as described by the comments to `getServerChecks`.
 func (v *Hierarchy) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := v.Log.WithValues("ns", req.Namespace, "user", req.UserInfo.Username)
+	log := v.Log.WithValues("ns", req.Namespace, "op", req.Operation, "user", req.UserInfo.Username)
 	decoded, err := v.decodeRequest(req)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
@@ -115,7 +115,6 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 	// object wouldn't pass legality. We should probably only give the HNC SA the ability to modify
 	// the _status_, though. TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/80.
 	if isHNCServiceAccount(req.ui) {
-		log.V(1).Info("Allowed change by HNC SA")
 		return allow("HNC SA")
 	}
 
