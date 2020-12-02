@@ -39,7 +39,7 @@ type anchorRequest struct {
 
 // Handle implements the validation webhook.
 func (v *Anchor) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := v.Log.WithValues("Namespace", req.Namespace, "Name", req.Name)
+	log := v.Log.WithValues("ns", req.Namespace, "nm", req.Name, "op", req.Operation, "user", req.UserInfo.Username)
 	// Early exit since the HNC SA can do whatever it wants.
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
 		log.V(1).Info("Allowed change by HNC SA")
@@ -48,7 +48,7 @@ func (v *Anchor) Handle(ctx context.Context, req admission.Request) admission.Re
 
 	decoded, err := v.decodeRequest(log, req)
 	if err != nil {
-		v.Log.Error(err, "Couldn't decode request")
+		log.Error(err, "Couldn't decode request")
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 	if decoded == nil {

@@ -47,7 +47,7 @@ type grTranslator interface {
 type gvkSet map[schema.GroupVersionKind]api.SynchronizationMode
 
 func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission.Response {
-	log := c.Log.WithValues("NamespaceName", req.Name)
+	log := c.Log.WithValues("nm", req.Name, "op", req.Operation, "user", req.UserInfo.Username)
 	if isHNCServiceAccount(&req.AdmissionRequest.UserInfo) {
 		return allow("HNC SA")
 	}
