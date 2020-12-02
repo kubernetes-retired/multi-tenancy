@@ -22,7 +22,6 @@ import (
 
 	pkgerr "github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -159,7 +158,7 @@ func (c *controller) BackPopulate(key string) error {
 		}
 	}
 
-	if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
+	if newStatus := conversion.Equality(c.config, spec).CheckUWPodStatusEquality(pPod, vPod); newStatus != nil {
 		if newPod == nil {
 			newPod = vPod.DeepCopy()
 		} else {
@@ -168,7 +167,7 @@ func (c *controller) BackPopulate(key string) error {
 				return fmt.Errorf("failed to retrieve vPod %s/%s from cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			}
 		}
-		newPod.Status = pPod.Status
+		newPod.Status = *newStatus
 		if _, err = tenantClient.CoreV1().Pods(vPod.Namespace).UpdateStatus(context.TODO(), newPod, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed to back populate pod %s/%s status update for cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 		}

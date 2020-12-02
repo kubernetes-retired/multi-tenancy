@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -173,7 +172,7 @@ func (c *controller) PatrollerDo() {
 				shouldDelete = true
 				klog.Warningf("Found pPod %s/%s delegated UID is different from tenant object.", pPod.Namespace, pPod.Name)
 			} else {
-				if !equality.Semantic.DeepEqual(vPod.Status, pPod.Status) {
+				if conversion.Equality(c.config, nil).CheckUWPodStatusEquality(pPod, vPod) != nil {
 					numStatusMissMatchedPods++
 					klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
 					if assignedPod(pPod) {
@@ -305,6 +304,17 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
+			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
+				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
+			}
+		}
+
+		updatedPodStatus := conversion.CheckDWPodConditionEquality(pPod, &podList.Items[i])
+		if updatedPodStatus != nil {
+			atomic.AddUint64(&numSpecMissMatchedPods, 1)
+			klog.Warningf("DWStatus of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
 			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			} else {
