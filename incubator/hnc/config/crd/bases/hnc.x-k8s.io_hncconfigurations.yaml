@@ -58,6 +58,11 @@ spec:
                 - resource
                 type: object
               type: array
+            unpropagatedAnnotations:
+              description: UnpropagatedAnnotations is a list of annotations that, if present on source objects, are removed in the propagated copies of those objects. This can be used to prevent products such as GKE Config Sync from thinking that it should manage objects owned by HNC (in this case, the configmanagement.gke.io/managed annotation).
+              items:
+                type: string
+              type: array
           type: object
         status:
           description: HNCConfigurationStatus defines the observed state of HNC configuration.

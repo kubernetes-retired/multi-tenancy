@@ -188,10 +188,15 @@ func createNSWithLabelAnnotation(ctx context.Context, prefix string, l map[strin
 
 func updateHNCConfig(ctx context.Context, c *api.HNCConfiguration) error {
 	if c.CreationTimestamp.IsZero() {
-		return k8sClient.Create(ctx, c)
+		if err := k8sClient.Create(ctx, c); err != nil {
+			return fmt.Errorf("while creating HNCConfiguration %q: %w", c.GetName(), err)
+		}
 	} else {
-		return k8sClient.Update(ctx, c)
+		if err := k8sClient.Update(ctx, c); err != nil {
+			return fmt.Errorf("while updating HNCConfiguration %q: %w", c.GetName(), err)
+		}
 	}
+	return nil
 }
 
 func resetHNCConfigToDefault(ctx context.Context) {
@@ -200,9 +205,8 @@ func resetHNCConfigToDefault(ctx context.Context) {
 		if err != nil {
 			return err
 		}
-		c.Spec.Resources = nil
-		c.Status.Resources = nil
-		c.Status.Conditions = nil
+		c.Spec = api.HNCConfigurationSpec{}
+		c.Status = api.HNCConfigurationStatus{}
 		return k8sClient.Update(ctx, c)
 	}).Should(Succeed(), "While resetting HNC config")
 }
@@ -214,8 +218,10 @@ func getHNCConfig(ctx context.Context) (*api.HNCConfiguration, error) {
 func getHNCConfigWithName(ctx context.Context, nm string) (*api.HNCConfiguration, error) {
 	nnm := types.NamespacedName{Name: nm}
 	config := &api.HNCConfiguration{}
-	err := k8sClient.Get(ctx, nnm, config)
-	return config, err
+	if err := k8sClient.Get(ctx, nnm, config); err != nil {
+		return nil, fmt.Errorf("while reading HNCConfiguration %q: %w", nm, err)
+	}
+	return config, nil
 }
 
 func addToHNCConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
@@ -235,12 +241,17 @@ func addToHNCConfig(ctx context.Context, group, resource string, mode api.Synchr
 func hasObject(ctx context.Context, resource string, nsName, name string) func() bool {
 	// `Eventually` only works with a fn that doesn't take any args.
 	return func() bool {
-		nnm := types.NamespacedName{Namespace: nsName, Name: name}
-		inst := &unstructured.Unstructured{}
-		inst.SetGroupVersionKind(GVKs[resource])
-		err := k8sClient.Get(ctx, nnm, inst)
+		_, err := getObject(ctx, resource, nsName, name)
 		return err == nil
 	}
+}
+
+func getObject(ctx context.Context, resource string, nsName, name string) (*unstructured.Unstructured, error) {
+	nnm := types.NamespacedName{Namespace: nsName, Name: name}
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[resource])
+	err := k8sClient.Get(ctx, nnm, inst)
+	return inst, err
 }
 
 // makeObject creates an empty object of the given kind in a specific namespace. The kind and

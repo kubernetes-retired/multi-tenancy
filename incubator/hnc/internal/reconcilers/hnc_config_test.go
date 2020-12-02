@@ -351,6 +351,74 @@ var _ = Describe("HNCConfiguration", func() {
 
 		Eventually(hasNumSourceObjects(ctx, "", "limitranges"), countUpdateTime).Should(BeFalse())
 	})
+
+	It("should avoid propagating banned annotations", func() {
+		setParent(ctx, barName, fooName)
+		makeObjectWithAnnotation(ctx, "roles", fooName, "foo-role", map[string]string{
+			"annot-a": "value-a",
+			"annot-b": "value-b",
+		})
+
+		// Ensure the object is propagated with both annotations
+		Eventually(func() error {
+			inst, err := getObject(ctx, "roles", barName, "foo-role")
+			if err != nil {
+				return err
+			}
+			annots := inst.GetAnnotations()
+			if annots["annot-a"] != "value-a" {
+				return fmt.Errorf("annot-a: want 'value-a', got %q", annots["annot-a"])
+			}
+			if annots["annot-b"] != "value-b" {
+				return fmt.Errorf("annot-b: want 'value-b', got %q", annots["annot-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for initial sync of foo-role")
+
+		// Tell the HNC config not to propagate annot-a
+		Eventually(func() error {
+			c, err := getHNCConfig(ctx)
+			if err != nil {
+				return err
+			}
+			c.Spec.UnpropagatedAnnotations = []string{"annot-a"}
+			return updateHNCConfig(ctx, c)
+		}).Should(Succeed(), "while trying to exclude annot-a")
+
+		// Verify that the annotation no longer appears
+		Eventually(func() error {
+			inst, err := getObject(ctx, "roles", barName, "foo-role")
+			if err != nil {
+				return err
+			}
+			annots := inst.GetAnnotations()
+			if val, ok := annots["annot-a"]; ok {
+				return fmt.Errorf("annot-a: wanted it to be missing, got %q", val)
+			}
+			if annots["annot-b"] != "value-b" {
+				return fmt.Errorf("annot-b: want 'value-b', got %q", annots["annot-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for annot-a to be unpropagated")
+
+		// Restore the annotation to its original state and verify that the annotation comes back.
+		resetHNCConfigToDefault(ctx)
+		Eventually(func() error {
+			inst, err := getObject(ctx, "roles", barName, "foo-role")
+			if err != nil {
+				return err
+			}
+			annots := inst.GetAnnotations()
+			if annots["annot-a"] != "value-a" {
+				return fmt.Errorf("annot-a: want 'value-a', got %q", annots["annot-a"])
+			}
+			if annots["annot-b"] != "value-b" {
+				return fmt.Errorf("annot-b: want 'value-b', got %q", annots["annot-b"])
+			}
+			return nil
+		}).Should(Succeed(), "verifying we can restore the annotations")
+
+	})
 })
 
 func typeSpecMode(ctx context.Context, group, resource string) func() api.SynchronizationMode {

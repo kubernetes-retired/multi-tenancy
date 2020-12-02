@@ -148,14 +148,20 @@ func GetValidateMode(mode api.SynchronizationMode, log logr.Logger) api.Synchron
 
 // SetMode sets the Mode field of an object reconciler and syncs objects in the cluster if needed.
 // The method will return an error if syncs fail.
-func (r *ObjectReconciler) SetMode(ctx context.Context, mode api.SynchronizationMode, log logr.Logger) error {
+//
+// If `resync` is true, all objects will be re-enqueued even if the mode hasn't changed.
+func (r *ObjectReconciler) SetMode(ctx context.Context, log logr.Logger, mode api.SynchronizationMode, resync bool) error {
 	log = log.WithValues("gvk", r.GVK)
 	newMode := GetValidateMode(mode, log)
 	oldMode := r.Mode
-	if newMode == oldMode {
+	if newMode == oldMode && !resync {
 		return nil
 	}
-	log.Info("Changing sync mode of the object reconciler", "old", oldMode, "new", newMode)
+	if resync {
+		log.Info("Forcibly resyncing all objects", "oldMode", oldMode, "newMode", newMode)
+	} else {
+		log.Info("Changing sync mode of the object reconciler", "oldMode", oldMode, "newMode", newMode)
+	}
 	r.Mode = newMode
 	// If the new mode is not "ignore", we need to update objects in the cluster
 	// (e.g., propagate or remove existing objects).
@@ -435,10 +441,42 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 	// or not, because HNCConfig webhook will also check the non-'Propagate' mode
 	// source objects in the forest to see if a mode change is allowed.
 	ns := r.Forest.Get(src.GetNamespace())
-	ns.SetSourceObject(src.DeepCopy())
+
+	ns.SetSourceObject(cleanSource(src))
 
 	// Enqueue propagated copies for this possibly deleted source
 	r.syncPropagation(ctx, log, src)
+}
+
+// cleanSource creates a sanitized version of the object to store in the forest. In particular, it
+// sets the standard app.kubernetes.io/managed-by label, and cleans out any unpropagated
+// annotations.
+func cleanSource(src *unstructured.Unstructured) *unstructured.Unstructured {
+	config.Lock.Lock()
+	defer config.Lock.Unlock()
+
+	// Don't modify the original
+	src = src.DeepCopy()
+
+	// Clean out bad annotations.
+	annot := src.GetAnnotations()
+	if annot == nil {
+		annot = map[string]string{}
+	}
+	for _, unprop := range config.UnpropagatedAnnotations {
+		delete(annot, unprop)
+	}
+	src.SetAnnotations(annot)
+
+	// Set or replace the managed-by label.
+	labels := src.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[api.LabelManagedByApps] = api.MetaGroup
+	src.SetLabels(labels)
+
+	return src
 }
 
 func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
