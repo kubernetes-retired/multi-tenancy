@@ -5,8 +5,9 @@ package config
 // exclude some default namespaces with constantly changing objects.
 // TODO make the exclusion configurable - https://github.com/kubernetes-sigs/multi-tenancy/issues/374
 var EX = map[string]bool{
-	"kube-system":  true,
-	"kube-public":  true,
-	"hnc-system":   true,
-	"cert-manager": true,
+	"kube-system":     true,
+	"kube-public":     true,
+	"hnc-system":      true,
+	"cert-manager":    true,
+	"kube-node-lease": true,
 }
