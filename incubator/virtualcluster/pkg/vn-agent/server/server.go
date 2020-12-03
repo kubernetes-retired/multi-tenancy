@@ -17,19 +17,25 @@ limitations under the License.
 package server
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/url"
 
 	"github.com/emicklei/go-restful"
 	"github.com/pkg/errors"
+	"k8s.io/client-go/rest"
+	certutil "k8s.io/client-go/util/cert"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
 // Server is a http.Handler which exposes vn-agent functionality over HTTP.
 type Server struct {
-	config      *config.Config
-	restfulCont *restful.Container
+	config                *config.Config
+	restfulCont           *restful.Container
+	transport             *http.Transport
+	superAPIServerAddress *url.URL
+	restConfig            *rest.Config
 }
 
 // ServeHTTP responds to HTTP requests on the vn-agent.
@@ -51,5 +57,35 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	}
 
 	server.InstallHandlers()
+
+	if server.config.KubeletClientCert != nil {
+		server.transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				Certificates:       []tls.Certificate{*server.config.KubeletClientCert},
+			},
+		}
+	} else {
+		restConfig, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get in cluster config")
+		}
+		server.restConfig = restConfig
+		superHttpsUrl, err := url.Parse(restConfig.Host)
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to parse apiserver address")
+		}
+		server.superAPIServerAddress = superHttpsUrl
+		caCrtPool, err := certutil.NewPool(restConfig.TLSClientConfig.CAFile)
+		if err != nil {
+			return nil, errors.Wrapf(err, "unable to parse ca file")
+		}
+		server.transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: caCrtPool,
+			},
+		}
+	}
+
 	return server, nil
 }

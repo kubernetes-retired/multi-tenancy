@@ -17,16 +17,11 @@ limitations under the License.
 package server
 
 import (
-	"crypto/tls"
 	"net/http"
-	"net/url"
 
 	"github.com/emicklei/go-restful"
-
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/proxy"
-	"k8s.io/client-go/rest"
-	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog"
 )
 
@@ -119,7 +114,12 @@ func (s *Server) InstallHandlers() {
 
 func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 	klog.V(4).Infof("request %+v", req.Request.URL)
-	var transport = &http.Transport{}
+
+	// there must be a peer certificate in the tls connection
+	if req.Request.TLS == nil || len(req.Request.TLS.PeerCertificates) == 0 {
+		resp.ResponseWriter.WriteHeader(http.StatusForbidden)
+		return
+	}
 
 	if s.config.KubeletClientCert != nil {
 		klog.Info("will forward request to kubelet")
@@ -127,82 +127,30 @@ func (s *Server) proxy(req *restful.Request, resp *restful.Response) {
 		req.Request.URL.Host = s.config.KubeletServerHost
 		req.Request.URL.Scheme = "https"
 
-		// there must be a peer certificate in the tls connection
-		if req.Request.TLS == nil || len(req.Request.TLS.PeerCertificates) == 0 {
-			resp.ResponseWriter.WriteHeader(http.StatusForbidden)
-			return
-		}
 		tenantName := req.Request.TLS.PeerCertificates[0].Subject.CommonName
 		TranslatePath(req, tenantName)
 
 		klog.V(4).Infof("request after translate %+v", req.Request.URL)
-
-		transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				Certificates:       []tls.Certificate{*s.config.KubeletClientCert},
-			},
-		}
 	} else {
 		klog.Info("will forward request to super apiserver")
 		// forward request to super apiserver
-		if req.Request.TLS == nil || len(req.Request.TLS.PeerCertificates) == 0 {
-			resp.ResponseWriter.WriteHeader(http.StatusForbidden)
-			return
-		}
-		// 1. get incluster rest config
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			klog.Errorf("fail to sa token or root ca: %s", err)
-			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
-			resp.ResponseWriter.Write([]byte(err.Error()))
-			return
-		}
-		// 1. get super master address
-		superHttpsUrl, err := url.Parse(restConfig.Host)
-		if err != nil {
-			klog.Errorf("fail to get super apiserver's url: %s", err)
-			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
-			resp.ResponseWriter.Write([]byte(err.Error()))
-			return
-		}
-
-		// 2. As we use the sa of the vn-agent, to forward the request, make sure
-		// the sa has the permission to access the pods
 		tenantName := req.Request.TLS.PeerCertificates[0].Subject.CommonName
-		err = TranslatePathForSuper(req, tenantName)
+		err := TranslatePathForSuper(req, tenantName)
 		if err != nil {
 			klog.Errorf("fail to translate url path for super master: %s", err)
 			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
 			resp.ResponseWriter.Write([]byte(err.Error()))
+			return
 		}
-		klog.V(4).Infof("request after translate %+v", superHttpsUrl)
+		klog.V(4).Infof("request after translate %+v", req.Request.URL)
 
-		// 3. mutate the request, i.e., replacing the dst, add bearer token header
-		req.Request.URL.Host = superHttpsUrl.Host
+		// mutate the request, i.e., replacing the dst, add bearer token header
+		req.Request.URL.Host = s.superAPIServerAddress.Host
 		req.Request.URL.Scheme = "https"
-		req.Request.Header.Add("Authorization", "Bearer "+restConfig.BearerToken)
-		if err != nil {
-			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
-			resp.ResponseWriter.Write([]byte(err.Error()))
-			return
-		}
-
-		caCrtPool, err := certutil.NewPool(restConfig.TLSClientConfig.CAFile)
-		if err != nil {
-			resp.ResponseWriter.WriteHeader(http.StatusNotFound)
-			resp.ResponseWriter.Write([]byte(err.Error()))
-			return
-		}
-
-		transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs: caCrtPool,
-			},
-		}
+		req.Request.Header.Add("Authorization", "Bearer "+s.restConfig.BearerToken)
 	}
 
-	handler := proxy.NewUpgradeAwareHandler(req.Request.URL, transport /*transport*/, false /*wrapTransport*/, httpstream.IsUpgradeRequest(req.Request) /*upgradeRequired*/, &responder{})
+	handler := proxy.NewUpgradeAwareHandler(req.Request.URL, s.transport /*transport*/, false /*wrapTransport*/, httpstream.IsUpgradeRequest(req.Request) /*upgradeRequired*/, &responder{})
 	handler.ServeHTTP(resp.ResponseWriter, req.Request)
 }
 
