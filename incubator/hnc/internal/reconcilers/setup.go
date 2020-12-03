@@ -9,11 +9,21 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 )
+
+// FakeDeleteCRDClient is a "fake" client used for testing only
+type FakeDeleteCRDClient struct{}
+
+// FakeDeleteCRDClient doesn't return any err on Get() because none of the reconciler test performs CRD deletion
+func (f FakeDeleteCRDClient) Get(context.Context, types.NamespacedName, runtime.Object) error {
+	return nil
+}
 
 var crds = map[string]bool{
 	"hncconfigurations.hnc.x-k8s.io":       true,
@@ -21,13 +31,35 @@ var crds = map[string]bool{
 	"hierarchyconfigurations.hnc.x-k8s.io": true,
 }
 
+// deleteCRDClientType could be either a real client or FakeDeleteCRDClient
+type deleteCRDClientType interface {
+	Get(context.Context, types.NamespacedName, runtime.Object) error
+}
+
+// deleteCRDClient is an uncached client for checking CRD deletion
+var deleteCRDClient deleteCRDClientType
+
 // Create creates all reconcilers.
 //
 // This function is called both from main.go as well as from the integ tests.
-func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int) error {
+func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, useFakeClient bool) error {
 	hcChan := make(chan event.GenericEvent)
 	anchorChan := make(chan event.GenericEvent)
 
+	// Create uncached client for CRD deletion check
+	if !useFakeClient {
+		var err error
+		deleteCRDClient, err = client.New(config.GetConfigOrDie(), client.Options{
+			Scheme: mgr.GetScheme(),
+			// I'm not sure if this mapper is needed - @ginnyji Dec2020
+			Mapper: mgr.GetRESTMapper(),
+		})
+		if err != nil {
+			return fmt.Errorf("cannot create deleteCRDClient: %s", err.Error())
+		}
+	} else {
+		deleteCRDClient = FakeDeleteCRDClient{}
+	}
 	// Create AnchorReconciler.
 	sar := &AnchorReconciler{
 		Client:   mgr.GetClient(),
@@ -74,10 +106,10 @@ type crdClient interface {
 
 // isDeletingCRD returns true if the specified HNC CRD is being or has been deleted. The argument
 // expected is the CRD name minus the HNC suffix, e.g. "hierarchyconfigurations".
-func isDeletingCRD(ctx context.Context, c crdClient, nm string) (bool, error) {
+func isDeletingCRD(ctx context.Context, nm string) (bool, error) {
 	crd := &apiextensions.CustomResourceDefinition{}
 	nsn := types.NamespacedName{Name: nm + "." + api.MetaGroup}
-	if err := c.Get(ctx, nsn, crd); err != nil {
+	if err := deleteCRDClient.Get(ctx, nsn, crd); err != nil {
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}

@@ -128,7 +128,7 @@ func (r *AnchorReconciler) onDeleting(ctx context.Context, log logr.Logger, inst
 	// We handle deletions differently depending on whether _one_ anchor is being deleted (i.e., the
 	// user wants to delete the namespace) or whether the Anchor CRD is being deleted, which usually
 	// means HNC is being uninstalled and we shouldn't delete _any_ namespaces.
-	deletingCRD, err := isDeletingCRD(ctx, r, api.Anchors)
+	deletingCRD, err := isDeletingCRD(ctx, api.Anchors)
 	if err != nil {
 		log.Error(err, "Couldn't determine if CRD is being deleted")
 		return false, err

@@ -192,7 +192,7 @@ func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
 
 	// Create all reconciling controllers
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles); err != nil {
+	if err := reconcilers.Create(mgr, f, maxReconciles, false); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}

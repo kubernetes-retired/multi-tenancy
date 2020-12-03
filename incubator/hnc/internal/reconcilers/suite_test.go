@@ -35,6 +35,7 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
@@ -99,7 +100,7 @@ var _ = BeforeSuite(func(done Done) {
 		Scheme: scheme.Scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
-	err = reconcilers.Create(k8sManager, forest.NewForest(), 100)
+	err = reconcilers.Create(k8sManager, forest.NewForest(), 100, true)
 	Expect(err).ToNot(HaveOccurred())
 
 	k8sClient = k8sManager.GetClient()
