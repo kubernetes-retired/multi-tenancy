@@ -1,6 +1,6 @@
 #!/bin/bash
 # Clean up topologies
-. ./scripts/performance/clean-up-topologies.sh
+./scripts/performance/clean-up-topologies.sh
 
 # N is the number of children of the root. Default to 500 (501 nodes).
 N=500
@@ -16,7 +16,8 @@ do
   kubectl create ns tplg-wide-$i
   for ((k=1;k<=O;k++))
   do
-    kubectl -n tplg-wide-$i create configmap configmap$k-$i --from-literal key=value
+    kubectl -n tplg-wide-$i create role role$k-$i --verb=update --resource=deployments
+    kubectl -n tplg-wide-$i create rolebinding rolebinding$k-$i --role role$k-$i --serviceaccount=tplg-wide-$i:default
   done
 done
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Clean up topologies
-. ./scripts/performance/clean-up-topologies.sh
+./scripts/performance/clean-up-topologies.sh
 
 # N is the depth of the tree. Default to 100 (100 nodes).
 N=100
@@ -17,7 +17,8 @@ do
   kubectl create ns tplg-skewer-$i
   for ((k=1;k<=O;k++))
   do
-    kubectl -n tplg-skewer-$i create configmap configmap$k-$i --from-literal key=value
+    kubectl -n tplg-skewer-$i create role role$k-$i --verb=update --resource=deployments
+    kubectl -n tplg-skewer-$i create rolebinding rolebinding$k-$i --role role$k-$i --serviceaccount=tplg-skewer-$i:default
   done
 done
 
