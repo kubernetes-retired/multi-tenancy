@@ -57,6 +57,18 @@ limitations. You can adjust the `--apiserver-qps-throttle` parameter in the
 manifest to increase it from the default of 50qps if your cluster supports
 higher values.
 
+## How much memory does HNC need?
+
+As of Dec. 2020, the [HNC performance test](../../scripts/performance/README.md)
+shows that 700 namespaces with 10 propagatable objects in each namespace would
+use about 200M memory during HNC startup and about 150M afterwards. Thus, we set
+a default of 300M memory limits and 150M memory requests for HNC.
+
+To change HNC memory limits and requests, you can update the values in
+`config/manager/manager.yaml`, run `make manifests` and reapply the manifest. If
+you are using a GKE cluster, you can view the real-time memory usage in the
+`Workloads` tab and determine what's the best limits and requests for you.
+
 ## Does HNC support high-availability?
 
 HNC is currently deployed as a single in-memory pod and therefore does not
