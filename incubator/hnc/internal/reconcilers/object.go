@@ -690,8 +690,8 @@ func (r *ObjectReconciler) syncPropagation(ctx context.Context, log logr.Logger,
 func (r *ObjectReconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.Unstructured, dst string) bool {
 	nsLabels := r.Forest.Get(dst).GetLabels()
 	if ok, err := selectors.ShouldPropagate(inst, nsLabels); err != nil {
-		// TODO: generate events for the errors
 		log.Error(err, "Cannot propagate")
+		r.EventRecorder.Event(inst, "Warning", api.EventCannotParseSelector, err.Error())
 		return false
 	} else if !ok {
 		return false
