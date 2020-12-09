@@ -85,8 +85,11 @@ const (
 	// EventCannotUpdate is for events when a namespace has an object that couldn't
 	// be propagated *into* this namespace - that is, it couldn't be created in
 	// the first place, or it couldn't be updated. The error message will point to
-	//the source namespace.
+	// the source namespace.
 	EventCannotUpdate string = "CannotUpdateObject"
+	// EventCannotGetSelector is for events when an object has annotations that cannot be
+	// parsed into a valid selector
+	EventCannotParseSelector string = "CannotParseSelector"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
