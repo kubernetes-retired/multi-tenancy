@@ -129,6 +129,9 @@ run: build
 # controller-gen.  We can't say paths="./..." because that would include
 # hack/tools.go, which is a fake file used to ensure that CONTROLLER_GEN gets
 # vendored.
+#
+# We build the full manifest last so that the kustomization.yaml file is still
+# there in case you want to rerun it manually.
 manifests: controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
 	@# See the comment above about the 'paths' arguments
@@ -136,17 +139,18 @@ manifests: controller-gen
 	./hack/crd_patches/singleton-enum-patch.sh
 	-rm -rf manifests/
 	mkdir manifests
+	@echo "Building CRD-only manifest"
+	cd manifests && \
+		touch kustomization.yaml && \
+		${KUSTOMIZE} edit add resource ../config/crd
+	${KUSTOMIZE} build manifests/ -o manifests/hnc-crds.yaml
+	@echo "Building full manifest"
+	rm manifests/kustomization.yaml
 	cd manifests && \
 		touch kustomization.yaml && \
 		${KUSTOMIZE} edit add resource ../config/default && \
 		${KUSTOMIZE} edit set image controller=${HNC_IMG}
 	${KUSTOMIZE} build manifests/ -o manifests/${HNC_IMG_NAME}.yaml
-	@echo "Building CRD-only manifest"
-	rm manifests/kustomization.yaml
-	cd manifests && \
-		touch kustomization.yaml && \
-		${KUSTOMIZE} edit add resource ../config/crd
-	${KUSTOMIZE} build manifests/ -o manifests/hnc-crds.yaml
 
 # Run go fmt against code
 fmt:
