@@ -18,6 +18,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
@@ -36,6 +37,7 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	v1a2 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
@@ -81,11 +83,13 @@ func main() {
 	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
-	flag.BoolVar(&internalCert, "enable-internal-cert-management", false, "Enables internal cert management.")
+	flag.BoolVar(&internalCert, "enable-internal-cert-management", false, "Enables internal cert management. See the user guide for more information.")
 	flag.IntVar(&maxReconciles, "max-reconciles", 1, "Number of concurrent reconciles to perform.")
-	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server.")
-	flag.BoolVar(&stats.SuppressObjectTags, "suppress-object-tags", true, "If true, suppresses the kinds of object metrics to reduce metric cardinality.")
+	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server. See the user guide for more information.")
+	flag.BoolVar(&stats.SuppressObjectTags, "suppress-object-tags", true, "If true, suppresses the kinds of object metrics to reduce metric cardinality. See the user guide for more information.")
 	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
+	uaArg := arrayArg{val: &config.UnpropagatedAnnotations}
+	flag.Var(&uaArg, "unpropagated-annotation", "An annotation that, if present, will be stripped out of any propagated copies of an object. May be specified multiple times, with each instance specifying one annotation. See the user guide for more information.")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -198,4 +202,23 @@ func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
 	}
 
 	setupLog.Info("All controllers started; setup complete")
+}
+
+// arrayArg is an arg that can be specified multiple times. It implements
+// https://golang.org/pkg/flag/#Value an is based on
+// https://stackoverflow.com/questions/28322997/how-to-get-a-list-of-values-into-a-flag-in-golang.
+type arrayArg struct {
+	val *[]string
+}
+
+func (a *arrayArg) String() string {
+	if a == nil || a.val == nil {
+		return ""
+	}
+	return strings.Join(*a.val, ",")
+}
+
+func (a *arrayArg) Set(val string) error {
+	*a.val = append(*a.val, val)
+	return nil
 }

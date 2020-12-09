@@ -148,20 +148,14 @@ func GetValidateMode(mode api.SynchronizationMode, log logr.Logger) api.Synchron
 
 // SetMode sets the Mode field of an object reconciler and syncs objects in the cluster if needed.
 // The method will return an error if syncs fail.
-//
-// If `resync` is true, all objects will be re-enqueued even if the mode hasn't changed.
-func (r *ObjectReconciler) SetMode(ctx context.Context, log logr.Logger, mode api.SynchronizationMode, resync bool) error {
+func (r *ObjectReconciler) SetMode(ctx context.Context, log logr.Logger, mode api.SynchronizationMode) error {
 	log = log.WithValues("gvk", r.GVK)
 	newMode := GetValidateMode(mode, log)
 	oldMode := r.Mode
-	if newMode == oldMode && !resync {
+	if newMode == oldMode {
 		return nil
 	}
-	if resync {
-		log.Info("Forcibly resyncing all objects", "oldMode", oldMode, "newMode", newMode)
-	} else {
-		log.Info("Changing sync mode of the object reconciler", "oldMode", oldMode, "newMode", newMode)
-	}
+	log.Info("Changing sync mode of the object reconciler", "oldMode", oldMode, "newMode", newMode)
 	r.Mode = newMode
 	// If the new mode is not "ignore", we need to update objects in the cluster
 	// (e.g., propagate or remove existing objects).
@@ -452,9 +446,6 @@ func (r *ObjectReconciler) syncSource(ctx context.Context, log logr.Logger, src 
 // sets the standard app.kubernetes.io/managed-by label, and cleans out any unpropagated
 // annotations.
 func cleanSource(src *unstructured.Unstructured) *unstructured.Unstructured {
-	config.Lock.Lock()
-	defer config.Lock.Unlock()
-
 	// Don't modify the original
 	src = src.DeepCopy()
 

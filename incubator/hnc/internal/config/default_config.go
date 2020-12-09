@@ -1,10 +1,5 @@
 package config
 
-import "sync"
-
-// Lock is used to protect all non-constant variables in this package.
-var Lock sync.Mutex
-
 // EX is a map used by reconcilers and validators to exclude namespaces that shouldn't be reconciled
 // or validated. We explicitly exclude some default namespaces with constantly changing objects.
 //
@@ -23,8 +18,6 @@ var EX = map[string]bool{
 // object - such as deleting objects it doesn't recognize. By removing these annotations on
 // propgated objects, HNC ensures that other systems won't attempt to claim the same object.
 //
-// Since this value can change, you must hold this package's `Lock` mutex when reading or writing
-// it.
-//
-// This map is populated by the HNCConfiguration object's .spec.unpropagatedAnnotations field.
+// This value is controlled by the --unpropagated-annotation command line, which may be set multiple
+// times.
 var UnpropagatedAnnotations []string

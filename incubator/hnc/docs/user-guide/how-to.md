@@ -21,6 +21,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Administer who has access to HNC properties](#admin-access)
   * [Modify the resources propagated by HNC](#admin-resources)
   * [Gather metrics](#admin-metrics)
+  * [Modify command-line arguments](#admin-cli-args)
 
 <a name="use"/>
 
@@ -726,3 +727,45 @@ kubectl run --rm -it \
 
 gcloud auth list
 ```
+
+<a name="admin-cli-args">
+
+## Modify command-line arguments
+
+HNC's default manifest file (available as part of each release with the name
+`hnc-manager.yaml`) includes a set of reasonable default command-line arguments
+for HNC, but you can tweak certain parameters to modify how HNC behaves. These
+parameters are different from those controlled by `HNCConfiguration` - they
+should only be modified extremely rarely, and only with significant caution.
+
+Interesting parameters include:
+
+* `--apiserver-qps-throttle=&lt;integer&gt;`: set to 50 by default, this limits how many
+  requests HNC will send to the Kubernetes apiserver per second in the steady
+  state (it may briefly allow up to 50% more than this number). Setting this
+  value too high can overwhelm the apiserver and prevent it from serving
+  requests from other clients. HNC can easily generate a huge number of
+  requests, especially when it's first starting up, as it tries to sync every
+  namespace and every propagated object type on your cluster.
+* `--enable-internal-cert-management`: present by default. This option uses the
+  [ODA `cert-controller`
+  library](https://github.com/open-policy-agent/cert-controller) to create and
+  distribute the HTTPS certificates used by HNC's webhooks. If you remove this
+  parameter, you can replace it with external cert management, such as
+  [Jetstack's `cert-manager`](https://github.com/jetstack/cert-manager), which
+  must be separately deployed, configured and maintained.
+* `--suppress-object-tags`: present by default. If removed, many more tags are
+  included in the metrics produced by HNC, including the names of personally
+  identifiable information (PII) such as the names of the resource types. This
+  can give you more insight into HNC's behaviour at the cost of an increased
+  load on your metrics database (through increased metric cardinality) and also
+  by increasing how carefully you need to guard your metrics against
+  unauthorized viewers.
+* `--unpropagated-annotation=&lt;string&gt;`: empty by default, this argument
+  can be specified multiple times, with each parameter representing an
+  annotation name, such as `example.com/foo`. When HNC propagates objects from
+  ancestor to descendant namespaces, it will strip these annotations out of the
+  metadata of the _copy_ of the object, if it exists. For example, this can be
+  used to remove an annotation on the source object that's has a special meaning
+  to another system, such as GKE Config Sync. If you restart HNC after changing
+  this arg, all _existing_ propagated objects will also be updated.

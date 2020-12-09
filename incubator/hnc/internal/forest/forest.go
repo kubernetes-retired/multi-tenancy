@@ -45,8 +45,8 @@ type TypeSyncer interface {
 
 	// SetMode sets the propagation mode of objects that are handled by the reconciler who implements
 	// the interface.  The method also syncs objects in the cluster for the type handled by the
-	// reconciler if necessary (or if the final boolean parameter is true).
-	SetMode(context.Context, logr.Logger, api.SynchronizationMode, bool) error
+	// reconciler if necessary.
+	SetMode(context.Context, logr.Logger, api.SynchronizationMode) error
 
 	// GetMode gets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	GetMode() api.SynchronizationMode
