@@ -625,7 +625,7 @@ func (r *HierarchyConfigReconciler) getSingleton(ctx context.Context, nm string)
 	deletingCRD := false
 	if inst.CreationTimestamp.IsZero() || !inst.DeletionTimestamp.IsZero() {
 		var err error
-		deletingCRD, err = isDeletingCRD(ctx, r, api.HierarchyConfigurations)
+		deletingCRD, err = isDeletingCRD(ctx, api.HierarchyConfigurations)
 		if err != nil {
 			return nil, false, err
 		}

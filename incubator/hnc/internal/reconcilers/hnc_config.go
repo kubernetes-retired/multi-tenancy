@@ -235,7 +235,7 @@ func (r *ConfigReconciler) validateSingleton(inst *api.HNCConfiguration) {
 func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConfiguration) error {
 	if inst.CreationTimestamp.IsZero() {
 		// No point creating it if the CRD's being deleted
-		if isDeleted, err := isDeletingCRD(ctx, r, api.HNCConfigSingletons); isDeleted || err != nil {
+		if isDeleted, err := isDeletingCRD(ctx, api.HNCConfigSingletons); isDeleted || err != nil {
 			r.Log.Info("CRD is being deleted (or CRD deletion status couldn't be determined); skip update")
 			return err
 		}
