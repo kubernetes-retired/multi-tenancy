@@ -22,6 +22,7 @@ also to all contributors since then.
 * [Propagating different resources](#resources)
 * [Hierarchical network policy](#netpol)
 * [Subnamespaces deep-dive](#subns)
+* [Keeping objects out of certain namespaces](#exceptions)
 
 <a name="basic"/>
 
@@ -654,3 +655,60 @@ the prefix "Crit," for "Critical") indicates that HNC is no longer updating the
 objects in this namespace. Instead, it's waiting for an admin to come fix the
 problems before it resumes creating or deleting objects. Conditions like these
 also show up in the HNC logs, and in its [metrics](how-to.md#admin-metrics).
+
+<a name="exceptions"/>
+
+## Keeping objects out of certain namespaces
+
+_Demonstrates: exceptions_
+
+Now let’s say your `acme-org` has a secret that you originally wanted to share with all the teams. We created this `Secret` as follows:
+
+```bash
+kubectl -n acme-org create secret my-secret --from-literal=password=iamacme
+```
+
+You’ll see that `my-secret` is propagated to both `team-a` and `team-b`:
+
+```bash
+kubectl -n team-a get secrets
+kubectl -n team-b get secrets
+```
+
+But now we’ve started running an untrusted service in `team-b`, so we’ve decided not to share that secret with it anymore. We can do this by setting the propagation selectors on the secret:
+
+```bash
+kubectl annotate secret my-secret -n acme-org propagate.hnc.x-k8s.io/treeSelect=!team-b
+```
+
+Now you’ll see the secret is no longer accessible from `team-b`:
+
+```bash
+kubectl -n team-b get secrets
+```
+
+If we add any children below `team-b`, the secret won’t be propagated to them, either.
+
+There are several ways to select the namespaces. The `treeSelect` annotation 
+can take a list (e.g. `!team-b, !team-a`) to exclude namespaces or a single 
+namespace (e.g. `team-a`) to include. You can also use the `select` annotation 
+that takes a [standard Kubernetes label
+selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors),
+or the `none`  annotation to turn off propagation completely. See
+[here](how-to.md#use-limit-propagation) for details.
+
+Of course, the annotation can also be part of the object when you create it:
+
+```bash
+k delete secret my-creds -n acme-org
+cat << EOF | k create -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    propagate.hnc.x-k8s.io/treeSelect: team-a
+  name: my-secret
+  amespace: acme-org
+... other fields ...
+EOF
+```

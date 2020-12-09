@@ -14,6 +14,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Delete a subnamespace](#use-subns-delete)
   * [Organize full namespaces into a hierarchy](#use-full)
   * [Resolve conditions on a namespace](#use-resolve-cond)
+  * [Limit the propagation of an object to descendant namespaces](#use-limit-propagation)
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
@@ -342,6 +343,62 @@ It means that this namespace is orphaned and its parent has been deleted. To fix
  namespace by using:
 ```
 $ kubectl hns set --root <namespace>
+```
+
+<a name="use-limit-propagation"/>
+
+### Limit the propagation of an object to descendant namespaces
+
+To limit the propagation of an object, you can use any of the following 
+exceptions selectors:
+
+* **`propagate.hnc.x-k8s.io/select`**: The object will only be propagated to 
+namespaces whose labels match the label selector. The value for this selector 
+has to be a [valid Kubernetes label selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors). 
+
+* **`propagate.hnc.x-k8s.io/treeSelect`**: Use a single namespace name to 
+represent where this object should be propagated, or use a comma-separated 
+list of negated (“!”) namespaces to represent which namespaces not to 
+propagate to (e.g. `!child1, !child2` means do not propagate to `child1` and 
+`child2`). For example, this can be used to propagate an object to a child 
+namespace, but not a grand-child namespace, using the value `child, !grand-child`. 
+
+* **`propagate.hnc.x-k8s.io/none`**: Setting `none` to `true` (case insensitive) will result in the object not 
+propagating to _any_ descendant namespace. Any other value will be rejected.
+
+For example, consider a case with a parent namespace with three child 
+namespaces, and the parent namespace has a secret called `my-secret`. To set 
+`my-secret` propagate to `child1` namespace (but nothing else), you can use:
+
+```bash
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/treeSelect=child1
+# OR
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/treeSelect="!child2, !child3"
+# OR
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select=child1.tree.hnc.x-k8s.io/depth
+# OR
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select="!child2.tree.hnc.x-k8s.io/depth, !child3.tree.hnc.x-k8s.io/depth"
+```
+
+To set `my-secret` not to propagate to any namespace, you can use:
+
+```bash
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/none=true
+```
+
+All these are equivalent to creating the object with the selector annotations:
+
+```bash
+cat << EOF | kubectl create -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    propagate.hnc.x-k8s.io/treeSelect: child1
+  name: my-secret
+  namespace: parent
+... other fields ...
+EOF
 ```
 
 <a name="admin"/>
