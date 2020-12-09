@@ -2,6 +2,7 @@ package reconcilers_test
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -13,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
 var _ = Describe("Exceptions", func() {
@@ -231,7 +233,7 @@ var _ = Describe("Exceptions", func() {
 	})
 })
 
-var _ = Describe("Secret", func() {
+var _ = Describe("Basic propagation", func() {
 	ctx := context.Background()
 
 	var (
@@ -252,6 +254,9 @@ var _ = Describe("Secret", func() {
 		makeObject(ctx, api.RoleResource, fooName, "foo-role")
 		makeObject(ctx, api.RoleResource, barName, "bar-role")
 		makeObject(ctx, api.RoleResource, bazName, "baz-role")
+
+		// This is empty by default.
+		config.UnpropagatedAnnotations = nil
 	})
 
 	AfterEach(func() {
@@ -528,6 +533,54 @@ var _ = Describe("Secret", func() {
 		time.Sleep(500 * time.Millisecond)
 		// The source object in the child shouldn't be deleted since the type has 'Remove' mode.
 		Eventually(hasObject(ctx, "secrets", barName, "bar-sec")).Should(BeTrue())
+	})
+
+	It("should avoid propagating banned annotations", func() {
+		setParent(ctx, barName, fooName)
+		makeObjectWithAnnotation(ctx, "roles", fooName, "foo-annot-role", map[string]string{
+			"annot-a": "value-a",
+			"annot-b": "value-b",
+		})
+
+		// Ensure the object is propagated with both annotations
+		Eventually(func() error {
+			inst, err := getObject(ctx, "roles", barName, "foo-annot-role")
+			if err != nil {
+				return err
+			}
+			annots := inst.GetAnnotations()
+			if annots["annot-a"] != "value-a" {
+				return fmt.Errorf("annot-a: want 'value-a', got %q", annots["annot-a"])
+			}
+			if annots["annot-b"] != "value-b" {
+				return fmt.Errorf("annot-b: want 'value-b', got %q", annots["annot-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for initial sync of foo-annot-role")
+		deleteObject(ctx, "roles", fooName, "foo-annot-role")
+
+		// Tell the HNC config not to propagate annot-a and verify that this time, it's not annotated
+		config.UnpropagatedAnnotations = []string{"annot-a"}
+		makeObjectWithAnnotation(ctx, "roles", fooName, "foo-annot-role", map[string]string{
+			"annot-a": "value-a",
+			"annot-b": "value-b",
+		})
+
+		// Verify that the annotation no longer appears
+		Eventually(func() error {
+			inst, err := getObject(ctx, "roles", barName, "foo-annot-role")
+			if err != nil {
+				return err
+			}
+			annots := inst.GetAnnotations()
+			if val, ok := annots["annot-a"]; ok {
+				return fmt.Errorf("annot-a: wanted it to be missing, got %q", val)
+			}
+			if annots["annot-b"] != "value-b" {
+				return fmt.Errorf("annot-b: want 'value-b', got %q", annots["annot-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for annot-a to be unpropagated")
 	})
 })
 

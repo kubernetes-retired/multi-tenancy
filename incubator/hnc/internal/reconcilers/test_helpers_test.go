@@ -300,7 +300,9 @@ func deleteObject(ctx context.Context, resource string, nsName, name string) {
 	inst.SetGroupVersionKind(GVKs[resource])
 	inst.SetNamespace(nsName)
 	inst.SetName(name)
-	ExpectWithOffset(1, k8sClient.Delete(ctx, inst)).Should(Succeed())
+	EventuallyWithOffset(1, func() bool {
+		return errors.IsNotFound(k8sClient.Delete(ctx, inst))
+	}).Should(BeTrue())
 }
 
 // cleanupObjects makes a best attempt to cleanup all objects created from makeObject.

@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
 )
@@ -99,10 +98,8 @@ func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	mustResync := r.syncConfig(inst)
-
 	// Create or sync corresponding ObjectReconcilers, if needed.
-	syncErr := r.syncObjectReconcilers(ctx, inst, mustResync)
+	syncErr := r.syncObjectReconcilers(ctx, inst)
 
 	// Set the status for each type.
 	r.setTypeStatuses(inst)
@@ -255,32 +252,6 @@ func (r *ConfigReconciler) writeSingleton(ctx context.Context, inst *api.HNCConf
 	return nil
 }
 
-// syncConfig syncs any necessary values in the `config` package. It returns true if anything's
-// changed, which means that all object syncers need to be fully resynchronized too.
-func (r *ConfigReconciler) syncConfig(inst *api.HNCConfiguration) bool {
-	sort.Strings(inst.Spec.UnpropagatedAnnotations)
-
-	changed := false
-	config.Lock.Lock()
-	if len(inst.Spec.UnpropagatedAnnotations) != len(config.UnpropagatedAnnotations) {
-		changed = true
-	} else {
-		for i := range config.UnpropagatedAnnotations {
-			if inst.Spec.UnpropagatedAnnotations[i] != config.UnpropagatedAnnotations[i] {
-				changed = true
-				break
-			}
-		}
-	}
-	if changed {
-		r.Log.Info("spec.unpropagatedAnnotations has changed", "old:", config.UnpropagatedAnnotations, "new", inst.Spec.UnpropagatedAnnotations)
-	}
-	config.UnpropagatedAnnotations = inst.Spec.UnpropagatedAnnotations
-	config.Lock.Unlock()
-
-	return changed
-}
-
 // syncObjectReconcilers creates or syncs ObjectReconcilers.
 //
 // For newly added types in the HNC configuration, the method will create corresponding ObjectReconcilers and
@@ -291,7 +262,7 @@ func (r *ConfigReconciler) syncConfig(inst *api.HNCConfiguration) bool {
 //
 // If a type exists, the method will sync the mode of the existing object reconciler
 // and update corresponding objects if needed. An error will be return to trigger reconciliation if sync fails.
-func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.HNCConfiguration, mustResync bool) error {
+func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
 	// This method is guarded by the forest mutex.
 	//
 	// For creating an object reconciler, the mutex is guarding two actions: creating ObjectReconcilers for
@@ -312,7 +283,7 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
-	if err := r.syncActiveReconcilers(ctx, inst, mustResync); err != nil {
+	if err := r.syncActiveReconcilers(ctx, inst); err != nil {
 		return err
 	}
 
@@ -326,10 +297,10 @@ func (r *ConfigReconciler) syncObjectReconcilers(ctx context.Context, inst *api.
 // syncActiveReconcilers syncs object reconcilers for types that are in the Spec
 // and exists in the API server. If an object reconciler exists, it sets its
 // mode according to the Spec; otherwise, it creates the object reconciler.
-func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration, mustResync bool) error {
+func (r *ConfigReconciler) syncActiveReconcilers(ctx context.Context, inst *api.HNCConfiguration) error {
 	for _, gvkMode := range r.activeGVKMode {
 		if ts := r.Forest.GetTypeSyncer(gvkMode.gvk); ts != nil {
-			if err := ts.SetMode(ctx, r.Log, gvkMode.mode, mustResync); err != nil {
+			if err := ts.SetMode(ctx, r.Log, gvkMode.mode); err != nil {
 				return err // retry the reconciliation
 			}
 		} else {
@@ -362,7 +333,7 @@ func (r *ConfigReconciler) syncRemovedReconcilers(ctx context.Context) error {
 		}
 		// The type does not exist in the Spec. Ignore subsequent reconciliations.
 		r.Log.Info("Resource config removed, will no longer update objects", "gvk", ts.GetGVK())
-		if err := ts.SetMode(ctx, r.Log, api.Ignore, false); err != nil {
+		if err := ts.SetMode(ctx, r.Log, api.Ignore); err != nil {
 			return err // retry the reconciliation
 		}
 	}
