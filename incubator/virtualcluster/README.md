@@ -42,7 +42,7 @@ The exceptions are persistence volume, storage class and priority class resource
 The syncer updates the synced object's status in each tenant control plane, 
 acting like a regular resource controller. This abstraction model means the following assumptions:
 - The synced object spec _SHOULD_ not be altered by any arbitrary controller in the super cluster.
-- Tenant master owns the lifecycle management for the synced object. The synced objects should not be
+- Tenant master owns the lifecycle management for the synced object. The synced objects _SHOULD NOT_ be
   managed by any controllers (e.g., StatefulSet) in the super cluster.
 
 If any of the above assumptions is violated, VirtualCluster may not work as expected. Note that this 
@@ -54,7 +54,7 @@ tenants will be aware of all changes.
 ## Limitations
 
 Ideally, tenants should not be aware of the existence of the super cluster in most cases. 
-There are still some noticeable differences comparing a tenant control plane and a normal kubernetes cluster.
+There are still some noticeable differences comparing a tenant control plane and a normal Kubernetes cluster.
 
 - In the tenant control plane, node objects only show up after tenant Pods are created. The super cluster
   node topology is not fully exposed in the tenant control plane. This means the VirtualCluster does not support
@@ -88,7 +88,7 @@ VirtualCluster passes most of the Kubernetes conformance tests. One failing test
 ### Q: What is the difference between VirtualCluster and multi-cluster solution?
 
 One of the primary design goals of VirtualCluster is to improve the overall resource utilization
-of a super cluster by allowing multiple tenants to share the node resources in an control plane isolated manner. 
+of a super cluster by allowing multiple tenants to share the node resources in a control plane isolated manner. 
 A multi-cluster solution can achieve the same isolation goal but resources won't be shared causing
 nodes to have lower utilization.
 
