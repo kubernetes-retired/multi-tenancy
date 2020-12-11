@@ -27,6 +27,7 @@ type PodSpec struct {
 	Capability               []v1.Capability    `default:"-"`
 	Ports                    []v1.ContainerPort `default:"-"`
 	AllowPrivilegeEscalation bool               `default:"-"`
+	ImagePullPolicy          v1.PullPolicy      `default:"Always"`
 }
 
 // SetDefaults usage := https://github.com/creasty/defaults#usage
@@ -67,8 +68,9 @@ func (p PodSpec) MakeSecPod() *v1.Pod {
 			},
 			Containers: []v1.Container{
 				{
-					Name:  "write-pod",
-					Image: imageutils.GetE2EImage(imageutils.BusyBox),
+					Name:            "write-pod",
+					Image:           imageutils.GetE2EImage(imageutils.BusyBox),
+					ImagePullPolicy: p.ImagePullPolicy,
 					Resources: v1.ResourceRequirements{
 						Limits: v1.ResourceList{
 							"cpu":    resource.MustParse("0m"),
