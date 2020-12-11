@@ -111,6 +111,10 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	// If the object wasn't and isn't inherited, we will check to see if the
 	// source can be created without causing any conflict.
 	if !oldInherited && !newInherited {
+		// check if there is any invalid HNC annotation
+		if msg := validateSelectorAnnot(inst); msg != "" {
+			return deny(metav1.StatusReasonBadRequest, msg)
+		}
 		// check selector format
 		// If this is a selector change, and the new selector is not valid, we'll deny this operation
 		if err := validateSelectorChange(inst, oldInst); err != nil {
@@ -137,6 +141,33 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta
 	}
 	// This is a propagated object.
 	return o.handleInherited(op, newSource, oldSource, inst, oldInst)
+}
+
+func validateSelectorAnnot(inst *unstructured.Unstructured) string {
+	annots := inst.GetAnnotations()
+	for key, _ := range annots {
+		// for example: segs = ["propagate.hnc.x-k8s.io", "select"]
+		segs := strings.SplitN(key, "/", 2)
+		// for example: prefix = ["propagate", "hnc.x-k8s.io"]
+		prefix := strings.SplitN(segs[0], ".", 2)
+		if len(prefix) < 2 || prefix[1] != api.MetaGroup {
+			continue
+		}
+		msg := "invalid HNC exceptions annotation: %v, should be one of the following: " +
+			api.AnnotationSelector + "; " + api.AnnotationTreeSelector + "; " +
+			api.AnnotationNoneSelector
+		// If this annotation is part of HNC metagroup, we check if the prefix value is valid
+		if segs[0] != api.AnnotationPropagatePrefix {
+			return fmt.Sprintf(msg, key)
+		}
+		// check if the suffix is valid by checking the whole annotation key
+		if key != api.AnnotationSelector &&
+			key != api.AnnotationTreeSelector &&
+			key != api.AnnotationNoneSelector {
+			return fmt.Sprintf(msg, key)
+		}
+	}
+	return ""
 }
 
 func validateSelectorUniqueness(inst, oldInst *unstructured.Unstructured) string {
