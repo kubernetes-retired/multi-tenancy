@@ -309,6 +309,48 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
+		name: "Deny creation of object with invalid HNC annotation prefix",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						"invalid.hnc.x-k8s.io/select": "foo",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny creation of object with invalid HNC annotation suffix",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						"invalid.hnc.x-k8s.io/slct": "foo",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with non-HNC annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						"plainword": "foo",
+					},
+				},
+			},
+		},
+	}, {
 		name: "Deny creation of object with invalid select annotation",
 		fail: true,
 		inst: &unstructured.Unstructured{
