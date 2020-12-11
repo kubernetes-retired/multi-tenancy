@@ -15,6 +15,7 @@ namespaces are, and _why_ they behave the way they do.
   * [Full namespaces and subnamespaces](#basic-subns)
   * [Policy inheritance and object propagation](#basic-propagation)
   * [Namespace labels and non-propagated policies](#basic-labels)
+  * [Exceptions and propagation control](#basic-exceptions)
 * [Administration](#admin)
   * [Hierarchical Configuration](#admin-hc)
   * [Namespaces administrators](#admin-admin)
@@ -275,7 +276,7 @@ this label, but if you manage to add it, HNC will likely promptly delete the
 object (believing that the source object has been deleted), while if you manage
 to delete it, HNC will simply overwrite the object anyway.
 
-> _Note: in HNC v0.5, the `inherited-from` label was called `inheritedFrom`.
+> _Note: in HNC v0.5, the `inherited-from` label was called `inheritedFrom`._
 
 <a name="basic-labels"/>
 
@@ -314,6 +315,40 @@ purposes, because anyone who can edit a Kubernetes object can also apply
 whichever labels they like. However, HNC will overwrite any changes made to
 these labels, so other applications can trust these labels for policy
 application.
+
+<a name="basic-exceptions"/>
+
+### Exceptions and propagation control
+
+By default, HNC propagates _all_ objects of a [specified type](how-to.md#admin-resources) 
+from ancestor namespaces to descendant namespaces. However, sometimes this is 
+too restrictive, and you need to create ***exceptions*** to certain policies. For example:
+
+* A ResourceQuota was propagated to many children, but one child namespace now 
+has higher requirements than the rest. Rather than getting rid of the quota in 
+the parent namespace, or raising the limit for everyone, you can stop the 
+quota in the parent from being propagated to that _one_ child namespace, 
+allowing you to replace it with another, more suitable quota.
+
+* A RoleBinding allows any user to create subnamespaces under one namespace, but 
+we don’t want to allow those users to create additional levels of hierarchy 
+underneath those subnamespaces. So you can stop the role binding from being 
+propagated to _any_ child namespace.
+
+Exceptions are defined using [annotations on the objects themselves](how-to.md#use-limit-propagation). 
+As a result, anyone who can edit an object can also control how it is 
+propagated to descendant namespaces.
+
+If you modify an exception - for example, by removing it - this could cause 
+the object to be propagated to descendants from which it had previously been 
+excluded. This could cause you to accidentally overwrite objects that were 
+intended to be exceptions from higher-level policies, like the ResourceQuota 
+in the example above. To prevent this, if modifying an exception would cause 
+HNC to overwrite another object, HNC’s admission controllers will prevent you 
+from modifying the object, and will identify the objects that would have been 
+overwritten by your actions. You can then rewrite the exception to safely 
+exclude those objects, or else delete the conflicting objects to allow them to 
+be replaced.
 
 <a name="admin"/>
 
