@@ -34,3 +34,8 @@ kubectl --kubeconfig=tenant-a -n a1 describe resourcequota
 
 Resource quotas must be configured for each tenant namespace, to guarantee fair number of objects across tenants.
 
+
+**namespaceRequired:** 
+
+1
+

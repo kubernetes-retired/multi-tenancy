@@ -30,3 +30,8 @@ For each returned by the first command verify that the resource cannot be modifi
 
 Each command must return 403 FORBIDDEN
 
+
+**namespaceRequired:** 
+
+1
+

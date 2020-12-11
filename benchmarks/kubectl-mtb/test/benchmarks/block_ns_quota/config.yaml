@@ -5,6 +5,7 @@ category: Tenant Isolation
 description: Tenants should not be able to modify the resource quotas defined in their namespaces
 remediation: 
 profileLevel: 1
+namespaceRequired: 1
 rationale: Resource quotas must be configured for isolation and fairness between tenants. Tenants should not be able to modify existing resource quotas as they may exhaust cluster resources and impact other tenants.
 audit: |
  Run the following commands to check for permissions to manage quotas in the tenant namespace:

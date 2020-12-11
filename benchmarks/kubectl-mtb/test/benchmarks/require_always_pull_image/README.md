@@ -20,3 +20,8 @@ Set the image pull policy to `Always` so that the users an be assured that their
 
 Set `imagePullPolicy` to `always` for the container.
 
+
+**namespaceRequired:** 
+
+2
+
