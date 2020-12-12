@@ -1,0 +1,19 @@
+id: MTB-PL1-CC-TI-2
+title: Block access to other tenant resources
+benchmarkType: Configuration
+category: Tenant Protection
+description: Access controls should be configured so that a tenant cannot view, edit, create, or delete namespaced resources belonging to another tenant.
+remediation: 
+profileLevel: 2
+namespaceRequired: 2
+rationale: Tenant resources should be isolated from other tenants.
+Audit: |
+  Run the following commands to retrieve the list of namespaced resources available in Tenant B
+  ```bash
+  kubectl --kubeconfig tenant-b api-resources --namespaced=true
+  ```
+  For each namespaced resource, and each verb (get, list, create, update, patch, watch, delete, and deletecollection) issue the following command
+  ```bash
+  kubectl --kubeconfig tenant-a -n b1 <verb> <resource>
+  ```
+  Each command must return 'no'

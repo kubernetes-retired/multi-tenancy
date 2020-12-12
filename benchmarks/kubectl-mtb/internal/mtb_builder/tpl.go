@@ -6,12 +6,13 @@ func BenchmarkFileTemplate() []byte {
 
 import (
 	"fmt"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
+
 
 var b = &benchmark.Benchmark{
 

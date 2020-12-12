@@ -80,6 +80,16 @@ func initConfig() error {
 		return err
 	}
 
+	if benchmarkRunOptions.OtherNamespace != "" && benchmarkRunOptions.OtherTenant != "" {
+		otherTenantConfig := config
+		otherTenantConfig.Impersonate.UserName = benchmarkRunOptions.OtherTenant
+
+		benchmarkRunOptions.OClient, err = kubernetes.NewForConfig(tenantConfig)
+		if err != nil {
+			return err
+		}
+	}
+
 	return err
 }
 
@@ -129,6 +139,9 @@ func validateFlags(cmd *cobra.Command) error {
 	if benchmarkRunOptions.TenantNamespace == "" {
 		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
 	}
+
+	benchmarkRunOptions.OtherNamespace, _ = cmd.Flags().GetString("other-namespace")
+	benchmarkRunOptions.OtherTenant, _ = cmd.Flags().GetString("other-tenant-admin")
 
 	err := initConfig()
 	if err != nil {

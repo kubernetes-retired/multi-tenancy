@@ -14,5 +14,6 @@ type RunOptions struct {
 	Label           string
 	KClient         *kubernetes.Clientset
 	TClient         *kubernetes.Clientset
+	OClient         *kubernetes.Clientset
 	Logger          *zap.SugaredLogger
 }
