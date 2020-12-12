@@ -61,10 +61,7 @@ var b = &benchmark.Benchmark{
 			return err
 		}
 
-		// Try to create a pod as tenant-admin impersonation
 		deployment := deploymentSpec.GetDeployment()
-
-
 		_, err = options.TClient.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			options.Logger.Debug(err.Error())
