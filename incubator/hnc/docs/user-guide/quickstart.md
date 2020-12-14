@@ -145,8 +145,6 @@ acme-org
 [s] indicates subnamespaces
 ```
 
-  Note: The `[s]` annotation was added in HNC v0.6 and isn't present in HNC v0.5.
-
 And team-b is a little weird, they call their SRE's "wizards" so we'll set up their roles too:
 
 ```bash
@@ -208,19 +206,10 @@ which is a single cluster-wide configuration for HNC as a whole. To do this,
 simply use the config subcommand:
 
 ```bash
-# In HNC v0.6:
 kubectl hns config set-resource secrets --mode Propagate
-
-# In HNC v0.5:
-kubectl hns config set-type --apiVersion v1 --kind Secret propagate
 ```
 
-  Note: In HNC v0.5, the apiVersion of _v1_ here applies to the Secret, and the word
-  _propagate_ refers to how we want HNC to treat this kind of object. In HNC
-  v0.6, the version is not required, but an optional `--group` parameter can
-  be used for resources that are not part of the core Kubernetes API.
-
-  Note: As of HNC v0.6, the supported modes are `Propagate`, `Remove` and
+  Note: As of HNC v0.6+, the supported modes are `Propagate`, `Remove` and
   `Ignore`. More may be added in the future; you can run `kubectl hns config
   set-resource` for the latest documentation.
 
@@ -247,7 +236,7 @@ status object:
 kubectl get hncconfiguration config -o yaml
 ```
 
-Which should show something like the following in HNC v0.6:
+Which should show something like the following:
 
 ```yaml
 apiVersion: hnc.x-k8s.io/v1alpha2
@@ -278,10 +267,6 @@ status:
     numSourceObjects: 1
     version: v1
 ```
-
-  Note: HNC v0.5 uses the `v1alpha1` API, which enforces that the RBAC objects
-  are also shown in the spec. In `v1alpha2`, RBAC objects are only shown in the
-  status.
 
 You can also edit this object directly if you prefer, as an alternative to
 using the kubectl plugin - the object is created automatically when HNC is
@@ -374,14 +359,7 @@ EOF
 Now let's ensure this policy can be propagated to its descendants.
 
 ```bash
-# HNC v0.6:
 kubectl hns config set-resource networkpolicies --group networking.k8s.io --mode Propagate
-
-# HNC v0.5:
-kubectl hns config set-type \
-  --apiVersion networking.k8s.io/v1 \
-  --kind NetworkPolicy \
-  propagate
 ```
 
 And verify it got propagated:
@@ -573,13 +551,9 @@ or any of their ancestors, have cascading deletion explicitly set. For example,
 to delete `service-1`, we first enable cascading deletion and then remove it:
 
 ```bash
-# HNC v0.6:
 kubectl hns set service-1 --allowCascadingDeletion
 
-# HNC v0.5:
-kubectl hns set service-1 --allowCascadingDelete
-
-# Short form (both v0.5 and v0.6):
+# Short form:
 kubectl hns set service-1 -a
 ```
 
@@ -646,19 +620,17 @@ in a bad state:
 
 ```bash
 kubectl hns describe staging
-# In HNC v0.6: see the text "ActivitiesHalted (ParentMissing)"
-# In HNC v0.5: see the text "CritParentMissing: missing parent"
+# See the text "ActivitiesHalted (ParentMissing)"
 ```
 
-The `ActivitiesHalted` condition (or in HNC v0.5, any condition that begins with
-the prefix "Crit," for "Critical") indicates that HNC is no longer updating the
+The `ActivitiesHalted` condition indicates that HNC is no longer updating the
 objects in this namespace. Instead, it's waiting for an admin to come fix the
 problems before it resumes creating or deleting objects. Conditions like these
 also show up in the HNC logs, and in its [metrics](how-to.md#admin-metrics).
 
 <a name="exceptions"/>
 
-## Keeping objects out of certain namespaces
+## Keeping objects out of certain namespaces (v0.7 only)
 
 _Demonstrates: exceptions_
 
@@ -689,9 +661,9 @@ kubectl -n team-b get secrets
 
 If we add any children below `team-b`, the secret won’t be propagated to them, either.
 
-There are several ways to select the namespaces. The `treeSelect` annotation 
-can take a list (e.g. `!team-b, !team-a`) to exclude namespaces or a single 
-namespace (e.g. `team-a`) to include. You can also use the `select` annotation 
+There are several ways to select the namespaces. The `treeSelect` annotation can
+take a list (e.g. `!team-b, !team-a`) to exclude namespaces or a single
+namespace (e.g. `team-a`) to include. You can also use the `select` annotation
 that takes a [standard Kubernetes label
 selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors),
 or the `none`  annotation to turn off propagation completely. See
