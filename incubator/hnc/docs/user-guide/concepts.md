@@ -276,8 +276,6 @@ this label, but if you manage to add it, HNC will likely promptly delete the
 object (believing that the source object has been deleted), while if you manage
 to delete it, HNC will simply overwrite the object anyway.
 
-> _Note: in HNC v0.5, the `inherited-from` label was called `inheritedFrom`._
-
 <a name="basic-labels"/>
 
 ### Tree labels and non-propagated policies
@@ -320,34 +318,36 @@ application.
 
 ### Exceptions and propagation control
 
-By default, HNC propagates _all_ objects of a [specified type](how-to.md#admin-resources) 
-from ancestor namespaces to descendant namespaces. However, sometimes this is 
+***Exceptions are only available in HNC v0.7***
+
+By default, HNC propagates _all_ objects of a [specified type](how-to.md#admin-resources)
+from ancestor namespaces to descendant namespaces. However, sometimes this is
 too restrictive, and you need to create ***exceptions*** to certain policies. For example:
 
-* A ResourceQuota was propagated to many children, but one child namespace now 
-has higher requirements than the rest. Rather than getting rid of the quota in 
-the parent namespace, or raising the limit for everyone, you can stop the 
-quota in the parent from being propagated to that _one_ child namespace, 
+* A ResourceQuota was propagated to many children, but one child namespace now
+has higher requirements than the rest. Rather than getting rid of the quota in
+the parent namespace, or raising the limit for everyone, you can stop the
+quota in the parent from being propagated to that _one_ child namespace,
 allowing you to replace it with another, more suitable quota.
 
-* A RoleBinding allows any user to create subnamespaces under one namespace, but 
-we don’t want to allow those users to create additional levels of hierarchy 
-underneath those subnamespaces. So you can stop the role binding from being 
+* A RoleBinding allows any user to create subnamespaces under one namespace, but
+we don’t want to allow those users to create additional levels of hierarchy
+underneath those subnamespaces. So you can stop the role binding from being
 propagated to _any_ child namespace.
 
-Exceptions are defined using [annotations on the objects themselves](how-to.md#use-limit-propagation). 
-As a result, anyone who can edit an object can also control how it is 
-propagated to descendant namespaces.
+Exceptions are defined using [annotations on the objects
+themselves](how-to.md#use-limit-propagation).  As a result, anyone who can edit
+an object can also control how it is propagated to descendant namespaces.
 
-If you modify an exception - for example, by removing it - this could cause 
-the object to be propagated to descendants from which it had previously been 
-excluded. This could cause you to accidentally overwrite objects that were 
-intended to be exceptions from higher-level policies, like the ResourceQuota 
-in the example above. To prevent this, if modifying an exception would cause 
-HNC to overwrite another object, HNC’s admission controllers will prevent you 
-from modifying the object, and will identify the objects that would have been 
-overwritten by your actions. You can then rewrite the exception to safely 
-exclude those objects, or else delete the conflicting objects to allow them to 
+If you modify an exception - for example, by removing it - this could cause
+the object to be propagated to descendants from which it had previously been
+excluded. This could cause you to accidentally overwrite objects that were
+intended to be exceptions from higher-level policies, like the ResourceQuota
+in the example above. To prevent this, if modifying an exception would cause
+HNC to overwrite another object, HNC’s admission controllers will prevent you
+from modifying the object, and will identify the objects that would have been
+overwritten by your actions. You can then rewrite the exception to safely
+exclude those objects, or else delete the conflicting objects to allow them to
 be replaced.
 
 <a name="admin"/>
@@ -462,10 +462,6 @@ the following fields:
 Other standard condition fields, such as `LastTransitionTime` and `Status`, are
 unused.
 
-> _Note: HNC v0.5 used a non-standard condition schema with only one
-> machine-readable code. All codes that started with the `Crit` prefix
-> correspond to an `ActivitiesHalted` code in HNC v0.6._
-
 Namespaces with an `ActivitiesHalted` condition have the following properties:
 
 * Object propagation is disabled. That is, new objects will not be copied in,
@@ -489,10 +485,6 @@ for that object, with the `.source.component` field set to `hnc.x-k8s.io`. You
 can either query such objects directly, or via `kubectl hns describe NAMESPACE`.
 The event will include machine-readable and human-readable information about the
 problem, and will generally require human intervention to resolve.
-
-> _Note: HNC v0.5 reported issues with objects as part of the non-standard
-> condition schema. These have been removed and replaced by standard Events in
-> HNC v0.6 since events are more standard, scalable and loggable._
 
 <a name="admin-labels-read">
 
