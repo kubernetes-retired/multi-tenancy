@@ -7,13 +7,13 @@ import (
 
 // RunOptions contains benchmark running options
 type RunOptions struct {
-	Tenant          string
-	TenantNamespace string
-	OtherTenant 	string
-	OtherNamespace 	string
-	Label           string
-	KClient         *kubernetes.Clientset
-	TClient         *kubernetes.Clientset
-	OClient         *kubernetes.Clientset
-	Logger          *zap.SugaredLogger
+	Tenant            string
+	TenantNamespace   string
+	OtherTenant       string
+	OtherNamespace    string
+	Label             string
+	KClient           *kubernetes.Clientset
+	TenantClient      *kubernetes.Clientset
+	OtherTenantClient *kubernetes.Clientset
+	Logger            *zap.SugaredLogger
 }

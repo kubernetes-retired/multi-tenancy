@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 		tenantConfig := testClient.Config
 		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + namespace + ":" + saName
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
-		options.TClient = tenantClient
+		options.TenantClient = tenantClient
 		options.Tenant = "system:serviceaccount:" + namespace + ":" + saName
 		options.TenantNamespace = namespace
 		return nil

@@ -40,7 +40,7 @@ var b = &benchmark.Benchmark{
 
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(options.TenantClient, options.TenantNamespace, resource, verb)
 				if err != nil {
 					return err
 				}
@@ -68,7 +68,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		role, err := options.TClient.RbacV1().Roles(options.TenantNamespace).Create(context.TODO(), role, metav1.CreateOptions{})
+		role, err := options.TenantClient.RbacV1().Roles(options.TenantNamespace).Create(context.TODO(), role, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ var b = &benchmark.Benchmark{
 			RoleRef:    roleref,
 		}
 
-		_, err = options.TClient.RbacV1().RoleBindings(options.TenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.TenantClient.RbacV1().RoleBindings(options.TenantNamespace).Create(context.TODO(), roleBinding, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ var b = &benchmark.Benchmark{
 	},
 
 	PostRun: func(options types.RunOptions) error {
-		err := options.TClient.RbacV1().Roles(options.TenantNamespace).Delete(context.TODO(), "role-sample", metav1.DeleteOptions{})
+		err := options.TenantClient.RbacV1().Roles(options.TenantNamespace).Delete(context.TODO(), "role-sample", metav1.DeleteOptions{})
 		if err != nil {
 			return err
 		}

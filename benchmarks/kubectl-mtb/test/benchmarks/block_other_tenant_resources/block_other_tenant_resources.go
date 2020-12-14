@@ -21,7 +21,7 @@ var b = &benchmark.Benchmark{
 	},
 
 	Run: func(options types.RunOptions) error {
-		var primaryNamespaceResources []utils.GroupResource
+		var resources []utils.GroupResource
 
 		lists, err := options.KClient.Discovery().ServerPreferredResources()
 		if err != nil {
@@ -42,42 +42,25 @@ var b = &benchmark.Benchmark{
 					continue
 				}
 
-				if resource.Namespaced {
+				if !resource.Namespaced {
 					continue
 				}
-				primaryNamespaceResources = append(primaryNamespaceResources, utils.GroupResource{
+				resources = append(resources, utils.GroupResource{
 					APIGroup:    gv.Group,
 					APIResource: resource,
 				})
 			}
 		}
 
-		for _, resource := range primaryNamespaceResources {
-			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(options.OClient, options.TenantNamespace, resource, verb)
-				if err != nil {
-					options.Logger.Debug(err.Error())
-					return err
-				}
-				if access {
-					return fmt.Errorf(msg)
-				}
-			}
+		err = utils.CheckAccessOnResourcesInNamespace(options.OtherTenantClient, options.TenantNamespace, resources, verbs)
+		if err != nil {
+			return err
 		}
 
-		for _, resource := range primaryNamespaceResources {
-			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(options.TClient, options.OtherNamespace, resource, verb)
-				if err != nil {
-					options.Logger.Debug(err.Error())
-					return err
-				}
-				if access {
-					return fmt.Errorf(msg)
-				}
-			}
+		err = utils.CheckAccessOnResourcesInNamespace(options.TenantClient, options.OtherNamespace, resources, verbs)
+		if err != nil {
+			return err
 		}
-
 		return nil
 	},
 }

@@ -75,7 +75,7 @@ func initConfig() error {
 	tenantConfig.Impersonate.UserName = benchmarkRunOptions.Tenant
 
 	// create the tenant clientset
-	benchmarkRunOptions.TClient, err = kubernetes.NewForConfig(tenantConfig)
+	benchmarkRunOptions.TenantClient, err = kubernetes.NewForConfig(tenantConfig)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func initConfig() error {
 		otherTenantConfig := config
 		otherTenantConfig.Impersonate.UserName = benchmarkRunOptions.OtherTenant
 
-		benchmarkRunOptions.OClient, err = kubernetes.NewForConfig(tenantConfig)
+		benchmarkRunOptions.OtherTenantClient, err = kubernetes.NewForConfig(tenantConfig)
 		if err != nil {
 			return err
 		}
