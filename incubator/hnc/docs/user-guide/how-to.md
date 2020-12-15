@@ -39,7 +39,7 @@ greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin.
 
 You can install the plugin by following the instructions for the [latest
-release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.6.0).
+release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.7.0).
 
 <a name="use-subns-create">
 
@@ -166,10 +166,6 @@ because this would result in the objects in the descendants being silently
 overwritten. HNC will also prevent you from changing the parent of a namespace
 if this would result in objects being overwritten.
 
-> **WARNING:** this guard against creating ancestor objects was only introduced in
-> HNC v0.5.3. Earlier versions of HNC have inconsistent behaviour; see #1076 for
-> details.
-
 However, if you bypass these admission controllers - for example, by updating
 objects while HNC is being upgraded - HNC _will_ overwrite conflicting objects
 in descendant namespaces. This is to ensure that if you are able to successfully
@@ -248,9 +244,6 @@ The `allowCascadingDeletion` field is a bit like `rm -rf` in a Linux shell.
 > deleted, and so will any subnamespaces of those namespaces, and so on.
 > However, any _full_ namespaces that are descendants of a subnamespace will not
 > be deleted.
-
-> _Note: In HNC v0.5.x and earlier, HNC uses v1alpha1 API and this field is
-> called `allowCascadingDelete`._
 
 To set the `allowCascadingDeletion` field on a namespace using the plugin:
 
@@ -350,25 +343,30 @@ $ kubectl hns set --root <namespace>
 
 ### Limit the propagation of an object to descendant namespaces
 
-To limit the propagation of an object, you can use any of the following 
-exceptions selectors:
+***Exceptions are only available in HNC v0.7***
 
-* **`propagate.hnc.x-k8s.io/select`**: The object will only be propagated to 
-namespaces whose labels match the label selector. The value for this selector 
-has to be a [valid Kubernetes label selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors). 
+To limit the propagation of an object, annotate it with an ***exception***. You
+can use any of the following annotations:
 
-* **`propagate.hnc.x-k8s.io/treeSelect`**: Use a single namespace name to 
-represent where this object should be propagated, or use a comma-separated 
-list of negated (“!”) namespaces to represent which namespaces not to 
-propagate to (e.g. `!child1, !child2` means do not propagate to `child1` and 
-`child2`). For example, this can be used to propagate an object to a child 
-namespace, but not a grand-child namespace, using the value `child, !grand-child`. 
+* **`propagate.hnc.x-k8s.io/select`**: The object will only be propagated to
+  namespaces whose labels match the label selector. The value for this selector
+  has to be a [valid Kubernetes label
+  selector](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors).
 
-* **`propagate.hnc.x-k8s.io/none`**: Setting `none` to `true` (case insensitive) will result in the object not 
-propagating to _any_ descendant namespace. Any other value will be rejected.
+* **`propagate.hnc.x-k8s.io/treeSelect`**: Use a single namespace name to
+  represent where this object should be propagated, or use a comma-separated
+  list of negated (“!”) namespaces to represent which namespaces not to
+  propagate to (e.g. `!child1, !child2` means do not propagate to `child1` and
+  `child2`). For example, this can be used to propagate an object to a child
+  namespace, but not a grand-child namespace, using the value `child,
+  !grand-child`.
 
-For example, consider a case with a parent namespace with three child 
-namespaces, and the parent namespace has a secret called `my-secret`. To set 
+* **`propagate.hnc.x-k8s.io/none`**: Setting `none` to `true` (case insensitive)
+  will result in the object not propagating to _any_ descendant namespace. Any
+  other value will be rejected.
+
+For example, consider a case with a parent namespace with three child
+namespaces, and the parent namespace has a secret called `my-secret`. To set
 `my-secret` propagate to `child1` namespace (but nothing else), you can use:
 
 ```bash
@@ -421,7 +419,7 @@ release notes for that version.
 #### Install an official release and the kubectl plugin
 
 [The most recent official release is
-v0.6.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.6.0).
+v0.7.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.7.0).
 Please see that page for release notes and installation instructions.
 
 #### Install from source
@@ -439,9 +437,6 @@ export HNC_IMG_TAG=test-img
 # Build and deploy to the cluster identified by your current kubectl context. This will
 # also build the kubectl-hns plugin and install it at # ${GOPATH}/bin/kubectl-hns;
 # please ensure this path is in your PATH env var in order to use it.
-#
-# NB: in HNC v0.5, you need `controller-gen` installed via kubebuilder.io for
-# this to work; this is not required in HNC v0.6.
 make deploy
 ```
 
@@ -592,11 +587,6 @@ status. You can also set any Kubernetes resource to any of the propagation modes
 discussed above. To do so, you need permission to update the `HNCConfiguration`
 object.
 
-> _Note: Before HNC v0.6, the propagation modes were in lower case (`propagate`,
-> `remove`, `ignore`). The modes were set on types by `apiVersion` and `kind`
-> instead of `group` and `resource`. The `Role` and `RoleBinding` RBAC kinds
-> were also enforced but they were still left in the `HNCConfiguration` spec._
-
 You can view the current set of resources being propagated, along with
 statistics, by saying `kubectl hns config describe`, or alternatively `kubectl
 get -oyaml hncconfiguration config`. This object is automatically created for
@@ -605,22 +595,14 @@ you when HNC is first installed.
 To configure an object resource using the kubectl plugin:
 
 ```
-# HNC v0.6:
 # "--group" can be omitted if the resource is a core K8s resource
 kubectl hns config set-resource [resource] --group [group] --mode [Propagate|Remove|Ignore]
-
-# HNC v0.5:
-kubectl hns config set-type --apiVersion [apiVersion] --kind [kind] [propagate|remove|ignore]
 ```
 
 For example:
 
 ```
-# HNC v0.6:
 kubectl hns config set-resource secrets --mode Propagate
-
-# HNC v0.5:
-kubectl hns config set-type --apiVersion v1 --kind Secret propagate
 ```
 
 To verify that this worked:
@@ -628,24 +610,17 @@ To verify that this worked:
 ```
 kubectl hns config describe
 
-# Output from HNC v0.6:
+# Output:
 Synchronized types:
 * Propagating: roles (rbac.authorization.k8s.io/v1)
 * Propagating: rolebindings (rbac.authorization.k8s.io/v1)
 * Propagating: secrets (v1) # <<<< This should be added
-
-# Output from HNC v0.5:
-Synchronized types:
-* Propagating: Role (rbac.authorization.k8s.io/v1)
-* Propagating: RoleBinding (rbac.authorization.k8s.io/v1)
-* Propagating: Secret (v1) # <<<< This should be added
 ```
 
 You can also modify the config directly to include custom configurations via
 `kubectl edit hncconfiguration config`:
 
 ```yaml
-# HNC v0.6 and later:
 apiVersion: hnc.x-k8s.io/v1alpha2
 kind: HNCConfiguration
 metadata:
@@ -656,27 +631,13 @@ spec:
     ...
     - resource: secrets   <<< This should be added
       mode: Propagate     <<<
-
-# HNC v0.5:
-apiVersion: hnc.x-k8s.io/v1alpha1
-kind: HNCConfiguration
-metadata:
-  name: config
-spec:
-  types:
-    # Spec for other types
-    ...
-    - apiVersion: v1   <<<
-      kind: Secret     <<< This should be added
-      mode: propagate  <<<
 ```
 
 Adding a new resource in the `Propagate` mode is potentially dangerous, since
 there could be existing objects of that resource type that would be overwritten
-by objects of the same name from ancestor namespaces. In HNC v0.5, it is up to
-the cluster administrator to avoid making any mistakes, but in HNC v0.6, the HNS
-plugin will not allow you to add a new resource in the `Propagate` mode.
-Instead, to do so safely:
+by objects of the same name from ancestor namespaces. As a result, the HNS
+plugin will not allow you to add a new resource directly in the `Propagate`
+mode.  Instead, to do so safely:
 
 * Add the new resource in the `Remove` mode. This will remove any propagated
   copies (of which there should be none) but will force HNC to start
