@@ -96,7 +96,7 @@ replicaset.apps/vc-manager-76c5878465   1         1         1       92s
 replicaset.apps/vc-syncer-55c5bc5898    1         1         1       92s
 ```
 
-## (Optional) Create `kubelet` client secrete and update `vn-agent`
+## (Optional) Create `kubelet` client secret and update `vn-agent`
 
 By default, `vn-agent` works in a suboptimal mode by forwarding all `kubelet` API requests to super master.
 A more efficient method is to communicate with `kubelet` directly using the client cert/key used by the super master.
