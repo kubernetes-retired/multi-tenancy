@@ -36,6 +36,8 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
 )
 
 type controller struct {
@@ -52,6 +54,7 @@ type controller struct {
 	multiClusterNodeController *mc.MultiClusterController
 	// UWcontroller
 	upwardNodeController *uw.UpwardController
+	vnodeProvider        vnode.VirtualNodeProvider
 }
 
 func NewNodeController(config *config.SyncerConfiguration,
@@ -63,6 +66,7 @@ func NewNodeController(config *config.SyncerConfiguration,
 	c := &controller{
 		nodeNameToCluster: make(map[string]map[string]struct{}),
 		nodeClient:        client.CoreV1(),
+		vnodeProvider:     native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
 
 	var mcOptions *mc.Options
@@ -103,8 +107,13 @@ func NewNodeController(config *config.SyncerConfiguration,
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				newNode := newObj.(*v1.Node)
 				oldNode := oldObj.(*v1.Node)
-				if newNode.ResourceVersion == oldNode.ResourceVersion || equality.Semantic.DeepEqual(newNode.Status.Conditions, oldNode.Status.Conditions) {
-					//We only update tenant virtual nodes if there are condition changes, e.g., updating LastHeartBeatTime.
+				if newNode.ResourceVersion == oldNode.ResourceVersion {
+					return
+				}
+
+				if equality.Semantic.DeepEqual(newNode.Status.Conditions, oldNode.Status.Conditions) &&
+					equality.Semantic.DeepEqual(newNode.Status.Addresses, oldNode.Status.Addresses) {
+					// We only update tenant virtual nodes if there are condition or addresses changes, e.g., updating LastHeartBeatTime.
 					return
 				}
 
@@ -114,6 +123,12 @@ func NewNodeController(config *config.SyncerConfiguration,
 		},
 	)
 	return c, multiClusterNodeController, upwardNodeController, nil
+}
+
+func (c *controller) SetVNodeProvider(provider vnode.VirtualNodeProvider) {
+	c.Lock()
+	c.vnodeProvider = provider
+	c.Unlock()
 }
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
