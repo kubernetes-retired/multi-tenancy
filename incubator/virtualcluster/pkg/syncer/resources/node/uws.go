@@ -99,7 +99,17 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 		return
 	}
 
-	if err := vnode.UpdateNodeStatus(tenantClient.CoreV1().Nodes(), node, vNodeObj.(*v1.Node)); err != nil {
+	vNode := vNodeObj.(*v1.Node)
+	newVNode := vNode.DeepCopy()
+	newVNode.Status.Conditions = node.Status.Conditions
+	vNodeAddress, err := c.vnodeProvider.GetNodeAddress(node)
+	if err != nil {
+		klog.Errorf("unable get node address from provider: %v", err)
+		return
+	}
+	newVNode.Status.Addresses = vNodeAddress
+
+	if err := vnode.UpdateNodeStatus(tenantClient.CoreV1().Nodes(), vNode, newVNode); err != nil {
 		klog.Errorf("failed to update node %s/%s's heartbeats: %v", clusterName, node.Name, err)
 	}
 	return
