@@ -36,6 +36,7 @@ import (
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
@@ -45,6 +46,7 @@ func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
 		klog.Fatalf("unable to initialize command options: %v", err)
 	}
 
+	var featureGatesString string
 	cmd := &cobra.Command{
 		Use: "syncer",
 		Long: `The resource syncer is a daemon that watches tenant masters to
@@ -52,8 +54,15 @@ keep tenant requests are synchronized to super master by creating corresponding
 custom resources on behalf of the tenant users in super master, following the
 resource isolation policy specified in Tenant CRD.`,
 		Run: func(cmd *cobra.Command, args []string) {
+			var err error
+			var c *syncerconfig.Config
+			s.ComponentConfig.FeatureGates, err = feature.NewFeatureGate(&feature.InitFeatureGates, featureGatesString)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				os.Exit(1)
+			}
 			verflag.PrintAndExitIfRequested()
-			c, err := s.Config()
+			c, err = s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 				os.Exit(1)
@@ -67,7 +76,7 @@ resource isolation policy specified in Tenant CRD.`,
 	}
 
 	fs := cmd.Flags()
-	namedFlagSets := s.Flags()
+	namedFlagSets := s.Flags(&featureGatesString)
 	verflag.AddFlags(namedFlagSets.FlagSet("global"))
 	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
 
