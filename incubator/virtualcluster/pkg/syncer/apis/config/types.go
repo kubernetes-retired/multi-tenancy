@@ -54,6 +54,9 @@ type SyncerConfiguration struct {
 	// VNAgentPort defines the port that the VN Agent is running on per host
 	VNAgentPort int32
 
+	// FeatureGates enabled by the user.
+	FeatureGates map[string]bool
+
 	// Super master rest config
 	RestConfig *rest.Config
 }
