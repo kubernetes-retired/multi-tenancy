@@ -34,8 +34,8 @@ type Config struct {
 	// config is the syncer's configuration object.
 	ComponentConfig syncerconfig.SyncerConfiguration
 
-	// the general kube client
-	SecretClient corev1.SecretsGetter
+	// the super cluster client
+	SuperClient corev1.CoreV1Interface
 	// virtual cluster CR client
 	VirtualClusterClient   vcclient.Interface
 	VirtualClusterInformer vcinformers.VirtualClusterInformer
