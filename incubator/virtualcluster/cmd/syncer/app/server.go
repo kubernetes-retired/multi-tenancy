@@ -100,7 +100,7 @@ resource isolation policy specified in Tenant CRD.`,
 
 func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	ss := syncer.New(&cc.ComponentConfig,
-		cc.SecretClient,
+		cc.SuperClient,
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
 		cc.SuperMasterClient,

@@ -90,7 +90,7 @@ func GetVirtualOwner(obj runtime.Object) (cluster, namespace string) {
 	return cluster, namespace
 }
 
-func GetKubeConfigOfVC(c v1core.SecretsGetter, vc *v1alpha1.VirtualCluster) ([]byte, error) {
+func GetKubeConfigOfVC(c v1core.CoreV1Interface, vc *v1alpha1.VirtualCluster) ([]byte, error) {
 	if adminKubeConfig, exists := vc.GetAnnotations()[constants.LabelAdminKubeConfig]; exists {
 		decoded, err := base64.StdEncoding.DecodeString(adminKubeConfig)
 		if err != nil {

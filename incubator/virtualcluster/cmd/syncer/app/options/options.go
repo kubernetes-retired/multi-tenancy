@@ -83,7 +83,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 			ExtraSyncingResources:      []string{},
 			VNAgentPort:                int32(10550),
-			FeatureGates:               map[string]bool{feature.SuperClusterPool: false},
+			FeatureGates:               map[string]bool{feature.SuperClusterPooling: false},
 		},
 		Address:  "",
 		Port:     "80",
@@ -172,7 +172,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 		return nil, err
 	}
 	c.ComponentConfig.RestConfig = restConfig
-	c.SecretClient = superMasterClient.CoreV1()
+	c.SuperClient = superMasterClient.CoreV1()
 	c.VirtualClusterClient = virtualClusterClient
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().VirtualClusters()
 	c.SuperMasterClient = superMasterClient

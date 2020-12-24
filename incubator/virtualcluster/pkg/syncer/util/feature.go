@@ -23,12 +23,12 @@ import (
 )
 
 const (
-	// SuperClusterPool is an experimental feature
-	SuperClusterPool = "SuperClusterPool"
+	// SuperClusterPooling is an experimental feature
+	SuperClusterPooling = "SuperClusterPooling"
 )
 
 var InitFeatureGates = FeatureList{
-	SuperClusterPool: {Default: false},
+	SuperClusterPooling: {Default: false},
 }
 
 // Feature represents a feature being gated

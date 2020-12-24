@@ -17,8 +17,10 @@ limitations under the License.
 package syncer
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -50,15 +53,23 @@ import (
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 var (
 	numHealthCluster   uint64
 	numUnHealthCluster uint64
+	SuperClusterID     string
+)
+
+const (
+	SuperClusterInfoCfgMap = "supercluster-info"
+	SuperClusterIDKey      = "id"
 )
 
 type Syncer struct {
-	secretClient      v1core.SecretsGetter
+	config            *config.SyncerConfiguration
+	superClient       v1core.CoreV1Interface
 	recorder          record.EventRecorder
 	controllerManager *manager.ControllerManager
 	// lister that can list virtual clusters from a shared cache
@@ -81,7 +92,7 @@ type Bootstrap interface {
 
 func New(
 	config *config.SyncerConfiguration,
-	secretClient v1core.SecretsGetter,
+	superClient v1core.CoreV1Interface,
 	virtualClusterClient vcclient.Interface,
 	virtualClusterInformer vcinformers.VirtualClusterInformer,
 	superMasterClient clientset.Interface,
@@ -89,11 +100,12 @@ func New(
 	recorder record.EventRecorder,
 ) *Syncer {
 	syncer := &Syncer{
-		secretClient: secretClient,
-		recorder:     recorder,
-		queue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
-		workers:      constants.UwsControllerWorkerLow,
-		clusterSet:   make(map[string]mc.ClusterInterface),
+		config:      config,
+		superClient: superClient,
+		recorder:    recorder,
+		queue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
+		workers:     constants.UwsControllerWorkerLow,
+		clusterSet:  make(map[string]mc.ClusterInterface),
 	}
 
 	// Handle VirtualCluster add&delete
@@ -150,6 +162,19 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 
 // Run begins watching and downward&upward syncing.
 func (s *Syncer) Run(stopChan <-chan struct{}) {
+	if feature.Enabled(s.config.FeatureGates, feature.SuperClusterPooling) {
+		klog.Infof("SuperClusterPooling feature is enabled!")
+		cfg, err := s.superClient.ConfigMaps("kube-system").Get(context.TODO(), SuperClusterInfoCfgMap, metav1.GetOptions{})
+		if err != nil {
+			klog.Infof("Fail to get configmap kube-system/%v from super cluster which is required for SuperClusterPooling feature. Quit!", SuperClusterInfoCfgMap)
+			os.Exit(1)
+		}
+		var ok bool
+		if SuperClusterID, ok = cfg.Data[SuperClusterIDKey]; ok == false {
+			klog.Infof("Fail to get ID value from configmap kube-system/%v. Quit!", SuperClusterInfoCfgMap)
+			os.Exit(1)
+		}
+	}
 	go func() {
 		if err := s.controllerManager.Start(stopChan); err != nil {
 			klog.V(1).Infof("controller manager exit: %v", err)
@@ -277,7 +302,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 
 	clusterName := conversion.ToClusterKey(vc)
 
-	adminKubeConfigBytes, err := conversion.GetKubeConfigOfVC(s.secretClient, vc)
+	adminKubeConfigBytes, err := conversion.GetKubeConfigOfVC(s.superClient, vc)
 	if err != nil {
 		return err
 	}
