@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgokubescheme "k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
@@ -42,6 +43,8 @@ import (
 	schedulerappconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/cmd/scheduler/app/config"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 )
 
 type SchedulerOptions struct {
@@ -115,7 +118,7 @@ func (o *SchedulerOptions) Config() (*schedulerappconfig.Config, error) {
 	c.ComponentConfig = o.ComponentConfig
 
 	// Prepare kube clients
-	leaderElectionClient, restConfig, err := createClients(c.ComponentConfig.ClientConnection, o.MetaCluster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
+	leaderElectionClient, metaClusterClient, virtualClusterClient, restConfig, err := createClients(c.ComponentConfig.ClientConnection, o.MetaCluster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +144,10 @@ func (o *SchedulerOptions) Config() (*schedulerappconfig.Config, error) {
 	}
 
 	c.ComponentConfig.RestConfig = restConfig
+	c.VirtualClusterClient = virtualClusterClient
+	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().VirtualClusters()
+	c.MetaClusterClient = metaClusterClient
+	c.MetaClusterInformerFactory = informers.NewSharedInformerFactory(metaClusterClient, 0)
 	c.Broadcaster = eventBroadcaster
 	c.Recorder = recorder
 	c.LeaderElectionClient = leaderElectionClient
@@ -209,7 +216,7 @@ func getInClusterNamespace() (string, error) {
 }
 
 func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface,
-	*restclient.Config, error) {
+	clientset.Interface, vcclient.Interface, *restclient.Config, error) {
 	// This creates a client, first loading any specified kubeconfig
 	// file, and then overriding the Master flag, if non-empty.
 	var (
@@ -228,7 +235,7 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 	}
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if restConfig.Timeout == 0 {
@@ -245,12 +252,22 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 		restConfig.Burst = constants.DefaultSchedulerClientBurst
 	}
 
+	metaClusterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, constants.SchedulerUserAgent))
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	virtualClusterClient, err := vcclient.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
 	leaderElectionRestConfig := *restConfig
 	restConfig.Timeout = timeout
 	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&leaderElectionRestConfig, "leader-election"))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return leaderElectionClient, restConfig, nil
+	return leaderElectionClient, metaClusterClient, virtualClusterClient, restConfig, nil
 }
