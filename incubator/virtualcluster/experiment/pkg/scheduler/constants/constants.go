@@ -31,6 +31,8 @@ const (
 	// DefaultRequestTimeout is set for all client-go request. This is the absolute
 	// timeout of the HTTP request, including reading the response body.
 	DefaultRequestTimeout = 30 * time.Second
+
+	VirtualClusterWorker = 3
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()

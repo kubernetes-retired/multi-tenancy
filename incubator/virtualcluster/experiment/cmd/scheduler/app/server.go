@@ -30,6 +30,7 @@ import (
 
 	schedulerappconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/cmd/scheduler/app/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/cmd/scheduler/app/options"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
@@ -82,8 +83,26 @@ func NewSchedulerCommand(stopChan <-chan struct{}) *cobra.Command {
 
 // Run start the scheduler.
 func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
+	scheduler := scheduler.New(&cc.ComponentConfig,
+		cc.VirtualClusterClient,
+		cc.VirtualClusterInformer,
+		cc.MetaClusterClient,
+		cc.MetaClusterInformerFactory,
+		cc.Recorder)
+
+	// Start all informers.
+	go cc.VirtualClusterInformer.Informer().Run(stopCh)
+	cc.MetaClusterInformerFactory.Start(stopCh)
+
+	// Wait for all caches to sync before resource sync.
+	cc.MetaClusterInformerFactory.WaitForCacheSync(stopCh)
+
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
+
+	// Prepare a reusable runCommand function.
+	run := startScheduler(ctx, scheduler, stopCh)
+
 	go func() {
 		select {
 		case <-stopCh:
@@ -91,10 +110,6 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 		case <-ctx.Done():
 		}
 	}()
-
-	// Prepare a reusable runCommand function.
-	run := startScheduler(ctx, stopCh)
-
 	if cc.LeaderElection != nil {
 		cc.LeaderElection.Callbacks = leaderelection.LeaderCallbacks{
 			OnStartedLeading: run,
@@ -115,9 +130,9 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	return fmt.Errorf("finished without leader elect")
 }
 
-func startScheduler(ctx context.Context, stopCh <-chan struct{}) func(context.Context) {
+func startScheduler(ctx context.Context, s *scheduler.Scheduler, stopCh <-chan struct{}) func(context.Context) {
 	return func(ctx context.Context) {
-		//TODO start scheduler
+		s.Run(stopCh)
 		<-ctx.Done()
 	}
 }

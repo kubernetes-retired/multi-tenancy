@@ -17,18 +17,29 @@ limitations under the License.
 package config
 
 import (
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/record"
 
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
+	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
+	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 )
 
 // Config has all the context to run a Syncer.
 type Config struct {
 	// the scheduler's configuration object
 	ComponentConfig schedulerconfig.SchedulerConfiguration
+
+	// virtual cluster CR client
+	VirtualClusterClient   vcclient.Interface
+	VirtualClusterInformer vcinformers.VirtualClusterInformer
+
+	// the meta cluster client
+	MetaClusterClient          clientset.Interface
+	MetaClusterInformerFactory informers.SharedInformerFactory
 
 	// the client only used for leader election
 	LeaderElectionClient clientset.Interface
