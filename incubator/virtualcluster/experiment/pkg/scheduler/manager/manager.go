@@ -26,6 +26,7 @@ import (
 // WatchManager manages number of resource watchers.
 type WatchManager struct {
 	resourceWatchers map[ResourceWatcher]struct{}
+	listeners        []listener.ClusterChangeListener
 }
 
 func New() *WatchManager {
@@ -43,7 +44,11 @@ type ResourceWatcherNew func(*schedulerconfig.SchedulerConfiguration) (ResourceW
 // AddResourceWatcher adds a resource watcher to the WatchManager.
 func (m *WatchManager) AddResourceWatcher(s ResourceWatcher) {
 	m.resourceWatchers[s] = struct{}{}
-	listener.AddListener(s)
+	m.listeners = append(m.listeners, s)
+}
+
+func (m *WatchManager) GetListeners() []listener.ClusterChangeListener {
+	return m.listeners
 }
 
 func (m *WatchManager) Start(stop <-chan struct{}) error {

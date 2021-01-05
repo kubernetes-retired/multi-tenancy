@@ -33,11 +33,12 @@ import (
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
-	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/watcher/virtualcluster"
+	//	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/reconciler"
+	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/virtualcluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
-	virtualClusterListerers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
+	virtualClusterLister "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
 
@@ -48,12 +49,12 @@ type Scheduler struct {
 	virtualClusterWatcher *manager.WatchManager
 
 	// lister that can list virtualclusters from an informer cache
-	virtualClusterListerer virtualClusterListerers.VirtualClusterLister
+	virtualClusterLister virtualClusterLister.VirtualClusterLister
 	// returns true when the vc cache is ready
 	virtualClusterSyncer cache.InformerSynced
 
-	virtualClusterQueue workqueue.RateLimitingInterface
-	vcWorkers           int
+	virtualClusterQueue   workqueue.RateLimitingInterface
+	virtualClusterWorkers int
 	// virtualClusterSet holds the virtualcluster collection
 	virtualClusterLock sync.Mutex
 	virtualClusterSet  map[string]mc.ClusterInterface
@@ -68,12 +69,12 @@ func New(
 	recorder record.EventRecorder,
 ) *Scheduler {
 	scheduler := &Scheduler{
-		config:              config,
-		metaClusterClient:   metaClusterClient,
-		recorder:            recorder,
-		virtualClusterQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualcluster"),
-		vcWorkers:           constants.VirtualClusterWorker,
-		virtualClusterSet:   make(map[string]mc.ClusterInterface),
+		config:                config,
+		metaClusterClient:     metaClusterClient,
+		recorder:              recorder,
+		virtualClusterQueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtualcluster"),
+		virtualClusterWorkers: constants.VirtualClusterWorker,
+		virtualClusterSet:     make(map[string]mc.ClusterInterface),
 	}
 
 	// Handle VirtualCluster add&delete
@@ -91,7 +92,7 @@ func New(
 			DeleteFunc: scheduler.enqueueVirtualCluster,
 		},
 	)
-	scheduler.virtualClusterListerer = vcInformer.Lister()
+	scheduler.virtualClusterLister = vcInformer.Lister()
 	scheduler.virtualClusterSyncer = vcInformer.Informer().HasSynced
 
 	vcWatcher := manager.New()
@@ -145,37 +146,9 @@ func (s *Scheduler) Run(stopChan <-chan struct{}) {
 		}
 
 		klog.V(5).Infof("starting scheduler workers")
-		for i := 0; i < s.vcWorkers; i++ {
-			go wait.Until(s.vcWorkerRun, 1*time.Second, stopChan)
+		for i := 0; i < s.virtualClusterWorkers; i++ {
+			go wait.Until(s.virtualClusterWorkerRun, 1*time.Second, stopChan)
 		}
 		<-stopChan
 	}()
-}
-
-func (s *Scheduler) vcWorkerRun() {
-	for s.processNextWorkItem() {
-	}
-}
-
-func (s *Scheduler) processNextWorkItem() bool {
-	key, quit := s.virtualClusterQueue.Get()
-	if quit {
-		return false
-	}
-	defer s.virtualClusterQueue.Done(key)
-
-	err := s.syncVirtualCluster(key.(string))
-	if err == nil {
-		s.virtualClusterQueue.Forget(key)
-		return true
-	}
-
-	utilruntime.HandleError(fmt.Errorf("error processing virtual cluster %v (will retry): %v", key, err))
-	s.virtualClusterQueue.AddRateLimited(key)
-	return true
-}
-
-func (s *Scheduler) syncVirtualCluster(key string) error {
-	// TODO: add vc reconcile logic
-	return nil
 }
