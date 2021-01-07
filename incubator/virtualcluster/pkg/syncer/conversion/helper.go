@@ -79,12 +79,7 @@ func GetVirtualNamespace(nsLister listersv1.NamespaceLister, pNamespace string) 
 	return
 }
 
-func GetVirtualOwner(obj runtime.Object) (cluster, namespace string) {
-	meta, err := meta.Accessor(obj)
-	if err != nil {
-		return "", ""
-	}
-
+func GetVirtualOwner(meta metav1.Object) (cluster, namespace string) {
 	cluster = meta.GetAnnotations()[constants.LabelCluster]
 	namespace = meta.GetAnnotations()[constants.LabelNamespace]
 	return cluster, namespace
