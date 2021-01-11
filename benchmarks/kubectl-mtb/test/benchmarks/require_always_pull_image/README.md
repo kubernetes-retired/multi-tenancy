@@ -23,5 +23,5 @@ Set `imagePullPolicy` to `always` for the container.
 
 **namespaceRequired:** 
 
-2
+1
 
