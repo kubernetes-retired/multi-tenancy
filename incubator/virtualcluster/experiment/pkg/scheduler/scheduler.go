@@ -34,6 +34,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
 	//	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/reconciler"
+	superclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/clientset/versioned"
+	superinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/informers/externalversions/cluster/v1alpha4"
+	superLister "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/listers/cluster/v1alpha4"
 	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/virtualcluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
@@ -48,10 +51,11 @@ type Scheduler struct {
 	recorder              record.EventRecorder
 	virtualClusterWatcher *manager.WatchManager
 
-	// lister that can list virtualclusters from an informer cache
+	superClusterLister superLister.ClusterLister
+	superClusterSynced cache.InformerSynced
+
 	virtualClusterLister virtualClusterLister.VirtualClusterLister
-	// returns true when the vc cache is ready
-	virtualClusterSyncer cache.InformerSynced
+	virtualClusterSynced cache.InformerSynced
 
 	virtualClusterQueue   workqueue.RateLimitingInterface
 	virtualClusterWorkers int
@@ -64,6 +68,8 @@ func New(
 	config *schedulerconfig.SchedulerConfiguration,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
+	superClient superclient.Interface,
+	superInformer superinformers.ClusterInformer,
 	metaClusterClient clientset.Interface,
 	metaInformers informers.SharedInformerFactory,
 	recorder record.EventRecorder,
@@ -93,7 +99,9 @@ func New(
 		},
 	)
 	scheduler.virtualClusterLister = vcInformer.Lister()
-	scheduler.virtualClusterSyncer = vcInformer.Informer().HasSynced
+	scheduler.virtualClusterSynced = vcInformer.Informer().HasSynced
+	scheduler.superClusterLister = superInformer.Lister()
+	scheduler.superClusterSynced = superInformer.Informer().HasSynced
 
 	vcWatcher := manager.New()
 	scheduler.virtualClusterWatcher = vcWatcher
@@ -141,7 +149,11 @@ func (s *Scheduler) Run(stopChan <-chan struct{}) {
 		klog.Infof("starting Scheduler")
 		defer klog.Infof("shutting down scheduler")
 
-		if !cache.WaitForCacheSync(stopChan, s.virtualClusterSyncer) {
+		if !cache.WaitForCacheSync(stopChan, s.virtualClusterSynced) {
+			return
+		}
+
+		if !cache.WaitForCacheSync(stopChan, s.superClusterSynced) {
 			return
 		}
 
