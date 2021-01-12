@@ -86,6 +86,8 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	scheduler := scheduler.New(&cc.ComponentConfig,
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
+		cc.SuperClusterClient,
+		cc.SuperClusterInformer,
 		cc.MetaClusterClient,
 		cc.MetaClusterInformerFactory,
 		cc.Recorder)

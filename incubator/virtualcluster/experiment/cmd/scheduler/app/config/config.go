@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/record"
 
+	superclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/clientset/versioned"
+	superinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/informers/externalversions/cluster/v1alpha4"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -36,6 +38,10 @@ type Config struct {
 	// virtual cluster CR client
 	VirtualClusterClient   vcclient.Interface
 	VirtualClusterInformer vcinformers.VirtualClusterInformer
+
+	// super cluster CR client
+	SuperClusterClient   superclient.Interface
+	SuperClusterInformer superinformers.ClusterInformer
 
 	// the meta cluster client
 	MetaClusterClient          clientset.Interface
