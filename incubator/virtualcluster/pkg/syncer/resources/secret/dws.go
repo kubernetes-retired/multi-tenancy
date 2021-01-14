@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -188,7 +189,7 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	if pSecret.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pSecret.Name)
 	}
-	spec, err := c.multiClusterSecretController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
 	if err != nil {
 		return err
 	}

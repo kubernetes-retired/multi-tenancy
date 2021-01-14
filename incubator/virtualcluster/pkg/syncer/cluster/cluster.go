@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -35,8 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	vclisters "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
@@ -53,17 +50,17 @@ type Cluster struct {
 	// The root namespace name for this cluster
 	key string
 	// Name of the corresponding virtual cluster object.
-	vcName string
+	Name string
 	// Namespace of the corresponding virtual cluster object.
-	vcNamespace string
+	Namespace string
 	// UID of the corresponding virtual cluster object.
-	vcUID string
+	UID string
 
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	RestConfig *rest.Config
 
-	// vcLister points to the super master virtual cluster informer cache.
-	vclister vclisters.VirtualClusterLister
+	// getter is used to get cluster CRD object.
+	getter mccontroller.Getter
 
 	// scheme is injected by the controllerManager when controllerManager.Start is called
 	scheme *runtime.Scheme
@@ -106,8 +103,7 @@ type CacheOptions struct {
 
 var _ mccontroller.ClusterInterface = &Cluster{}
 
-// New creates a new Cluster.
-func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.VirtualClusterLister, configBytes []byte, o Options) (*Cluster, error) {
+func NewCluster(key, namespace, name, uid string, getter mccontroller.Getter, configBytes []byte, o Options) (*Cluster, error) {
 	clusterRestConfig, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build rest config: %v", err)
@@ -125,15 +121,15 @@ func NewTenantCluster(key, namespace, name, uid string, vclister vclisters.Virtu
 	}
 
 	return &Cluster{
-		key:         key,
-		vcName:      name,
-		vcNamespace: namespace,
-		vcUID:       uid,
-		vclister:    vclister,
-		RestConfig:  clusterRestConfig,
-		Options:     o,
-		synced:      false,
-		stopCh:      make(chan struct{})}, nil
+		key:        key,
+		Name:       name,
+		Namespace:  namespace,
+		UID:        uid,
+		getter:     getter,
+		RestConfig: clusterRestConfig,
+		Options:    o,
+		synced:     false,
+		stopCh:     make(chan struct{})}, nil
 }
 
 // GetClusterName returns the unique cluster name, aka, the root namespace name.
@@ -142,27 +138,16 @@ func (c *Cluster) GetClusterName() string {
 }
 
 func (c *Cluster) GetOwnerInfo() (string, string, string) {
-	return c.vcName, c.vcNamespace, c.vcUID
+	return c.Name, c.Namespace, c.UID
 }
 
-// GetSpec returns the virtual cluster spec.
-func (c *Cluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
-	vc, err := c.vclister.VirtualClusters(c.vcNamespace).Get(c.vcName)
+// GetObject returns the cluster object.
+func (c *Cluster) GetObject() (runtime.Object, error) {
+	obj, err := c.getter.GetObject(c.Namespace, c.Name)
 	if err != nil {
 		return nil, err
 	}
-
-	spec := vc.Spec.DeepCopy()
-	prefixesSet := sets.NewString(spec.OpaqueMetaPrefixes...)
-	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {
-		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
-	}
-	prefixesSet = sets.NewString(spec.TransparentMetaPrefixes...)
-	if !prefixesSet.Has(constants.DefaultTransparentMetaPrefix) {
-		spec.TransparentMetaPrefixes = append(spec.TransparentMetaPrefixes, constants.DefaultTransparentMetaPrefix)
-	}
-
-	return spec, nil
+	return obj, nil
 }
 
 func (c *Cluster) getScheme() *runtime.Scheme {

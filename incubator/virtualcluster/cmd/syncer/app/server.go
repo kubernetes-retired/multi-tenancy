@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import (
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 

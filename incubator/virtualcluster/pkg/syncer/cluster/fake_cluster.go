@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,13 +18,11 @@ package cluster
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
@@ -57,13 +55,8 @@ func (c *fakeCluster) GetOwnerInfo() (string, string, string) {
 	return c.vc.Name, c.vc.Namespace, string(c.vc.UID)
 }
 
-func (c *fakeCluster) GetSpec() (*v1alpha1.VirtualClusterSpec, error) {
-	spec := c.vc.Spec.DeepCopy()
-	prefixesSet := sets.NewString(spec.OpaqueMetaPrefixes...)
-	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {
-		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
-	}
-	return spec, nil
+func (c *fakeCluster) GetObject() (runtime.Object, error) {
+	return c.vc, nil
 }
 
 func (c *fakeCluster) GetClientSet() (clientset.Interface, error) {

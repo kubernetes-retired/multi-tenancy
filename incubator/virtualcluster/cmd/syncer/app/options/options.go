@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ import (
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
 )
 
 // ResourceSyncerOptions is the main context object for the resource syncer.
