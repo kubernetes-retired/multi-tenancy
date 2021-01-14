@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -53,7 +54,7 @@ import (
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
 )
 
 var (
@@ -82,6 +83,20 @@ type Syncer struct {
 	// clusterSet holds the cluster collection in which cluster is running.
 	mu         sync.Mutex
 	clusterSet map[string]mc.ClusterInterface
+}
+
+type virtualclusterGetter struct {
+	lister vclisters.VirtualClusterLister
+}
+
+var _ mc.Getter = &virtualclusterGetter{}
+
+func (v *virtualclusterGetter) GetObject(namespace, name string) (runtime.Object, error) {
+	vc, err := v.lister.VirtualClusters(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return vc, nil
 }
 
 // Bootstrap is a bootstrapping interface for syncer, targets the initialization protocol
@@ -306,8 +321,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 	if err != nil {
 		return err
 	}
-
-	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), s.lister, adminKubeConfigBytes, cluster.Options{})
+	tenantCluster, err := cluster.NewCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), &virtualclusterGetter{lister: s.lister}, adminKubeConfigBytes, cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}

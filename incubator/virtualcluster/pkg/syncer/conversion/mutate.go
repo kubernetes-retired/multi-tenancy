@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion/envvars"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 type VCMutateInterface interface {
@@ -161,11 +162,11 @@ func PodMutateDefault(vPod *v1.Pod, saSecretMap map[string]string, services []*v
 			mutateWeightedPodAffinityTerms(p.pPod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution, p.clusterName)
 		}
 
-		clusterDomain, err := p.mc.GetClusterDomain(p.clusterName)
+		spec, err := util.GetVirtualClusterSpec(p.mc, p.clusterName)
 		if err != nil {
 			return err
 		}
-		mutateDNSConfig(p, vPod, clusterDomain, nameServer)
+		mutateDNSConfig(p, vPod, spec.ClusterDomain, nameServer)
 
 		// FIXME(zhuangqh): how to support pod subdomain.
 		if p.pPod.Spec.Subdomain != "" {

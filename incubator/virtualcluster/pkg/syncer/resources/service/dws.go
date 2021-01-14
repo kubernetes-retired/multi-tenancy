@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -114,7 +115,7 @@ func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, reques
 		return fmt.Errorf("pService %s/%s delegated UID is different from updated object.", targetNamespace, pService.Name)
 	}
 
-	spec, err := c.multiClusterServiceController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterServiceController, clusterName)
 	if err != nil {
 		return err
 	}

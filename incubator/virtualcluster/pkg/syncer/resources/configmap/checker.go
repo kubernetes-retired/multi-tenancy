@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
  Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 var numMissMatchedConfigMaps uint64
@@ -98,7 +99,7 @@ func (c *controller) PatrollerDo() {
 			configMapDiffer.OnDelete(pObj)
 			return
 		}
-		spec, err := c.multiClusterConfigMapController.GetSpec(vObj.GetOwnerCluster())
+		spec, err := util.GetVirtualClusterSpec(c.multiClusterConfigMapController, vObj.GetOwnerCluster())
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", vObj.GetOwnerCluster())
 			return

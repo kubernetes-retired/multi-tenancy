@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 // StartUWS starts the upward syncer
@@ -80,7 +81,7 @@ func (c *controller) BackPopulate(key string) error {
 		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
-	spec, err := c.multiClusterIngressController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterIngressController, clusterName)
 	if err != nil {
 		return pkgerr.Wrapf(err, "failed to get spec of cluster %s", clusterName)
 	}

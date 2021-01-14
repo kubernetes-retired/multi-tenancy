@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue"
@@ -91,11 +90,16 @@ type Cache interface {
 	Stop()
 }
 
+// Lister interface is used to get the CRD object that abstracts the cluster.
+type Getter interface {
+	GetObject(string, string) (runtime.Object, error)
+}
+
 // ClusterInterface decouples the controller package from the cluster package.
 type ClusterInterface interface {
 	GetClusterName() string
 	GetOwnerInfo() (string, string, string)
-	GetSpec() (*v1alpha1.VirtualClusterSpec, error)
+	GetObject() (runtime.Object, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
@@ -276,29 +280,16 @@ func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset
 	return cluster.GetClientSet()
 }
 
-// GetClusterDomain returns the cluster's domain name specified in VirtualClusterSpec
-func (c *MultiClusterController) GetClusterDomain(clusterName string) (string, error) {
-	cluster := c.getCluster(clusterName)
-	if cluster == nil {
-		return "", errors.NewClusterNotFound(clusterName)
-	}
-	spec, err := cluster.GetSpec()
-	if err != nil {
-		return "", nil
-	}
-	return spec.ClusterDomain, nil
-}
-
-func (c *MultiClusterController) GetSpec(clusterName string) (*v1alpha1.VirtualClusterSpec, error) {
+func (c *MultiClusterController) GetClusterObject(clusterName string) (runtime.Object, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	spec, err := cluster.GetSpec()
+	obj, err := cluster.GetObject()
 	if err != nil {
 		return nil, err
 	}
-	return spec, nil
+	return obj, nil
 }
 
 func (c *MultiClusterController) GetOwnerInfo(clusterName string) (string, string, string, error) {

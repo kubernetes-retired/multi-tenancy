@@ -22,15 +22,33 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/apis/cluster/v1alpha4"
+	superListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/listers/cluster/v1alpha4"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	vcListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
 )
+
+type virtualclusterGetter struct {
+	lister vcListers.VirtualClusterLister
+}
+
+var _ mc.Getter = &virtualclusterGetter{}
+
+func (v *virtualclusterGetter) GetObject(namespace, name string) (runtime.Object, error) {
+	vc, err := v.lister.VirtualClusters(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return vc, nil
+}
 
 func (s *Scheduler) virtualClusterWorkerRun() {
 	for s.processNextVirtualClusterItem() {
@@ -122,7 +140,7 @@ func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) e
 		return err
 	}
 
-	tenantCluster, err := cluster.NewTenantCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), s.virtualClusterLister, adminKubeConfigBytes, cluster.Options{})
+	tenantCluster, err := cluster.NewCluster(clusterName, vc.Namespace, vc.Name, string(vc.UID), &virtualclusterGetter{lister: s.virtualClusterLister}, adminKubeConfigBytes, cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
@@ -162,6 +180,20 @@ func (s *Scheduler) syncVirtualClusterCache(cluster *cluster.Cluster, vc *v1alph
 		return
 	}
 	cluster.SetSynced()
+}
+
+type superclusterGetter struct {
+	lister superListers.ClusterLister
+}
+
+var _ mc.Getter = &superclusterGetter{}
+
+func (v *superclusterGetter) GetObject(namespace, name string) (runtime.Object, error) {
+	super, err := v.lister.Clusters(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return super, nil
 }
 
 func (s *Scheduler) superClusterWorkerRun() {
@@ -246,8 +278,15 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 	}
 	s.superClusterLock.Unlock()
 
-	// TODO: create supercluster cluster instance
-	var superCluster *cluster.Cluster
+	clusterName := fmt.Sprintf("%s/%s", super.Namespace, super.Name)
+
+	// TODO: get kubeConfig following CAPI standard.
+	var adminKubeConfigBytes []byte
+
+	superCluster, err := cluster.NewCluster(clusterName, super.Namespace, super.Name, string(super.UID), &superclusterGetter{lister: s.superClusterLister}, adminKubeConfigBytes, cluster.Options{})
+	if err != nil {
+		return fmt.Errorf("failed to new super cluster %s/%s: %v", super.Namespace, super.Name, err)
+	}
 
 	// for each resource type of the newly added VirtualCluster, we add a listener
 	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
