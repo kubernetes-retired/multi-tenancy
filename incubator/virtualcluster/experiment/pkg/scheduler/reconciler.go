@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/apis/cluster/v1alpha4"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/cluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
@@ -78,13 +79,13 @@ func (s *Scheduler) syncVirtualCluster(key string) error {
 		s.removeVirtualCluster(key)
 		return nil
 	default:
-		klog.Infof("Cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
+		klog.Infof("Virtual cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
 		return nil
 	}
 }
 
 func (s *Scheduler) removeVirtualCluster(key string) {
-	klog.Infof("Remove cluster %s", key)
+	klog.Infof("Remove virtualcluster %s", key)
 
 	s.virtualClusterLock.Lock()
 	defer s.virtualClusterLock.Unlock()
@@ -105,7 +106,7 @@ func (s *Scheduler) removeVirtualCluster(key string) {
 }
 
 func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) error {
-	klog.Infof("Add cluster %s", key)
+	klog.Infof("Add virtualcluster %s", key)
 
 	s.virtualClusterLock.Lock()
 	if _, exist := s.virtualClusterSet[key]; exist {
@@ -154,10 +155,132 @@ func (s *Scheduler) syncVirtualClusterCache(cluster *cluster.Cluster, vc *v1alph
 			UID:       vc.UID,
 		}, v1.EventTypeWarning, "ClusterUnHealth", "VirtualCluster %v unhealth: failed to sync cache", cluster.GetClusterName())
 
-		klog.Warningf("failed to sync cache for cluster %s, retry", cluster.GetClusterName())
+		klog.Warningf("failed to sync cache for virtualcluster %s, retry", cluster.GetClusterName())
 		key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(vc)
 		s.removeVirtualCluster(key)
 		s.virtualClusterQueue.AddAfter(key, 5*time.Second)
+		return
+	}
+	cluster.SetSynced()
+}
+
+func (s *Scheduler) superClusterWorkerRun() {
+	for s.processNextSuperClusterItem() {
+	}
+}
+
+func (s *Scheduler) processNextSuperClusterItem() bool {
+	key, quit := s.superClusterQueue.Get()
+	if quit {
+		return false
+	}
+	defer s.superClusterQueue.Done(key)
+
+	err := s.syncSuperCluster(key.(string))
+	if err == nil {
+		s.superClusterQueue.Forget(key)
+		return true
+	}
+
+	utilruntime.HandleError(fmt.Errorf("error processing super cluster %v (will retry): %v", key, err))
+	s.superClusterQueue.AddRateLimited(key)
+	return true
+}
+
+func (s *Scheduler) syncSuperCluster(key string) error {
+	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	if err != nil {
+		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
+		return nil
+	}
+
+	super, err := s.superClusterLister.Clusters(namespace).Get(name)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
+
+		s.removeSuperCluster(key)
+		return nil
+	}
+
+	switch v1alpha4.ClusterPhase(super.Status.Phase) {
+	case v1alpha4.ClusterPhaseProvisioned:
+		return s.addSuperCluster(key, super)
+	case v1alpha4.ClusterPhaseFailed:
+		s.removeSuperCluster(key)
+		return nil
+	default:
+		klog.Infof("SuperCluster %s/%s not ready to reconcile", super.Namespace, super.Name)
+		return nil
+	}
+}
+
+func (s *Scheduler) removeSuperCluster(key string) {
+	klog.Infof("Remove supercluster %s", key)
+
+	s.superClusterLock.Lock()
+	defer s.superClusterLock.Unlock()
+
+	super, exist := s.superClusterSet[key]
+	if !exist {
+		// already deleted
+		return
+	}
+
+	super.Stop()
+	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
+		clusterChangeListener.RemoveCluster(super)
+	}
+
+	delete(s.superClusterSet, key)
+}
+
+func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
+	klog.Infof("Add supercluster %s", key)
+
+	s.superClusterLock.Lock()
+	if _, exist := s.superClusterSet[key]; exist {
+		s.superClusterLock.Unlock()
+		return nil
+	}
+	s.superClusterLock.Unlock()
+
+	// TODO: create supercluster cluster instance
+	var superCluster *cluster.Cluster
+
+	// for each resource type of the newly added VirtualCluster, we add a listener
+	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
+		clusterChangeListener.AddCluster(superCluster)
+	}
+
+	s.superClusterLock.Lock()
+	s.superClusterSet[key] = superCluster
+	s.superClusterLock.Unlock()
+
+	go s.syncSuperClusterCache(superCluster, super)
+
+	return nil
+}
+
+func (s *Scheduler) syncSuperClusterCache(cluster *cluster.Cluster, super *v1alpha4.Cluster) {
+	go func() {
+		err := cluster.Start()
+		klog.Infof("supercluster %s shutdown: %v", cluster.GetClusterName(), err)
+	}()
+
+	if !cluster.WaitForCacheSync() {
+		s.recorder.Eventf(&v1.ObjectReference{
+			Kind:      "Cluster",
+			Namespace: super.Namespace,
+			Name:      super.Name,
+			UID:       super.UID,
+		}, v1.EventTypeWarning, "ClusterUnHealth", "SuperCluster %v unhealth: failed to sync cache", cluster.GetClusterName())
+
+		klog.Warningf("failed to sync cache for supercluster %s, retry", cluster.GetClusterName())
+		key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(super)
+		s.removeSuperCluster(key)
+		s.superClusterQueue.AddAfter(key, 5*time.Second)
 		return
 	}
 	cluster.SetSynced()

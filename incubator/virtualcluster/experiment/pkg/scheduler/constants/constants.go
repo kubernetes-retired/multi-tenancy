@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ const (
 	DefaultRequestTimeout = 30 * time.Second
 
 	VirtualClusterWorker = 3
+	SuperClusterWorker   = 3
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()
