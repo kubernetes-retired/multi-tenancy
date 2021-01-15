@@ -20,8 +20,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
 const (
@@ -71,30 +69,12 @@ const (
 
 	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
 	DefaultvNodeGCGracePeriod = time.Second * 120
-	// If reconcile request keeps failing, stop retrying after MaxReconcileRetryAttempts.
-	// According to controller workqueue default rate limiter algorithm, retry 16 times takes around 180 seconds.
-	MaxReconcileRetryAttempts = 16
 
 	DefaultOpaqueMetaPrefix      = "tenancy.x-k8s.io"
 	DefaultTransparentMetaPrefix = "transparency.tenancy.x-k8s.io"
 
 	// LabelSuperClusterIP is used to inform the tenant service about the cluster IP used in super master.
 	LabelSuperClusterIP = "transparency.tenancy.x-k8s.io/clusterIP"
-
-	// Override the client-go default 5 qps and 10 burst, which are too samll for syncer.
-	DefaultSyncerClientQPS   = 1000
-	DefaultSyncerClientBurst = 2000
-
-	// DefaultRequestTimeout is set for all client-go request. This is the absolute
-	// timeout of the HTTP request, including reading the response body.
-	DefaultRequestTimeout = 30 * time.Second
-
-	// StatusCode represents the status of every syncer operations.
-	// TODO: more detailed error code
-	StatusCodeOK                     = "OK"
-	StatusCodeExceedMaxRetryAttempts = "ExceedMaxRetryAttempts"
-	StatusCodeError                  = "Error"
-	StatusCodeBadRequest             = "BadRequest"
 
 	KubeconfigAdminSecretName = "admin-kubeconfig"
 )
@@ -108,6 +88,3 @@ const (
 )
 
 var DefaultDeletionPolicy = metav1.DeletePropagationBackground
-
-// ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
-var ResourceSyncerUserAgent = "resource-syncer/" + version.BriefVersion()

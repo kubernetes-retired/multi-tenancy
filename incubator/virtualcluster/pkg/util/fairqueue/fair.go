@@ -23,8 +23,8 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer/weightedroundrobin"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue/balancer"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue/balancer/weightedroundrobin"
 )
 
 type Item interface {

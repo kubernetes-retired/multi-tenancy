@@ -17,7 +17,7 @@ limitations under the License.
 package listener
 
 import (
-	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
 var Listeners []ClusterChangeListener
