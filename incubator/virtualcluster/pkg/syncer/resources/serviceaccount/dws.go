@@ -86,11 +86,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileServiceAccountCreate(clusterName, targetNamespace, requestUID string, vSa *v1.ServiceAccount) error {
-	vcName, _, _, err := c.multiClusterServiceAccountController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.multiClusterServiceAccountController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
-	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, vSa)
+	newObj, err := conversion.BuildMetadata(clusterName, vcNS, vcName, targetNamespace, vSa)
 	if err != nil {
 		return err
 	}
