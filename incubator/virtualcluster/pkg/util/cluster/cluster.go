@@ -34,14 +34,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
 // Each Cluster object represents a tenant master in Virtual Cluster architecture.
 //
 // Cluster implements the ClusterInterface used by MultiClusterController in
-// sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/mccontroller/mccontroller.go.
+// sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller/mccontroller.go.
 //
 // It stores a Kubernetes client, cache, and other cluster-scoped dependencies.
 // The dependencies are lazily created in getters and cached for reuse.

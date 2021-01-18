@@ -33,8 +33,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -348,8 +349,8 @@ func recordOperationDuration(operation string, start time.Time) {
 
 func recordOperationStatus(operation string, err error) {
 	if err != nil {
-		metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeError}).Inc()
+		metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": utilconstants.StatusCodeError}).Inc()
 		return
 	}
-	metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeOK}).Inc()
+	metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": utilconstants.StatusCodeOK}).Inc()
 }

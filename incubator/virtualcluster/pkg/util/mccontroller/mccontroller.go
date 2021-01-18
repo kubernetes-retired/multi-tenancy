@@ -39,12 +39,12 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/errors"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/handler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/handler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 // MultiClusterController implements the multicluster controller pattern.

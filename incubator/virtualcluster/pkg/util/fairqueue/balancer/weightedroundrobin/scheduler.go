@@ -17,7 +17,7 @@ limitations under the License.
 package weightedroundrobin
 
 import (
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/fairqueue/balancer"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue/balancer"
 )
 
 type node struct {
