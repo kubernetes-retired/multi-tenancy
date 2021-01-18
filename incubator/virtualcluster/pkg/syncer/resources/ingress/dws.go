@@ -86,11 +86,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileIngressCreate(clusterName, targetNamespace, requestUID string, ingress *v1beta1.Ingress) error {
-	vcName, _, _, err := c.multiClusterIngressController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.multiClusterIngressController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
-	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, ingress)
+	newObj, err := conversion.BuildMetadata(clusterName, vcNS, vcName, targetNamespace, ingress)
 	if err != nil {
 		return err
 	}
