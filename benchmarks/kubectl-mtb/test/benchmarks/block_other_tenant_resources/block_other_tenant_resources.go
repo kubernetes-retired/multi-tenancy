@@ -23,7 +23,7 @@ var b = &benchmark.Benchmark{
 	Run: func(options types.RunOptions) error {
 		var resources []utils.GroupResource
 
-		lists, err := options.KClient.Discovery().ServerPreferredResources()
+		lists, err := options.ClusterAdminClient.Discovery().ServerPreferredResources()
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
@@ -38,13 +38,10 @@ var b = &benchmark.Benchmark{
 				continue
 			}
 			for _, resource := range list.APIResources {
-				if len(resource.Verbs) == 0 {
+				if len(resource.Verbs) == 0  || !resource.Namespaced {
 					continue
 				}
 
-				if !resource.Namespaced {
-					continue
-				}
 				resources = append(resources, utils.GroupResource{
 					APIGroup:    gv.Group,
 					APIResource: resource,
@@ -52,12 +49,12 @@ var b = &benchmark.Benchmark{
 			}
 		}
 
-		err = utils.CheckAccessOnResourcesInNamespace(options.OtherTenantClient, options.TenantNamespace, resources, verbs)
+		err = utils.CheckAccessOnResourcesInNamespace(options.Tenant2Client, options.TenantNamespace, resources, verbs)
 		if err != nil {
 			return err
 		}
 
-		err = utils.CheckAccessOnResourcesInNamespace(options.TenantClient, options.OtherNamespace, resources, verbs)
+		err = utils.CheckAccessOnResourcesInNamespace(options.Tenant1Client, options.OtherNamespace, resources, verbs)
 		if err != nil {
 			return err
 		}
@@ -74,4 +71,3 @@ func init() {
 
 	test.BenchmarkSuite.Add(b);
 }
-	

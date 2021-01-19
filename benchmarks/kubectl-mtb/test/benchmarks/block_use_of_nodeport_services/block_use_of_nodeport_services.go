@@ -36,7 +36,7 @@ var b = &benchmark.Benchmark{
 		}
 
 		for _, resource := range resources {
-			access, msg, err := utils.RunAccessCheck(options.TenantClient, options.TenantNamespace, resource, "create")
+			access, msg, err := utils.RunAccessCheck(options.Tenant1Client, options.TenantNamespace, resource, "create")
 			if err != nil {
 				options.Logger.Debug(err.Error())
 				return err
@@ -56,7 +56,7 @@ var b = &benchmark.Benchmark{
 		imageName := "image-" + string(uuid.NewUUID())
 		deployment := e2edeployment.NewDeployment(deploymentName, 1, podLabels, imageName, imageutils.GetE2EImage(imageutils.Nginx), "Recreate")
 
-		_, err := options.TenantClient.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err := options.Tenant1Client.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
@@ -64,7 +64,7 @@ var b = &benchmark.Benchmark{
 
 		svcSpec := &serviceutil.ServiceConfig{Type: "NodePort", Selector: podLabels}
 		svc := svcSpec.CreateServiceSpec()
-		_, err = options.TenantClient.CoreV1().Services(options.TenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.Tenant1Client.CoreV1().Services(options.TenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create service of type NodePort")

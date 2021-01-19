@@ -25,7 +25,7 @@ var b = &benchmark.Benchmark{
 				},
 			}
 
-			access, msg, err := utils.RunAccessCheck(options.TenantClient, options.TenantNamespace, resource, verb)
+			access, msg, err := utils.RunAccessCheck(options.Tenant1Client, options.TenantNamespace, resource, verb)
 			if err != nil {
 				options.Logger.Debug(err.Error())
 				return err
@@ -40,7 +40,7 @@ var b = &benchmark.Benchmark{
 	Run: func(options types.RunOptions) error {
 
 		resourceNameList := [9]string{"pods", "services", "replicationcontrollers", "resourcequotas", "secrets", "configmaps", "persistentvolumeclaims", "services.nodeports", "services.loadbalancers"}
-		tenantResourceQuotas := utils.GetTenantResoureQuotas(options.TenantNamespace, options.TenantClient)
+		tenantResourceQuotas := utils.GetTenantResoureQuotas(options.TenantNamespace, options.Tenant1Client)
 		expectedVal := strings.Join(tenantResourceQuotas, " ")
 		for _, r := range resourceNameList {
 			if !strings.Contains(expectedVal, r) {
