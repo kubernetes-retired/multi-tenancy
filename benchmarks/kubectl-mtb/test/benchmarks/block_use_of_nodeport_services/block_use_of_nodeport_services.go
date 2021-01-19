@@ -3,10 +3,10 @@ package blockuseofnodeportservices
 import (
 	"context"
 	"fmt"
-	deploymentutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/deployment"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
+	deploymentutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/deployment"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
@@ -36,7 +36,7 @@ var b = &benchmark.Benchmark{
 		}
 
 		for _, resource := range resources {
-			access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
+			access, msg, err := utils.RunAccessCheck(options.Tenant1Client, options.TenantNamespace, resource, "create")
 			if err != nil {
 				options.Logger.Debug(err.Error())
 				return err
@@ -54,15 +54,9 @@ var b = &benchmark.Benchmark{
 		podLabels := map[string]string{"test": "multi"}
 		deploymentName := "deployment-" + string(uuid.NewUUID())
 		imageName := "image-" + string(uuid.NewUUID())
-		deploymentSpec := &deploymentutil.DeploymentSpec{DeploymentName: deploymentName, Replicas: 1, PodLabels: podLabels, ImageName: imageName, Image: imageutils.GetE2EImage(imageutils.Nginx), StrategyType: "Recreate"}
-		err := deploymentSpec.SetDefaults()
-		if err != nil {
-			options.Logger.Debug(err.Error())
-			return err
-		}
+		deployment := deploymentutil.DeploymentSpec{deploymentName, 1, podLabels, imageName, imageutils.GetE2EImage(imageutils.Nginx), "Recreate"}
 
-		deployment := deploymentSpec.GetDeployment()
-		_, err = options.TClient.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err := options.Tenant1Client.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment.GetDeployment(), metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
@@ -70,7 +64,7 @@ var b = &benchmark.Benchmark{
 
 		svcSpec := &serviceutil.ServiceConfig{Type: "NodePort", Selector: podLabels}
 		svc := svcSpec.CreateServiceSpec()
-		_, err = options.TClient.CoreV1().Services(options.TenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.Tenant1Client.CoreV1().Services(options.TenantNamespace).Create(context.TODO(), svc, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 
 		if err == nil {
 			return fmt.Errorf("Tenant must be unable to create service of type NodePort")

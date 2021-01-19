@@ -25,7 +25,7 @@ var b = &benchmark.Benchmark{
 			},
 		}
 
-		access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, "create")
+		access, msg, err := utils.RunAccessCheck(options.Tenant1Client, options.TenantNamespace, resource, "create")
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
@@ -49,7 +49,7 @@ var b = &benchmark.Benchmark{
 
 		// Try to create a pod as tenant-admin impersonation
 		pod := podSpec.MakeSecPod()
-		_, err = options.TClient.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err = options.Tenant1Client.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err == nil {
 			options.Logger.Debug("Created pod with Spec: ", pod.Spec)
 			return fmt.Errorf("Tenant should not be able to create pods with add capabilities")

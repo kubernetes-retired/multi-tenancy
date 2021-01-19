@@ -68,7 +68,7 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			return err
 		}
-		options.KClient = k8sClient
+		options.ClusterAdminClient = k8sClient
 		options.Logger = log.GetLogger(true)
 		rest := k8sClient.CoreV1().RESTClient()
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 		tenantConfig := testClient.Config
 		tenantConfig.Impersonate.UserName = "system:serviceaccount:" + namespace + ":" + saName
 		tenantClient, _ = kubernetes.NewForConfig(tenantConfig)
-		options.TClient = tenantClient
+		options.Tenant1Client = tenantClient
 		options.Tenant = "system:serviceaccount:" + namespace + ":" + saName
 		options.TenantNamespace = namespace
 		return nil

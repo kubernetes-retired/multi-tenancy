@@ -1,14 +1,14 @@
-package blockaccesstoclusterresources
+package blockothertenantresources
 
 import (
 	"fmt"
-
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
+	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
+
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 )
 
 var verbs = []string{"get", "update"}
@@ -19,6 +19,7 @@ var b = &benchmark.Benchmark{
 
 		return nil
 	},
+
 	Run: func(options types.RunOptions) error {
 		var resources []utils.GroupResource
 
@@ -37,13 +38,10 @@ var b = &benchmark.Benchmark{
 				continue
 			}
 			for _, resource := range list.APIResources {
-				if len(resource.Verbs) == 0 {
+				if len(resource.Verbs) == 0  || !resource.Namespaced {
 					continue
 				}
 
-				if resource.Namespaced {
-					continue
-				}
 				resources = append(resources, utils.GroupResource{
 					APIGroup:    gv.Group,
 					APIResource: resource,
@@ -51,21 +49,25 @@ var b = &benchmark.Benchmark{
 			}
 		}
 
-		err = utils.CheckAccessOnResourcesInNamespace(options.Tenant1Client, "", resources, verbs)
+		err = utils.CheckAccessOnResourcesInNamespace(options.Tenant2Client, options.TenantNamespace, resources, verbs)
 		if err != nil {
 			return err
 		}
 
+		err = utils.CheckAccessOnResourcesInNamespace(options.Tenant1Client, options.OtherNamespace, resources, verbs)
+		if err != nil {
+			return err
+		}
 		return nil
 	},
 }
 
 func init() {
 	// Get the []byte representation of a file, or an error if it doesn't exist:
-	err := b.ReadConfig(box.Get("block_access_to_cluster_resources/config.yaml"))
+	err := b.ReadConfig(box.Get("block_other_tenant_resources/config.yaml"))
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println(err)
 	}
 
-	test.BenchmarkSuite.Add(b)
+	test.BenchmarkSuite.Add(b);
 }

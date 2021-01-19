@@ -66,7 +66,7 @@ func initConfig() error {
 	}
 
 	// create the K8s clientset
-	benchmarkRunOptions.KClient, err = kubernetes.NewForConfig(config)
+	benchmarkRunOptions.ClusterAdminClient, err = kubernetes.NewForConfig(config)
 	if err != nil {
 		return err
 	}
@@ -75,9 +75,19 @@ func initConfig() error {
 	tenantConfig.Impersonate.UserName = benchmarkRunOptions.Tenant
 
 	// create the tenant clientset
-	benchmarkRunOptions.TClient, err = kubernetes.NewForConfig(tenantConfig)
+	benchmarkRunOptions.Tenant1Client, err = kubernetes.NewForConfig(tenantConfig)
 	if err != nil {
 		return err
+	}
+
+	if benchmarkRunOptions.OtherNamespace != "" && benchmarkRunOptions.OtherTenant != "" {
+		otherTenantConfig := config
+		otherTenantConfig.Impersonate.UserName = benchmarkRunOptions.OtherTenant
+
+		benchmarkRunOptions.Tenant2Client, err = kubernetes.NewForConfig(tenantConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	return err
@@ -130,12 +140,15 @@ func validateFlags(cmd *cobra.Command) error {
 		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
 	}
 
+	benchmarkRunOptions.OtherNamespace, _ = cmd.Flags().GetString("other-namespace")
+	benchmarkRunOptions.OtherTenant, _ = cmd.Flags().GetString("other-tenant-admin")
+
 	err := initConfig()
 	if err != nil {
 		return err
 	}
 
-	_, err = benchmarkRunOptions.KClient.CoreV1().Namespaces().Get(context.TODO(), benchmarkRunOptions.TenantNamespace, metav1.GetOptions{})
+	_, err = benchmarkRunOptions.ClusterAdminClient.CoreV1().Namespaces().Get(context.TODO(), benchmarkRunOptions.TenantNamespace, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("invalid namespace")
 	}

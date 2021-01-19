@@ -30,7 +30,7 @@ var b = &benchmark.Benchmark{
 		verbs := []string{"create", "update", "patch", "delete", "deletecollection"}
 		for _, resource := range resources {
 			for _, verb := range verbs {
-				access, msg, err := utils.RunAccessCheck(options.TClient, options.TenantNamespace, resource, verb)
+				access, msg, err := utils.RunAccessCheck(options.Tenant1Client, options.TenantNamespace, resource, verb)
 				if err != nil {
 					options.Logger.Debug(err.Error())
 					return err

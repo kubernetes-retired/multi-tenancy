@@ -36,7 +36,7 @@ var b = &benchmark.Benchmark{
 	},
 	Run: func(options types.RunOptions) error {
 
-		lists, err := options.KClient.Discovery().ServerPreferredResources()
+		lists, err := options.ClusterAdminClient.Discovery().ServerPreferredResources()
 		if err != nil {
 			return nil
 		}
