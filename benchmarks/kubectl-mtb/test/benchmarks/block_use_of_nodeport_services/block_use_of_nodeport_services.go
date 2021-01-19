@@ -6,7 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
-	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
+	deploymentutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/deployment"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/pkg/benchmark"
@@ -54,9 +54,9 @@ var b = &benchmark.Benchmark{
 		podLabels := map[string]string{"test": "multi"}
 		deploymentName := "deployment-" + string(uuid.NewUUID())
 		imageName := "image-" + string(uuid.NewUUID())
-		deployment := e2edeployment.NewDeployment(deploymentName, 1, podLabels, imageName, imageutils.GetE2EImage(imageutils.Nginx), "Recreate")
+		deployment := deploymentutil.DeploymentSpec{deploymentName, 1, podLabels, imageName, imageutils.GetE2EImage(imageutils.Nginx), "Recreate"}
 
-		_, err := options.Tenant1Client.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+		_, err := options.Tenant1Client.AppsV1().Deployments(options.TenantNamespace).Create(context.TODO(), deployment.GetDeployment(), metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
