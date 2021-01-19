@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
 var numMissMatchedOpaqueSecrets uint64
@@ -153,7 +154,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 			klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, pSecret.Name)
 			continue
 		}
-		spec, err := c.multiClusterSecretController.GetSpec(clusterName)
+		spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
@@ -193,7 +194,7 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, secretList[0].Name)
 		return
 	}
-	spec, err := c.multiClusterSecretController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
 	if err != nil {
 		klog.Errorf("fail to get cluster spec : %s", clusterName)
 		return

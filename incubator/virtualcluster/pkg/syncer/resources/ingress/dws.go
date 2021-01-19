@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,8 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -85,11 +86,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileIngressCreate(clusterName, targetNamespace, requestUID string, ingress *v1beta1.Ingress) error {
-	vcName, _, _, err := c.multiClusterIngressController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.multiClusterIngressController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
-	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, ingress)
+	newObj, err := conversion.BuildMetadata(clusterName, vcNS, vcName, targetNamespace, ingress)
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func (c *controller) reconcileIngressUpdate(clusterName, targetNamespace, reques
 		return fmt.Errorf("pIngress %s/%s delegated UID is different from updated object.", targetNamespace, pIngress.Name)
 	}
 
-	spec, err := c.multiClusterIngressController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterIngressController, clusterName)
 	if err != nil {
 		return err
 	}

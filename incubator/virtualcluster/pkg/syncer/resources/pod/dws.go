@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -167,11 +169,11 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 		return err
 	}
 
-	vcName, _, _, err := c.multiClusterPodController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.multiClusterPodController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
-	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, vPod)
+	newObj, err := conversion.BuildMetadata(clusterName, vcNS, vcName, targetNamespace, vPod)
 	if err != nil {
 		return err
 	}
@@ -301,7 +303,7 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 		}
 		return err
 	}
-	spec, err := c.multiClusterPodController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterPodController, clusterName)
 	if err != nil {
 		return err
 	}
@@ -347,8 +349,8 @@ func recordOperationDuration(operation string, start time.Time) {
 
 func recordOperationStatus(operation string, err error) {
 	if err != nil {
-		metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeError}).Inc()
+		metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": utilconstants.StatusCodeError}).Inc()
 		return
 	}
-	metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": constants.StatusCodeOK}).Inc()
+	metrics.PodOperations.With(prometheus.Labels{"operation_type": operation, "code": utilconstants.StatusCodeOK}).Inc()
 }

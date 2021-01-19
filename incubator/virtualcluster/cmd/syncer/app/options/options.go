@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -46,7 +46,8 @@ import (
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions"
 	syncerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 )
 
 // ResourceSyncerOptions is the main context object for the resource syncer.
@@ -82,6 +83,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 			ExtraSyncingResources:      []string{},
 			VNAgentPort:                int32(10550),
+			FeatureGates:               map[string]bool{feature.SuperClusterPooling: false},
 		},
 		Address:  "",
 		Port:     "80",
@@ -90,7 +92,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 	}, nil
 }
 
-func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
+func (o *ResourceSyncerOptions) Flags(featureGatesString *string) cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 
 	fs := fss.FlagSet("server")
@@ -100,6 +102,7 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
 	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress)")
 	fs.Int32Var(&o.ComponentConfig.VNAgentPort, "vn-agent-port", 10550, "Port the vn-agent listens on")
+	fs.StringVar(featureGatesString, "feature-gates", *featureGatesString, "A set of key=value pairs that describe feature gates for various features. ")
 
 	serverFlags := fss.FlagSet("metricsServer")
 	serverFlags.StringVar(&o.Address, "address", o.Address, "The server address.")
@@ -169,7 +172,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 		return nil, err
 	}
 	c.ComponentConfig.RestConfig = restConfig
-	c.SecretClient = superMasterClient.CoreV1()
+	c.SuperClient = superMasterClient.CoreV1()
 	c.VirtualClusterClient = virtualClusterClient
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().VirtualClusters()
 	c.SuperMasterClient = superMasterClient

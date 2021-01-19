@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,8 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
@@ -97,11 +98,11 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileEndpointsCreate(clusterName, targetNamespace, requestUID string, ep *v1.Endpoints) error {
-	vcName, _, _, err := c.multiClusterEndpointsController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.multiClusterEndpointsController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
-	newObj, err := conversion.BuildMetadata(clusterName, vcName, targetNamespace, ep)
+	newObj, err := conversion.BuildMetadata(clusterName, vcNS, vcName, targetNamespace, ep)
 	if err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace, requ
 	if pEP.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pEP.Name)
 	}
-	spec, err := c.multiClusterEndpointsController.GetSpec(clusterName)
+	spec, err := util.GetVirtualClusterSpec(c.multiClusterEndpointsController, clusterName)
 	if err != nil {
 		return err
 	}
