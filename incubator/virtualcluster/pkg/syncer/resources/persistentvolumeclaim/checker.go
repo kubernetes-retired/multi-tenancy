@@ -132,12 +132,12 @@ func (c *controller) checkPVCOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterPersistentVolumeClaimController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.multiClusterPersistentVolumeClaimController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, &vPVC)
+		updatedPVC := conversion.Equality(c.config, vc).CheckPVCEquality(pPVC, &vPVC)
 		if updatedPVC != nil {
 			atomic.AddUint64(&numMissMatchedPVCs, 1)
 			klog.Warningf("spec of pvc %v/%v diff in super&tenant master", vPVC.Namespace, vPVC.Name)

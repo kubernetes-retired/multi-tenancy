@@ -154,13 +154,13 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 			klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, pSecret.Name)
 			continue
 		}
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
 
-		updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(pSecret, &secretList.Items[i])
+		updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(pSecret, &secretList.Items[i])
 		if updatedSecret != nil {
 			atomic.AddUint64(&numMissMatchedOpaqueSecrets, 1)
 			klog.Warningf("spec of secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
@@ -194,13 +194,13 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, secretList[0].Name)
 		return
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
 	if err != nil {
 		klog.Errorf("fail to get cluster spec : %s", clusterName)
 		return
 	}
 
-	updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(secretList[0], vSecret)
+	updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(secretList[0], vSecret)
 	if updatedSecret != nil {
 		atomic.AddUint64(&numMissMatchedSASecrets, 1)
 		klog.Warningf("spec of service account token type secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)

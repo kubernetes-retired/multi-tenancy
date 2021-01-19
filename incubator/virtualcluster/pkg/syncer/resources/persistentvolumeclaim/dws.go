@@ -115,11 +115,11 @@ func (c *controller) reconcilePVCUpdate(clusterName, targetNamespace, requestUID
 	if pPVC.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pPVC %s/%s delegated UID is different from updated object.", targetNamespace, pPVC.Name)
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterPersistentVolumeClaimController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterPersistentVolumeClaimController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedPVC := conversion.Equality(c.config, spec).CheckPVCEquality(pPVC, vPVC)
+	updatedPVC := conversion.Equality(c.config, vc).CheckPVCEquality(pPVC, vPVC)
 	if updatedPVC != nil {
 		pPVC, err = c.pvcClient.PersistentVolumeClaims(targetNamespace).Update(context.TODO(), updatedPVC, metav1.UpdateOptions{})
 		if err != nil {

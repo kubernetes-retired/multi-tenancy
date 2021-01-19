@@ -125,11 +125,11 @@ func (c *controller) reconcileEndpointsUpdate(clusterName, targetNamespace, requ
 	if pEP.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pEP.Name)
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterEndpointsController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterEndpointsController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedEndpoints := conversion.Equality(c.config, spec).CheckEndpointsEquality(pEP, vEP)
+	updatedEndpoints := conversion.Equality(c.config, vc).CheckEndpointsEquality(pEP, vEP)
 	if updatedEndpoints != nil {
 		pEP, err = c.endpointClient.Endpoints(targetNamespace).Update(context.TODO(), updatedEndpoints, metav1.UpdateOptions{})
 		if err != nil {

@@ -139,12 +139,12 @@ func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterIngressController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.multiClusterIngressController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedIngress := conversion.Equality(c.config, spec).CheckIngressEquality(pIngress, &ingList.Items[i])
+		updatedIngress := conversion.Equality(c.config, vc).CheckIngressEquality(pIngress, &ingList.Items[i])
 		if updatedIngress != nil {
 			atomic.AddUint64(&numSpecMissMatchedIngresses, 1)
 			klog.Warningf("spec of ingress %v/%v diff in super&tenant master", vIngress.Namespace, vIngress.Name)
@@ -156,7 +156,7 @@ func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
 		}
 
 		enqueue := false
-		updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &ingList.Items[i].ObjectMeta)
+		updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &ingList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedIngresses, 1)
 			enqueue = true

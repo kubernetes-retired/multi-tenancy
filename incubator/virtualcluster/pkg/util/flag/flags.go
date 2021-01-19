@@ -14,25 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package flag
 
 import (
-	"fmt"
-
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"github.com/spf13/pflag"
+	"k8s.io/klog"
 )
 
-func GetVirtualClusterObject(mc *mc.MultiClusterController, clustername string) (*v1alpha1.VirtualCluster, error) {
-	obj, err := mc.GetClusterObject(clustername)
-	if err != nil {
-		return nil, fmt.Errorf("fail to obtain the virtualcluster object")
-	}
-
-	vc, ok := obj.(*v1alpha1.VirtualCluster)
-	if !ok {
-		return nil, fmt.Errorf("cannot get the virtualcluster from non-vc object")
-	}
-
-	return vc, nil
+// PrintFlags logs the flags in the flagset
+func PrintFlags(flags *pflag.FlagSet) {
+	flags.VisitAll(func(flag *pflag.Flag) {
+		klog.V(1).Infof("FLAG: --%s=%q", flag.Name, flag.Value)
+	})
 }

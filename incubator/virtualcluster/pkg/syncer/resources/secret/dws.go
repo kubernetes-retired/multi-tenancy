@@ -189,11 +189,11 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	if pSecret.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pSecret.Name)
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterSecretController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedSecret := conversion.Equality(c.config, spec).CheckSecretEquality(pSecret, vSecret)
+	updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
 		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(context.TODO(), updatedSecret, metav1.UpdateOptions{})
 		if err != nil {

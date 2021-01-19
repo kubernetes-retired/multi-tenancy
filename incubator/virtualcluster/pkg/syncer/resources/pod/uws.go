@@ -144,13 +144,13 @@ func (c *controller) BackPopulate(key string) error {
 		}
 	}
 
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterPodController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterPodController, clusterName)
 	if err != nil {
 		return err
 	}
 
 	var newPod *v1.Pod
-	updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
+	updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
 	if updatedMeta != nil {
 		newPod = vPod.DeepCopy()
 		newPod.ObjectMeta = *updatedMeta
@@ -159,7 +159,7 @@ func (c *controller) BackPopulate(key string) error {
 		}
 	}
 
-	if newStatus := conversion.Equality(c.config, spec).CheckUWPodStatusEquality(pPod, vPod); newStatus != nil {
+	if newStatus := conversion.Equality(c.config, vc).CheckUWPodStatusEquality(pPod, vPod); newStatus != nil {
 		if newPod == nil {
 			newPod = vPod.DeepCopy()
 		} else {

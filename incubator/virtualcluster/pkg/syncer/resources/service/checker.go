@@ -139,12 +139,12 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterServiceController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.multiClusterServiceController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedService := conversion.Equality(c.config, spec).CheckServiceEquality(pService, &svcList.Items[i])
+		updatedService := conversion.Equality(c.config, vc).CheckServiceEquality(pService, &svcList.Items[i])
 		if updatedService != nil {
 			atomic.AddUint64(&numSpecMissMatchedServices, 1)
 			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
@@ -156,7 +156,7 @@ func (c *controller) checkServicesOfTenantCluster(clusterName string) {
 		}
 		if isBackPopulateService(pService) {
 			enqueue := false
-			updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pService.ObjectMeta, &svcList.Items[i].ObjectMeta)
+			updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pService.ObjectMeta, &svcList.Items[i].ObjectMeta)
 			if updatedMeta != nil {
 				atomic.AddUint64(&numUWMetaMissMatchedServices, 1)
 				enqueue = true

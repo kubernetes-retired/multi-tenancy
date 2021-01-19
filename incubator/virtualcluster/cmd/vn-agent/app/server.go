@@ -32,6 +32,7 @@ import (
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/vn-agent/app/options"
+	utilflag "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/flag"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/certificate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
@@ -49,6 +50,8 @@ func NewVnAgentCommand(stopChan <-chan struct{}) *cobra.Command {
 		Long: `The vn-agent is proxy between tenant apiserver and kubelet server on physical node.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			verflag.PrintAndExitIfRequested()
+			utilflag.PrintFlags(cmd.Flags())
+
 			c, serverOptions, err := s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)

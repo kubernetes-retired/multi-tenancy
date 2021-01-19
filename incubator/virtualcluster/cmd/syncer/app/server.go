@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
+	utilflag "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/flag"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
@@ -62,6 +63,8 @@ resource isolation policy specified in Tenant CRD.`,
 				os.Exit(1)
 			}
 			verflag.PrintAndExitIfRequested()
+			utilflag.PrintFlags(cmd.Flags())
+
 			c, err = s.Config()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
