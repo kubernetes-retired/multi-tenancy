@@ -81,13 +81,13 @@ func (c *controller) BackPopulate(key string) error {
 		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterIngressController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterIngressController, clusterName)
 	if err != nil {
 		return pkgerr.Wrapf(err, "failed to get spec of cluster %s", clusterName)
 	}
 
 	var newIngress *v1beta1.Ingress
-	updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &vIngress.ObjectMeta)
+	updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &vIngress.ObjectMeta)
 	if updatedMeta != nil {
 		newIngress = vIngress.DeepCopy()
 		newIngress.ObjectMeta = *updatedMeta

@@ -95,13 +95,13 @@ func (c *controller) BackPopulate(key string) error {
 		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterServiceController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterServiceController, clusterName)
 	if err != nil {
 		return pkgerr.Wrapf(err, "failed to get spec of cluster %s", clusterName)
 	}
 
 	var newService *v1.Service
-	updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pService.ObjectMeta, &vService.ObjectMeta)
+	updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pService.ObjectMeta, &vService.ObjectMeta)
 	if updatedMeta != nil {
 		newService = vService.DeepCopy()
 		newService.ObjectMeta = *updatedMeta

@@ -115,11 +115,11 @@ func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, reques
 		return fmt.Errorf("pService %s/%s delegated UID is different from updated object.", targetNamespace, pService.Name)
 	}
 
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterServiceController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterServiceController, clusterName)
 	if err != nil {
 		return err
 	}
-	updated := conversion.Equality(c.config, spec).CheckServiceEquality(pService, vService)
+	updated := conversion.Equality(c.config, vc).CheckServiceEquality(pService, vService)
 	if updated != nil {
 		_, err = c.serviceClient.Services(targetNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
 		if err != nil {

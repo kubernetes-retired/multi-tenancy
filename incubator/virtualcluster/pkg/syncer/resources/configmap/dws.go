@@ -113,11 +113,11 @@ func (c *controller) reconcileConfigMapUpdate(clusterName, targetNamespace, requ
 	if pConfigMap.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pConfigMap %s/%s delegated UID is different from updated object.", targetNamespace, pConfigMap.Name)
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterConfigMapController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterConfigMapController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedConfigMap := conversion.Equality(c.config, spec).CheckConfigMapEquality(pConfigMap, vConfigMap)
+	updatedConfigMap := conversion.Equality(c.config, vc).CheckConfigMapEquality(pConfigMap, vConfigMap)
 	if updatedConfigMap != nil {
 		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(context.TODO(), updatedConfigMap, metav1.UpdateOptions{})
 		if err != nil {

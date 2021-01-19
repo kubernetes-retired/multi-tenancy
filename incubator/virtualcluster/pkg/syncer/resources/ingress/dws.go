@@ -114,11 +114,11 @@ func (c *controller) reconcileIngressUpdate(clusterName, targetNamespace, reques
 		return fmt.Errorf("pIngress %s/%s delegated UID is different from updated object.", targetNamespace, pIngress.Name)
 	}
 
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterIngressController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterIngressController, clusterName)
 	if err != nil {
 		return err
 	}
-	updated := conversion.Equality(c.config, spec).CheckIngressEquality(pIngress, vIngress)
+	updated := conversion.Equality(c.config, vc).CheckIngressEquality(pIngress, vIngress)
 	if updated != nil {
 		_, err = c.ingressClient.Ingresses(targetNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
 		if err != nil {
