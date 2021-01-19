@@ -31,9 +31,11 @@ func TestCheckDWKVEquality(t *testing.T) {
 	syncerConfig := &config.SyncerConfiguration{
 		DefaultOpaqueMetaDomains: []string{"kubernetes.io"},
 	}
-	spec := v1alpha1.VirtualClusterSpec{
-		TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
-		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+	vc := v1alpha1.VirtualCluster{
+		Spec: v1alpha1.VirtualClusterSpec{
+			TransparentMetaPrefixes: []string{"tp.x-k8s.io"},
+			OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+		},
 	}
 	for _, tt := range []struct {
 		name     string
@@ -172,7 +174,7 @@ func TestCheckDWKVEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got, equal := Equality(syncerConfig, &spec).checkDWKVEquality(tt.super, tt.virtual)
+			got, equal := Equality(syncerConfig, &vc).checkDWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v %v", tt.isEqual, equal, got)
 			} else {
@@ -185,9 +187,11 @@ func TestCheckDWKVEquality(t *testing.T) {
 }
 
 func TestCheckUWKVEquality(t *testing.T) {
-	spec := v1alpha1.VirtualClusterSpec{
-		TransparentMetaPrefixes: []string{"tp.x-k8s.io", "tp1.x-k8s.io"},
-		OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+	vc := v1alpha1.VirtualCluster{
+		Spec: v1alpha1.VirtualClusterSpec{
+			TransparentMetaPrefixes: []string{"tp.x-k8s.io", "tp1.x-k8s.io"},
+			OpaqueMetaPrefixes:      []string{"tenancy.x-k8s.io"},
+		},
 	}
 	for _, tt := range []struct {
 		name     string
@@ -279,7 +283,7 @@ func TestCheckUWKVEquality(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(tc *testing.T) {
-			got, equal := Equality(nil, &spec).checkUWKVEquality(tt.super, tt.virtual)
+			got, equal := Equality(nil, &vc).checkUWKVEquality(tt.super, tt.virtual)
 			if equal != tt.isEqual {
 				tc.Errorf("expected equal %v, got %v", tt.isEqual, equal)
 			} else {

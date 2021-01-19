@@ -31,15 +31,16 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 )
 
 type vcEquality struct {
 	config *config.SyncerConfiguration
-	vcSpec *v1alpha1.VirtualClusterSpec
+	vc     *v1alpha1.VirtualCluster
 }
 
-func Equality(syncerConfig *config.SyncerConfiguration, spec *v1alpha1.VirtualClusterSpec) *vcEquality {
-	return &vcEquality{config: syncerConfig, vcSpec: spec}
+func Equality(syncerConfig *config.SyncerConfiguration, vc *v1alpha1.VirtualCluster) *vcEquality {
+	return &vcEquality{config: syncerConfig, vc: vc}
 }
 
 // CheckPodEquality check whether super master Pod object and virtual Pod object
@@ -195,12 +196,16 @@ func (e vcEquality) CheckUWObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *me
 // Note that we cannot remove a key from tenant if the key was presented in VC.Spec.TransparentMetaPrefixes
 // since we did not track the key removal event.
 func (e vcEquality) checkUWKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
-	if e.vcSpec == nil {
+	if e.vc == nil {
 		return nil, true
 	}
+	matchingSet := sets.NewString(constants.DefaultTransparentMetaPrefix)
+	matchingSet.Insert(e.vc.Spec.TransparentMetaPrefixes...)
+	matchingList := matchingSet.UnsortedList()
+
 	moreOrDiff := make(map[string]string)
 	for pk, pv := range pKV {
-		if hasPrefixInArray(pk, e.vcSpec.TransparentMetaPrefixes) {
+		if hasPrefixInArray(pk, matchingList) {
 			vv, ok := vKV[pk]
 			if !ok || pv != vv {
 				moreOrDiff[pk] = pv
@@ -225,17 +230,20 @@ func (e vcEquality) checkUWKVEquality(pKV, vKV map[string]string) (map[string]st
 // The exceptional keys that used by super master object are specified in
 // VC.Spec.TransparentMetaPrefixes plus a white list (e.g., tenancy.x-k8s.io).
 func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]string, bool) {
-	var exceptions []string
-	if e.vcSpec != nil {
-		exceptions = e.vcSpec.TransparentMetaPrefixes
-		exceptions = append(exceptions, e.vcSpec.OpaqueMetaPrefixes...)
+	var exceptionsList []string
+	if e.vc != nil {
+		exceptions := sets.NewString()
+		exceptions.Insert(e.vc.Spec.TransparentMetaPrefixes...)
+		exceptions.Insert(e.vc.Spec.OpaqueMetaPrefixes...)
+		exceptions.Insert(constants.DefaultOpaqueMetaPrefix, constants.DefaultTransparentMetaPrefix)
+		exceptionsList = exceptions.UnsortedList()
 	}
 
 	// key in virtual more or diff then super
 	moreOrDiff := make(map[string]string)
 
 	for vk, vv := range vKV {
-		if hasPrefixInArray(vk, exceptions) {
+		if hasPrefixInArray(vk, exceptionsList) {
 			// tenant pod should not use exceptional keys. it may conflicts with syncer.
 			continue
 		}
@@ -251,7 +259,7 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 	// key in virtual less then super
 	less := make(map[string]string)
 	for pk := range pKV {
-		if hasPrefixInArray(pk, exceptions) {
+		if hasPrefixInArray(pk, exceptionsList) {
 			continue
 		}
 		if e.isOpaquedKey(pk) {

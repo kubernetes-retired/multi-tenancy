@@ -99,12 +99,12 @@ func (c *controller) PatrollerDo() {
 			configMapDiffer.OnDelete(pObj)
 			return
 		}
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterConfigMapController, vObj.GetOwnerCluster())
+		vc, err := util.GetVirtualClusterObject(c.multiClusterConfigMapController, vObj.GetOwnerCluster())
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", vObj.GetOwnerCluster())
 			return
 		}
-		updated := conversion.Equality(c.config, spec).CheckConfigMapEquality(pCM, vCM)
+		updated := conversion.Equality(c.config, vc).CheckConfigMapEquality(pCM, vCM)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedConfigMaps, 1)
 			klog.Warningf("ConfigMap %s diff in super&tenant master", pObj.Key)

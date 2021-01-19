@@ -296,12 +296,12 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			metrics.CheckerRemedyStats.WithLabelValues("DeletedTenantPodsDueToNodeMissMatch").Inc()
 			continue
 		}
-		spec, err := util.GetVirtualClusterSpec(c.multiClusterPodController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.multiClusterPodController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPod := conversion.Equality(c.config, spec).CheckPodEquality(pPod, &podList.Items[i])
+		updatedPod := conversion.Equality(c.config, vc).CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
@@ -323,7 +323,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			}
 		}
 
-		updatedMeta := conversion.Equality(c.config, spec).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
+		updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedPods, 1)
 			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)

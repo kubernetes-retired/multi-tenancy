@@ -19,34 +19,20 @@ package util
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
-func GetVirtualClusterSpec(mc *mc.MultiClusterController, clustername string) (*v1alpha1.VirtualClusterSpec, error) {
+func GetVirtualClusterObject(mc *mc.MultiClusterController, clustername string) (*v1alpha1.VirtualCluster, error) {
 	obj, err := mc.GetClusterObject(clustername)
 	if err != nil {
-		return nil, fmt.Errorf("Fail to obtain the virtualcluster object.")
+		return nil, fmt.Errorf("fail to obtain the virtualcluster object")
 	}
 
 	vc, ok := obj.(*v1alpha1.VirtualCluster)
 	if !ok {
-		return nil, fmt.Errorf("Cannot get the virtualcluster spec from non-vc object.")
+		return nil, fmt.Errorf("cannot get the virtualcluster from non-vc object")
 	}
 
-	spec := vc.Spec.DeepCopy()
-	prefixesSet := sets.NewString(spec.OpaqueMetaPrefixes...)
-	if !prefixesSet.Has(constants.DefaultOpaqueMetaPrefix) {
-		spec.OpaqueMetaPrefixes = append(spec.OpaqueMetaPrefixes, constants.DefaultOpaqueMetaPrefix)
-	}
-	prefixesSet = sets.NewString(spec.TransparentMetaPrefixes...)
-	if !prefixesSet.Has(constants.DefaultTransparentMetaPrefix) {
-		spec.TransparentMetaPrefixes = append(spec.TransparentMetaPrefixes, constants.DefaultTransparentMetaPrefix)
-	}
-
-	return spec, nil
-
+	return vc, nil
 }

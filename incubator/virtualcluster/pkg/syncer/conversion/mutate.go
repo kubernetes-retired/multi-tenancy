@@ -162,11 +162,11 @@ func PodMutateDefault(vPod *v1.Pod, saSecretMap map[string]string, services []*v
 			mutateWeightedPodAffinityTerms(p.pPod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution, p.clusterName)
 		}
 
-		spec, err := util.GetVirtualClusterSpec(p.mc, p.clusterName)
+		vc, err := util.GetVirtualClusterObject(p.mc, p.clusterName)
 		if err != nil {
 			return err
 		}
-		mutateDNSConfig(p, vPod, spec.ClusterDomain, nameServer)
+		mutateDNSConfig(p, vPod, vc.Spec.ClusterDomain, nameServer)
 
 		// FIXME(zhuangqh): how to support pod subdomain.
 		if p.pPod.Spec.Subdomain != "" {

@@ -303,11 +303,11 @@ func (c *controller) reconcilePodUpdate(clusterName, targetNamespace, requestUID
 		}
 		return err
 	}
-	spec, err := util.GetVirtualClusterSpec(c.multiClusterPodController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.multiClusterPodController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedPod := conversion.Equality(c.config, spec).CheckPodEquality(pPod, vPod)
+	updatedPod := conversion.Equality(c.config, vc).CheckPodEquality(pPod, vPod)
 	if updatedPod != nil {
 		pPod, err = c.client.Pods(targetNamespace).Update(context.TODO(), updatedPod, metav1.UpdateOptions{})
 		if err != nil {
