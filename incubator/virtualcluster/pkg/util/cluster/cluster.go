@@ -47,14 +47,14 @@ import (
 // The dependencies are lazily created in getters and cached for reuse.
 // It is not thread safe.
 type Cluster struct {
-	// The root namespace name for this cluster
+	// The key of this cluster. For vc, it is the root cluster namespace.
 	key string
-	// Name of the corresponding virtual cluster object.
-	Name string
-	// Namespace of the corresponding virtual cluster object.
-	Namespace string
-	// UID of the corresponding virtual cluster object.
-	UID string
+	// name of the corresponding cluster object.
+	name string
+	// namespace of the corresponding cluster object.
+	namespace string
+	// uid of the corresponding cluster object.
+	uid string
 
 	// Config is the rest.config used to talk to the apiserver.  Required.
 	RestConfig *rest.Config
@@ -74,7 +74,7 @@ type Cluster struct {
 	// a clientset client for unwatched tenant master objects (rw directly to tenant apiserver)
 	client *clientset.Clientset
 
-	Options
+	options Options
 
 	// a flag indicates that the cluster cache has been synced
 	synced bool
@@ -96,9 +96,9 @@ type CacheOptions struct {
 	// A cache resync triggers event handlers for each object watched by the cache.
 	// It can be useful if your level-based logic isn't perfect.
 	Resync *time.Duration
-	// Namespace can be used to watch only a single namespace.
+	// WatchNamespace can be used to watch only a single namespace.
 	// If unset (Namespace == ""), all namespaces are watched.
-	Namespace string
+	WatchNamespace string
 }
 
 var _ mccontroller.ClusterInterface = &Cluster{}
@@ -122,12 +122,12 @@ func NewCluster(key, namespace, name, uid string, getter mccontroller.Getter, co
 
 	return &Cluster{
 		key:        key,
-		Name:       name,
-		Namespace:  namespace,
-		UID:        uid,
+		name:       name,
+		namespace:  namespace,
+		uid:        uid,
 		getter:     getter,
 		RestConfig: clusterRestConfig,
-		Options:    o,
+		options:    o,
 		synced:     false,
 		stopCh:     make(chan struct{})}, nil
 }
@@ -138,12 +138,12 @@ func (c *Cluster) GetClusterName() string {
 }
 
 func (c *Cluster) GetOwnerInfo() (string, string, string) {
-	return c.Name, c.Namespace, c.UID
+	return c.name, c.namespace, c.uid
 }
 
 // GetObject returns the cluster object.
 func (c *Cluster) GetObject() (runtime.Object, error) {
-	obj, err := c.getter.GetObject(c.Namespace, c.Name)
+	obj, err := c.getter.GetObject(c.namespace, c.name)
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +196,8 @@ func (c *Cluster) getCache() (cache.Cache, error) {
 	ca, err := cache.New(c.RestConfig, cache.Options{
 		Scheme:    c.getScheme(),
 		Mapper:    m,
-		Resync:    c.Resync,
-		Namespace: c.Namespace,
+		Resync:    c.options.Resync,
+		Namespace: c.options.WatchNamespace,
 	})
 	if err != nil {
 		return nil, err
