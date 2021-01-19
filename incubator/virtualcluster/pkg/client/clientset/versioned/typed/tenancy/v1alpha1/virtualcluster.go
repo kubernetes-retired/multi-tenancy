@@ -37,15 +37,15 @@ type VirtualClustersGetter interface {
 
 // VirtualClusterInterface has methods to work with VirtualCluster resources.
 type VirtualClusterInterface interface {
-	Create(*v1alpha1.VirtualCluster) (*v1alpha1.VirtualCluster, error)
-	Update(*v1alpha1.VirtualCluster) (*v1alpha1.VirtualCluster, error)
-	UpdateStatus(*v1alpha1.VirtualCluster) (*v1alpha1.VirtualCluster, error)
-	Delete(name string, options *v1.DeleteOptions) error
-	DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error
-	Get(name string, options v1.GetOptions) (*v1alpha1.VirtualCluster, error)
-	List(opts v1.ListOptions) (*v1alpha1.VirtualClusterList, error)
-	Watch(opts v1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.VirtualCluster, err error)
+	Create(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.CreateOptions) (*v1alpha1.VirtualCluster, error)
+	Update(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.UpdateOptions) (*v1alpha1.VirtualCluster, error)
+	UpdateStatus(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.UpdateOptions) (*v1alpha1.VirtualCluster, error)
+	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.VirtualCluster, error)
+	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.VirtualClusterList, error)
+	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.VirtualCluster, err error)
 	VirtualClusterExpansion
 }
 
@@ -64,20 +64,20 @@ func newVirtualClusters(c *TenancyV1alpha1Client, namespace string) *virtualClus
 }
 
 // Get takes name of the virtualCluster, and returns the corresponding virtualCluster object, and an error if there is any.
-func (c *virtualClusters) Get(name string, options v1.GetOptions) (result *v1alpha1.VirtualCluster, err error) {
+func (c *virtualClusters) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.VirtualCluster, err error) {
 	result = &v1alpha1.VirtualCluster{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("virtualclusters").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of VirtualClusters that match those selectors.
-func (c *virtualClusters) List(opts v1.ListOptions) (result *v1alpha1.VirtualClusterList, err error) {
+func (c *virtualClusters) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.VirtualClusterList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -88,13 +88,13 @@ func (c *virtualClusters) List(opts v1.ListOptions) (result *v1alpha1.VirtualClu
 		Resource("virtualclusters").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested virtualClusters.
-func (c *virtualClusters) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *virtualClusters) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -105,87 +105,90 @@ func (c *virtualClusters) Watch(opts v1.ListOptions) (watch.Interface, error) {
 		Resource("virtualclusters").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch(context.TODO())
+		Watch(ctx)
 }
 
 // Create takes the representation of a virtualCluster and creates it.  Returns the server's representation of the virtualCluster, and an error, if there is any.
-func (c *virtualClusters) Create(virtualCluster *v1alpha1.VirtualCluster) (result *v1alpha1.VirtualCluster, err error) {
+func (c *virtualClusters) Create(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.CreateOptions) (result *v1alpha1.VirtualCluster, err error) {
 	result = &v1alpha1.VirtualCluster{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("virtualclusters").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(virtualCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a virtualCluster and updates it. Returns the server's representation of the virtualCluster, and an error, if there is any.
-func (c *virtualClusters) Update(virtualCluster *v1alpha1.VirtualCluster) (result *v1alpha1.VirtualCluster, err error) {
+func (c *virtualClusters) Update(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.UpdateOptions) (result *v1alpha1.VirtualCluster, err error) {
 	result = &v1alpha1.VirtualCluster{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("virtualclusters").
 		Name(virtualCluster.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(virtualCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-
-func (c *virtualClusters) UpdateStatus(virtualCluster *v1alpha1.VirtualCluster) (result *v1alpha1.VirtualCluster, err error) {
+func (c *virtualClusters) UpdateStatus(ctx context.Context, virtualCluster *v1alpha1.VirtualCluster, opts v1.UpdateOptions) (result *v1alpha1.VirtualCluster, err error) {
 	result = &v1alpha1.VirtualCluster{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("virtualclusters").
 		Name(virtualCluster.Name).
 		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(virtualCluster).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the virtualCluster and deletes it. Returns an error if one occurs.
-func (c *virtualClusters) Delete(name string, options *v1.DeleteOptions) error {
+func (c *virtualClusters) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("virtualclusters").
 		Name(name).
-		Body(options).
-		Do(context.TODO()).
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *virtualClusters) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
+func (c *virtualClusters) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("virtualclusters").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do(context.TODO()).
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched virtualCluster.
-func (c *virtualClusters) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.VirtualCluster, err error) {
+func (c *virtualClusters) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.VirtualCluster, err error) {
 	result = &v1alpha1.VirtualCluster{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("virtualclusters").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do(context.TODO()).
+		Do(ctx).
 		Into(result)
 	return
 }

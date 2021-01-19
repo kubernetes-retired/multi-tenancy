@@ -235,12 +235,14 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 	moreOrDiff := make(map[string]string)
 
 	for vk, vv := range vKV {
-		if hasPrefixInArray(vk, exceptions) {
-			// tenant pod should not use exceptional keys. it may conflicts with syncer.
-			continue
-		}
-		if e.isOpaquedKey(vk) {
-			continue
+		if !hasPrefixInArray(vk, e.vcSpec.ProtectedMetaPrefixes) {
+			if hasPrefixInArray(vk, exceptions) {
+				// tenant pod should not use exceptional keys. it may conflicts with syncer.
+				continue
+			}
+			if e.isOpaquedKey(vk) {
+				continue
+			}
 		}
 		pv, ok := pKV[vk]
 		if !ok || pv != vv {
@@ -251,11 +253,13 @@ func (e vcEquality) checkDWKVEquality(pKV, vKV map[string]string) (map[string]st
 	// key in virtual less then super
 	less := make(map[string]string)
 	for pk := range pKV {
-		if hasPrefixInArray(pk, exceptions) {
-			continue
-		}
-		if e.isOpaquedKey(pk) {
-			continue
+		if !hasPrefixInArray(pk, e.vcSpec.ProtectedMetaPrefixes) {
+			if hasPrefixInArray(pk, exceptions) {
+				continue
+			}
+			if e.isOpaquedKey(pk) {
+				continue
+			}
 		}
 
 		vv, ok := vKV[pk]

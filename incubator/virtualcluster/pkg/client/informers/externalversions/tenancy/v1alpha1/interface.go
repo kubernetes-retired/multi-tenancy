@@ -23,6 +23,10 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// ClusterBufferPools returns a ClusterBufferPoolInformer.
+	ClusterBufferPools() ClusterBufferPoolInformer
+	// ClusterInstances returns a ClusterInstanceInformer.
+	ClusterInstances() ClusterInstanceInformer
 	// ClusterVersions returns a ClusterVersionInformer.
 	ClusterVersions() ClusterVersionInformer
 	// VirtualClusters returns a VirtualClusterInformer.
@@ -38,6 +42,16 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// ClusterBufferPools returns a ClusterBufferPoolInformer.
+func (v *version) ClusterBufferPools() ClusterBufferPoolInformer {
+	return &clusterBufferPoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// ClusterInstances returns a ClusterInstanceInformer.
+func (v *version) ClusterInstances() ClusterInstanceInformer {
+	return &clusterInstanceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ClusterVersions returns a ClusterVersionInformer.

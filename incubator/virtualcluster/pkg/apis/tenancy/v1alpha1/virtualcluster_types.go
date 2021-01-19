@@ -48,6 +48,10 @@ type VirtualClusterSpec struct {
 	// +optional
 	OpaqueMetaPrefixes []string `json:"opaqueMetaPrefixes,omitempty"`
 
+	// ProtectedMetaPrefixes is the key prefix of labels or annotations that are protected.
+	// they are excluded from other prefixes options, will be sync downward to super cluster.
+	ProtectedMetaPrefixes []string `json:"protectedMetaPrefixes,omitempty"`
+
 	// Service CIDRs used by VirtualCluster
 	// +optional
 	ServiceCidr string `json:"serviceCidr,omitempty"`

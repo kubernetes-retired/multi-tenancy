@@ -25,6 +25,8 @@ import (
 
 type TenancyV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	ClusterBufferPoolsGetter
+	ClusterInstancesGetter
 	ClusterVersionsGetter
 	VirtualClustersGetter
 }
@@ -32,6 +34,14 @@ type TenancyV1alpha1Interface interface {
 // TenancyV1alpha1Client is used to interact with features provided by the tenancy.x-k8s.io group.
 type TenancyV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *TenancyV1alpha1Client) ClusterBufferPools(namespace string) ClusterBufferPoolInterface {
+	return newClusterBufferPools(c, namespace)
+}
+
+func (c *TenancyV1alpha1Client) ClusterInstances(namespace string) ClusterInstanceInterface {
+	return newClusterInstances(c, namespace)
 }
 
 func (c *TenancyV1alpha1Client) ClusterVersions() ClusterVersionInterface {

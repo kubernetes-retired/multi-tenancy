@@ -17,6 +17,10 @@ limitations under the License.
 
 package v1alpha1
 
+type ClusterBufferPoolExpansion interface{}
+
+type ClusterInstanceExpansion interface{}
+
 type ClusterVersionExpansion interface{}
 
 type VirtualClusterExpansion interface{}

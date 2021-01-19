@@ -17,6 +17,22 @@ limitations under the License.
 
 package v1alpha1
 
+// ClusterBufferPoolListerExpansion allows custom methods to be added to
+// ClusterBufferPoolLister.
+type ClusterBufferPoolListerExpansion interface{}
+
+// ClusterBufferPoolNamespaceListerExpansion allows custom methods to be added to
+// ClusterBufferPoolNamespaceLister.
+type ClusterBufferPoolNamespaceListerExpansion interface{}
+
+// ClusterInstanceListerExpansion allows custom methods to be added to
+// ClusterInstanceLister.
+type ClusterInstanceListerExpansion interface{}
+
+// ClusterInstanceNamespaceListerExpansion allows custom methods to be added to
+// ClusterInstanceNamespaceLister.
+type ClusterInstanceNamespaceListerExpansion interface{}
+
 // ClusterVersionListerExpansion allows custom methods to be added to
 // ClusterVersionLister.
 type ClusterVersionListerExpansion interface{}

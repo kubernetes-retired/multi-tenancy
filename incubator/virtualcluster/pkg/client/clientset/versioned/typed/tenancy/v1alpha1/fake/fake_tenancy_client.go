@@ -27,6 +27,14 @@ type FakeTenancyV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeTenancyV1alpha1) ClusterBufferPools(namespace string) v1alpha1.ClusterBufferPoolInterface {
+	return &FakeClusterBufferPools{c, namespace}
+}
+
+func (c *FakeTenancyV1alpha1) ClusterInstances(namespace string) v1alpha1.ClusterInstanceInterface {
+	return &FakeClusterInstances{c, namespace}
+}
+
 func (c *FakeTenancyV1alpha1) ClusterVersions() v1alpha1.ClusterVersionInterface {
 	return &FakeClusterVersions{c}
 }

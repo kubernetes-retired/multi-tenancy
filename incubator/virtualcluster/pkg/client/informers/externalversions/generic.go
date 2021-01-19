@@ -52,6 +52,10 @@ func (f *genericInformer) Lister() cache.GenericLister {
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
 	// Group=tenancy.x-k8s.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("clusterbufferpools"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Tenancy().V1alpha1().ClusterBufferPools().Informer()}, nil
+	case v1alpha1.SchemeGroupVersion.WithResource("clusterinstances"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Tenancy().V1alpha1().ClusterInstances().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("clusterversions"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Tenancy().V1alpha1().ClusterVersions().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("virtualclusters"):
