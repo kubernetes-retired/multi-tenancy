@@ -9,6 +9,7 @@ import (
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
@@ -95,14 +96,13 @@ func (c *HNCConfig) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 }
 
 func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
-	for _, r := range inst.Spec.Resources {
+	for i, r := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
-
+		field := field.NewPath("spec", "resources").Index(i)
 		// Validate the type configured is not an HNC enforced type.
 		if api.IsEnforcedType(r) {
-			return deny(metav1.StatusReasonInvalid,
-				fmt.Sprintf("Invalid configuration of %s in the spec, because it's enforced by HNC "+
-					"with 'Propagate' mode. Please remove it from the spec.", gr))
+			return denyInvalid(field, fmt.Sprintf("Invalid configuration of %s in the spec, because it's enforced by HNC "+
+				"with 'Propagate' mode. Please remove it from the spec.", gr))
 		}
 
 		// Validate the type exists in the apiserver. If yes, convert GR to GVK. We
@@ -110,14 +110,14 @@ func (c *HNCConfig) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		// overwriting conflict (forest uses GVK as the key for object reconcilers).
 		gvk, err := c.translator.GVKFor(gr)
 		if err != nil {
-			return deny(metav1.StatusReasonInvalid,
+			return denyInvalid(field,
 				fmt.Sprintf("Cannot find the %s in the apiserver with error: %s", gr, err.Error()))
 		}
 
 		// Validate if the configuration of a type already exists. Each type should
 		// only have one configuration.
 		if _, exists := ts[gvk]; exists {
-			return deny(metav1.StatusReasonInvalid, fmt.Sprintf("Duplicate configurations for %s", gr))
+			return denyInvalid(field, fmt.Sprintf("Duplicate configurations for %s", gr))
 		}
 		ts[gvk] = r.Mode
 	}
