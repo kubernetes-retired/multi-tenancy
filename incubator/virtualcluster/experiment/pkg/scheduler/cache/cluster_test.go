@@ -278,6 +278,6 @@ func TestDeepCopy(t *testing.T) {
 		!equality.Semantic.DeepEqual(clone.slices[defaultNamespace][0].size, cluster.slices[defaultNamespace][0].size) ||
 		clone.slices[defaultNamespace][0].cluster != cluster.slices[defaultNamespace][0].cluster ||
 		!equality.Semantic.DeepEqual(clone.pods[pod.GetNamespaceKey()], cluster.pods[pod.GetNamespaceKey()]) {
-		t.Errorf("deepcopy fails %v %v", clone.alloc, cluster.alloc)
+		t.Errorf("deepcopy fails %v %v", clone, cluster)
 	}
 }
