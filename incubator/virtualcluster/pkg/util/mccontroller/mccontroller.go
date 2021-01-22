@@ -18,6 +18,7 @@ package mccontroller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -40,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
@@ -420,6 +422,15 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		return true
 	}
 
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		if c.FilterObjectFromSchedulingResult(req) {
+			c.Queue.Forget(req)
+			c.Queue.Done(req)
+			klog.Infof("drop request %+v which doesn't scheduled to this cluster", req)
+			return true
+		}
+	}
+
 	defer metrics.RecordDWSOperationDuration(c.objectKind, req.ClusterName, time.Now())
 
 	// RunInformersAndControllers the syncHandler, passing it the cluster/namespace/Name
@@ -461,6 +472,63 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	c.Queue.AddRateLimited(req)
 	klog.Errorf("%s dws request reconcile failed: %v", req, err)
 	return false
+}
+
+func (c *MultiClusterController) FilterObjectFromSchedulingResult(req reconciler.Request) bool {
+	var nsName string
+	if c.objectKind == "Namespace" {
+		nsName = req.Name
+	} else {
+		nsName = req.Namespace
+	}
+
+	if filterSuperClusterRelatedObject(c, req.ClusterName, nsName) {
+		return true
+	}
+
+	if c.objectKind == "Pod" {
+		if filterSuperClusterSchedulePod(c, req) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func filterSuperClusterRelatedObject(c *MultiClusterController, clusterName, nsName string) bool {
+	nsObj, err := c.GetByObjectType(clusterName, "", nsName, &v1.Namespace{})
+	if err != nil {
+		klog.Errorf("failed to get ns %s of cluster %s: %v", nsName, clusterName, err)
+		return true
+	}
+	placements := make(map[string]int)
+	clist, ok := nsObj.(*v1.Namespace).GetAnnotations()[constants.LabelScheduledPlacements]
+	if !ok {
+		return true
+	}
+	if err = json.Unmarshal([]byte(clist), &placements); err != nil {
+		klog.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", clist, constants.LabelScheduledPlacements, clusterName, nsName, err)
+		return true
+	}
+
+	_, ok = placements[constants.SuperClusterID]
+
+	return !ok
+}
+
+func filterSuperClusterSchedulePod(c *MultiClusterController, req reconciler.Request) bool {
+	podObj, err := c.GetByObjectType(req.ClusterName, req.Namespace, req.Name, &v1.Pod{})
+	if err != nil {
+		klog.Errorf("failed to get pod %+v: %v", req, err)
+		return true
+	}
+
+	cname, ok := podObj.(*v1.Pod).GetAnnotations()[constants.LabelScheduledCluster]
+	if !ok {
+		return true
+	}
+
+	return cname != constants.SuperClusterID
 }
 
 func getTargetObject(objectType runtime.Object) runtime.Object {

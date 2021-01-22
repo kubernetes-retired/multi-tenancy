@@ -23,6 +23,14 @@ import (
 )
 
 const (
+	// LabelScheduledCluster is the super cluster the pod schedules to.
+	LabelScheduledCluster = "scheduler.tenancy.x-k8s.io/superCluster"
+
+	// LabelScheduledPlacements is the scheduled placements the namespace schedules to.
+	LabelScheduledPlacements = "scheduler.tenancy.x-k8s.io/placements"
+)
+
+const (
 	// Override the client-go default 5 qps and 10 burst, which are too small for mccontroller .
 	DefaultSyncerClientQPS   = 1000
 	DefaultSyncerClientBurst = 2000
@@ -42,6 +50,9 @@ const (
 	StatusCodeError                  = "Error"
 	StatusCodeBadRequest             = "BadRequest"
 )
+
+// SuperClusterID is initialized when syncer started, it won't change during syncer life cycle.
+var SuperClusterID string
 
 // ResourceSyncerUserAgent is the userAgent name when starting resource syncer.
 // TODO: make this configurable in Cluster instance.
