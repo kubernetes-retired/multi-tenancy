@@ -130,18 +130,28 @@ func removeBenchmarksWithIDs(ids []string) {
 
 // Validation of the flag inputs
 func validateFlags(cmd *cobra.Command) error {
-	benchmarkRunOptions.Tenant, _ = cmd.Flags().GetString("as")
-	if benchmarkRunOptions.Tenant == "" {
-		return fmt.Errorf("username must be set via --as")
+	tenants, _ := cmd.Flags().GetStringSlice("as")
+	tenantNamespaces, _ := cmd.Flags().GetStringSlice("namespace")
+
+	if len(tenants) < 1 || len(tenantNamespaces) < 1 {
+		return fmt.Errorf("please provide tenant or tenant namespace")
 	}
 
-	benchmarkRunOptions.TenantNamespace, _ = cmd.Flags().GetString("namespace")
-	if benchmarkRunOptions.TenantNamespace == "" {
-		return fmt.Errorf("tenant namespace must be set via --namespace or -n")
+	if len(tenants) != len(tenantNamespaces) {
+		return fmt.Errorf("please provide same number of tenant and tenantNamespaces")
 	}
 
-	benchmarkRunOptions.OtherNamespace, _ = cmd.Flags().GetString("other-namespace")
-	benchmarkRunOptions.OtherTenant, _ = cmd.Flags().GetString("other-tenant-admin")
+	if len(tenants) > 2 || len(tenantNamespaces) > 2 {
+		return fmt.Errorf("support for more than 2 tenants is not available yet")
+	}
+
+	benchmarkRunOptions.Tenant = tenants[0]
+	benchmarkRunOptions.TenantNamespace = tenantNamespaces[0]
+
+	if len(tenants) > 1 {
+		benchmarkRunOptions.OtherTenant = tenants[1]
+		benchmarkRunOptions.OtherNamespace = tenantNamespaces[1]
+	}
 
 	err := initConfig()
 	if err != nil {
@@ -287,12 +297,10 @@ func runTests(cmd *cobra.Command, args []string) error {
 
 func newRunCmd() *cobra.Command {
 	runCmd.Flags().BoolP("debug", "d", false, "Use debugging mode")
-	runCmd.Flags().StringP("namespace", "n", "", "(required) tenant namespace")
-	runCmd.Flags().String("as", "", "(required) user name to impersonate")
+	runCmd.Flags().StringSliceP("namespace", "n", []string{}, "(required) tenant namespace")
+	runCmd.Flags().StringSlice("as", []string{}, "(required) user name to impersonate")
 	runCmd.Flags().StringP("out", "o", "default", "(optional) output reporters (default, policyreport)")
 	runCmd.Flags().StringP("skip", "s", "", "(optional) benchmark IDs to skip")
-	runCmd.Flags().String("other-namespace", "", "(optional) other tenant namespace")
-	runCmd.Flags().String("other-tenant-admin","", "(optional) other tenant admin")
 	runCmd.Flags().StringP("labels", "l", "", "(optional) labels")
 
 	return runCmd
