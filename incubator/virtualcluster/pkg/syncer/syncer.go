@@ -51,8 +51,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/feature"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/cluster"
+	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
@@ -60,7 +61,6 @@ import (
 var (
 	numHealthCluster   uint64
 	numUnHealthCluster uint64
-	SuperClusterID     string
 )
 
 const (
@@ -177,15 +177,15 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 
 // Run begins watching and downward&upward syncing.
 func (s *Syncer) Run(stopChan <-chan struct{}) {
-	if feature.Enabled(s.config.FeatureGates, feature.SuperClusterPooling) {
-		klog.Infof("SuperClusterPooling feature is enabled!")
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		klog.Infof("SuperClusterPooling featuregate is enabled!")
 		cfg, err := s.superClient.ConfigMaps("kube-system").Get(context.TODO(), SuperClusterInfoCfgMap, metav1.GetOptions{})
 		if err != nil {
 			klog.Infof("Fail to get configmap kube-system/%v from super cluster which is required for SuperClusterPooling feature. Quit!", SuperClusterInfoCfgMap)
 			os.Exit(1)
 		}
 		var ok bool
-		if SuperClusterID, ok = cfg.Data[SuperClusterIDKey]; ok == false {
+		if utilconst.SuperClusterID, ok = cfg.Data[SuperClusterIDKey]; ok == false {
 			klog.Infof("Fail to get ID value from configmap kube-system/%v. Quit!", SuperClusterInfoCfgMap)
 			os.Exit(1)
 		}
