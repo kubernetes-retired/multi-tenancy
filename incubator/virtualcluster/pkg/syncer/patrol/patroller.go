@@ -18,6 +18,7 @@ package patrol
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,7 +31,6 @@ import (
 )
 
 type Patroller struct {
-	name string
 	// objectKind is the kind of target object this controller watched.
 	objectKind string
 
@@ -39,31 +39,32 @@ type Patroller struct {
 
 // Options are the arguments for creating a new Patrol.
 type Options struct {
+	name       string
 	Reconciler reconciler.PatrolReconciler
 	Period     time.Duration
 }
 
-func NewPatroller(name string, objectType runtime.Object, options Options) (*Patroller, error) {
-	if options.Reconciler == nil {
-		return nil, fmt.Errorf("must specify patrol reconciler")
-	}
-
-	if len(name) == 0 {
-		return nil, fmt.Errorf("must specify Name for patrol reconciler")
-	}
-
+func NewPatroller(objectType runtime.Object, rc reconciler.PatrolReconciler, opts ...OptConfig) (*Patroller, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
 		return nil, fmt.Errorf("unknown object kind %+v", objectType)
 	}
 
 	p := &Patroller{
-		name:       name,
 		objectKind: kinds[0].Kind,
-		Options:    options,
+		Options: Options{
+			name:       fmt.Sprintf("%s-patroller", strings.ToLower(kinds[0].Kind)),
+			Reconciler: rc,
+			Period:     60 * time.Second,
+		},
 	}
-	if p.Period == 0 {
-		p.Period = 60 * time.Second
+
+	for _, opt := range opts {
+		opt(&p.Options)
+	}
+
+	if p.Reconciler == nil {
+		return nil, fmt.Errorf("must specify patrol reconciler")
 	}
 	return p, nil
 }

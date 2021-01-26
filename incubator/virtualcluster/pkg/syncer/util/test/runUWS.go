@@ -87,7 +87,7 @@ func RunUpwardSync(
 	syncErr := make(chan error)
 	defer close(syncErr)
 	fakeRc := &fakeUWReconciler{errCh: syncErr}
-	rsOptions := &manager.ResourceSyncerOptions{
+	rsOptions := manager.ResourceSyncerOptions{
 		UWOptions: &uw.Options{Reconciler: fakeRc},
 		IsFake:    true,
 	}

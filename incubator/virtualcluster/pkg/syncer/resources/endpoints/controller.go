@@ -55,38 +55,27 @@ func NewEndpointsController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:         config,
 		endpointClient: client.CoreV1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterEndpointsController, err := mc.NewMCController("tenant-masters-endpoints-controller", &v1.Endpoints{}, *mcOptions)
+	multiClusterEndpointsController, err := mc.NewMCController(&v1.Endpoints{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create endpoints mc controller: %v", err)
 	}
 	c.multiClusterEndpointsController = multiClusterEndpointsController
+
 	c.endpointsLister = informer.Core().V1().Endpoints().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.endpointsSynced = func() bool { return true }
 	} else {
 		c.endpointsSynced = informer.Core().V1().Endpoints().Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	endPointsPatroller, err := pa.NewPatroller("endPoints-patroller", &v1.Endpoints{}, *patrolOptions)
+	endPointsPatroller, err := pa.NewPatroller(&v1.Endpoints{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create endpoints patroller: %v", err)
 	}

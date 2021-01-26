@@ -55,38 +55,26 @@ func NewSecretController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		secretClient: client.CoreV1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterSecretController, err := mc.NewMCController("tenant-masters-secret-controller", &v1.Secret{}, *mcOptions)
+	multiClusterSecretController, err := mc.NewMCController(&v1.Secret{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create secret mc controller: %v", err)
 	}
 	c.multiClusterSecretController = multiClusterSecretController
 
 	c.secretLister = informer.Core().V1().Secrets().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.secretSynced = func() bool { return true }
 	} else {
 		c.secretSynced = informer.Core().V1().Secrets().Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	secretPatroller, err := pa.NewPatroller("secret-patroller", &v1.Secret{}, *patrolOptions)
+	secretPatroller, err := pa.NewPatroller(&v1.Secret{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create secret patroller: %v", err)
 	}

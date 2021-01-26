@@ -116,7 +116,7 @@ func RunPatrol(
 	fakeDWRc := &fakeReconciler{errCh: syncDWS}
 	fakeUWRc := &fakeUWReconciler{errCh: syncUWS}
 
-	rsOptions := &manager.ResourceSyncerOptions{
+	rsOptions := manager.ResourceSyncerOptions{
 		MCOptions:     &mc.Options{Reconciler: fakeDWRc},
 		UWOptions:     &uw.Options{Reconciler: fakeUWRc},
 		PatrolOptions: &pa.Options{Reconciler: fakePatrolRc},

@@ -59,26 +59,21 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		namespaceClient: client.CoreV1(),
 		vcClient:        vcClient,
 	}
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterNamespaceController, err := mc.NewMCController("tenant-masters-namespace-controller", &v1.Namespace{}, *mcOptions)
+
+	multiClusterNamespaceController, err := mc.NewMCController(&v1.Namespace{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create namespace mc controller: %v", err)
 	}
 	c.multiClusterNamespaceController = multiClusterNamespaceController
 	c.nsLister = informer.Core().V1().Namespaces().Lister()
 	c.vcLister = vcInformer.Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.nsSynced = func() bool { return true }
 		c.vcSynced = func() bool { return true }
 	} else {
@@ -86,13 +81,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 		c.vcSynced = vcInformer.Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	namespacePatroller, err := pa.NewPatroller("namespace-patroller", &v1.Namespace{}, *patrolOptions)
+	namespacePatroller, err := pa.NewPatroller(&v1.Namespace{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create namespace patroller: %v", err)
 	}

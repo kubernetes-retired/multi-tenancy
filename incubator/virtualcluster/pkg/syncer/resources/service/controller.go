@@ -59,51 +59,34 @@ func NewServiceController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:        config,
 		serviceClient: client.CoreV1(),
 	}
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterServiceController, err := mc.NewMCController("tenant-masters-service-controller", &v1.Service{}, *mcOptions)
+
+	multiClusterServiceController, err := mc.NewMCController(&v1.Service{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create service mc controller: %v", err)
 	}
 	c.multiClusterServiceController = multiClusterServiceController
 
 	c.serviceLister = informer.Core().V1().Services().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.serviceSynced = func() bool { return true }
 	} else {
 		c.serviceSynced = informer.Core().V1().Services().Informer().HasSynced
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	upwardServiceController, err := uw.NewUWController("service-upward-controller", &v1.Service{}, *uwOptions)
+	upwardServiceController, err := uw.NewUWController(&v1.Service{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create service upward controller: %v", err)
 	}
 	c.upwardServiceController = upwardServiceController
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	servicePatroller, err := pa.NewPatroller("service-patroller", &v1.Service{}, *patrolOptions)
+	servicePatroller, err := pa.NewPatroller(&v1.Service{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create service patroller: %v", err)
 	}

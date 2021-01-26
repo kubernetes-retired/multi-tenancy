@@ -107,7 +107,7 @@ func RunDownwardSync(
 	syncErr := make(chan error)
 	defer close(syncErr)
 	fakeRc := &fakeReconciler{errCh: syncErr}
-	rsOptions := &manager.ResourceSyncerOptions{
+	rsOptions := manager.ResourceSyncerOptions{
 		MCOptions: &mc.Options{Reconciler: fakeRc},
 		IsFake:    true,
 	}

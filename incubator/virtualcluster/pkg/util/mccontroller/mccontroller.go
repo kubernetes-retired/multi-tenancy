@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,8 +58,6 @@ import (
 // MultiClusterController saves all watched tenant clusters in a set.
 type MultiClusterController struct {
 	sync.Mutex
-	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
-	name string
 
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
@@ -84,6 +83,9 @@ type Options struct {
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
+
+	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
+	name string
 }
 
 // Cache is the interface used by Controller to start and wait for caches to sync.
@@ -111,38 +113,31 @@ type ClusterInterface interface {
 }
 
 // NewMCController creates a new MultiClusterController.
-func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
-	if options.Reconciler == nil {
-		return nil, fmt.Errorf("must specify Reconciler")
-	}
-
-	if len(name) == 0 {
-		return nil, fmt.Errorf("must specify Name for Controller")
-	}
-
+func NewMCController(objectType runtime.Object, rc reconciler.DWReconciler, opts ...OptConfig) (*MultiClusterController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
 		return nil, fmt.Errorf("unknown object kind %+v", objectType)
 	}
 
 	c := &MultiClusterController{
-		name:       name,
 		objectType: objectType,
 		objectKind: kinds[0].Kind,
 		clusters:   make(map[string]ClusterInterface),
-		Options:    options,
+		Options: Options{
+			name:                    fmt.Sprintf("%s-mccontroller", strings.ToLower(kinds[0].Kind)),
+			JitterPeriod:            1 * time.Second,
+			MaxConcurrentReconciles: 1,
+			Reconciler:              rc,
+			Queue:                   fairqueue.NewRateLimitingFairQueue(),
+		},
 	}
 
-	if c.JitterPeriod == 0 {
-		c.JitterPeriod = 1 * time.Second
+	for _, opt := range opts {
+		opt(&c.Options)
 	}
 
-	if c.MaxConcurrentReconciles <= 0 {
-		c.MaxConcurrentReconciles = 1
-	}
-
-	if c.Queue == nil {
-		c.Queue = fairqueue.NewRateLimitingFairQueue()
+	if c.Reconciler == nil {
+		return nil, fmt.Errorf("must specify DW Reconciler")
 	}
 
 	return c, nil
