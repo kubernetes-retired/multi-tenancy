@@ -134,15 +134,15 @@ func validateFlags(cmd *cobra.Command) error {
 	tenantNamespaces, _ := cmd.Flags().GetStringSlice("namespace")
 
 	if len(tenants) < 1 || len(tenantNamespaces) < 1 {
-		return fmt.Errorf("please provide tenant or tenant namespace")
+		return fmt.Errorf("user and namespace required")
 	}
 
 	if len(tenants) != len(tenantNamespaces) {
-		return fmt.Errorf("please provide same number of tenant and tenantNamespaces")
+		return fmt.Errorf("user and namespace counts must be equal")
 	}
 
 	if len(tenants) > 2 || len(tenantNamespaces) > 2 {
-		return fmt.Errorf("support for more than 2 tenants is not available yet")
+		return fmt.Errorf("user and namespace counts cannot exceed 2")
 	}
 
 	benchmarkRunOptions.Tenant = tenants[0]
