@@ -113,7 +113,7 @@ var b = &benchmark.Benchmark{
 			}
 		}
 
-		cmd := []string{"wget", nginxPodIp + ":" + "80"}
+		cmd := []string{"wget", "--timeout=5", nginxPodIp + ":" + "80"}
 		req := options.ClusterAdminClient.CoreV1().RESTClient().Post().Resource("pods").Name("busy-box").
 			Namespace(options.OtherNamespace).SubResource("exec")
 		option := &v1.PodExecOptions{
