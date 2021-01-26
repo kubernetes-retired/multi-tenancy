@@ -297,3 +297,8 @@ func (c *Cluster) SetSynced() {
 func (c *Cluster) Stop() {
 	close(c.stopCh)
 }
+
+// GetRestConfig returns restful configuration of virtual cluster client
+func (c *Cluster) GetRestConfig() *rest.Config {
+	return c.RestConfig
+}

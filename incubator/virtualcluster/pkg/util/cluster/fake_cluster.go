@@ -19,6 +19,7 @@ package cluster
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -82,4 +83,9 @@ func (c *fakeCluster) WaitForCacheSync() bool {
 
 func (c *fakeCluster) Stop() {
 	return
+}
+
+// GetRestConfig returns restful configuration of virtual cluster client
+func (c *fakeCluster) GetRestConfig() *rest.Config {
+	return nil
 }

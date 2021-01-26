@@ -64,6 +64,8 @@ type ResourceSyncerOptions struct {
 	KeyFile  string
 }
 
+var ComponentName = "vc-syncer"
+
 // NewResourceSyncerOptions creates a new resource syncer with a default config.
 func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 	return &ResourceSyncerOptions{
@@ -76,7 +78,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 					RetryPeriod:   v1.Duration{Duration: 2 * time.Second},
 					ResourceLock:  resourcelock.ConfigMapsResourceLock,
 				},
-				LockObjectName: "vc-syncer-leaderelection-lock",
+				LockObjectName: ComponentName + "-leaderelection-lock",
 			},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
 			DisableServiceAccountToken: true,
@@ -98,6 +100,7 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs := fss.FlagSet("server")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
+	fs.StringVar(&ComponentName, "componentname", ComponentName, "The component name (default vc-syncer).")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
 	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress)")
