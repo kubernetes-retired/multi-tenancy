@@ -65,7 +65,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 		serviceClient: client.CoreV1(),
 	}
 
-	multiClusterServiceController, err := mc.NewMCController(&v1.Service{}, c,
+	multiClusterServiceController, err := mc.NewMCController(&v1.Service{}, &v1.ServiceList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create service mc controller: %v", err)

@@ -65,7 +65,7 @@ func NewNamespaceController(config *config.SyncerConfiguration,
 		vcClient:        vcClient,
 	}
 
-	multiClusterNamespaceController, err := mc.NewMCController(&v1.Namespace{}, c,
+	multiClusterNamespaceController, err := mc.NewMCController(&v1.Namespace{}, &v1.NamespaceList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create namespace mc controller: %v", err)

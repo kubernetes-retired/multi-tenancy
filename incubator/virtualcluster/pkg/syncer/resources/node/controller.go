@@ -69,7 +69,7 @@ func NewNodeController(config *config.SyncerConfiguration,
 		vnodeProvider:     native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
 
-	multiClusterNodeController, err := mc.NewMCController(&v1.Node{}, c,
+	multiClusterNodeController, err := mc.NewMCController(&v1.Node{}, &v1.NodeList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create node mc controller: %v", err)

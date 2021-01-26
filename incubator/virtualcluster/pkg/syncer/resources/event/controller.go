@@ -74,7 +74,7 @@ func NewEventController(config *config.SyncerConfiguration,
 		},
 	}
 
-	multiClusterEventController, err := mc.NewMCController(&v1.Event{}, c,
+	multiClusterEventController, err := mc.NewMCController(&v1.Event{}, &v1.EventList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create event mc controller: %v", err)

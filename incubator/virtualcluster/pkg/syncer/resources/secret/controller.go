@@ -60,7 +60,7 @@ func NewSecretController(config *config.SyncerConfiguration,
 		secretClient: client.CoreV1(),
 	}
 
-	multiClusterSecretController, err := mc.NewMCController(&v1.Secret{}, c,
+	multiClusterSecretController, err := mc.NewMCController(&v1.Secret{}, &v1.SecretList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create secret mc controller: %v", err)

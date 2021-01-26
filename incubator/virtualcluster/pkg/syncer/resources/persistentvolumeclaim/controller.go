@@ -61,7 +61,7 @@ func NewPVCController(config *config.SyncerConfiguration,
 		pvcClient: client.CoreV1(),
 	}
 
-	multiClusterPersistentVolumeClaimController, err := mc.NewMCController(&v1.PersistentVolumeClaim{}, c,
+	multiClusterPersistentVolumeClaimController, err := mc.NewMCController(&v1.PersistentVolumeClaim{}, &v1.PersistentVolumeClaimList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolumeClaim mc controller: %v", err)

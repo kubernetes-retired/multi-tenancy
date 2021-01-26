@@ -102,7 +102,7 @@ func NewPodController(config *config.SyncerConfiguration,
 		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
 		vnodeProvider:      native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
-	multiClusterPodController, err := mc.NewMCController(&v1.Pod{}, c,
+	multiClusterPodController, err := mc.NewMCController(&v1.Pod{}, &v1.PodList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerHigh), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create pod mc controller: %v", err)

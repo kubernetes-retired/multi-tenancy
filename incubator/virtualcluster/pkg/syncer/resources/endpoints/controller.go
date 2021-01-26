@@ -61,7 +61,7 @@ func NewEndpointsController(config *config.SyncerConfiguration,
 		endpointClient: client.CoreV1(),
 	}
 
-	multiClusterEndpointsController, err := mc.NewMCController(&v1.Endpoints{}, c,
+	multiClusterEndpointsController, err := mc.NewMCController(&v1.Endpoints{}, &v1.EndpointsList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create endpoints mc controller: %v", err)

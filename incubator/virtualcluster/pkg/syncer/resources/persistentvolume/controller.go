@@ -70,7 +70,7 @@ func NewPVController(config *config.SyncerConfiguration,
 		informer: informer.Core().V1(),
 	}
 
-	multiClusterPersistentVolumeController, err := mc.NewMCController(&v1.PersistentVolume{}, c,
+	multiClusterPersistentVolumeController, err := mc.NewMCController(&v1.PersistentVolume{}, &v1.PersistentVolumeList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume mc controller: %v", err)

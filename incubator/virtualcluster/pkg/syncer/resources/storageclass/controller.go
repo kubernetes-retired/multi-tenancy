@@ -70,7 +70,7 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 		informer: informer.Storage().V1(),
 	}
 
-	multiClusterStorageClassController, err := mc.NewMCController(&v1.StorageClass{}, c,
+	multiClusterStorageClassController, err := mc.NewMCController(&v1.StorageClass{}, &v1.StorageClassList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageClass mc controller: %v", err)

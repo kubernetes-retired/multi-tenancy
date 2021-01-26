@@ -59,7 +59,7 @@ func NewServiceAccountController(config *config.SyncerConfiguration,
 		saClient: client.CoreV1(),
 	}
 
-	multiClusterServiceAccountController, err := mc.NewMCController(&v1.ServiceAccount{}, c,
+	multiClusterServiceAccountController, err := mc.NewMCController(&v1.ServiceAccount{}, &v1.ServiceAccountList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create serviceAccount mc controller: %v", err)

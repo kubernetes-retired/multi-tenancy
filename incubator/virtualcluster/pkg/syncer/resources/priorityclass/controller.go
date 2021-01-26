@@ -70,7 +70,7 @@ func NewPriorityClassController(config *config.SyncerConfiguration,
 		informer: informer.Scheduling().V1(),
 	}
 
-	multiClusterPriorityClassController, err := mc.NewMCController(&v1.PriorityClass{}, c,
+	multiClusterPriorityClassController, err := mc.NewMCController(&v1.PriorityClass{}, &v1.PriorityClassList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create priorityClass mc controller: %v", err)

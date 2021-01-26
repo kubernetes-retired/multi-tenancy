@@ -65,7 +65,7 @@ func NewIngressController(config *config.SyncerConfiguration,
 		ingressClient: client.ExtensionsV1beta1(),
 	}
 
-	multiClusterIngressController, err := mc.NewMCController(&v1beta1.Ingress{}, c,
+	multiClusterIngressController, err := mc.NewMCController(&v1beta1.Ingress{}, &v1beta1.IngressList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create ingress mc controller: %v", err)

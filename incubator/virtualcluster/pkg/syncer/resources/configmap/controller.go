@@ -62,7 +62,7 @@ func NewConfigMapController(config *config.SyncerConfiguration,
 		configMapClient: client.CoreV1(),
 	}
 
-	multiClusterConfigMapController, err := mc.NewMCController(&v1.ConfigMap{}, c,
+	multiClusterConfigMapController, err := mc.NewMCController(&v1.ConfigMap{}, &v1.ConfigMapList{}, c,
 		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create configMap mc controller: %v", err)
