@@ -1,0 +1,9 @@
+id: MTB-PL1-BC-NI-1
+title: Default deny network connections across tenants
+benchmarkType: Behavioral
+category:  Network Isolation
+description: By default, Kubernetes allows network connections across all pods and services in the same cluster. In a multi-tenant configuration a tenant should not be allowed to connect to pods and services belonging to another tenant, unless the connections are explicitly allowed.
+rationale: Tenants should have explicit control over ingress connections for their workloads.
+audit: Create a pod in a tenant namespace. Then create services which export ranges of ports. Connections to these services from other tenants should fail.
+profileLevel: 2
+namespaceRequired: 2
