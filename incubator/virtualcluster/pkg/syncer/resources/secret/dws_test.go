@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
-func superSecret(vcName, name, namespace, uid, clusterKey string, secretType v1.SecretType) *v1.Secret {
+func superSecret(vcName, vcNamespace, name, namespace, uid, clusterKey string, secretType v1.SecretType) *v1.Secret {
 	secret := &v1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -46,7 +46,8 @@ func superSecret(vcName, name, namespace, uid, clusterKey string, secretType v1.
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				constants.LabelVCName: vcName,
+				constants.LabelVCName:      vcName,
+				constants.LabelVCNamespace: vcNamespace,
 			},
 			Annotations: map[string]string{
 				constants.LabelUID:             uid,
@@ -54,6 +55,7 @@ func superSecret(vcName, name, namespace, uid, clusterKey string, secretType v1.
 				constants.LabelNamespace:       "default",
 				constants.LabelOwnerReferences: "null",
 				constants.LabelVCName:          vcName,
+				constants.LabelVCNamespace:     vcNamespace,
 			},
 		},
 		Type: secretType,
@@ -62,7 +64,7 @@ func superSecret(vcName, name, namespace, uid, clusterKey string, secretType v1.
 	return secret
 }
 
-func superServiceAccountSecret(vcName, name, namespace, uid, clusterKey string) *v1.Secret {
+func superServiceAccountSecret(vcName, vcNamespace, name, namespace, uid, clusterKey string) *v1.Secret {
 	return &v1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -79,10 +81,12 @@ func superServiceAccountSecret(vcName, name, namespace, uid, clusterKey string) 
 				constants.LabelOwnerReferences: "null",
 				constants.LabelSecretName:      name,
 				constants.LabelVCName:          vcName,
+				constants.LabelVCNamespace:     vcNamespace,
 			},
 			Labels: map[string]string{
-				constants.LabelSecretUID: uid,
-				constants.LabelVCName:    vcName,
+				constants.LabelSecretUID:   uid,
+				constants.LabelVCName:      vcName,
+				constants.LabelVCNamespace: vcNamespace,
 			},
 		},
 		Type: v1.SecretTypeOpaque,
@@ -118,7 +122,7 @@ func TestDWSecretCreation(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-	defaultVCName := testTenant.Name
+	defaultVCName, defaultVCNamespace := testTenant.Name, testTenant.Namespace
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -133,12 +137,12 @@ func TestDWSecretCreation(t *testing.T) {
 				tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 		},
 		"new secret but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
@@ -147,7 +151,7 @@ func TestDWSecretCreation(t *testing.T) {
 		},
 		"new secret but exists different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "123456", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "123456", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
@@ -156,7 +160,7 @@ func TestDWSecretCreation(t *testing.T) {
 		},
 		"new secret but conflict with generated sa opaque secret": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyGeneratedNameToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "123456", defaultClusterKey), "normal-token-1"),
+				applyGeneratedNameToSecret(superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "123456", defaultClusterKey), "normal-token-1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("normal-token-1", "default", "12345", v1.SecretTypeOpaque),
@@ -168,23 +172,23 @@ func TestDWSecretCreation(t *testing.T) {
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 		},
 		"new service account secret when token controller created one exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeServiceAccountToken),
+				superSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeServiceAccountToken),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 		},
 		"new service account secret but already exists": {
 			ExistingObjectInSuper: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
@@ -193,13 +197,13 @@ func TestDWSecretCreation(t *testing.T) {
 		},
 		"new service account secret but exists different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "123456", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "123456", defaultClusterKey),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			},
 			ExpectedCreatedPObject: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 		},
 	}
@@ -267,7 +271,7 @@ func TestDWSecretDeletion(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-	defaultVCName := testTenant.Name
+	defaultVCName, defaultVCNamespace := testTenant.Name, testTenant.Namespace
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -280,7 +284,7 @@ func TestDWSecretDeletion(t *testing.T) {
 	}{
 		"delete secret": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			EnqueueObject:          tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
 			ExpectedDeletedPObject: []string{superDefaultNSName + "/normal-secret"},
@@ -291,7 +295,7 @@ func TestDWSecretDeletion(t *testing.T) {
 		},
 		"delete secret but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superSecret(defaultVCName, "normal-secret", superDefaultNSName, "123456", defaultClusterKey, v1.SecretTypeOpaque),
+				superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "123456", defaultClusterKey, v1.SecretTypeOpaque),
 			},
 			EnqueueObject: tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque),
 			ExpectedError: "delegated UID is different",
@@ -360,7 +364,7 @@ func TestDWServiceAccountSecretDeletion(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-	defaultVCName := testTenant.Name
+	defaultVCName, defaultVCNamespace := testTenant.Name, testTenant.Namespace
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -373,7 +377,7 @@ func TestDWServiceAccountSecretDeletion(t *testing.T) {
 	}{
 		"delete service account secret": {
 			ExistingObjectInSuper: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey),
 			},
 			EnqueueObject:             tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			ExpectedDeletedCollection: []string{constants.LabelSecretUID + "=12345"},
@@ -384,7 +388,7 @@ func TestDWServiceAccountSecretDeletion(t *testing.T) {
 		},
 		"delete service account secret but existing different one": {
 			ExistingObjectInSuper: []runtime.Object{
-				superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "123456", defaultClusterKey),
+				superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "123456", defaultClusterKey),
 			},
 			EnqueueObject:       tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken),
 			ExpectedNoOperation: true,
@@ -460,7 +464,7 @@ func TestDWSecretUpdate(t *testing.T) {
 	}
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
-	defaultVCName := testTenant.Name
+	defaultVCName, defaultVCNamespace := testTenant.Name, testTenant.Namespace
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
 
 	testcases := map[string]struct {
@@ -472,7 +476,7 @@ func TestDWSecretUpdate(t *testing.T) {
 	}{
 		"secret no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
+				applyDataToSecret(superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque), "data1"),
@@ -481,18 +485,18 @@ func TestDWSecretUpdate(t *testing.T) {
 		},
 		"secret diff in data": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
+				applyDataToSecret(superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("normal-secret", "default", "12345", v1.SecretTypeOpaque), "data2"),
 			},
 			ExpectedUpdatedPObject: []runtime.Object{
-				applyDataToSecret(superSecret(defaultVCName, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data2"),
+				applyDataToSecret(superSecret(defaultVCName, defaultVCNamespace, "normal-secret", superDefaultNSName, "12345", defaultClusterKey, v1.SecretTypeOpaque), "data2"),
 			},
 		},
 		"service account secret no diff": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
+				applyDataToSecret(superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken), "data1"),
@@ -501,13 +505,13 @@ func TestDWSecretUpdate(t *testing.T) {
 		},
 		"service account secret diff in data": {
 			ExistingObjectInSuper: []runtime.Object{
-				applyDataToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
+				applyDataToSecret(superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data1"),
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				applyDataToSecret(tenantSecret("sa-secret", "default", "12345", v1.SecretTypeServiceAccountToken), "data2"),
 			},
 			ExpectedUpdatedPObject: []runtime.Object{
-				applyDataToSecret(superServiceAccountSecret(defaultVCName, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data2"),
+				applyDataToSecret(superServiceAccountSecret(defaultVCName, defaultVCNamespace, "sa-secret", superDefaultNSName, "12345", defaultClusterKey), "data2"),
 			},
 		},
 	}
