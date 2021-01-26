@@ -24,6 +24,7 @@ var Listeners []ClusterChangeListener
 
 type ClusterChangeListener interface {
 	AddCluster(cluster mc.ClusterInterface)
+	WatchCluster(cluster mc.ClusterInterface)
 	RemoveCluster(cluster mc.ClusterInterface)
 }
 

@@ -33,14 +33,22 @@ func NewMCControllerListener(c *mc.MultiClusterController) ClusterChangeListener
 }
 
 func (m MCControllerListener) AddCluster(cluster mc.ClusterInterface) {
-	klog.Infof("%s watch cluster %s for %s resource", m.c.GetControllerName(), cluster.GetClusterName(), m.c.GetObjectKind())
-	err := m.c.WatchClusterResource(cluster, mc.WatchOptions{})
+	klog.Infof("%s add cluster %s for %s resource", m.c.GetControllerName(), cluster.GetClusterName(), m.c.GetObjectKind())
+	err := m.c.RegisterClusterResource(cluster, mc.WatchOptions{})
 	if err != nil {
-		klog.Errorf("failed to watch cluster %s %s event: %v", cluster.GetClusterName(), m.c.GetObjectKind(), err)
+		klog.Errorf("failed to add cluster %s %s event: %v", cluster.GetClusterName(), m.c.GetObjectKind(), err)
 	}
 }
 
 func (m MCControllerListener) RemoveCluster(cluster mc.ClusterInterface) {
 	klog.Infof("%s stop watching cluster %s for %s resource", m.c.GetControllerName(), cluster.GetClusterName(), m.c.GetObjectKind())
 	m.c.TeardownClusterResource(cluster)
+}
+
+func (m MCControllerListener) WatchCluster(cluster mc.ClusterInterface) {
+	klog.Infof("%s watch cluster %s for %s resource", m.c.GetControllerName(), cluster.GetClusterName(), m.c.GetObjectKind())
+	err := m.c.WatchClusterResource(cluster, mc.WatchOptions{})
+	if err != nil {
+		klog.Errorf("failed to watch cluster %s %s event: %v", cluster.GetClusterName(), m.c.GetObjectKind(), err)
+	}
 }

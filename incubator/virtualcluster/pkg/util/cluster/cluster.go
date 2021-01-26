@@ -268,6 +268,22 @@ func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocac
 	return nil
 }
 
+// GetInformer fetches or constructs an informer for the given object that corresponds to a single
+// API kind and resource.
+func (c *Cluster) GetInformer(objectType runtime.Object) (cache.Informer, error) {
+	ca, err := c.getCache()
+	if err != nil {
+		return nil, err
+	}
+
+	i, err := ca.GetInformer(context.TODO(), objectType)
+	if err != nil {
+		return nil, err
+	}
+
+	return i, nil
+}
+
 // Start starts the Cluster's cache and blocks,
 // until an empty struct is sent to the stop channel.
 func (c *Cluster) Start() error {
