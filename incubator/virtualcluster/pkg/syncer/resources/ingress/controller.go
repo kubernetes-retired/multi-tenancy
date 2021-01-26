@@ -26,7 +26,6 @@ import (
 	v1beta1extensions "k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
 	listersv1beta1 "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog"
 
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -36,6 +35,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
@@ -160,15 +160,6 @@ func (c *controller) enqueueIngress(obj interface{}) {
 	c.upwardIngressController.AddToQueue(key)
 }
 
-func (c *controller) AddCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-ingress-controller watch cluster %s for ingress resource", cluster.GetClusterName())
-	err := c.multiClusterIngressController.WatchClusterResource(cluster, mc.WatchOptions{})
-	if err != nil {
-		klog.Errorf("failed to watch cluster %s ingress event: %v", cluster.GetClusterName(), err)
-	}
-}
-
-func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-ingress-controller stop watching cluster %s for ingress resource", cluster.GetClusterName())
-	c.multiClusterIngressController.TeardownClusterResource(cluster)
+func (c *controller) GetListener() listener.ClusterChangeListener {
+	return listener.NewMCControllerListener(c.multiClusterIngressController)
 }

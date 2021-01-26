@@ -195,6 +195,16 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 	}
 }
 
+// GetControllerName get the mccontroller name, is used to uniquely identify the Controller in tracing, logging and monitoring.
+func (c *MultiClusterController) GetControllerName() string {
+	return c.name
+}
+
+// GetObjectKind is the objectKind name this controller watch to.
+func (c *MultiClusterController) GetObjectKind() string {
+	return c.objectKind
+}
+
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
 	cluster := c.getCluster(clusterName)

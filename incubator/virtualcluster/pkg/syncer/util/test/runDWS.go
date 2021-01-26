@@ -128,8 +128,8 @@ func RunDownwardSync(
 	fakeRc.SetResourceSyncer(resourceSyncer)
 
 	// register tenant cluster to controller.
-	resourceSyncer.AddCluster(tenantCluster)
-	defer resourceSyncer.RemoveCluster(tenantCluster)
+	resourceSyncer.GetListener().AddCluster(tenantCluster)
+	defer resourceSyncer.GetListener().RemoveCluster(tenantCluster)
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
