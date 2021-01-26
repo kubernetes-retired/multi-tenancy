@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vc-scheduler
+  namespace: vc-manager
+  labels:
+    app: vc-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-scheduler
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: vc-scheduler
+    spec:
+      serviceAccountName: vc-scheduler
+      containers:
+        - command:
+            - scheduler
+          image: virtualcluster/scheduler-amd64
+          imagePullPolicy: Always
+          name: vc-scheduler
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vc-scheduler-role
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - secrets
+    - configmaps
+  verbs:
+    - get
+    - list
+    - create
+    - update  
+- apiGroups:
+    - ""
+    - storage.k8s.io
+  resources:
+    - events
+  verbs:
+    - create
+    - patch
+- apiGroups:
+    - tenancy.x-k8s.io
+  resources:
+    - virtualclusters
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - tenancy.x-k8s.io
+  resources:
+    - virtualclusters/status
+  verbs:
+    - get
+- apiGroups:
+    - cluster.x-k8s.io
+  resources:
+    - clusters
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - cluster.x-k8s.io
+  resources:
+    - clusters/status
+  verbs:
+    - get
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vc-scheduler-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vc-scheduler-role
+subjects:
+  - kind: ServiceAccount
+    name: vc-scheduler
+    namespace: vc-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-scheduler
+  namespace: vc-manager

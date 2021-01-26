@@ -23,6 +23,11 @@ import (
 )
 
 const (
+	SuperClusterInfoCfgMap = "supercluster-info"
+	SuperClusterIDKey      = "id"
+)
+
+const (
 	// LabelScheduledCluster is the super cluster the pod schedules to.
 	LabelScheduledCluster = "scheduler.tenancy.x-k8s.io/superCluster"
 

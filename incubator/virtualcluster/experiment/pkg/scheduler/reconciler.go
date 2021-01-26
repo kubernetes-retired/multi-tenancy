@@ -17,11 +17,13 @@ limitations under the License.
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
@@ -31,8 +33,10 @@ import (
 	superListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/listers/cluster/v1alpha4"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/cluster"
+	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
@@ -280,13 +284,29 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 
 	clusterName := fmt.Sprintf("%s/%s", super.Namespace, super.Name)
 
-	// TODO: get kubeConfig following CAPI standard.
-	var adminKubeConfigBytes []byte
+	// we assume the super cluster kubeconfig is saved in a secret with the same name of the cluster CR in the same namespace.
+	// this may change in the future
+	adminKubeConfigSecret, err := s.metaClusterClient.CoreV1().Secrets(super.Namespace).Get(context.TODO(), super.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get secret (%s) for super cluster in namespace %s: %v", super.Name, super.Namespace, err)
+	}
+	adminKubeConfigBytes := adminKubeConfigSecret.Data[constants.KubeconfigAdminSecretName]
 
 	superCluster, err := cluster.NewCluster(clusterName, super.Namespace, super.Name, string(super.UID), &superclusterGetter{lister: s.superClusterLister}, adminKubeConfigBytes, cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new super cluster %s/%s: %v", super.Namespace, super.Name, err)
 	}
+	// the super cluster should have the id configmap in kube-system
+	cs, _ := superCluster.GetClientSet()
+	cfg, err := cs.CoreV1().ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get super cluster info configmap in kube-system")
+	}
+	id, ok := cfg.Data[utilconst.SuperClusterIDKey]
+	if !ok {
+		return fmt.Errorf("failed to get super cluster id from the supercluster-info configmap in kube-system")
+	}
+	klog.Infof("supercluster %s's ID is found: %v", key, id)
 
 	// for each resource type of the newly added VirtualCluster, we add a listener
 	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
