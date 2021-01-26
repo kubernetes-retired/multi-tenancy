@@ -18,6 +18,8 @@ package mccontroller
 
 import (
 	v1 "k8s.io/api/core/v1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -86,6 +88,10 @@ func getTargetObj(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolume{}
 	case *v1.Endpoints:
 		return &v1.Endpoints{}
+	case *schedulingv1.PriorityClass:
+		return &schedulingv1.PriorityClass{}
+	case *extensionsv1beta1.Ingress:
+		return &extensionsv1beta1.Ingress{}
 	default:
 		return nil
 	}
@@ -117,6 +123,10 @@ func getTargetObjList(objectType runtime.Object) runtime.Object {
 		return &v1.PersistentVolumeList{}
 	case *v1.Endpoints:
 		return &v1.EndpointsList{}
+	case *schedulingv1.PriorityClass:
+		return &schedulingv1.PriorityClassList{}
+	case *extensionsv1beta1.Ingress:
+		return &extensionsv1beta1.IngressList{}
 	default:
 		return nil
 	}
