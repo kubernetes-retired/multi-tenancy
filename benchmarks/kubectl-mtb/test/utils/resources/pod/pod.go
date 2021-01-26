@@ -28,7 +28,6 @@ type PodSpec struct {
 	Ports                    []v1.ContainerPort `default:"-"`
 	AllowPrivilegeEscalation bool               `default:"-"`
 	ImagePullPolicy          v1.PullPolicy      `default:"Always"`
-	Name                     string             `default:""`
 }
 
 // SetDefaults usage := https://github.com/creasty/defaults#usage
@@ -44,12 +43,6 @@ func (p PodSpec) MakeSecPod() *v1.Pod {
 	if len(p.Command) == 0 {
 		p.Command = "trap exit TERM; while true; do sleep 1; done"
 	}
-	var podName string
-	if p.Name == "" {
-		podName = "security-context-" + string(uuid.NewUUID())
-	} else {
-		podName = p.Name
-	}
 	if p.fsGroup == nil {
 		p.fsGroup = func(i int64) *int64 {
 			return &i
@@ -61,7 +54,7 @@ func (p PodSpec) MakeSecPod() *v1.Pod {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
+			Name:      "security-context-" + string(uuid.NewUUID()),
 			Namespace: p.NS,
 		},
 		Spec: v1.PodSpec{

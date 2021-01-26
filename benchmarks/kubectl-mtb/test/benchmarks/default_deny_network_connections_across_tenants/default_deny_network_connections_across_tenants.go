@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	podutil "k8s.io/kubernetes/test/e2e/framework/pod"
-	imageutils "k8s.io/kubernetes/test/utils/image"
 	"os"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils"
-	podspecutil "sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test/utils/resources/pod"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/types"
 	"time"
 
@@ -21,6 +20,50 @@ import (
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/test"
 )
 
+
+func makeSecPod(imageName string, namespace string, podName string) *v1.Pod {
+	var runAsNonRoot = false
+	var runAsUser = int64(1000)
+	return &v1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: namespace,
+			Labels:    map[string]string{"run": "my-nginx"},
+		},
+		Spec: v1.PodSpec{
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsNonRoot: &runAsNonRoot,
+				RunAsUser: &runAsUser,
+			},
+			Containers: []v1.Container{
+				{
+					Name:  podName,
+					ImagePullPolicy: "Always",
+					Image: "nginxinc/nginx-unprivileged",
+					Resources: v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							"cpu":    resource.MustParse("0m"),
+							"memory": resource.MustParse("0Gi"),
+						},
+						Requests: v1.ResourceList{
+							"cpu":    resource.MustParse("0m"),
+							"memory": resource.MustParse("0Gi"),
+						},
+					},
+					SecurityContext: &v1.SecurityContext{
+						RunAsNonRoot: &runAsNonRoot,
+						RunAsUser: &runAsUser,
+					},
+				},
+			},
+			RestartPolicy: v1.RestartPolicyAlways,
+		},
+	}
+}
 
 var b = &benchmark.Benchmark{
 
@@ -54,27 +97,7 @@ var b = &benchmark.Benchmark{
 		return nil
 	},
 	Run: func(options types.RunOptions) error {
-		pod := &v1.Pod{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Pod",
-				APIVersion: "v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "nginx-test",
-				Namespace: options.TenantNamespace,
-				Labels:    map[string]string{"run": "my-nginx"},
-			},
-			Spec: v1.PodSpec{
-				Containers: []v1.Container{
-					{
-						Name:  "nginx-test",
-						ImagePullPolicy: "Always",
-						Image: imageutils.GetE2EImage(imageutils.Nginx),
-					},
-				},
-				RestartPolicy: v1.RestartPolicyAlways,
-			},
-		}
+		pod := makeSecPod("nginxinc/nginx-unprivileged", options.TenantNamespace, "nginx-test")
 		_, err := options.Tenant1Client.CoreV1().Pods(options.TenantNamespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 		if err != nil {
 			return err
@@ -93,16 +116,10 @@ var b = &benchmark.Benchmark{
 
 		nginxPodIp := nginxPod.Status.PodIP
 
-		podSpec := &podspecutil.PodSpec{NS: options.OtherNamespace, RunAsNonRoot: false, Name: "busy-box"}
-		err = podSpec.SetDefaults()
-		if err != nil {
-			options.Logger.Debug(err.Error())
-			return err
-		}
+		busyBoxPod := makeSecPod("joeshaw/busybox-nonroot", options.OtherNamespace, "busy-box")
 
 		// Try to create a pod as tenant-admin impersonation
-		podBusyBox := podSpec.MakeSecPod()
-		_, err = options.Tenant2Client.CoreV1().Pods(options.OtherNamespace).Create(context.TODO(), podBusyBox, metav1.CreateOptions{})
+		_, err = options.Tenant2Client.CoreV1().Pods(options.OtherNamespace).Create(context.TODO(), busyBoxPod, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -113,7 +130,7 @@ var b = &benchmark.Benchmark{
 			}
 		}
 
-		cmd := []string{"wget", "--timeout=5", nginxPodIp + ":" + "80"}
+		cmd := []string{"curl", "--connect-timeout",  "5", nginxPodIp + ":" + "8080"}
 		req := options.ClusterAdminClient.CoreV1().RESTClient().Post().Resource("pods").Name("busy-box").
 			Namespace(options.OtherNamespace).SubResource("exec")
 		option := &v1.PodExecOptions{
