@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
 	clientgocache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -70,6 +71,10 @@ func (c *fakeCluster) GetDelegatingClient() (client.Client, error) {
 func (c *fakeCluster) AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error {
 	// do nothing. we manually enqueue event in test.
 	return nil
+}
+
+func (c *fakeCluster) GetInformer(objectType runtime.Object) (cache.Informer, error) {
+	return nil, nil
 }
 
 func (c *fakeCluster) Start() error {

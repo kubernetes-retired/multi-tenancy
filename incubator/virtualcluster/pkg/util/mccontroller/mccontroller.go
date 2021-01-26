@@ -38,6 +38,7 @@ import (
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
@@ -103,6 +104,7 @@ type ClusterInterface interface {
 	GetOwnerInfo() (string, string, string)
 	GetObject() (runtime.Object, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
+	GetInformer(objectType runtime.Object) (cache.Informer, error)
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
 	Cache
@@ -157,6 +159,23 @@ type WatchOptions struct {
 func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, o WatchOptions) error {
 	c.Lock()
 	defer c.Unlock()
+	if _, exist := c.clusters[cluster.GetClusterName()]; !exist {
+		return fmt.Errorf("please register cluster %s resource before watch", cluster.GetClusterName())
+	}
+
+	if c.objectType == nil {
+		return nil
+	}
+
+	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue}
+	return cluster.AddEventHandler(c.objectType, h)
+}
+
+// RegisterClusterResource get the informer *before* trying to wait for the
+// caches to sync so that we have a chance to register their intended caches.
+func (c *MultiClusterController) RegisterClusterResource(cluster ClusterInterface, o WatchOptions) error {
+	c.Lock()
+	defer c.Unlock()
 	if _, exist := c.clusters[cluster.GetClusterName()]; exist {
 		return nil
 	}
@@ -166,8 +185,8 @@ func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, 
 		return nil
 	}
 
-	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue}
-	return cluster.AddEventHandler(c.objectType, h)
+	_, err := cluster.GetInformer(c.objectType)
+	return err
 }
 
 // TeardownClusterResource forget the cluster it watches.

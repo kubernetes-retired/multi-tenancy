@@ -326,7 +326,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
 
-	// for each resource type of the newly added VirtualCluster, we add a listener
+	// for each resource type of the newly added VirtualCluster, we add the object to informer cache.
 	for _, clusterChangeListener := range listener.Listeners {
 		clusterChangeListener.AddCluster(tenantCluster)
 	}
@@ -361,6 +361,12 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluste
 		return
 	}
 	cluster.SetSynced()
+	klog.Infof("cluster %s cache sync done", cluster.GetClusterName())
+
+	// start watching cluster resource event after cache sync done.
+	for _, clusterChangeListener := range listener.Listeners {
+		clusterChangeListener.WatchCluster(cluster)
+	}
 }
 
 func (s *Syncer) healthPatrol() {
