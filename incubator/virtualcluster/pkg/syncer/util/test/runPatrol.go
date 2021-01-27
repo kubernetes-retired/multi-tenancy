@@ -69,6 +69,7 @@ func RunPatrol(
 	waitUWS bool,
 	controllerStateModifyFunc controllerStateModifier,
 ) ([]core.Action, []core.Action, error) {
+	registerDefaultScheme()
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
 	tenantClient := fakeClient.NewFakeClient()
@@ -155,7 +156,7 @@ func RunPatrol(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer, each)
+		informer := superInformer.InformerFor(each, nil)
 		informer.GetStore().Add(each)
 	}
 	go resourceSyncer.StartDWS(stopCh)
