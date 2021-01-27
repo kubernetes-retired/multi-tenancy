@@ -55,38 +55,26 @@ func NewPVCController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:    config,
 		pvcClient: client.CoreV1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterPersistentVolumeClaimController, err := mc.NewMCController("tenant-masters-pvc-controller", &v1.PersistentVolumeClaim{}, *mcOptions)
+	multiClusterPersistentVolumeClaimController, err := mc.NewMCController(&v1.PersistentVolumeClaim{}, &v1.PersistentVolumeClaimList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolumeClaim mc controller: %v", err)
 	}
 	c.multiClusterPersistentVolumeClaimController = multiClusterPersistentVolumeClaimController
 	c.pvcLister = informer.Core().V1().PersistentVolumeClaims().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.pvcSynced = func() bool { return true }
 	} else {
 		c.pvcSynced = informer.Core().V1().PersistentVolumeClaims().Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	persistentVolumeClaimPatroller, err := pa.NewPatroller("pvc-patroller", &v1.PersistentVolumeClaim{}, *patrolOptions)
+	persistentVolumeClaimPatroller, err := pa.NewPatroller(&v1.PersistentVolumeClaim{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolumeClaim patroller: %v", err)
 	}

@@ -59,51 +59,34 @@ func NewIngressController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:        config,
 		ingressClient: client.ExtensionsV1beta1(),
 	}
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterIngressController, err := mc.NewMCController("tenant-masters-ingress-controller", &v1beta1.Ingress{}, *mcOptions)
+
+	multiClusterIngressController, err := mc.NewMCController(&v1beta1.Ingress{}, &v1beta1.IngressList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create ingress mc controller: %v", err)
 	}
 	c.multiClusterIngressController = multiClusterIngressController
 
 	c.ingressLister = informer.Extensions().V1beta1().Ingresses().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.ingressSynced = func() bool { return true }
 	} else {
 		c.ingressSynced = informer.Extensions().V1beta1().Ingresses().Informer().HasSynced
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	upwardIngressController, err := uw.NewUWController("ingress-upward-controller", &v1beta1.Ingress{}, *uwOptions)
+	upwardIngressController, err := uw.NewUWController(&v1beta1.Ingress{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create ingress upward controller: %v", err)
 	}
 	c.upwardIngressController = upwardIngressController
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	ingressPatroller, err := pa.NewPatroller("ingress-patroller", &v1beta1.Ingress{}, *patrolOptions)
+	ingressPatroller, err := pa.NewPatroller(&v1beta1.Ingress{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create ingress patroller: %v", err)
 	}

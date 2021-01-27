@@ -21,10 +21,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
-	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 )
 
 func TestIngressPatrol(t *testing.T) {
@@ -99,6 +100,7 @@ func TestIngressPatrol(t *testing.T) {
 		},
 	}
 
+	utilscheme.Scheme.AddKnownTypePair(&v1beta1.Ingress{}, &v1beta1.IngressList{})
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
 			tenantActions, superActions, err := util.RunPatrol(NewIngressController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, nil, tc.WaitDWS, tc.WaitUWS, nil)

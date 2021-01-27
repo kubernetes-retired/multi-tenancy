@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 )
 
 func tenantIngress(name, namespace, uid string) *v1beta1.Ingress {
@@ -107,6 +108,7 @@ func TestDWIngressCreation(t *testing.T) {
 		},
 	}
 
+	utilscheme.Scheme.AddKnownTypePair(&v1beta1.Ingress{}, &v1beta1.IngressList{})
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
 			actions, reconcileErr, err := util.RunDownwardSync(NewIngressController,

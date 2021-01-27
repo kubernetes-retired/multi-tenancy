@@ -76,7 +76,7 @@ type ResourceSyncerNew func(*config.SyncerConfiguration,
 	clientset.Interface,
 	informers.SharedInformerFactory,
 	vcclient.Interface,
-	vcinformers.VirtualClusterInformer, *ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+	vcinformers.VirtualClusterInformer, ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
 // Start gets all the unique caches of the controllers it manages, starts them,
 // then starts the controllers as soon as their respective caches are synced.

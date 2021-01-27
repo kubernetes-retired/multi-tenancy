@@ -63,20 +63,15 @@ func NewPVController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:   config,
 		client:   client.CoreV1(),
 		informer: informer.Core().V1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	multiClusterPersistentVolumeController, err := mc.NewMCController("tenant-masters-pv-controller", &v1.PersistentVolume{}, *mcOptions)
+	multiClusterPersistentVolumeController, err := mc.NewMCController(&v1.PersistentVolume{}, &v1.PersistentVolumeList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume mc controller: %v", err)
 	}
@@ -84,7 +79,7 @@ func NewPVController(config *config.SyncerConfiguration,
 	c.pvLister = c.informer.PersistentVolumes().Lister()
 	c.pvcLister = c.informer.PersistentVolumeClaims().Lister()
 
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.pvSynced = func() bool { return true }
 		c.pvcSynced = func() bool { return true }
 	} else {
@@ -92,26 +87,14 @@ func NewPVController(config *config.SyncerConfiguration,
 		c.pvcSynced = c.informer.PersistentVolumeClaims().Informer().HasSynced
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	upwardPersistentVolumeController, err := uw.NewUWController("pv-upward-controller", &v1.PersistentVolume{}, *uwOptions)
+	upwardPersistentVolumeController, err := uw.NewUWController(&v1.PersistentVolume{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume upward controller: %v", err)
 	}
 	c.upwardPersistentVolumeController = upwardPersistentVolumeController
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	persistentVolumePatroller, err := pa.NewPatroller("persistentVolume-patroller", &v1.PersistentVolume{}, *patrolOptions)
+	persistentVolumePatroller, err := pa.NewPatroller(&v1.PersistentVolume{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume patroller: %v", err)
 	}

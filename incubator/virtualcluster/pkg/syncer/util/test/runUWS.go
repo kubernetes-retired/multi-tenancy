@@ -62,6 +62,7 @@ func RunUpwardSync(
 	enqueueKey string,
 	controllerStateModifyFunc controllerStateModifier,
 ) (actions []core.Action, reconcileError error, err error) {
+	registerDefaultScheme()
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
 	tenantClient := fakeClient.NewFakeClient()
@@ -87,7 +88,7 @@ func RunUpwardSync(
 	syncErr := make(chan error)
 	defer close(syncErr)
 	fakeRc := &fakeUWReconciler{errCh: syncErr}
-	rsOptions := &manager.ResourceSyncerOptions{
+	rsOptions := manager.ResourceSyncerOptions{
 		UWOptions: &uw.Options{Reconciler: fakeRc},
 		IsFake:    true,
 	}
@@ -123,7 +124,7 @@ func RunUpwardSync(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer, each)
+		informer := superInformer.InformerFor(each, nil)
 		informer.GetStore().Add(each)
 	}
 

@@ -21,14 +21,11 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	extensionsV1beta1 "k8s.io/api/extensions/v1beta1"
-	schedulingV1 "k8s.io/api/scheduling/v1"
 	storageV1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	cache "k8s.io/client-go/tools/cache"
 	fakeClient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -37,6 +34,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/cluster"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
@@ -74,6 +72,7 @@ func RunDownwardSync(
 	enqueueObject runtime.Object,
 	clientSetMutator FakeClientSetMutator,
 ) (actions []core.Action, reconcileError error, err error) {
+	registerDefaultScheme()
 	// setup fake tenant cluster
 	tenantClientset := fake.NewSimpleClientset()
 	tenantClient := fakeClient.NewFakeClient()
@@ -107,7 +106,7 @@ func RunDownwardSync(
 	syncErr := make(chan error)
 	defer close(syncErr)
 	fakeRc := &fakeReconciler{errCh: syncErr}
-	rsOptions := &manager.ResourceSyncerOptions{
+	rsOptions := manager.ResourceSyncerOptions{
 		MCOptions: &mc.Options{Reconciler: fakeRc},
 		IsFake:    true,
 	}
@@ -138,7 +137,7 @@ func RunDownwardSync(
 
 	// add object to super informer.
 	for _, each := range existingObjectInSuper {
-		informer := getObjectInformer(superInformer, each)
+		informer := superInformer.InformerFor(each, nil)
 		informer.GetStore().Add(each)
 	}
 
@@ -157,37 +156,17 @@ func RunDownwardSync(
 	return superClient.Actions(), reconcileError, nil
 }
 
-func getObjectInformer(informer informers.SharedInformerFactory, obj runtime.Object) cache.SharedIndexInformer {
-	switch obj.(type) {
-	case *v1.Namespace:
-		return informer.Core().V1().Namespaces().Informer()
-	case *v1.Service:
-		return informer.Core().V1().Services().Informer()
-	case *v1.Pod:
-		return informer.Core().V1().Pods().Informer()
-	case *v1.ServiceAccount:
-		return informer.Core().V1().ServiceAccounts().Informer()
-	case *v1.Secret:
-		return informer.Core().V1().Secrets().Informer()
-	case *v1.Node:
-		return informer.Core().V1().Nodes().Informer()
-	case *v1.PersistentVolume:
-		return informer.Core().V1().PersistentVolumes().Informer()
-	case *v1.PersistentVolumeClaim:
-		return informer.Core().V1().PersistentVolumeClaims().Informer()
-	case *v1.ConfigMap:
-		return informer.Core().V1().ConfigMaps().Informer()
-	case *v1.Endpoints:
-		return informer.Core().V1().Endpoints().Informer()
-	case *v1.Event:
-		return informer.Core().V1().Events().Informer()
-	case *storageV1.StorageClass:
-		return informer.Storage().V1().StorageClasses().Informer()
-	case *schedulingV1.PriorityClass:
-		return informer.Scheduling().V1().PriorityClasses().Informer()
-	case *extensionsV1beta1.Ingress:
-		return informer.Extensions().V1beta1().Ingresses().Informer()
-	default:
-		return nil
-	}
+func registerDefaultScheme() {
+	utilscheme.Scheme.AddKnownTypePair(&v1.Namespace{}, &v1.NamespaceList{},
+		&v1.Service{}, &v1.ServiceList{},
+		&v1.Pod{}, &v1.PodList{},
+		&v1.ServiceAccount{}, &v1.ServiceAccountList{},
+		&v1.Secret{}, &v1.SecretList{},
+		&v1.Node{}, &v1.NodeList{},
+		&v1.PersistentVolume{}, &v1.PersistentVolumeList{},
+		&v1.PersistentVolumeClaim{}, &v1.PersistentVolumeClaimList{},
+		&v1.ConfigMap{}, &v1.ConfigMapList{},
+		&v1.Endpoints{}, &v1.EndpointsList{},
+		&v1.Event{}, &v1.EventList{},
+		&storageV1.StorageClass{}, &storageV1.StorageClassList{})
 }

@@ -21,13 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
-	schedulingv1 "k8s.io/api/scheduling/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,6 +41,7 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
@@ -57,8 +56,6 @@ import (
 // MultiClusterController saves all watched tenant clusters in a set.
 type MultiClusterController struct {
 	sync.Mutex
-	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
-	name string
 
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
@@ -84,6 +81,9 @@ type Options struct {
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
+
+	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
+	name string
 }
 
 // Cache is the interface used by Controller to start and wait for caches to sync.
@@ -111,38 +111,33 @@ type ClusterInterface interface {
 }
 
 // NewMCController creates a new MultiClusterController.
-func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
-	if options.Reconciler == nil {
-		return nil, fmt.Errorf("must specify Reconciler")
-	}
-
-	if len(name) == 0 {
-		return nil, fmt.Errorf("must specify Name for Controller")
-	}
-
+func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DWReconciler, opts ...OptConfig) (*MultiClusterController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
 		return nil, fmt.Errorf("unknown object kind %+v", objectType)
 	}
 
 	c := &MultiClusterController{
-		name:       name,
 		objectType: objectType,
 		objectKind: kinds[0].Kind,
 		clusters:   make(map[string]ClusterInterface),
-		Options:    options,
+		Options: Options{
+			name:                    fmt.Sprintf("%s-mccontroller", strings.ToLower(kinds[0].Kind)),
+			JitterPeriod:            1 * time.Second,
+			MaxConcurrentReconciles: 1,
+			Reconciler:              rc,
+			Queue:                   fairqueue.NewRateLimitingFairQueue(),
+		},
 	}
 
-	if c.JitterPeriod == 0 {
-		c.JitterPeriod = 1 * time.Second
+	utilscheme.Scheme.AddKnownTypePair(objectType, objectListType)
+
+	for _, opt := range opts {
+		opt(&c.Options)
 	}
 
-	if c.MaxConcurrentReconciles <= 0 {
-		c.MaxConcurrentReconciles = 1
-	}
-
-	if c.Queue == nil {
-		c.Queue = fairqueue.NewRateLimitingFairQueue()
+	if c.Reconciler == nil {
+		return nil, fmt.Errorf("must specify DW Reconciler")
 	}
 
 	return c, nil
@@ -230,7 +225,7 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instance := getTargetObject(c.objectType)
+	instance := utilscheme.Scheme.NewObject(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
@@ -248,9 +243,9 @@ func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name st
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instance := getTargetObject(objectType)
+	instance := utilscheme.Scheme.NewObject(objectType)
 	if instance == nil {
-		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+		return nil, fmt.Errorf("the object type %v is not supported by mccontroller", objectType)
 	}
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
@@ -269,7 +264,7 @@ func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instanceList := getTargetObjectList(c.objectType)
+	instanceList := utilscheme.Scheme.NewObjectList(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
@@ -284,9 +279,9 @@ func (c *MultiClusterController) ListByObjectType(clusterName string, objectType
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instanceList := getTargetObjectList(objectType)
+	instanceList := utilscheme.Scheme.NewObjectList(objectType)
 	if instanceList == nil {
-		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+		return nil, fmt.Errorf("the object type %v is not supported by mccontroller", objectType)
 	}
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
@@ -558,74 +553,4 @@ func filterSuperClusterSchedulePod(c *MultiClusterController, req reconciler.Req
 	}
 
 	return cname != constants.SuperClusterID
-}
-
-func getTargetObject(objectType runtime.Object) runtime.Object {
-	switch objectType.(type) {
-	case *v1.ConfigMap:
-		return &v1.ConfigMap{}
-	case *v1.Namespace:
-		return &v1.Namespace{}
-	case *v1.Node:
-		return &v1.Node{}
-	case *v1.Event:
-		return &v1.Event{}
-	case *v1.Pod:
-		return &v1.Pod{}
-	case *v1.Secret:
-		return &v1.Secret{}
-	case *v1.Service:
-		return &v1.Service{}
-	case *v1.ServiceAccount:
-		return &v1.ServiceAccount{}
-	case *storagev1.StorageClass:
-		return &storagev1.StorageClass{}
-	case *v1.PersistentVolumeClaim:
-		return &v1.PersistentVolumeClaim{}
-	case *v1.PersistentVolume:
-		return &v1.PersistentVolume{}
-	case *v1.Endpoints:
-		return &v1.Endpoints{}
-	case *schedulingv1.PriorityClass:
-		return &schedulingv1.PriorityClass{}
-	case *extensionsv1beta1.Ingress:
-		return &extensionsv1beta1.Ingress{}
-	default:
-		return nil
-	}
-}
-
-func getTargetObjectList(objectType runtime.Object) runtime.Object {
-	switch objectType.(type) {
-	case *v1.ConfigMap:
-		return &v1.ConfigMapList{}
-	case *v1.Namespace:
-		return &v1.NamespaceList{}
-	case *v1.Node:
-		return &v1.NodeList{}
-	case *v1.Event:
-		return &v1.EventList{}
-	case *v1.Pod:
-		return &v1.PodList{}
-	case *v1.Secret:
-		return &v1.SecretList{}
-	case *v1.Service:
-		return &v1.ServiceList{}
-	case *v1.ServiceAccount:
-		return &v1.ServiceAccountList{}
-	case *storagev1.StorageClass:
-		return &storagev1.StorageClassList{}
-	case *v1.PersistentVolumeClaim:
-		return &v1.PersistentVolumeClaimList{}
-	case *v1.PersistentVolume:
-		return &v1.PersistentVolumeList{}
-	case *v1.Endpoints:
-		return &v1.EndpointsList{}
-	case *schedulingv1.PriorityClass:
-		return &schedulingv1.PriorityClassList{}
-	case *extensionsv1beta1.Ingress:
-		return &extensionsv1beta1.IngressList{}
-	default:
-		return nil
-	}
 }

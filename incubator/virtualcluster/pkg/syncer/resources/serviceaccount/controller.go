@@ -54,37 +54,25 @@ func NewServiceAccountController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		saClient: client.CoreV1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterServiceAccountController, err := mc.NewMCController("tenant-masters-service-account-controller", &v1.ServiceAccount{}, *mcOptions)
+	multiClusterServiceAccountController, err := mc.NewMCController(&v1.ServiceAccount{}, &v1.ServiceAccountList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create serviceAccount mc controller: %v", err)
 	}
 	c.multiClusterServiceAccountController = multiClusterServiceAccountController
 	c.saLister = informer.Core().V1().ServiceAccounts().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.saSynced = func() bool { return true }
 	} else {
 		c.saSynced = informer.Core().V1().ServiceAccounts().Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	serviceAccountPatroller, err := pa.NewPatroller("serviceAccount-patroller", &v1.ServiceAccount{}, *patrolOptions)
+	serviceAccountPatroller, err := pa.NewPatroller(&v1.ServiceAccount{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create serviceAccount patroller: %v", err)
 	}

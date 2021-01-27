@@ -62,40 +62,28 @@ func NewNodeController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		nodeNameToCluster: make(map[string]map[string]struct{}),
 		nodeClient:        client.CoreV1(),
 		vnodeProvider:     native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterNodeController, err := mc.NewMCController("tenant-masters-node-controller", &v1.Node{}, *mcOptions)
+	multiClusterNodeController, err := mc.NewMCController(&v1.Node{}, &v1.NodeList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create node mc controller: %v", err)
 	}
 	c.multiClusterNodeController = multiClusterNodeController
 	c.nodeLister = informer.Core().V1().Nodes().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.nodeSynced = func() bool { return true }
 	} else {
 		c.nodeSynced = informer.Core().V1().Nodes().Informer().HasSynced
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
-	upwardNodeController, err := uw.NewUWController("node-upward-controller", &v1.Node{}, *uwOptions)
+	upwardNodeController, err := uw.NewUWController(&v1.Node{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerHigh), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create node upward controller: %v", err)
 	}

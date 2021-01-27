@@ -63,7 +63,7 @@ func NewEventController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 
 	c := &controller{
 		client:   client.CoreV1(),
@@ -74,14 +74,8 @@ func NewEventController(config *config.SyncerConfiguration,
 		},
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterEventController, err := mc.NewMCController("tenant-masters-event-controller", &v1.Event{}, *mcOptions)
+	multiClusterEventController, err := mc.NewMCController(&v1.Event{}, &v1.EventList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create event mc controller: %v", err)
 	}
@@ -91,19 +85,13 @@ func NewEventController(config *config.SyncerConfiguration,
 	c.eventLister = c.informer.Events().Lister()
 	c.nsSynced = c.informer.Namespaces().Informer().HasSynced
 	c.eventSynced = c.informer.Events().Informer().HasSynced
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.nsSynced = func() bool { return true }
 		c.eventSynced = func() bool { return true }
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	upwardEventController, err := uw.NewUWController("event-upward-controller", &v1.Event{}, *uwOptions)
+	upwardEventController, err := uw.NewUWController(&v1.Event{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create event upward controller: %v", err)
 	}

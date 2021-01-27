@@ -55,39 +55,28 @@ func NewConfigMapController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 
 	c := &controller{
 		config:          config,
 		configMapClient: client.CoreV1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerLow
-	multiClusterConfigMapController, err := mc.NewMCController("tenant-masters-configmap-controller", &v1.ConfigMap{}, *mcOptions)
+	multiClusterConfigMapController, err := mc.NewMCController(&v1.ConfigMap{}, &v1.ConfigMapList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create configMap mc controller: %v", err)
 	}
 	c.multiClusterConfigMapController = multiClusterConfigMapController
+
 	c.configMapLister = informer.Core().V1().ConfigMaps().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.configMapSynced = func() bool { return true }
 	} else {
 		c.configMapSynced = informer.Core().V1().ConfigMaps().Informer().HasSynced
 	}
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	configMapPatroller, err := pa.NewPatroller("configMap-patroller", &v1.ConfigMap{}, *patrolOptions)
+	configMapPatroller, err := pa.NewPatroller(&v1.ConfigMap{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create configMap patroller: %v", err)
 	}
