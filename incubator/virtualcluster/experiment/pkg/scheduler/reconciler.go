@@ -184,6 +184,9 @@ func (s *Scheduler) syncVirtualClusterCache(cluster *cluster.Cluster, vc *v1alph
 		return
 	}
 	cluster.SetSynced()
+	for _, clusterChangeListener := range s.virtualClusterWatcher.GetListeners() {
+		clusterChangeListener.WatchCluster(cluster)
+	}
 }
 
 type superclusterGetter struct {
@@ -343,4 +346,7 @@ func (s *Scheduler) syncSuperClusterCache(cluster *cluster.Cluster, super *v1alp
 		return
 	}
 	cluster.SetSynced()
+	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
+		clusterChangeListener.WatchCluster(cluster)
+	}
 }
