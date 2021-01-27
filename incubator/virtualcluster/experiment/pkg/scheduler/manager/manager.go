@@ -35,7 +35,7 @@ func New() *WatchManager {
 
 // ResourceWatcher is the interface used by WatchManager to manage multiple resource watchers.
 type ResourceWatcher interface {
-	listener.ClusterChangeListener
+	GetListener() listener.ClusterChangeListener
 	Start(stopCh <-chan struct{}) error
 }
 
@@ -44,7 +44,11 @@ type ResourceWatcherNew func(*schedulerconfig.SchedulerConfiguration) (ResourceW
 // AddResourceWatcher adds a resource watcher to the WatchManager.
 func (m *WatchManager) AddResourceWatcher(s ResourceWatcher) {
 	m.resourceWatchers[s] = struct{}{}
-	m.listeners = append(m.listeners, s)
+	l := s.GetListener()
+	if l == nil {
+		panic("resource watcher should provide listener")
+	}
+	m.listeners = append(m.listeners, l)
 }
 
 func (m *WatchManager) GetListeners() []listener.ClusterChangeListener {
