@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/client-go/rest"
 	"net/http"
 	"strings"
 	"sync"
@@ -107,6 +108,7 @@ type ClusterInterface interface {
 	GetInformer(objectType runtime.Object) (cache.Informer, error)
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
+	GetRestConfig() *rest.Config
 	Cache
 }
 

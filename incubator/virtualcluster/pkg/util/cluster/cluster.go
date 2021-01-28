@@ -251,6 +251,11 @@ func (c *Cluster) GetDelegatingClient() (client.Client, error) {
 	return dc, nil
 }
 
+// GetRestConfig returns restful configuration of virtual cluster client
+func (c *Cluster) GetRestConfig() *rest.Config {
+	return c.RestConfig
+}
+
 // AddEventHandler instructs the Cluster's cache to watch objectType's resource,
 // if it doesn't already, and to add handler as an event handler.
 func (c *Cluster) AddEventHandler(objectType runtime.Object, handler clientgocache.ResourceEventHandler) error {
