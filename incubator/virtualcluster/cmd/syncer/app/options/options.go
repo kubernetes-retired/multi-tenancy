@@ -85,7 +85,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			VNAgentPort:                int32(10550),
 			FeatureGates:               map[string]bool{featuregate.SuperClusterPooling: false},
 		},
-		SyncerName: "kvc",
+		SyncerName: "vc",
 		Address:    "",
 		Port:       "80",
 		CertFile:   "",
