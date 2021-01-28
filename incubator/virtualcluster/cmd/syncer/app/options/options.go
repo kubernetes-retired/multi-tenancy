@@ -57,14 +57,12 @@ type ResourceSyncerOptions struct {
 
 	SuperMaster           string
 	SuperMasterKubeconfig string
-
-	Address  string
-	Port     string
-	CertFile string
-	KeyFile  string
+	SyncerName            string
+	Address               string
+	Port                  string
+	CertFile              string
+	KeyFile               string
 }
-
-var ComponentName = "vc-syncer"
 
 // NewResourceSyncerOptions creates a new resource syncer with a default config.
 func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
@@ -78,7 +76,7 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 					RetryPeriod:   v1.Duration{Duration: 2 * time.Second},
 					ResourceLock:  resourcelock.ConfigMapsResourceLock,
 				},
-				LockObjectName: ComponentName + "-leaderelection-lock",
+				LockObjectName: "syncer-leaderelection-lock",
 			},
 			ClientConnection:           componentbaseconfig.ClientConnectionConfiguration{},
 			DisableServiceAccountToken: true,
@@ -87,10 +85,11 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			VNAgentPort:                int32(10550),
 			FeatureGates:               map[string]bool{featuregate.SuperClusterPooling: false},
 		},
-		Address:  "",
-		Port:     "80",
-		CertFile: "",
-		KeyFile:  "",
+		SyncerName: "kvc",
+		Address:    "",
+		Port:       "80",
+		CertFile:   "",
+		KeyFile:    "",
 	}, nil
 }
 
@@ -100,7 +99,7 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs := fss.FlagSet("server")
 	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
-	fs.StringVar(&ComponentName, "componentname", ComponentName, "The component name (default vc-syncer).")
+	fs.StringVar(&o.SyncerName, "syncer-name", o.SyncerName, "Syncer name (default vc).")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
 	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress)")
@@ -164,7 +163,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	// Set up leader election if enabled.
 	var leaderElectionConfig *leaderelection.LeaderElectionConfig
 	if c.ComponentConfig.LeaderElection.LeaderElect {
-		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, leaderElectionRecorder)
+		leaderElectionConfig, err = makeLeaderElectionConfig(c.ComponentConfig.LeaderElection, leaderElectionClient, leaderElectionRecorder, o.SyncerName)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +199,7 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 
 // makeLeaderElectionConfig builds a leader election configuration. It will
 // create a new resource lock associated with the configuration.
-func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder) (*leaderelection.LeaderElectionConfig, error) {
+func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfiguration, client clientset.Interface, recorder record.EventRecorder, syncername string) (*leaderelection.LeaderElectionConfig, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get hostname: %v", err)
@@ -215,7 +214,7 @@ func makeLeaderElectionConfig(config syncerconfig.SyncerLeaderElectionConfigurat
 			return nil, fmt.Errorf("unable to find leader election namespace: %v", err)
 		}
 	}
-
+	config.LockObjectName = syncername + "-" + "syncer-leaderelection-lock"
 	rl, err := resourcelock.New(config.ResourceLock,
 		config.LockObjectNamespace,
 		config.LockObjectName,

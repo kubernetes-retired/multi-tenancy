@@ -20,10 +20,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/rest"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+        "k8s.io/client-go/rest"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,10 +37,12 @@ import (
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
@@ -54,8 +57,6 @@ import (
 // MultiClusterController saves all watched tenant clusters in a set.
 type MultiClusterController struct {
 	sync.Mutex
-	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
-	name string
 
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
@@ -81,6 +82,9 @@ type Options struct {
 
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
+
+	// name is used to uniquely identify a Controller in tracing, logging and monitoring.  Name is required.
+	name string
 }
 
 // Cache is the interface used by Controller to start and wait for caches to sync.
@@ -101,45 +105,41 @@ type ClusterInterface interface {
 	GetOwnerInfo() (string, string, string)
 	GetObject() (runtime.Object, error)
 	AddEventHandler(runtime.Object, clientgocache.ResourceEventHandler) error
+	GetInformer(objectType runtime.Object) (cache.Informer, error)
 	GetClientSet() (clientset.Interface, error)
 	GetDelegatingClient() (client.Client, error)
-	GetRestConfig() *rest.Config
+        GetRestConfig() *rest.Config
 	Cache
 }
 
 // NewMCController creates a new MultiClusterController.
-func NewMCController(name string, objectType runtime.Object, options Options) (*MultiClusterController, error) {
-	if options.Reconciler == nil {
-		return nil, fmt.Errorf("must specify Reconciler")
-	}
-
-	if len(name) == 0 {
-		return nil, fmt.Errorf("must specify Name for Controller")
-	}
-
+func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DWReconciler, opts ...OptConfig) (*MultiClusterController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
 		return nil, fmt.Errorf("unknown object kind %+v", objectType)
 	}
 
 	c := &MultiClusterController{
-		name:       name,
 		objectType: objectType,
 		objectKind: kinds[0].Kind,
 		clusters:   make(map[string]ClusterInterface),
-		Options:    options,
+		Options: Options{
+			name:                    fmt.Sprintf("%s-mccontroller", strings.ToLower(kinds[0].Kind)),
+			JitterPeriod:            1 * time.Second,
+			MaxConcurrentReconciles: 1,
+			Reconciler:              rc,
+			Queue:                   fairqueue.NewRateLimitingFairQueue(),
+		},
 	}
 
-	if c.JitterPeriod == 0 {
-		c.JitterPeriod = 1 * time.Second
+	utilscheme.Scheme.AddKnownTypePair(objectType, objectListType)
+
+	for _, opt := range opts {
+		opt(&c.Options)
 	}
 
-	if c.MaxConcurrentReconciles <= 0 {
-		c.MaxConcurrentReconciles = 1
-	}
-
-	if c.Queue == nil {
-		c.Queue = fairqueue.NewRateLimitingFairQueue()
+	if c.Reconciler == nil {
+		return nil, fmt.Errorf("must specify DW Reconciler")
 	}
 
 	return c, nil
@@ -156,6 +156,23 @@ type WatchOptions struct {
 func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, o WatchOptions) error {
 	c.Lock()
 	defer c.Unlock()
+	if _, exist := c.clusters[cluster.GetClusterName()]; !exist {
+		return fmt.Errorf("please register cluster %s resource before watch", cluster.GetClusterName())
+	}
+
+	if c.objectType == nil {
+		return nil
+	}
+
+	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue}
+	return cluster.AddEventHandler(c.objectType, h)
+}
+
+// RegisterClusterResource get the informer *before* trying to wait for the
+// caches to sync so that we have a chance to register their intended caches.
+func (c *MultiClusterController) RegisterClusterResource(cluster ClusterInterface, o WatchOptions) error {
+	c.Lock()
+	defer c.Unlock()
 	if _, exist := c.clusters[cluster.GetClusterName()]; exist {
 		return nil
 	}
@@ -165,8 +182,8 @@ func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, 
 		return nil
 	}
 
-	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue}
-	return cluster.AddEventHandler(c.objectType, h)
+	_, err := cluster.GetInformer(c.objectType)
+	return err
 }
 
 // TeardownClusterResource forget the cluster it watches.
@@ -194,13 +211,23 @@ func (c *MultiClusterController) Start(stop <-chan struct{}) error {
 	}
 }
 
+// GetControllerName get the mccontroller name, is used to uniquely identify the Controller in tracing, logging and monitoring.
+func (c *MultiClusterController) GetControllerName() string {
+	return c.name
+}
+
+// GetObjectKind is the objectKind name this controller watch to.
+func (c *MultiClusterController) GetObjectKind() string {
+	return c.objectKind
+}
+
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instance := getTargetObject(c.objectType)
+	instance := utilscheme.Scheme.NewObject(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
@@ -218,9 +245,9 @@ func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name st
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instance := getTargetObject(objectType)
+	instance := utilscheme.Scheme.NewObject(objectType)
 	if instance == nil {
-		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+		return nil, fmt.Errorf("the object type %v is not supported by mccontroller", objectType)
 	}
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
@@ -239,7 +266,7 @@ func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instanceList := getTargetObjectList(c.objectType)
+	instanceList := utilscheme.Scheme.NewObjectList(c.objectType)
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
 		return nil, err
@@ -254,9 +281,9 @@ func (c *MultiClusterController) ListByObjectType(clusterName string, objectType
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
-	instanceList := getTargetObjectList(objectType)
+	instanceList := utilscheme.Scheme.NewObjectList(objectType)
 	if instanceList == nil {
-		return nil, fmt.Errorf("The object type %v is not supported by mccontroller", objectType)
+		return nil, fmt.Errorf("the object type %v is not supported by mccontroller", objectType)
 	}
 	delegatingClient, err := cluster.GetDelegatingClient()
 	if err != nil {
