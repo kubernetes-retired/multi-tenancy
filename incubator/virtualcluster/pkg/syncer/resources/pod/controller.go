@@ -42,6 +42,7 @@ import (
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
@@ -91,7 +92,7 @@ func NewPodController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:             config,
 		client:             client.CoreV1(),
@@ -101,14 +102,8 @@ func NewPodController(config *config.SyncerConfiguration,
 		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
 		vnodeProvider:      native.NewNativeVirtualNodeProvider(config.VNAgentPort),
 	}
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.DwsControllerWorkerHigh
-	multiClusterPodController, err := mc.NewMCController("tenant-masters-pod-controller", &v1.Pod{}, *mcOptions)
+	multiClusterPodController, err := mc.NewMCController(&v1.Pod{}, &v1.PodList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerHigh), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create pod mc controller: %v", err)
 	}
@@ -116,7 +111,7 @@ func NewPodController(config *config.SyncerConfiguration,
 	c.serviceLister = c.informer.Services().Lister()
 	c.secretLister = c.informer.Secrets().Lister()
 	c.podLister = c.informer.Pods().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.serviceSynced = func() bool { return true }
 		c.secretSynced = func() bool { return true }
 		c.podSynced = func() bool { return true }
@@ -125,26 +120,15 @@ func NewPodController(config *config.SyncerConfiguration,
 		c.secretSynced = c.informer.Secrets().Informer().HasSynced
 		c.podSynced = c.informer.Pods().Informer().HasSynced
 	}
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerHigh
-	upwardPodController, err := uw.NewUWController("pod-upward-controller", &v1.Pod{}, *uwOptions)
+
+	upwardPodController, err := uw.NewUWController(&v1.Pod{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerHigh), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create pod upward controller: %v", err)
 	}
 	c.upwardPodController = upwardPodController
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	podPatroller, err := pa.NewPatroller("pod-patroller", &v1.Pod{}, *patrolOptions)
+	podPatroller, err := pa.NewPatroller(&v1.Pod{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create pod patroller %v", err)
 	}
@@ -286,17 +270,8 @@ func (c *controller) SetVNodeProvider(provider vnode.VirtualNodeProvider) {
 	c.Unlock()
 }
 
-func (c *controller) AddCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-pod-controller watch cluster %s for pod resource", cluster.GetClusterName())
-	err := c.multiClusterPodController.WatchClusterResource(cluster, mc.WatchOptions{})
-	if err != nil {
-		klog.Errorf("failed to watch cluster %s pod event: %v", cluster.GetClusterName(), err)
-	}
-}
-
-func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-pod-controller stop watching cluster %s for pod resource", cluster.GetClusterName())
-	c.multiClusterPodController.TeardownClusterResource(cluster)
+func (c *controller) GetListener() listener.ClusterChangeListener {
+	return listener.NewMCControllerListener(c.multiClusterPodController)
 }
 
 // assignedPod selects pods that are assigned (scheduled and running).

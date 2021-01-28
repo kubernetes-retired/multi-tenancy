@@ -74,7 +74,7 @@ func Register(config *config.SyncerConfiguration,
 	vcInformer vcinformers.VirtualClusterInformer,
 	controllerManager *manager.ControllerManager) error {
 	for _, f := range AddToManagerFuncs {
-		if c, _, _, err := f(config, client, informerFactory, vcClient, vcInformer, nil); err != nil {
+		if c, _, _, err := f(config, client, informerFactory, vcClient, vcInformer, manager.ResourceSyncerOptions{}); err != nil {
 			return err
 		} else {
 			controllerManager.AddResourceSyncer(c)
@@ -85,7 +85,7 @@ func Register(config *config.SyncerConfiguration,
 		klog.V(4).Infof("extra resource controllers that will be synced to virtual cluster are %v", r)
 		extraf, exist := ExtraResourceController[r]
 		if exist {
-			if c, _, _, err := extraf(config, client, informerFactory, vcClient, vcInformer, nil); err != nil {
+			if c, _, _, err := extraf(config, client, informerFactory, vcClient, vcInformer, manager.ResourceSyncerOptions{}); err != nil {
 				klog.Errorf("cannot add extra resource %v for syncer", r)
 				return err
 			} else {

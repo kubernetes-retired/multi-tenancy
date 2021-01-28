@@ -94,8 +94,9 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 
 	// Start all informers.
 	go cc.VirtualClusterInformer.Informer().Run(stopCh)
-	cc.MetaClusterInformerFactory.Start(stopCh)
+	go cc.SuperClusterInformer.Informer().Run(stopCh)
 
+	cc.MetaClusterInformerFactory.Start(stopCh)
 	// Wait for all caches to sync before resource sync.
 	cc.MetaClusterInformerFactory.WaitForCacheSync(stopCh)
 

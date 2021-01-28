@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 )
 
-var DefaultFeatureGate FeatureGate
+var DefaultFeatureGate, _ = NewFeatureGate(nil)
 
 // FeatureGate indicates whether a given feature is enabled or not
 type FeatureGate interface {

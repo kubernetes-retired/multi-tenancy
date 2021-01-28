@@ -51,10 +51,10 @@ func New() *ControllerManager {
 
 // ResourceSyncer is the interface used by ControllerManager to manage multiple resource syncers.
 type ResourceSyncer interface {
-	listener.ClusterChangeListener
 	reconciler.DWReconciler
 	reconciler.UWReconciler
 	reconciler.PatrolReconciler
+	GetListener() listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
 	StartPatrol(stopCh <-chan struct{}) error
@@ -63,14 +63,20 @@ type ResourceSyncer interface {
 // AddController adds a resource syncer to the ControllerManager.
 func (m *ControllerManager) AddResourceSyncer(s ResourceSyncer) {
 	m.resourceSyncers[s] = struct{}{}
-	listener.AddListener(s)
+
+	l := s.GetListener()
+	if l == nil {
+		panic("resource Syncer should provide listener")
+	}
+
+	listener.AddListener(l)
 }
 
 type ResourceSyncerNew func(*config.SyncerConfiguration,
 	clientset.Interface,
 	informers.SharedInformerFactory,
 	vcclient.Interface,
-	vcinformers.VirtualClusterInformer, *ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+	vcinformers.VirtualClusterInformer, ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
 
 // Start gets all the unique caches of the controllers it manages, starts them,
 // then starts the controllers as soon as their respective caches are synced.

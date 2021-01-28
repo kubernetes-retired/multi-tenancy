@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
@@ -62,53 +63,35 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options *manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
 	c := &controller{
 		config:   config,
 		client:   client.StorageV1(),
 		informer: informer.Storage().V1(),
 	}
 
-	var mcOptions *mc.Options
-	if options == nil || options.MCOptions == nil {
-		mcOptions = &mc.Options{Reconciler: c}
-	} else {
-		mcOptions = options.MCOptions
-	}
-	mcOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	multiClusterStorageClassController, err := mc.NewMCController("tenant-masters-storageclass-controller", &v1.StorageClass{}, *mcOptions)
+	multiClusterStorageClassController, err := mc.NewMCController(&v1.StorageClass{}, &v1.StorageClassList{}, c,
+		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageClass mc controller: %v", err)
 	}
 	c.multiClusterStorageClassController = multiClusterStorageClassController
 
 	c.storageclassLister = informer.Storage().V1().StorageClasses().Lister()
-	if options != nil && options.IsFake {
+	if options.IsFake {
 		c.storageclassSynced = func() bool { return true }
 	} else {
 		c.storageclassSynced = informer.Storage().V1().StorageClasses().Informer().HasSynced
 	}
 
-	var uwOptions *uw.Options
-	if options == nil || options.UWOptions == nil {
-		uwOptions = &uw.Options{Reconciler: c}
-	} else {
-		uwOptions = options.UWOptions
-	}
-	uwOptions.MaxConcurrentReconciles = constants.UwsControllerWorkerLow
-	upwardStorageClassController, err := uw.NewUWController("storageclass-upward-controller", &v1.StorageClass{}, *uwOptions)
+	upwardStorageClassController, err := uw.NewUWController(&v1.StorageClass{}, c,
+		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageclass upward controller: %v", err)
 	}
 	c.upwardStorageClassController = upwardStorageClassController
 
-	var patrolOptions *pa.Options
-	if options == nil || options.PatrolOptions == nil {
-		patrolOptions = &pa.Options{Reconciler: c}
-	} else {
-		patrolOptions = options.PatrolOptions
-	}
-	storageClassPatroller, err := pa.NewPatroller("storageClass-patroller", &v1.StorageClass{}, *patrolOptions)
+	storageClassPatroller, err := pa.NewPatroller(&v1.StorageClass{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create storageClass patroller: %v", err)
 	}
@@ -177,15 +160,6 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	return reconciler.Result{}, nil
 }
 
-func (c *controller) AddCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-storageclass-controller watch cluster %s for storageclass resource", cluster.GetClusterName())
-	err := c.multiClusterStorageClassController.WatchClusterResource(cluster, mc.WatchOptions{})
-	if err != nil {
-		klog.Errorf("failed to watch cluster %s storageclass: %v", cluster.GetClusterName(), err)
-	}
-}
-
-func (c *controller) RemoveCluster(cluster mc.ClusterInterface) {
-	klog.Infof("tenant-masters-storageclass-controller stop watching cluster %s for storageclass resource", cluster.GetClusterName())
-	c.multiClusterStorageClassController.TeardownClusterResource(cluster)
+func (c *controller) GetListener() listener.ClusterChangeListener {
+	return listener.NewMCControllerListener(c.multiClusterStorageClassController)
 }

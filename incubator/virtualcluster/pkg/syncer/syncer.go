@@ -63,11 +63,6 @@ var (
 	numUnHealthCluster uint64
 )
 
-const (
-	SuperClusterInfoCfgMap = "supercluster-info"
-	SuperClusterIDKey      = "id"
-)
-
 type Syncer struct {
 	config            *config.SyncerConfiguration
 	superClient       v1core.CoreV1Interface
@@ -179,14 +174,14 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 func (s *Syncer) Run(stopChan <-chan struct{}) {
 	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
 		klog.Infof("SuperClusterPooling featuregate is enabled!")
-		cfg, err := s.superClient.ConfigMaps("kube-system").Get(context.TODO(), SuperClusterInfoCfgMap, metav1.GetOptions{})
+		cfg, err := s.superClient.ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
 		if err != nil {
-			klog.Infof("Fail to get configmap kube-system/%v from super cluster which is required for SuperClusterPooling feature. Quit!", SuperClusterInfoCfgMap)
+			klog.Infof("Fail to get configmap kube-system/%v from super cluster which is required for SuperClusterPooling feature. Quit!", utilconst.SuperClusterInfoCfgMap)
 			os.Exit(1)
 		}
 		var ok bool
-		if utilconst.SuperClusterID, ok = cfg.Data[SuperClusterIDKey]; ok == false {
-			klog.Infof("Fail to get ID value from configmap kube-system/%v. Quit!", SuperClusterInfoCfgMap)
+		if utilconst.SuperClusterID, ok = cfg.Data[utilconst.SuperClusterIDKey]; ok == false {
+			klog.Infof("Fail to get ID value from configmap kube-system/%v. Quit!", utilconst.SuperClusterInfoCfgMap)
 			os.Exit(1)
 		}
 	}
@@ -326,7 +321,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 		return fmt.Errorf("failed to new tenant cluster %s/%s: %v", vc.Namespace, vc.Name, err)
 	}
 
-	// for each resource type of the newly added VirtualCluster, we add a listener
+	// for each resource type of the newly added VirtualCluster, we add the object to informer cache.
 	for _, clusterChangeListener := range listener.Listeners {
 		clusterChangeListener.AddCluster(tenantCluster)
 	}
@@ -361,6 +356,12 @@ func (s *Syncer) runCluster(cluster *cluster.Cluster, vc *v1alpha1.VirtualCluste
 		return
 	}
 	cluster.SetSynced()
+	klog.Infof("cluster %s cache sync done", cluster.GetClusterName())
+
+	// start watching cluster resource event after cache sync done.
+	for _, clusterChangeListener := range listener.Listeners {
+		clusterChangeListener.WatchCluster(cluster)
+	}
 }
 
 func (s *Syncer) healthPatrol() {

@@ -18,6 +18,7 @@ package uwcontroller
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,8 +35,6 @@ import (
 )
 
 type UpwardController struct {
-	name string
-
 	// objectType is the type of object to watch.  e.g. &v1.Pod{}
 	objectType runtime.Object
 
@@ -54,40 +53,37 @@ type Options struct {
 	Reconciler reconciler.UWReconciler
 	// Queue can be used to override the default queue.
 	Queue workqueue.RateLimitingInterface
+
+	name string
 }
 
-func NewUWController(name string, objectType runtime.Object, options Options) (*UpwardController, error) {
-	if options.Reconciler == nil {
-		return nil, fmt.Errorf("must specify UW Reconciler")
-	}
-
-	if len(name) == 0 {
-		return nil, fmt.Errorf("must specify Name for Controller")
-	}
-
+func NewUWController(objectType runtime.Object, rc reconciler.UWReconciler, opts ...OptConfig) (*UpwardController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
 		return nil, fmt.Errorf("unknown object kind %+v", objectType)
 	}
 
+	name := fmt.Sprintf("%s-upward-controller", strings.ToLower(kinds[0].Kind))
 	c := &UpwardController{
-		name:       name,
 		objectType: objectType,
 		objectKind: kinds[0].Kind,
-		Options:    options,
+		Options: Options{
+			name:                    name,
+			JitterPeriod:            1 * time.Second,
+			MaxConcurrentReconciles: 1,
+			Reconciler:              rc,
+			Queue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
+		},
 	}
 
-	if c.JitterPeriod == 0 {
-		c.JitterPeriod = 1 * time.Second
+	for _, opt := range opts {
+		opt(&c.Options)
 	}
 
-	if c.MaxConcurrentReconciles <= 0 {
-		c.MaxConcurrentReconciles = 1
+	if c.Reconciler == nil {
+		return nil, fmt.Errorf("must specify UW Reconciler")
 	}
 
-	if c.Queue == nil {
-		c.Queue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), c.name)
-	}
 	return c, nil
 }
 
