@@ -67,7 +67,7 @@ func TestAPIs(t *testing.T) {
 // All tests in the reconcilers_test package are in one suite. As a result, they
 // share the same test environment (e.g., same api server).
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -505,7 +505,7 @@ func (r *realClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm stri
 // allow is a replacement for controller-runtime's admission.Allowed() that allows you to set the
 // message (human-readable) as opposed to the reason (machine-readable).
 func allow(msg string) admission.Response {
-	return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+	return admission.Response{AdmissionResponse: k8sadm.AdmissionResponse{
 		Allowed: true,
 		Result: &metav1.Status{
 			Code:    0,
@@ -518,7 +518,7 @@ func allow(msg string) admission.Response {
 // human-readable message _and_ a machine-readable reason, and also sets the code correctly instead
 // of hardcoding it to 403 Forbidden.
 func deny(reason metav1.StatusReason, msg string) admission.Response {
-	return admission.Response{AdmissionResponse: admissionv1beta1.AdmissionResponse{
+	return admission.Response{AdmissionResponse: k8sadm.AdmissionResponse{
 		Allowed: false,
 		Result: &metav1.Status{
 			Code:    codeFromReason(reason),

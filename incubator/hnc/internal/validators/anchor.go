@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -34,7 +34,7 @@ type Anchor struct {
 // req defines the aspects of the admission.Request that we care about.
 type anchorRequest struct {
 	anchor *api.SubnamespaceAnchor
-	op     v1beta1.Operation
+	op     k8sadm.Operation
 }
 
 // Handle implements the validation webhook.
@@ -77,7 +77,7 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	cns := v.Forest.Get(cnm)
 
 	switch req.op {
-	case v1beta1.Create:
+	case k8sadm.Create:
 		// Can't create subnamespaces in excluded namespaces
 		if config.EX[pnm] {
 			msg := fmt.Sprintf("The namespace %s is not allowed to create subnamespaces. Please create subnamespaces in a different namespace.", pnm)
@@ -94,7 +94,7 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 			}
 		}
 
-	case v1beta1.Delete:
+	case k8sadm.Delete:
 		// Don't allow the anchor to be deleted if it's in a good state and has descendants of its own,
 		// unless allowCascadingDeletion is set.
 		if req.anchor.Status.State == api.Ok && cns.ChildNames() != nil && !cns.AllowsCascadingDeletion() {
@@ -116,7 +116,7 @@ func (v *Anchor) decodeRequest(log logr.Logger, in admission.Request) (*anchorRe
 	var err error
 	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
 	// which will be empty for a DELETE request.
-	if in.Operation == v1beta1.Delete {
+	if in.Operation == k8sadm.Delete {
 		log.V(1).Info("Decoding a delete request.")
 		if in.OldObject.Raw == nil {
 			// https://github.com/kubernetes-sigs/multi-tenancy/issues/688

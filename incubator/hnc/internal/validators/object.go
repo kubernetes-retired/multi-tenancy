@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -66,15 +66,15 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	// while "new" won't exist for deletions).
 	inst := &unstructured.Unstructured{}
 	oldInst := &unstructured.Unstructured{}
-	if req.Operation != admissionv1beta1.Delete {
+	if req.Operation != k8sadm.Delete {
 		if err := o.decoder.Decode(req, inst); err != nil {
 			log.Error(err, "Couldn't decode req.Object", "raw", req.Object)
 			return deny(metav1.StatusReasonBadRequest, err.Error())
 		}
 	}
-	if req.Operation != admissionv1beta1.Create {
+	if req.Operation != k8sadm.Create {
 		// See issue #688 and #889
-		if req.Operation == admissionv1beta1.Delete && req.OldObject.Raw == nil {
+		if req.Operation == k8sadm.Delete && req.OldObject.Raw == nil {
 			return allow("cannot validate deletions in K8s 1.14")
 		}
 		if err := o.decoder.DecodeRaw(req.OldObject, oldInst); err != nil {
@@ -103,7 +103,7 @@ func (o *Object) isPropagateType(gvk metav1.GroupVersionKind) bool {
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
-func (o *Object) handle(ctx context.Context, log logr.Logger, op admissionv1beta1.Operation, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (o *Object) handle(ctx context.Context, log logr.Logger, op k8sadm.Operation, inst, oldInst *unstructured.Unstructured) admission.Response {
 	// Find out if the object was/is inherited, and where it's inherited from.
 	oldSource, oldInherited := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newSource, newInherited := metadata.GetLabel(inst, api.LabelInheritedFrom)
@@ -230,15 +230,15 @@ func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 	return err
 }
 
-func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (o *Object) handleInherited(op k8sadm.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
 	// Propagated objects cannot be created or deleted (except by the HNC SA, but the HNC SA
 	// never gets this far in the validation). They *can* have their statuses updated, so
 	// if this is an update, make sure that the canonical form of the object hasn't changed.
 	switch op {
-	case admissionv1beta1.Create:
+	case k8sadm.Create:
 		return deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
 
-	case admissionv1beta1.Delete:
+	case k8sadm.Delete:
 		if o.isDeletingNS(oldInst) {
 			// There are few things more irritating in (K8s) life than having some stupid controller stop
 			// your namespace from being deleted. If there's an object in here and we've decided that the
@@ -251,7 +251,7 @@ func (o *Object) handleInherited(op admissionv1beta1.Operation, newSource, oldSo
 		}
 		return deny(metav1.StatusReasonForbidden, "Cannot delete object propagated from namespace \""+oldSource+"\"")
 
-	case admissionv1beta1.Update:
+	case k8sadm.Update:
 		// If the values have changed, that's an illegal modification. This includes if the label is
 		// added or deleted. Note that this label is *not* included in object.Canonical(), below, so we
 		// need to check it manually.

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
@@ -36,7 +36,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 			anchor.ObjectMeta.Name = tc.cnm
 			req := &anchorRequest{
 				anchor: anchor,
-				op:     v1beta1.Create,
+				op:     k8sadm.Create,
 			}
 
 			// Test
@@ -91,7 +91,7 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 			anchor.Status.State = tc.stt
 			req := &anchorRequest{
 				anchor: anchor,
-				op:     v1beta1.Delete,
+				op:     k8sadm.Delete,
 			}
 
 			// Test
