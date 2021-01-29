@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -34,7 +34,7 @@ type Namespace struct {
 // nsRequest defines the aspects of the admission.Request that we care about.
 type nsRequest struct {
 	ns *corev1.Namespace
-	op v1beta1.Operation
+	op k8sadm.Operation
 }
 
 // Handle implements the validation webhook.
@@ -74,20 +74,20 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 	ns := v.Forest.Get(req.ns.Name)
 
 	switch req.op {
-	case v1beta1.Create:
+	case k8sadm.Create:
 		// This check only applies to the Create operation since namespace name
 		// cannot be updated.
 		if rsp := v.nameExistsInExternalHierarchy(req); !rsp.Allowed {
 			return rsp
 		}
-	case v1beta1.Update:
+	case k8sadm.Update:
 		// This check only applies to the Update operation. Creating a namespace
 		// with external manager is allowed and we will prevent this conflict by not
 		// allowing setting a parent when validating the HierarchyConfiguration.
 		if rsp := v.conflictBetweenParentAndExternalManager(req, ns); !rsp.Allowed {
 			return rsp
 		}
-	case v1beta1.Delete:
+	case k8sadm.Delete:
 		if rsp := v.cannotDeleteSubnamespace(req); !rsp.Allowed {
 			return rsp
 		}
@@ -157,7 +157,7 @@ func (v *Namespace) decodeRequest(log logr.Logger, in admission.Request) (*nsReq
 	var err error
 	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
 	// which will be empty for a DELETE request.
-	if in.Operation == v1beta1.Delete {
+	if in.Operation == k8sadm.Delete {
 		if in.OldObject.Raw == nil {
 			// See https://github.com/kubernetes-sigs/multi-tenancy/issues/688. OldObject can be nil in
 			// K8s 1.14 and earlier.

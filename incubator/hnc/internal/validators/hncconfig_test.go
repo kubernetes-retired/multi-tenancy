@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -31,11 +31,11 @@ var (
 func TestDeletingConfigObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
 		g := NewGomegaWithT(t)
-		req := admission.Request{AdmissionRequest: v1beta1.AdmissionRequest{
-			Operation: v1beta1.Delete,
+		req := admission.Request{AdmissionRequest: k8sadm.AdmissionRequest{
+			Operation: k8sadm.Delete,
 			Name:      api.HNCConfigSingleton,
 		}}
-		config := &HNCConfig{Log: zap.Logger(false)}
+		config := &HNCConfig{Log: zap.New()}
 
 		got := config.Handle(context.Background(), req)
 
@@ -47,11 +47,11 @@ func TestDeletingConfigObject(t *testing.T) {
 func TestDeletingOtherObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
 		g := NewGomegaWithT(t)
-		req := admission.Request{AdmissionRequest: v1beta1.AdmissionRequest{
-			Operation: v1beta1.Delete,
+		req := admission.Request{AdmissionRequest: k8sadm.AdmissionRequest{
+			Operation: k8sadm.Delete,
 			Name:      "other",
 		}}
-		config := &HNCConfig{Log: zap.Logger(false)}
+		config := &HNCConfig{Log: zap.New()}
 
 		got := config.Handle(context.Background(), req)
 
@@ -65,7 +65,7 @@ func TestRBACTypes(t *testing.T) {
 	config := &HNCConfig{
 		translator: fakeGRTranslator{},
 		Forest:     f,
-		Log:        zap.Logger(false),
+		Log:        zap.New(),
 	}
 
 	tests := []struct {
@@ -153,7 +153,7 @@ func TestNonRBACTypes(t *testing.T) {
 			config := &HNCConfig{
 				translator: tc.validator,
 				Forest:     forest.NewForest(),
-				Log:        zap.Logger(false),
+				Log:        zap.New(),
 			}
 
 			got := config.handle(context.Background(), c)
@@ -210,7 +210,7 @@ func TestPropagateConflict(t *testing.T) {
 			config := &HNCConfig{
 				translator: fakeGRTranslator{},
 				Forest:     f,
-				Log:        zap.Logger(false),
+				Log:        zap.New(),
 			}
 
 			// Add source objects to the forest.

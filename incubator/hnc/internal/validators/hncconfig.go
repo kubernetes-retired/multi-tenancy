@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -53,7 +53,7 @@ func (c *HNCConfig) Handle(ctx context.Context, req admission.Request) admission
 		return allow("HNC SA")
 	}
 
-	if req.Operation == v1beta1.Delete {
+	if req.Operation == k8sadm.Delete {
 		if req.Name == api.HNCConfigSingleton {
 			return deny(metav1.StatusReasonForbidden, "Deleting the 'config' object is forbidden")
 		} else {

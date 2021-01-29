@@ -83,9 +83,7 @@ type gvk2gr map[schema.GroupVersionKind]schema.GroupResource
 const checkPeriod = 3 * time.Second
 
 // Reconcile is the entrypoint to the reconciler.
-func (r *ConfigReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-
+func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	// Load the config and clear its conditions so they can be reset.
 	inst, err := r.getSingleton(ctx)
 	if err != nil {
@@ -530,7 +528,7 @@ func (r *ConfigReconciler) triggerReconcileIfNeeded() {
 	go func() {
 		inst := &api.HNCConfiguration{}
 		inst.ObjectMeta.Name = api.HNCConfigSingleton
-		r.Trigger <- event.GenericEvent{Meta: inst}
+		r.Trigger <- event.GenericEvent{Object: inst}
 	}()
 }
 
@@ -538,19 +536,18 @@ func (r *ConfigReconciler) triggerReconcileIfNeeded() {
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Whenever a CRD is created/updated, we will send a request to reconcile the singleton again, in
 	// case the singleton has configuration for the custom resource type.
-	crdMapFn := handler.ToRequestsFunc(
-		func(_ handler.MapObject) []reconcile.Request {
-			return []reconcile.Request{{NamespacedName: types.NamespacedName{
-				Name: api.HNCConfigSingleton,
-			}}}
-		})
+	crdMapFn := func(_ client.Object) []reconcile.Request {
+		return []reconcile.Request{{NamespacedName: types.NamespacedName{
+			Name: api.HNCConfigSingleton,
+		}}}
+	}
 
 	// Register the reconciler
 	err := ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
 		Watches(&source.Channel{Source: r.Trigger}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &apiextensions.CustomResourceDefinition{}},
-			&handler.EnqueueRequestsFromMapFunc{ToRequests: crdMapFn}).
+			handler.EnqueueRequestsFromMapFunc(crdMapFn)).
 		Complete(r)
 	if err != nil {
 		return err

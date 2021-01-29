@@ -52,8 +52,7 @@ type AnchorReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic. It currently
 // only handles the creation of the namespaces but no deletion or state reporting yet.
-func (r *AnchorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := loggerWithRID(r.Log).WithValues("trigger", req.NamespacedName)
 	log.V(1).Info("Reconciling anchor")
 
@@ -302,7 +301,7 @@ func (r *AnchorReconciler) enqueue(log logr.Logger, nm, pnm, reason string) {
 		inst.ObjectMeta.Name = nm
 		inst.ObjectMeta.Namespace = pnm
 		log.V(1).Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm, "reason", reason)
-		r.Affected <- event.GenericEvent{Meta: inst}
+		r.Affected <- event.GenericEvent{Object: inst}
 	}()
 }
 
@@ -372,21 +371,20 @@ func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger,
 
 func (r *AnchorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Maps an subnamespace to its anchor in the parent namespace.
-	nsMapFn := handler.ToRequestsFunc(
-		func(a handler.MapObject) []reconcile.Request {
-			if a.Meta.GetAnnotations()[api.SubnamespaceOf] == "" {
-				return nil
-			}
-			return []reconcile.Request{
-				{NamespacedName: types.NamespacedName{
-					Name:      a.Meta.GetName(),
-					Namespace: a.Meta.GetAnnotations()[api.SubnamespaceOf],
-				}},
-			}
-		})
+	nsMapFn := func(obj client.Object) []reconcile.Request {
+		if obj.GetAnnotations()[api.SubnamespaceOf] == "" {
+			return nil
+		}
+		return []reconcile.Request{
+			{NamespacedName: types.NamespacedName{
+				Name:      obj.GetName(),
+				Namespace: obj.GetAnnotations()[api.SubnamespaceOf],
+			}},
+		}
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.SubnamespaceAnchor{}).
 		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Namespace{}}, &handler.EnqueueRequestsFromMapFunc{ToRequests: nsMapFn}).
+		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
 		Complete(r)
 }

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
@@ -44,7 +44,7 @@ func TestDeleteSubNamespace(t *testing.T) {
 
 			req := &nsRequest{
 				ns: sub,
-				op: v1beta1.Delete,
+				op: k8sadm.Delete,
 			}
 
 			// Construct the forest
@@ -79,7 +79,7 @@ func TestDeleteOwnerNamespace(t *testing.T) {
 		g := NewGomegaWithT(t)
 		req := &nsRequest{
 			ns: aInst,
-			op: v1beta1.Delete,
+			op: k8sadm.Delete,
 		}
 
 		// Test
@@ -136,7 +136,7 @@ func TestCreateNamespace(t *testing.T) {
 		g := NewGomegaWithT(t)
 		req := &nsRequest{
 			ns: ns,
-			op: v1beta1.Create,
+			op: k8sadm.Create,
 		}
 
 		// Test
@@ -198,7 +198,7 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 
 			req := &nsRequest{
 				ns: tc.nsInst,
-				op: v1beta1.Update,
+				op: k8sadm.Update,
 			}
 
 			// Test

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	k8sadm "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -30,7 +30,7 @@ func TestType(t *testing.T) {
 	}
 	f := forest.NewForest()
 	f.AddTypeSyncer(or)
-	l := zap.Logger(false)
+	l := zap.New()
 	o := &Object{Forest: f, Log: l}
 
 	tests := []struct {
@@ -66,7 +66,7 @@ func TestType(t *testing.T) {
 			if tc.ns == "" {
 				tc.ns = "default"
 			}
-			req := admission.Request{AdmissionRequest: admissionv1beta1.AdmissionRequest{
+			req := admission.Request{AdmissionRequest: k8sadm.AdmissionRequest{
 				Name:      "foo",
 				Namespace: tc.ns,
 				Kind:      metav1.GroupVersionKind{Version: tc.version, Kind: tc.kind},
@@ -86,7 +86,7 @@ func TestType(t *testing.T) {
 func TestInheritedFromLabel(t *testing.T) {
 	f := forest.NewForest()
 	o := &Object{Forest: f}
-	l := zap.Logger(false)
+	l := zap.New()
 
 	tests := []struct {
 		name      string
@@ -130,7 +130,7 @@ func TestInheritedFromLabel(t *testing.T) {
 			metadata.SetLabel(inst, tc.newLabel, tc.newValue)
 
 			// Test
-			got := o.handle(context.Background(), l, admissionv1beta1.Update, inst, oldInst)
+			got := o.handle(context.Background(), l, k8sadm.Update, inst, oldInst)
 
 			// Report
 			code := got.AdmissionResponse.Result.Code
@@ -145,7 +145,7 @@ func TestInheritedFromLabel(t *testing.T) {
 func TestUserChanges(t *testing.T) {
 	f := forest.NewForest()
 	o := &Object{Forest: f}
-	l := zap.Logger(false)
+	l := zap.New()
 
 	tests := []struct {
 		name    string
@@ -543,12 +543,12 @@ func TestUserChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewGomegaWithT(t)
-			op := admissionv1beta1.Update
+			op := k8sadm.Update
 			if tc.inst == nil {
-				op = admissionv1beta1.Delete
+				op = k8sadm.Delete
 				tc.inst = &unstructured.Unstructured{}
 			} else if tc.oldInst == nil {
-				op = admissionv1beta1.Create
+				op = k8sadm.Create
 				tc.oldInst = &unstructured.Unstructured{}
 			}
 			// Test
@@ -629,8 +629,8 @@ func TestCreatingConflictSource(t *testing.T) {
 			f := foresttest.Create(tc.forest)
 			createSecret(tc.conflictInstName, tc.conflictNamespace, f)
 			o := &Object{Forest: f}
-			l := zap.Logger(false)
-			op := admissionv1beta1.Create
+			l := zap.New()
+			op := k8sadm.Create
 			inst := &unstructured.Unstructured{}
 			inst.SetName(tc.newInstName)
 			inst.SetNamespace(tc.newInstNamespace)

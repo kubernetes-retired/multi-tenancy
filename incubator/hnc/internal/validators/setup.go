@@ -42,7 +42,10 @@ func CreateCertsIfNeeded(mgr ctrl.Manager, novalidation, internalCert bool) (cha
 		CAOrganization: caOrganization,
 		DNSName:        dnsName,
 		IsReady:        setupFinished,
-		VWHName:        vwhName,
+		Webhooks: []cert.WebhookInfo{{
+			Type: cert.Validating,
+			Name: vwhName,
+		}},
 	})
 }
 

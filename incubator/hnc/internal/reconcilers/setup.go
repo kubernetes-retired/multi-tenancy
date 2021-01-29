@@ -6,7 +6,6 @@ import (
 
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +20,7 @@ import (
 type FakeDeleteCRDClient struct{}
 
 // FakeDeleteCRDClient doesn't return any err on Get() because none of the reconciler test performs CRD deletion
-func (f FakeDeleteCRDClient) Get(context.Context, types.NamespacedName, runtime.Object) error {
+func (f FakeDeleteCRDClient) Get(context.Context, types.NamespacedName, client.Object) error {
 	return nil
 }
 
@@ -33,7 +32,7 @@ var crds = map[string]bool{
 
 // deleteCRDClientType could be either a real client or FakeDeleteCRDClient
 type deleteCRDClientType interface {
-	Get(context.Context, types.NamespacedName, runtime.Object) error
+	Get(context.Context, types.NamespacedName, client.Object) error
 }
 
 // deleteCRDClient is an uncached client for checking CRD deletion
@@ -101,7 +100,7 @@ func Create(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, useFakeClient
 
 // crdClient is any client that can be used in isDeletingCRD (i.e. any reconciler).
 type crdClient interface {
-	Get(context.Context, types.NamespacedName, runtime.Object) error
+	Get(context.Context, types.NamespacedName, client.Object) error
 }
 
 // isDeletingCRD returns true if the specified HNC CRD is being or has been deleted. The argument

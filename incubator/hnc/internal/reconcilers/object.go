@@ -189,9 +189,8 @@ func (r *ObjectReconciler) enqueueAllObjects(ctx context.Context, log logr.Logge
 	return nil
 }
 
-func (r *ObjectReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *ObjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	resp := ctrl.Result{}
-	ctx := context.Background()
 	log := loggerWithRID(r.Log).WithValues("trigger", req.NamespacedName)
 
 	if config.EX[req.Namespace] {
@@ -483,7 +482,7 @@ func (r *ObjectReconciler) enqueueDescendants(ctx context.Context, log logr.Logg
 		dc := object.Canonical(src)
 		dc.SetNamespace(ns)
 		log.V(1).Info("... enqueuing descendant copy", "affected", ns+"/"+src.GetName(), "reason", reason)
-		r.Affected <- event.GenericEvent{Meta: dc}
+		r.Affected <- event.GenericEvent{Object: dc}
 	}
 }
 
@@ -501,7 +500,7 @@ func (r *ObjectReconciler) enqueueLocalObjects(ctx context.Context, log logr.Log
 		co := object.Canonical(&inst)
 		co.SetNamespace(inst.GetNamespace())
 		log.V(1).Info("Enqueuing existing object for reconciliation", "affected", co.GetName())
-		r.Affected <- event.GenericEvent{Meta: co}
+		r.Affected <- event.GenericEvent{Object: co}
 	}
 
 	return nil
@@ -520,7 +519,7 @@ func (r *ObjectReconciler) enqueuePropagatedObjects(ctx context.Context, log log
 		lc := object.Canonical(obj)
 		lc.SetNamespace(ns)
 		log.V(1).Info("Enqueuing local copy of the ancestor original for reconciliation", "affected", lc.GetName())
-		r.Affected <- event.GenericEvent{Meta: lc}
+		r.Affected <- event.GenericEvent{Object: lc}
 	}
 }
 
