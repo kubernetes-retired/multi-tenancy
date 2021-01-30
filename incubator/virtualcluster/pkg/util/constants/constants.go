@@ -19,6 +19,8 @@ package constants
 import (
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
@@ -33,7 +35,15 @@ const (
 
 	// LabelScheduledPlacements is the scheduled placements the namespace schedules to.
 	LabelScheduledPlacements = "scheduler.tenancy.x-k8s.io/placements"
+
+	// LabelScheduledSlice is the scheduled slice size of the namespace.
+	LabelNamespaceSlice = "scheduler.tenancy.x-k8s.io/slice"
 )
+
+var DefaultNamespaceSlice = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse("2"),
+	v1.ResourceMemory: resource.MustParse("4Gi"),
+}
 
 const (
 	// Override the client-go default 5 qps and 10 burst, which are too small for mccontroller .

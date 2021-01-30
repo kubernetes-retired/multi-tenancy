@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -35,10 +37,12 @@ import (
 	superinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/informers/externalversions/cluster/v1alpha4"
 	superLister "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/listers/cluster/v1alpha4"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
+	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
 	superClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/supercluster"
 	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/virtualcluster"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -66,6 +70,8 @@ type Scheduler struct {
 	virtualClusterWorkers int
 	virtualClusterLock    sync.Mutex
 	virtualClusterSet     map[string]mc.ClusterInterface
+
+	schedulerCache internalcache.Cache
 }
 
 func New(
@@ -76,6 +82,7 @@ func New(
 	superInformer superinformers.ClusterInformer,
 	metaClusterClient clientset.Interface,
 	metaInformers informers.SharedInformerFactory,
+	stopCh <-chan struct{},
 	recorder record.EventRecorder,
 ) *Scheduler {
 	scheduler := &Scheduler{
@@ -122,11 +129,12 @@ func New(
 			DeleteFunc: scheduler.enqueueSuperCluster,
 		},
 	)
-
 	scheduler.virtualClusterLister = vcInformer.Lister()
 	scheduler.virtualClusterSynced = vcInformer.Informer().HasSynced
 	scheduler.superClusterLister = superInformer.Lister()
 	scheduler.superClusterSynced = superInformer.Informer().HasSynced
+
+	scheduler.schedulerCache = internalcache.NewSchedulerCache(stopCh)
 
 	vcWatcher := manager.New()
 	scheduler.virtualClusterWatcher = vcWatcher
@@ -135,7 +143,6 @@ func New(
 	superWatcher := manager.New()
 	scheduler.superClusterWatcher = superWatcher
 	superClusterWatchers.Register(config, superWatcher)
-
 	return scheduler
 }
 
@@ -188,28 +195,26 @@ func (s *Scheduler) enqueueSuperCluster(obj interface{}) {
 }
 
 func (s *Scheduler) Run(stopChan <-chan struct{}) {
+
+	if !cache.WaitForCacheSync(stopChan, s.virtualClusterSynced) {
+		klog.Errorf("fail to sync virtualclustr informer cache")
+		return
+	}
+
+	if !cache.WaitForCacheSync(stopChan, s.superClusterSynced) {
+		klog.Errorf("fail to sync superclustr informer cache")
+		return
+	}
+
+	if err := s.Bootstrap(); err != nil {
+		klog.Errorf("initializing scheduler cache fails with error: %v", err)
+		panic("the scheduler cannot start without an initialized cache")
+	}
+
 	go func() {
 		if err := s.virtualClusterWatcher.Start(stopChan); err != nil {
 			klog.Infof("virtualcluster watch manager exits: %v", err)
 		}
-	}()
-
-	go func() {
-		defer utilruntime.HandleCrash()
-		defer s.virtualClusterQueue.ShutDown()
-
-		klog.Infof("starting scheduler virtualcluster workerqueue")
-		defer klog.Infof("shutting down scheduler virtualcluster workerqueue")
-
-		if !cache.WaitForCacheSync(stopChan, s.virtualClusterSynced) {
-			return
-		}
-
-		klog.Infof("starting scheduler virtualcluster workers")
-		for i := 0; i < s.virtualClusterWorkers; i++ {
-			go wait.Until(s.virtualClusterWorkerRun, 1*time.Second, stopChan)
-		}
-		<-stopChan
 	}()
 
 	go func() {
@@ -220,20 +225,63 @@ func (s *Scheduler) Run(stopChan <-chan struct{}) {
 
 	go func() {
 		defer utilruntime.HandleCrash()
+		defer s.virtualClusterQueue.ShutDown()
+
+		klog.Infof("starting scheduler virtualcluster workerqueue")
+		defer klog.Infof("shutting down scheduler virtualcluster workerqueue")
+
+		for i := 0; i < s.virtualClusterWorkers; i++ {
+			go wait.Until(s.virtualClusterWorkerRun, 1*time.Second, stopChan)
+		}
+		<-stopChan
+	}()
+
+	go func() {
+		defer utilruntime.HandleCrash()
 		defer s.superClusterQueue.ShutDown()
 
 		klog.Infof("starting scheduler supercluster workerqueue")
 		defer klog.Infof("shutting down scheduler supercluster workerqueue")
 
-		if !cache.WaitForCacheSync(stopChan, s.superClusterSynced) {
-			return
-		}
-
-		klog.Infof("starting scheduler supercluster workers")
 		for i := 0; i < s.superClusterWorkers; i++ {
 			go wait.Until(s.superClusterWorkerRun, 1*time.Second, stopChan)
 		}
 		<-stopChan
 
 	}()
+}
+
+// The dirty sets are used in bootstrap and in handling cluster offline. If a cluster was in dirty set and becomes online again,
+// the cluster state needs to be synchronized with the scheduler cache first during which the scheduler will not serve any scheduling
+// request from that cluster.
+var DirtyVirtualClusters sync.Map
+var DirtySuperClusters sync.Map
+
+// Bootstrap initializes the scheduler cache
+func (s *Scheduler) Bootstrap() error {
+	superList, err := s.superClusterLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("failed to list super cluster CRs: %v", err)
+	}
+	for _, each := range superList {
+		if err := util.SyncSuperClusterState(s.metaClusterClient, each, s.schedulerCache); err != nil {
+			DirtySuperClusters.Store(types.NamespacedName{Name: each.Name, Namespace: each.Namespace}, struct{}{})
+			// retry in super workerqueue
+			s.enqueueSuperCluster(each)
+		}
+	}
+
+	vcList, err := s.virtualClusterLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("failed to list super cluster CRs: %v", err)
+	}
+
+	for _, each := range vcList {
+		if err := util.SyncVirtualClusterState(s.metaClusterClient, each, s.schedulerCache); err != nil {
+			DirtyVirtualClusters.Store(types.NamespacedName{Name: each.Name, Namespace: each.Namespace}, struct{}{})
+			// retry in vc workerqueue
+			s.enqueueVirtualCluster(each)
+		}
+	}
+	return nil
 }

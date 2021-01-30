@@ -90,6 +90,7 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 		cc.SuperClusterInformer,
 		cc.MetaClusterClient,
 		cc.MetaClusterInformerFactory,
+		stopCh,
 		cc.Recorder)
 
 	// Start all informers.

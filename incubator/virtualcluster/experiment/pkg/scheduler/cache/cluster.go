@@ -52,12 +52,15 @@ func NewCluster(name string, labels map[string]string, capacity v1.ResourceList)
 }
 
 func (c *Cluster) DeepCopy() *Cluster {
-	labelcopy := make(map[string]string)
-	for k, v := range c.labels {
-		labelcopy[k] = v
+	var labelcopy map[string]string
+	if c.labels != nil {
+		labelcopy := make(map[string]string)
+		for k, v := range c.labels {
+			labelcopy[k] = v
+		}
 	}
 
-	out := NewCluster(c.name, c.labels, c.capacity.DeepCopy())
+	out := NewCluster(c.name, labelcopy, c.capacity.DeepCopy())
 
 	slicesCopy := make(map[string][]*Slice)
 
