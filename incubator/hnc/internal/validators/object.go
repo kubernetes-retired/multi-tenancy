@@ -8,9 +8,12 @@ import (
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -140,7 +143,7 @@ func (o *Object) handle(ctx context.Context, log logr.Logger, op k8sadm.Operatio
 		return allow("source object")
 	}
 	// This is a propagated object.
-	return o.handleInherited(op, newSource, oldSource, inst, oldInst)
+	return o.handleInherited(ctx, op, newSource, oldSource, inst, oldInst)
 }
 
 func validateSelectorAnnot(inst *unstructured.Unstructured) string {
@@ -230,7 +233,7 @@ func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 	return err
 }
 
-func (o *Object) handleInherited(op k8sadm.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (o *Object) handleInherited(ctx context.Context, op k8sadm.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
 	// Propagated objects cannot be created or deleted (except by the HNC SA, but the HNC SA
 	// never gets this far in the validation). They *can* have their statuses updated, so
 	// if this is an update, make sure that the canonical form of the object hasn't changed.
@@ -239,17 +242,19 @@ func (o *Object) handleInherited(op k8sadm.Operation, newSource, oldSource strin
 		return deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
 
 	case k8sadm.Delete:
-		if o.isDeletingNS(oldInst) {
-			// There are few things more irritating in (K8s) life than having some stupid controller stop
-			// your namespace from being deleted. If there's an object in here and we've decided that the
-			// namespace should be deleted, then don't block anything!
-			//
-			// It's probably slightly safer to create a K8s client, actually load the namespace and check
-			// its deletion timestamp here. But it's much easier to just record this information in the
-			// namespace/HC reconciler and read it here.
-			return allow("allowing deletion of propagated object since namespace is being deleted")
+		// There are few things more irritating in (K8s) life than having some stupid controller stop
+		// your namespace from being deleted. If there's an object in here and we've decided that the
+		// namespace should be deleted, then don't block anything!
+		isDeleting, err := o.isDeletingNS(ctx, oldInst.GetNamespace())
+		if err != nil {
+			return deny(metav1.StatusReasonInternalError, "Cannot delete object propagated from namespace \""+oldSource+"\" with error: "+err.Error())
 		}
-		return deny(metav1.StatusReasonForbidden, "Cannot delete object propagated from namespace \""+oldSource+"\"")
+
+		if !isDeleting {
+			return deny(metav1.StatusReasonForbidden, "Cannot delete object propagated from namespace \""+oldSource+"\"")
+		}
+
+		return allow("allowing deletion of propagated object since namespace is being deleted")
 
 	case k8sadm.Update:
 		// If the values have changed, that's an illegal modification. This includes if the label is
@@ -275,16 +280,24 @@ func (o *Object) handleInherited(op k8sadm.Operation, newSource, oldSource strin
 	return deny(metav1.StatusReasonInternalError, "unknown operation: "+string(op))
 }
 
-// isDeletingNS returns true if the namespace of the object is already being deleted, based on the
-// in-memory forest.
-func (o *Object) isDeletingNS(inst *unstructured.Unstructured) bool {
-	o.Forest.Lock()
-	defer o.Forest.Unlock()
-	ns := o.Forest.Get(inst.GetNamespace())
-	if ns == nil {
-		return false
+// validateDeletingNS validates if the namespace of the object is already being deleted
+func (o *Object) isDeletingNS(ctx context.Context, ns string) (bool, error) {
+	nsObj := &corev1.Namespace{}
+	nnm := types.NamespacedName{Name: ns}
+	if err := o.client.Get(ctx, nnm, nsObj); err != nil {
+		// `IsNotFound` should never happen, but if for some bizarre reason the namespace appears to be deleted before the object,
+		// we should allow the object to be deleted too.
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("while determining whether namespace %q is being deleted: %w", ns, err)
 	}
-	return ns.IsDeleting
+
+	if !nsObj.DeletionTimestamp.IsZero() {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // hasConflict checks if there's any conflicting objects in the descendants. Returns

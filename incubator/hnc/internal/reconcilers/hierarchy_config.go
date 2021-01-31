@@ -216,9 +216,6 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	hadCrit := ns.HasLocalCritCondition()
 	ns.ClearConditions()
 
-	// Record whether the namespace is being deleted; this is useful for object validators.
-	ns.IsDeleting = !nsInst.DeletionTimestamp.IsZero()
-
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
 
@@ -301,7 +298,7 @@ func (r *HierarchyConfigReconciler) syncSubnamespaceParent(log logr.Logger, inst
 	// We could also add an exception to allow K8s SAs to override the object validator (and we
 	// probably should), but this prevents us from getting into a war with K8s and is sufficient for
 	// v0.5.
-	if pnm != "" && ns.IsDeleting {
+	if pnm != "" && !nsInst.DeletionTimestamp.IsZero() {
 		log.V(1).Info("Subnamespace is being deleted; ignoring SubnamespaceOf annotation", "parent", inst.Spec.Parent, "annotation", pnm)
 		pnm = ""
 	}

@@ -3,12 +3,17 @@ package validators
 import (
 	"context"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
@@ -148,10 +153,11 @@ func TestUserChanges(t *testing.T) {
 	l := zap.New()
 
 	tests := []struct {
-		name    string
-		oldInst *unstructured.Unstructured
-		inst    *unstructured.Unstructured
-		fail    bool
+		name       string
+		oldInst    *unstructured.Unstructured
+		inst       *unstructured.Unstructured
+		fail       bool
+		isDeleting bool
 	}{{
 		name: "Allow changes to original objects",
 		oldInst: &unstructured.Unstructured{
@@ -273,8 +279,22 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
-		name: "Deny deletions of propagated objects",
+		name: "Deny deletions of propagated objects when namespace is not being deleted",
 		fail: true,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+			},
+		},
+	}, {
+		name:       "Allow deletions of propagated objects when namespace is being deleted",
+		isDeleting: true,
 		oldInst: &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "v1",
@@ -542,7 +562,7 @@ func TestUserChanges(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			op := k8sadm.Update
 			if tc.inst == nil {
 				op = k8sadm.Delete
@@ -551,6 +571,9 @@ func TestUserChanges(t *testing.T) {
 				op = k8sadm.Create
 				tc.oldInst = &unstructured.Unstructured{}
 			}
+
+			c := fakeNSClient{isDeleting: tc.isDeleting}
+			o.client = c
 			// Test
 			got := o.handle(context.Background(), l, op, tc.inst, tc.oldInst)
 			// Report
@@ -561,6 +584,48 @@ func TestUserChanges(t *testing.T) {
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
 		})
 	}
+}
+
+type fakeNSClient struct {
+	isDeleting bool
+}
+
+// Get decodes given client.Object as corev1.Namespace that might contains deletionTimestamp
+func (c fakeNSClient) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+	nsObj := obj.(*corev1.Namespace)
+	if c.isDeleting {
+		nsObj.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+	}
+
+	return nil
+}
+
+func (fakeNSClient) Create(_ context.Context, _ client.Object, _ ...client.CreateOption) error {
+	return nil
+}
+func (fakeNSClient) Update(_ context.Context, _ client.Object, _ ...client.UpdateOption) error {
+	return nil
+}
+func (fakeNSClient) Delete(_ context.Context, _ client.Object, _ ...client.DeleteOption) error {
+	return nil
+}
+func (fakeNSClient) DeleteAllOf(_ context.Context, _ client.Object, _ ...client.DeleteAllOfOption) error {
+	return nil
+}
+func (fakeNSClient) Patch(_ context.Context, _ client.Object, _ client.Patch, _ ...client.PatchOption) error {
+	return nil
+}
+func (fakeNSClient) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+	return nil
+}
+func (fakeNSClient) Status() client.StatusWriter {
+	return nil
+}
+func (fakeNSClient) RESTMapper() meta.RESTMapper {
+	return nil
+}
+func (fakeNSClient) Scheme() *runtime.Scheme {
+	return nil
 }
 
 func TestCreatingConflictSource(t *testing.T) {
