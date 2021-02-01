@@ -210,6 +210,12 @@ func MustApplyYAML(s string) {
 	MustRun("kubectl apply -f", filename)
 }
 
+func MustNotApplyYAML(s string){
+	filename := writeTempFile(s)
+	defer removeFile(filename)
+	MustNotRun("kubectl apply -f", filename)
+}
+
 // RunCommand passes all arguments to the OS to execute, and returns the combined stdout/stderr and
 // and error object. By default, each arg to this function may contain strings (e.g. "echo hello
 // world"), in which case we split the strings on the spaces (so this would be equivalent to calling
