@@ -34,6 +34,8 @@ const (
 
 	VirtualClusterWorker = 3
 	SuperClusterWorker   = 3
+
+	KubeconfigAdminSecretName = "admin-kubeconfig"
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()

@@ -31,12 +31,12 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/apis/cluster/v1alpha4"
 	superListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/client/listers/cluster/v1alpha4"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcListers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/cluster"
-	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
@@ -301,13 +301,9 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 	}
 	// the super cluster should have the id configmap in kube-system
 	cs, _ := superCluster.GetClientSet()
-	cfg, err := cs.CoreV1().ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
+	id, err := util.GetSuperClusterID(cs)
 	if err != nil {
-		return fmt.Errorf("failed to get super cluster info configmap in kube-system")
-	}
-	id, ok := cfg.Data[utilconst.SuperClusterIDKey]
-	if !ok {
-		return fmt.Errorf("failed to get super cluster id from the supercluster-info configmap in kube-system")
+		return fmt.Errorf("failed to get super cluster id: %v", err)
 	}
 	klog.Infof("supercluster %s's ID is found: %v", key, id)
 
