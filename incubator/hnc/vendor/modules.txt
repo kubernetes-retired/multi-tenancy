@@ -214,7 +214,7 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/open-policy-agent/cert-controller v0.0.0-20210129015139-6ff9721a1c47
+# github.com/open-policy-agent/cert-controller v0.0.0-20210202184811-4842e4760ab0
 ## explicit
 github.com/open-policy-agent/cert-controller/pkg/rotator
 # github.com/peterbourgon/diskv v2.0.1+incompatible

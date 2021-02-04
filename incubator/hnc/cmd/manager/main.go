@@ -50,16 +50,17 @@ var (
 )
 
 var (
-	metricsAddr          string
-	maxReconciles        int
-	enableLeaderElection bool
-	leaderElectionId     string
-	novalidation         bool
-	debugLogs            bool
-	testLog              bool
-	internalCert         bool
-	qps                  int
-	webhookServerPort    int
+	metricsAddr            string
+	maxReconciles          int
+	enableLeaderElection   bool
+	leaderElectionId       string
+	novalidation           bool
+	debugLogs              bool
+	testLog                bool
+	internalCert           bool
+	qps                    int
+	webhookServerPort      int
+	restartOnSecretRefresh bool
 )
 
 func init() {
@@ -90,6 +91,7 @@ func main() {
 	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
 	uaArg := arrayArg{val: &config.UnpropagatedAnnotations}
 	flag.Var(&uaArg, "unpropagated-annotation", "An annotation that, if present, will be stripped out of any propagated copies of an object. May be specified multiple times, with each instance specifying one annotation. See the user guide for more information.")
+	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
 	flag.Parse()
 
 	// Enable OpenCensus exporters to export metrics
@@ -159,7 +161,7 @@ func main() {
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
 	setupLog.Info("Starting certificate generation")
-	certsCreated, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert)
+	certsCreated, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
 	if err != nil {
 		setupLog.Error(err, "unable to set up cert rotation")
 		os.Exit(1)
