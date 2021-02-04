@@ -35,7 +35,17 @@ import (
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
+
+func init() {
+	plugin.Register(&plugin.Registration{
+		ID: "persistentvolume",
+		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
+			return NewPVController(ctx.Config.(*config.SyncerConfiguration), ctx.Client, ctx.Informer, ctx.VCClient, ctx.VCInformer, manager.ResourceSyncerOptions{})
+		},
+	})
+}
 
 type controller struct {
 	manager.BaseResourceSyncer

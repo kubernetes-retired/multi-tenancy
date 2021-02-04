@@ -31,7 +31,17 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
+
+func init() {
+	plugin.Register(&plugin.Registration{
+		ID: "namespace",
+		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
+			return NewNamespaceController(ctx.Config.(*config.SyncerConfiguration), ctx.Client, ctx.Informer, ctx.VCClient, ctx.VCInformer, manager.ResourceSyncerOptions{})
+		},
+	})
+}
 
 type controller struct {
 	manager.BaseResourceSyncer
