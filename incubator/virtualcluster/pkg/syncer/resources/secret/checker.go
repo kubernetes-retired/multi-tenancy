@@ -42,13 +42,13 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting secret checker")
 	}
-	c.secretPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // PatrollerDo check if normal secrets and service account secrets keep consistency between super master and tenant masters.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterSecretController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up secret period checker")
 		return
@@ -93,7 +93,7 @@ func (c *controller) PatrollerDo() {
 			vSecretName = secretName
 		}
 		// check whether secret is exists in tenant.
-		vSecretObj, err := c.multiClusterSecretController.Get(clusterName, vNamespace, vSecretName)
+		vSecretObj, err := c.MultiClusterController.Get(clusterName, vNamespace, vSecretName)
 		if errors.IsNotFound(err) {
 			shouldDelete = true
 		}
@@ -120,7 +120,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) checkSecretOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterSecretController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing secrets from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -137,7 +137,7 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 
 		pSecret, err := c.secretLister.Secrets(targetNamespace).Get(vSecret.Name)
 		if errors.IsNotFound(err) {
-			if err := c.multiClusterSecretController.RequeueObject(clusterName, &secretList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &secretList.Items[i]); err != nil {
 				klog.Errorf("error requeue vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantOpaqueSecrets").Inc()
@@ -154,13 +154,13 @@ func (c *controller) checkSecretOfTenantCluster(clusterName string) {
 			klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, pSecret.Name)
 			continue
 		}
-		vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
 
-		updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(pSecret, &secretList.Items[i])
+		updatedSecret := conversion.Equality(c.Config, vc).CheckSecretEquality(pSecret, &secretList.Items[i])
 		if updatedSecret != nil {
 			atomic.AddUint64(&numMissMatchedOpaqueSecrets, 1)
 			klog.Warningf("spec of secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)
@@ -173,7 +173,7 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		constants.LabelSecretUID: string(vSecret.UID),
 	}))
 	if errors.IsNotFound(err) || len(secretList) == 0 {
-		if err := c.multiClusterSecretController.RequeueObject(clusterName, vSecret); err != nil {
+		if err := c.MultiClusterController.RequeueObject(clusterName, vSecret); err != nil {
 			klog.Errorf("error requeue service account type vSecret %v/%v in cluster %s: %v", vSecret.Namespace, vSecret.Name, clusterName, err)
 		} else {
 			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantSASecrets").Inc()
@@ -194,13 +194,13 @@ func (c *controller) checkServiceAccountTokenTypeSecretOfTenantCluster(clusterNa
 		klog.Errorf("Found pSecret %s/%s delegated UID is different from tenant object.", targetNamespace, secretList[0].Name)
 		return
 	}
-	vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 	if err != nil {
 		klog.Errorf("fail to get cluster spec : %s", clusterName)
 		return
 	}
 
-	updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(secretList[0], vSecret)
+	updatedSecret := conversion.Equality(c.Config, vc).CheckSecretEquality(secretList[0], vSecret)
 	if updatedSecret != nil {
 		atomic.AddUint64(&numMissMatchedSASecrets, 1)
 		klog.Warningf("spec of service account token type secret %v/%v diff in super&tenant master", vSecret.Namespace, vSecret.Name)

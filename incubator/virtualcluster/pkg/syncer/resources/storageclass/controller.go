@@ -36,26 +36,17 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master storageclasses client
 	client v1storage.StorageClassesGetter
 	// super master storageclasses informer/lister/synced functions
 	informer           storageinformers.Interface
 	storageclassLister listersv1.StorageClassLister
 	storageclassSynced cache.InformerSynced
-
-	// Connect to all tenant master storageclass informers
-	multiClusterStorageClassController *mc.MultiClusterController
-	// UWcontroller
-	upwardStorageClassController *uw.UpwardController
-	// Periodic checker
-	storageClassPatroller *pa.Patroller
 }
 
 func NewStorageClassController(config *config.SyncerConfiguration,
@@ -63,19 +54,20 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
-		config:   config,
+		BaseResourceSyncer: manager.BaseResourceSyncer{
+			Config: config,
+		},
 		client:   client.StorageV1(),
 		informer: informer.Storage().V1(),
 	}
 
-	multiClusterStorageClassController, err := mc.NewMCController(&v1.StorageClass{}, &v1.StorageClassList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1.StorageClass{}, &v1.StorageClassList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create storageClass mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterStorageClassController = multiClusterStorageClassController
 
 	c.storageclassLister = informer.Storage().V1().StorageClasses().Lister()
 	if options.IsFake {
@@ -84,18 +76,15 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 		c.storageclassSynced = informer.Storage().V1().StorageClasses().Informer().HasSynced
 	}
 
-	upwardStorageClassController, err := uw.NewUWController(&v1.StorageClass{}, c,
-		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
+	c.UpwardController, err = uw.NewUWController(&v1.StorageClass{}, c, uw.WithOptions(options.UWOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create storageclass upward controller: %v", err)
+		return nil, err
 	}
-	c.upwardStorageClassController = upwardStorageClassController
 
-	storageClassPatroller, err := pa.NewPatroller(&v1.StorageClass{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1.StorageClass{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create storageClass patroller: %v", err)
+		return nil, err
 	}
-	c.storageClassPatroller = storageClassPatroller
 
 	c.informer.StorageClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -126,7 +115,7 @@ func NewStorageClassController(config *config.SyncerConfiguration,
 				DeleteFunc: c.enqueueStorageClass,
 			},
 		})
-	return c, multiClusterStorageClassController, upwardStorageClassController, nil
+	return c, nil
 }
 
 func publicStorageClass(e *v1.StorageClass) bool {
@@ -141,25 +130,13 @@ func (c *controller) enqueueStorageClass(obj interface{}) {
 		return
 	}
 
-	clusterNames := c.multiClusterStorageClassController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("No tenant masters, stop backpopulate storageclass %v", key)
 		return
 	}
 
 	for _, clusterName := range clusterNames {
-		c.upwardStorageClassController.AddToQueue(clusterName + "/" + key)
+		c.UpwardController.AddToQueue(clusterName + "/" + key)
 	}
-}
-
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterStorageClassController)
 }

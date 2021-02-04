@@ -34,12 +34,12 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.nodeSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	return c.upwardNodeController.Start(stopCh)
+	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) enqueueNode(obj interface{}) {
 	node := obj.(*v1.Node)
-	c.upwardNodeController.AddToQueue(node.Name)
+	c.UpwardController.AddToQueue(node.Name)
 }
 
 func (c *controller) BackPopulate(nodeName string) error {
@@ -76,7 +76,7 @@ func (c *controller) BackPopulate(nodeName string) error {
 func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	tenantClient, err := c.multiClusterNodeController.GetClusterClient(clusterName)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		klog.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 		// Cluster is removed. We should remove the entry from nodeNameToCluster map.
@@ -86,7 +86,7 @@ func (c *controller) updateClusterNodeStatus(clusterName string, node *v1.Node, 
 		return
 	}
 
-	vNodeObj, err := c.multiClusterNodeController.Get(clusterName, "", node.Name)
+	vNodeObj, err := c.MultiClusterController.Get(clusterName, "", node.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Errorf("could not find node %s/%s: %v", clusterName, node.Name, err)

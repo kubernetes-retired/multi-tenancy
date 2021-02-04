@@ -30,28 +30,20 @@ import (
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master ingress client
 	ingressClient v1beta1extensions.IngressesGetter
 	// super master informer/listers/synced functions
 	ingressLister listersv1beta1.IngressLister
 	ingressSynced cache.InformerSynced
-	// Connect to all tenant master ingress informers
-	multiClusterIngressController *mc.MultiClusterController
-	// UWcontroller
-	upwardIngressController *uw.UpwardController
-	// Periodic checker
-	ingressPatroller *pa.Patroller
 }
 
 func NewIngressController(config *config.SyncerConfiguration,
@@ -59,18 +51,19 @@ func NewIngressController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
-		config:        config,
+		BaseResourceSyncer: manager.BaseResourceSyncer{
+			Config: config,
+		},
 		ingressClient: client.ExtensionsV1beta1(),
 	}
 
-	multiClusterIngressController, err := mc.NewMCController(&v1beta1.Ingress{}, &v1beta1.IngressList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1beta1.Ingress{}, &v1beta1.IngressList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create ingress mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterIngressController = multiClusterIngressController
 
 	c.ingressLister = informer.Extensions().V1beta1().Ingresses().Lister()
 	if options.IsFake {
@@ -79,18 +72,15 @@ func NewIngressController(config *config.SyncerConfiguration,
 		c.ingressSynced = informer.Extensions().V1beta1().Ingresses().Informer().HasSynced
 	}
 
-	upwardIngressController, err := uw.NewUWController(&v1beta1.Ingress{}, c,
-		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
+	c.UpwardController, err = uw.NewUWController(&v1beta1.Ingress{}, c, uw.WithOptions(options.UWOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create ingress upward controller: %v", err)
+		return nil, err
 	}
-	c.upwardIngressController = upwardIngressController
 
-	ingressPatroller, err := pa.NewPatroller(&v1beta1.Ingress{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1beta1.Ingress{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create ingress patroller: %v", err)
+		return nil, err
 	}
-	c.ingressPatroller = ingressPatroller
 
 	informer.Extensions().V1beta1().Ingresses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -121,7 +111,7 @@ func NewIngressController(config *config.SyncerConfiguration,
 				DeleteFunc: c.enqueueIngress,
 			},
 		})
-	return c, multiClusterIngressController, upwardIngressController, nil
+	return c, nil
 }
 
 func (c *controller) enqueueIngress(obj interface{}) {
@@ -140,9 +130,5 @@ func (c *controller) enqueueIngress(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.upwardIngressController.AddToQueue(key)
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterIngressController)
+	c.UpwardController.AddToQueue(key)
 }

@@ -31,17 +31,14 @@ import (
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master client
 	client v1core.CoreV1Interface
 	// super master pv/pvc lister/synced functions
@@ -50,12 +47,6 @@ type controller struct {
 	pvSynced  cache.InformerSynced
 	pvcLister listersv1.PersistentVolumeClaimLister
 	pvcSynced cache.InformerSynced
-	// Connect to all tenant master pv informers
-	multiClusterPersistentVolumeController *mc.MultiClusterController
-	// UWcontroller
-	upwardPersistentVolumeController *uw.UpwardController
-	// Periodic checker
-	persistentVolumePatroller *pa.Patroller
 }
 
 func NewPVController(config *config.SyncerConfiguration,
@@ -63,19 +54,21 @@ func NewPVController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
-		config:   config,
+		BaseResourceSyncer: manager.BaseResourceSyncer{
+			Config: config,
+		},
 		client:   client.CoreV1(),
 		informer: informer.Core().V1(),
 	}
 
-	multiClusterPersistentVolumeController, err := mc.NewMCController(&v1.PersistentVolume{}, &v1.PersistentVolumeList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1.PersistentVolume{}, &v1.PersistentVolumeList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterPersistentVolumeController = multiClusterPersistentVolumeController
+
 	c.pvLister = c.informer.PersistentVolumes().Lister()
 	c.pvcLister = c.informer.PersistentVolumeClaims().Lister()
 
@@ -87,18 +80,15 @@ func NewPVController(config *config.SyncerConfiguration,
 		c.pvcSynced = c.informer.PersistentVolumeClaims().Informer().HasSynced
 	}
 
-	upwardPersistentVolumeController, err := uw.NewUWController(&v1.PersistentVolume{}, c,
-		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
+	c.UpwardController, err = uw.NewUWController(&v1.PersistentVolume{}, c, uw.WithOptions(options.UWOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume upward controller: %v", err)
+		return nil, err
 	}
-	c.upwardPersistentVolumeController = upwardPersistentVolumeController
 
-	persistentVolumePatroller, err := pa.NewPatroller(&v1.PersistentVolume{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1.PersistentVolume{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create persistentVolume patroller: %v", err)
+		return nil, err
 	}
-	c.persistentVolumePatroller = persistentVolumePatroller
 
 	c.informer.PersistentVolumes().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -130,7 +120,7 @@ func NewPVController(config *config.SyncerConfiguration,
 			},
 		})
 
-	return c, multiClusterPersistentVolumeController, upwardPersistentVolumeController, nil
+	return c, nil
 }
 
 func boundPersistentVolume(e *v1.PersistentVolume) bool {
@@ -143,17 +133,5 @@ func (c *controller) enqueuePersistentVolume(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.upwardPersistentVolumeController.AddToQueue(key)
-}
-
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterPersistentVolumeController)
+	c.UpwardController.AddToQueue(key)
 }

@@ -40,10 +40,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/handler"
@@ -116,7 +117,7 @@ type ClusterInterface interface {
 func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DWReconciler, opts ...OptConfig) (*MultiClusterController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
-		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+		return nil, fmt.Errorf("mccontroller: unknown object kind %+v", objectType)
 	}
 
 	c := &MultiClusterController{
@@ -126,7 +127,7 @@ func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DW
 		Options: Options{
 			name:                    fmt.Sprintf("%s-mccontroller", strings.ToLower(kinds[0].Kind)),
 			JitterPeriod:            1 * time.Second,
-			MaxConcurrentReconciles: 1,
+			MaxConcurrentReconciles: constants.DwsControllerWorkerLow,
 			Reconciler:              rc,
 			Queue:                   fairqueue.NewRateLimitingFairQueue(),
 		},
@@ -139,7 +140,7 @@ func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DW
 	}
 
 	if c.Reconciler == nil {
-		return nil, fmt.Errorf("must specify DW Reconciler")
+		return nil, fmt.Errorf("mccontroller %q: must specify DW Reconciler", c.objectKind)
 	}
 
 	return c, nil
@@ -463,7 +464,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	// string of the resource to be synced.
 	result, err := c.Reconciler.Reconcile(req)
 	if err == nil {
-		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeOK)
+		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, utilconstants.StatusCodeOK)
 		if result.RequeueAfter > 0 {
 			c.Queue.AddAfter(req, result.RequeueAfter)
 		} else if result.Requeue {
@@ -479,7 +480,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	// we take a negative attitude on this situation and fail fast.
 	if apierr, ok := err.(apierrors.APIStatus); ok {
 		if code := apierr.Status().Code; code == http.StatusBadRequest || code == http.StatusForbidden {
-			metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeBadRequest)
+			metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, utilconstants.StatusCodeBadRequest)
 			klog.Errorf("%s dws request is rejected: %v", c.name, err)
 			c.Queue.Forget(obj)
 			return true
@@ -487,14 +488,14 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 	}
 
 	// exceed max retry
-	if c.Queue.NumRequeues(obj) >= constants.MaxReconcileRetryAttempts {
-		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeExceedMaxRetryAttempts)
+	if c.Queue.NumRequeues(obj) >= utilconstants.MaxReconcileRetryAttempts {
+		metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, utilconstants.StatusCodeExceedMaxRetryAttempts)
 		c.Queue.Forget(obj)
 		klog.Warningf("%s dws request is dropped due to reaching max retry limit: %+v", c.name, obj)
 		return true
 	}
 
-	metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, constants.StatusCodeError)
+	metrics.RecordDWSOperationStatus(c.objectKind, req.ClusterName, utilconstants.StatusCodeError)
 	c.Queue.AddRateLimited(req)
 	klog.Errorf("%s dws request reconcile failed: %v", req, err)
 	return false
@@ -528,16 +529,16 @@ func filterSuperClusterRelatedObject(c *MultiClusterController, clusterName, nsN
 		return true
 	}
 	placements := make(map[string]int)
-	clist, ok := nsObj.(*v1.Namespace).GetAnnotations()[constants.LabelScheduledPlacements]
+	clist, ok := nsObj.(*v1.Namespace).GetAnnotations()[utilconstants.LabelScheduledPlacements]
 	if !ok {
 		return true
 	}
 	if err = json.Unmarshal([]byte(clist), &placements); err != nil {
-		klog.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", clist, constants.LabelScheduledPlacements, clusterName, nsName, err)
+		klog.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", clist, utilconstants.LabelScheduledPlacements, clusterName, nsName, err)
 		return true
 	}
 
-	_, ok = placements[constants.SuperClusterID]
+	_, ok = placements[utilconstants.SuperClusterID]
 
 	return !ok
 }
@@ -549,10 +550,10 @@ func filterSuperClusterSchedulePod(c *MultiClusterController, req reconciler.Req
 		return true
 	}
 
-	cname, ok := podObj.(*v1.Pod).GetAnnotations()[constants.LabelScheduledCluster]
+	cname, ok := podObj.(*v1.Pod).GetAnnotations()[utilconstants.LabelScheduledCluster]
 	if !ok {
 		return true
 	}
 
-	return cname != constants.SuperClusterID
+	return cname != utilconstants.SuperClusterID
 }

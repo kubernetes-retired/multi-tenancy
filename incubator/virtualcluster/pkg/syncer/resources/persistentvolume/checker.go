@@ -41,13 +41,13 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvSynced, c.pvcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-	c.persistentVolumePatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // PatrollerDo check if persistent volumes keep consistency between super master and tenant masters.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterPersistentVolumeController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -88,11 +88,11 @@ func (c *controller) PatrollerDo() {
 			// Bound PVC does not belong to any tenant.
 			continue
 		}
-		vPVObj, err := c.multiClusterPersistentVolumeController.Get(clusterName, "", pPV.Name)
+		vPVObj, err := c.MultiClusterController.Get(clusterName, "", pPV.Name)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPVs").Inc()
-				c.upwardPersistentVolumeController.AddToQueue(pPV.Name)
+				c.UpwardController.AddToQueue(pPV.Name)
 			}
 			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
 		} else {
@@ -110,7 +110,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterPersistentVolumeController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing pv from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -137,7 +137,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			shouldDelete = true
 		}
 		if shouldDelete {
-			tenantClient, err := c.multiClusterPersistentVolumeController.GetClusterClient(clusterName)
+			tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 			if err != nil {
 				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 				continue
@@ -154,7 +154,7 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		updatedPVSpec := conversion.Equality(c.config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+		updatedPVSpec := conversion.Equality(c.Config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 		if updatedPVSpec != nil {
 			atomic.AddUint64(&numSpecMissMatchedPVs, 1)
 			klog.Warningf("spec of pv %v diff in super&tenant master %s", vPV.Name, clusterName)

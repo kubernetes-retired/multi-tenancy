@@ -36,7 +36,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.eventSynced, c.nsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	return c.upwardEventController.Start(stopCh)
+	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {
@@ -66,7 +66,7 @@ func (c *controller) BackPopulate(key string) error {
 		return nil
 	}
 
-	tenantClient, err := c.multiClusterEventController.GetClusterClient(clusterName)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
@@ -77,7 +77,7 @@ func (c *controller) BackPopulate(key string) error {
 		return nil
 	}
 
-	vInvolvedObject, err := c.multiClusterEventController.GetByObjectType(clusterName, tenantNS, pEvent.InvolvedObject.Name, vInvolvedObjectType)
+	vInvolvedObject, err := c.MultiClusterController.GetByObjectType(clusterName, tenantNS, pEvent.InvolvedObject.Name, vInvolvedObjectType)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("back populate event: failed to find pod %s/%s in cluster %s", tenantNS, pEvent.InvolvedObject.Name, clusterName)
@@ -87,7 +87,7 @@ func (c *controller) BackPopulate(key string) error {
 	}
 
 	vEvent := conversion.BuildVirtualEvent(clusterName, pEvent, vInvolvedObject.(metav1.Object))
-	_, err = c.multiClusterEventController.Get(clusterName, tenantNS, vEvent.Name)
+	_, err = c.MultiClusterController.Get(clusterName, tenantNS, vEvent.Name)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			_, err = tenantClient.CoreV1().Events(tenantNS).Create(context.TODO(), vEvent, metav1.CreateOptions{})

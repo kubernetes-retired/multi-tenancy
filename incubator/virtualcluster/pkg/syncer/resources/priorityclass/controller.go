@@ -36,26 +36,17 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master priorityclasses client
 	client v1priorityclass.PriorityClassesGetter
 	// super master priorityclasses informer/lister/synced functions
 	informer            priorityclassinformers.Interface //weiling
 	priorityclassLister listersv1.PriorityClassLister
 	priorityclassSynced cache.InformerSynced
-
-	// Connect to all tenant master priorityclass informers
-	multiClusterPriorityClassController *mc.MultiClusterController
-	// UWcontroller
-	upwardPriorityClassController *uw.UpwardController
-	// Periodic checker
-	priorityClassPatroller *pa.Patroller
 }
 
 func NewPriorityClassController(config *config.SyncerConfiguration,
@@ -63,19 +54,20 @@ func NewPriorityClassController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
-		config:   config,
+		BaseResourceSyncer: manager.BaseResourceSyncer{
+			Config: config,
+		},
 		client:   client.SchedulingV1(),
 		informer: informer.Scheduling().V1(),
 	}
 
-	multiClusterPriorityClassController, err := mc.NewMCController(&v1.PriorityClass{}, &v1.PriorityClassList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1.PriorityClass{}, &v1.PriorityClassList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create priorityClass mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterPriorityClassController = multiClusterPriorityClassController
 
 	c.priorityclassLister = informer.Scheduling().V1().PriorityClasses().Lister()
 	if options.IsFake {
@@ -84,18 +76,15 @@ func NewPriorityClassController(config *config.SyncerConfiguration,
 		c.priorityclassSynced = informer.Scheduling().V1().PriorityClasses().Informer().HasSynced
 	}
 
-	upwardPriorityClassController, err := uw.NewUWController(&v1.PriorityClass{}, c,
-		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
+	c.UpwardController, err = uw.NewUWController(&v1.PriorityClass{}, c, uw.WithOptions(options.UWOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create priorityclass upward controller: %v", err)
+		return nil, err
 	}
-	c.upwardPriorityClassController = upwardPriorityClassController
 
-	priorityClassPatroller, err := pa.NewPatroller(&v1.PriorityClass{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1.PriorityClass{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create priorityClass patroller: %v", err)
+		return nil, err
 	}
-	c.priorityClassPatroller = priorityClassPatroller
 
 	c.informer.PriorityClasses().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -126,7 +115,7 @@ func NewPriorityClassController(config *config.SyncerConfiguration,
 				DeleteFunc: c.enqueuePriorityClass,
 			},
 		})
-	return c, multiClusterPriorityClassController, upwardPriorityClassController, nil
+	return c, nil
 }
 
 func publicPriorityClass(e *v1.PriorityClass) bool {
@@ -141,25 +130,13 @@ func (c *controller) enqueuePriorityClass(obj interface{}) {
 		return
 	}
 
-	clusterNames := c.multiClusterPriorityClassController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("No tenant masters, stop backpopulate priorityclass %v", key)
 		return
 	}
 
 	for _, clusterName := range clusterNames {
-		c.upwardPriorityClassController.AddToQueue(clusterName + "/" + key)
+		c.UpwardController.AddToQueue(clusterName + "/" + key)
 	}
-}
-
-func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	return reconciler.Result{}, nil
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterPriorityClassController)
 }

@@ -36,7 +36,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.configMapSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	return c.multiClusterConfigMapController.Start(stopCh)
+	return c.MultiClusterController.Start(stopCh)
 }
 
 // The reconcile logic for tenant master configMap informer
@@ -53,7 +53,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		pExists = false
 	}
 	vExists := true
-	vConfigMapObj, err := c.multiClusterConfigMapController.Get(request.ClusterName, request.Namespace, request.Name)
+	vConfigMapObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err
@@ -88,7 +88,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileConfigMapCreate(clusterName, targetNamespace, requestUID string, configMap *v1.ConfigMap) error {
-	vcName, vcNS, _, err := c.multiClusterConfigMapController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
@@ -113,11 +113,11 @@ func (c *controller) reconcileConfigMapUpdate(clusterName, targetNamespace, requ
 	if pConfigMap.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pConfigMap %s/%s delegated UID is different from updated object.", targetNamespace, pConfigMap.Name)
 	}
-	vc, err := util.GetVirtualClusterObject(c.multiClusterConfigMapController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedConfigMap := conversion.Equality(c.config, vc).CheckConfigMapEquality(pConfigMap, vConfigMap)
+	updatedConfigMap := conversion.Equality(c.Config, vc).CheckConfigMapEquality(pConfigMap, vConfigMap)
 	if updatedConfigMap != nil {
 		pConfigMap, err = c.configMapClient.ConfigMaps(targetNamespace).Update(context.TODO(), updatedConfigMap, metav1.UpdateOptions{})
 		if err != nil {

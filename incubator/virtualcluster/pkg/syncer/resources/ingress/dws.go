@@ -36,7 +36,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.ingressSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Ingress dws")
 	}
-	return c.multiClusterIngressController.Start(stopCh)
+	return c.MultiClusterController.Start(stopCh)
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
@@ -51,7 +51,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		pExists = false
 	}
 	vExists := true
-	vIngressObj, err := c.multiClusterIngressController.Get(request.ClusterName, request.Namespace, request.Name)
+	vIngressObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err
@@ -86,7 +86,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileIngressCreate(clusterName, targetNamespace, requestUID string, ingress *v1beta1.Ingress) error {
-	vcName, vcNS, _, err := c.multiClusterIngressController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
@@ -114,11 +114,11 @@ func (c *controller) reconcileIngressUpdate(clusterName, targetNamespace, reques
 		return fmt.Errorf("pIngress %s/%s delegated UID is different from updated object.", targetNamespace, pIngress.Name)
 	}
 
-	vc, err := util.GetVirtualClusterObject(c.multiClusterIngressController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 	if err != nil {
 		return err
 	}
-	updated := conversion.Equality(c.config, vc).CheckIngressEquality(pIngress, vIngress)
+	updated := conversion.Equality(c.Config, vc).CheckIngressEquality(pIngress, vIngress)
 	if updated != nil {
 		_, err = c.ingressClient.Ingresses(targetNamespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
 		if err != nil {

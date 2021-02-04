@@ -40,13 +40,13 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.priorityclassSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-	c.priorityClassPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // ParollerDo check if PriorityClass keeps consistency between super master and tenant masters.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterPriorityClassController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up priority class period checker")
 		return
@@ -75,11 +75,11 @@ func (c *controller) PatrollerDo() {
 			continue
 		}
 		for _, clusterName := range clusterNames {
-			_, err := c.multiClusterPriorityClassController.Get(clusterName, "", pPriorityClass.Name)
+			_, err := c.MultiClusterController.Get(clusterName, "", pPriorityClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPriorityClasses").Inc()
-					c.upwardPriorityClassController.AddToQueue(clusterName + "/" + pPriorityClass.Name)
+					c.UpwardController.AddToQueue(clusterName + "/" + pPriorityClass.Name)
 				}
 				klog.Errorf("fail to get priorityclass from cluster %s: %v", clusterName, err)
 			}
@@ -90,7 +90,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterPriorityClassController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing priorityclass from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -101,7 +101,7 @@ func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
 		pPriorityClass, err := c.priorityclassLister.Get(vPriorityClass.Name)
 		if errors.IsNotFound(err) {
 			// super master is the source of the truth for sc object, delete tenant master obj
-			tenantClient, err := c.multiClusterPriorityClassController.GetClusterClient(clusterName)
+			tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 			if err != nil {
 				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 				continue
@@ -127,7 +127,7 @@ func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
 			atomic.AddUint64(&numMissMatchedPriorityClasses, 1)
 			klog.Warningf("spec of priorityClass %v diff in super&tenant master", vPriorityClass.Name)
 			if publicPriorityClass(pPriorityClass) {
-				c.upwardPriorityClassController.AddToQueue(clusterName + "/" + pPriorityClass.Name)
+				c.UpwardController.AddToQueue(clusterName + "/" + pPriorityClass.Name)
 			}
 		}
 	}

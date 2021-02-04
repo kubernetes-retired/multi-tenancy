@@ -36,7 +36,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.priorityclassSynced) {
 		return fmt.Errorf("failed to wait for caches to sync priorityclass")
 	}
-	return c.upwardPriorityClassController.Start(stopCh)
+	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {
@@ -52,12 +52,12 @@ func (c *controller) BackPopulate(key string) error {
 		op = reconciler.DeleteEvent
 	}
 
-	tenantClient, err := c.multiClusterPriorityClassController.GetClusterClient(clusterName)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	vPriorityClassObj, err := c.multiClusterPriorityClassController.Get(clusterName, "", scName)
+	vPriorityClassObj, err := c.MultiClusterController.Get(clusterName, "", scName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if op == reconciler.AddEvent {
@@ -82,7 +82,7 @@ func (c *controller) BackPopulate(key string) error {
 			return err
 		}
 	} else {
-		updatedPriorityClass := conversion.Equality(c.config, nil).CheckPriorityClassEquality(pPriorityClass, vPriorityClassObj.(*v1.PriorityClass))
+		updatedPriorityClass := conversion.Equality(c.Config, nil).CheckPriorityClassEquality(pPriorityClass, vPriorityClassObj.(*v1.PriorityClass))
 		if updatedPriorityClass != nil {
 			_, err := tenantClient.SchedulingV1().PriorityClasses().Update(context.TODO(), updatedPriorityClass, metav1.UpdateOptions{})
 			if err != nil {
