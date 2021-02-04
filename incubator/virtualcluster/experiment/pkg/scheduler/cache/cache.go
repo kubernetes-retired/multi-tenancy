@@ -22,6 +22,8 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
+
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 )
 
 var _ Cache = &schedulerCache{}
@@ -123,7 +125,8 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 	}
 	clusterState, ok := c.clusters[cluster]
 	if !ok {
-		return fmt.Errorf("namespace %s has a placement to a cluster %s that does not exist", key, cluster)
+		klog.Warningf("namespace %s has a placement to a cluster %s that does not exist, create a shadow cluster", key, cluster)
+		clusterState = c.addShadowCluster(cluster)
 	}
 	var slices []*Slice
 	for i := 0; i < num; i++ {
@@ -135,6 +138,11 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 func (c *schedulerCache) AddNamespace(namespace *Namespace) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	key := namespace.GetKey()
+	if old, ok := c.namespaces[key]; ok {
+		return c.updateNamespaceWithoutLock(old, namespace)
+	}
 	return c.addNamespaceWithoutLock(namespace)
 }
 
@@ -221,16 +229,11 @@ func (c *schedulerCache) removeNamespaceWithoutLock(namespace *Namespace) error 
 	return err
 }
 
-// UpdateNamespace handles changing namespace scheduling result.
-// TODO: We need more detailed namespace update methods such as updating labels only.
-func (c *schedulerCache) UpdateNamespace(oldNamespace, newNamespace *Namespace) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *schedulerCache) updateNamespaceWithoutLock(oldNamespace, newNamespace *Namespace) error {
 	var err error
 	if oldNamespace.GetKey() != newNamespace.GetKey() {
 		return fmt.Errorf("cannot update namespaces with different keys.")
 	}
-
 	err = c.removeNamespaceWithoutLock(oldNamespace)
 	if err != nil {
 		return err
@@ -244,12 +247,41 @@ func (c *schedulerCache) UpdateNamespace(oldNamespace, newNamespace *Namespace) 
 	return nil
 }
 
+// UpdateNamespace handles changing namespace scheduling result.
+// TODO: We need more detailed namespace update methods such as updating labels only.
+func (c *schedulerCache) UpdateNamespace(oldNamespace, newNamespace *Namespace) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.updateNamespaceWithoutLock(oldNamespace, newNamespace)
+}
+
+func (c *schedulerCache) revertShadowCluster(shadowCluster, newCluster *Cluster) {
+	if newCluster.labels != nil {
+		shadowCluster.labels = make(map[string]string)
+		for k, v := range newCluster.labels {
+			shadowCluster.labels[k] = v
+		}
+	}
+	shadowCluster.capacity = newCluster.capacity.DeepCopy()
+	shadowCluster.shadow = false
+}
+
+func (c *schedulerCache) addShadowCluster(name string) *Cluster {
+	shadowCluster := NewCluster(name, nil, constants.ShadowClusterCapacity)
+	shadowCluster.shadow = true
+	c.clusters[name] = shadowCluster
+	return shadowCluster
+}
+
 func (c *schedulerCache) AddCluster(cluster *Cluster) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, ok := c.clusters[cluster.name]; ok {
-		return fmt.Errorf("cluster %s was added to cache", cluster.name)
+	if clusterState, ok := c.clusters[cluster.name]; ok {
+		if clusterState.shadow {
+			c.revertShadowCluster(clusterState, cluster)
+			return nil
+		}
 	}
 	clone := cluster.DeepCopy()
 	c.clusters[cluster.name] = clone

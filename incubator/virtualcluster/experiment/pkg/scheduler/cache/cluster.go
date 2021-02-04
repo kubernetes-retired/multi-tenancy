@@ -27,6 +27,7 @@ type Cluster struct {
 	name     string
 	labels   map[string]string
 	capacity v1.ResourceList
+	shadow   bool // a shadow cluster has a fake capacity, hence is not involved in scheduling
 
 	alloc  v1.ResourceList
 	slices map[string][]*Slice            // ns key -> slice array
