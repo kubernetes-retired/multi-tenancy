@@ -94,6 +94,15 @@ func (s *Scheduler) syncVirtualCluster(key string) error {
 		return nil
 	}
 
+	if _, ok := DirtyVirtualClusters.Load(key); ok {
+		// the cluster was dirty, we need to refresh the scheduler cache
+		if err := util.SyncVirtualClusterState(s.metaClusterClient, vc, s.schedulerCache); err != nil {
+			return fmt.Errorf("failed to refresh the scheduler cache for virtual cluster %s:%v", key, err)
+		}
+		klog.Infof("successfully refresh the scheduler cache for virtual cluster %s/%s, remove it from dirty set", vc.Namespace, vc.Name)
+		DirtyVirtualClusters.Delete(key)
+	}
+
 	switch vc.Status.Phase {
 	case v1alpha1.ClusterRunning:
 		return s.addVirtualCluster(key, vc)
@@ -101,13 +110,13 @@ func (s *Scheduler) syncVirtualCluster(key string) error {
 		s.removeVirtualCluster(key)
 		return nil
 	default:
-		klog.Infof("Virtual cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
+		klog.Infof("virtual cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
 		return nil
 	}
 }
 
 func (s *Scheduler) removeVirtualCluster(key string) {
-	klog.Infof("Remove virtualcluster %s", key)
+	klog.Infof("remove virtualcluster %s", key)
 
 	s.virtualClusterLock.Lock()
 	defer s.virtualClusterLock.Unlock()
@@ -128,7 +137,7 @@ func (s *Scheduler) removeVirtualCluster(key string) {
 }
 
 func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) error {
-	klog.Infof("Add virtualcluster %s", key)
+	klog.Infof("add virtualcluster %s", key)
 
 	s.virtualClusterLock.Lock()
 	if _, exist := s.virtualClusterSet[key]; exist {
@@ -243,6 +252,15 @@ func (s *Scheduler) syncSuperCluster(key string) error {
 		return nil
 	}
 
+	if _, ok := DirtySuperClusters.Load(key); ok {
+		// the cluster was dirty, we need to refresh the scheduler cache
+		if err := util.SyncSuperClusterState(s.metaClusterClient, super, s.schedulerCache); err != nil {
+			return fmt.Errorf("failed to refresh the scheduler cache for super cluster %s:%v", key, err)
+		}
+		klog.Infof("successfully refresh the scheduler cache for super cluster %s/%s, remove it from dirty set", super.Namespace, super.Name)
+		DirtySuperClusters.Delete(key)
+	}
+
 	switch v1alpha4.ClusterPhase(super.Status.Phase) {
 	case v1alpha4.ClusterPhaseProvisioned:
 		return s.addSuperCluster(key, super)
@@ -250,13 +268,13 @@ func (s *Scheduler) syncSuperCluster(key string) error {
 		s.removeSuperCluster(key)
 		return nil
 	default:
-		klog.Infof("SuperCluster %s/%s not ready to reconcile", super.Namespace, super.Name)
+		klog.Infof("superCluster %s/%s not ready to reconcile", super.Namespace, super.Name)
 		return nil
 	}
 }
 
 func (s *Scheduler) removeSuperCluster(key string) {
-	klog.Infof("Remove supercluster %s", key)
+	klog.Infof("remove supercluster %s", key)
 
 	s.superClusterLock.Lock()
 	defer s.superClusterLock.Unlock()
@@ -276,7 +294,7 @@ func (s *Scheduler) removeSuperCluster(key string) {
 }
 
 func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
-	klog.Infof("Add supercluster %s", key)
+	klog.Infof("add supercluster %s", key)
 
 	s.superClusterLock.Lock()
 	if _, exist := s.superClusterSet[key]; exist {

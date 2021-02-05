@@ -17,8 +17,12 @@ limitations under the License.
 package constants
 
 import (
+	"fmt"
+	"math"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
 
@@ -39,3 +43,9 @@ const (
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()
+
+// shadowcluster has a fake "unlimited" capacity
+var ShadowClusterCapacity = v1.ResourceList{
+	v1.ResourceCPU:    resource.MustParse(fmt.Sprintf("%d", math.MaxInt32)),
+	v1.ResourceMemory: resource.MustParse(fmt.Sprintf("%dGi", math.MaxInt32)),
+}

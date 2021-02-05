@@ -29,7 +29,7 @@ const (
 	defaultCluster2 = "testcluster2"
 )
 
-func TestNamespaceInterfaces(t *testing.T) {
+func TestAddRemoveNamespace(t *testing.T) {
 	defaultCapacity := v1.ResourceList{
 		"cpu":    resource.MustParse("2000M"),
 		"memory": resource.MustParse("4Gi"),
@@ -119,23 +119,23 @@ func TestNamespaceInterfaces(t *testing.T) {
 			succeed: false,
 		},
 
-		"Fail to add one namespace due to wrong cluster name": {
+		"Succeed to add one namespace with shadow cluster": {
 			namespace: NewNamespace(defaultTenant, defaultNamespace, nil, defaultQuota, defaultQuotaSlice,
 				[]*Placement{
 					NewPlacement(defaultCluster1, 1),
-					NewPlacement("I am wrong", 1),
+					NewPlacement("shadow", 1),
 				}),
 			allocAfter: map[string]v1.ResourceList{
 				defaultCluster1: v1.ResourceList{
-					"cpu":    resource.MustParse("0M"),
-					"memory": resource.MustParse("0Gi"),
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
 				},
 				defaultCluster2: v1.ResourceList{
 					"cpu":    resource.MustParse("0M"),
 					"memory": resource.MustParse("0Gi"),
 				},
 			},
-			succeed: false,
+			succeed: true,
 		},
 
 		"Fail to add one namespace due to wrong schedule": {
@@ -197,4 +197,226 @@ func TestNamespaceInterfaces(t *testing.T) {
 
 	}
 
+}
+
+func TestUpdateNamespace(t *testing.T) {
+	defaultCapacity := v1.ResourceList{
+		"cpu":    resource.MustParse("2000M"),
+		"memory": resource.MustParse("4Gi"),
+	}
+
+	fullQuota := v1.ResourceList{
+		"cpu":    resource.MustParse("4000M"),
+		"memory": resource.MustParse("8Gi"),
+	}
+
+	defaultQuota := v1.ResourceList{
+		"cpu":    resource.MustParse("1000M"),
+		"memory": resource.MustParse("2Gi"),
+	}
+
+	defaultQuotaSlice := v1.ResourceList{
+		"cpu":    resource.MustParse("500M"),
+		"memory": resource.MustParse("1Gi"),
+	}
+
+	stop := make(chan struct{})
+	cache := NewSchedulerCache(stop)
+
+	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
+	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)
+
+	cache.AddCluster(cluster1)
+	cache.AddCluster(cluster2)
+
+	testcases := map[string]struct {
+		oldNamespace *Namespace
+		newNamespace *Namespace
+		allocAfter   map[string]v1.ResourceList
+		succeed      bool
+	}{
+		"Succeed to update one namespace": {
+			oldNamespace: NewNamespace(defaultTenant, defaultNamespace, nil, fullQuota, defaultQuotaSlice,
+				[]*Placement{
+					NewPlacement(defaultCluster1, 4),
+					NewPlacement(defaultCluster2, 4),
+				}),
+			newNamespace: NewNamespace(defaultTenant, defaultNamespace, nil, defaultQuota, defaultQuotaSlice,
+				[]*Placement{
+					NewPlacement(defaultCluster1, 1),
+					NewPlacement(defaultCluster2, 1),
+				}),
+			allocAfter: map[string]v1.ResourceList{
+				defaultCluster1: v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+				defaultCluster2: v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+			},
+			succeed: true,
+		},
+
+		"Fail to update one namespace": {
+			oldNamespace: NewNamespace(defaultTenant, defaultNamespace, nil, defaultQuota, defaultQuotaSlice,
+				[]*Placement{
+					NewPlacement(defaultCluster1, 1),
+					NewPlacement(defaultCluster2, 1),
+				}),
+			newNamespace: NewNamespace(defaultTenant, defaultNamespace, nil, fullQuota, defaultQuotaSlice,
+				[]*Placement{
+					NewPlacement(defaultCluster1, 6),
+					NewPlacement(defaultCluster2, 2),
+				}),
+			allocAfter: map[string]v1.ResourceList{
+				defaultCluster1: v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+				defaultCluster2: v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+			},
+			succeed: false,
+		},
+	}
+
+	for k, tc := range testcases {
+		t.Run(k, func(t *testing.T) {
+			err := cache.AddNamespace(tc.oldNamespace)
+			if err != nil {
+				t.Errorf("test %s fail to create old namespace with err %v", k, err)
+			}
+			err = cache.UpdateNamespace(tc.oldNamespace, tc.newNamespace)
+			if tc.succeed && err != nil {
+				t.Errorf("test %s should succeed but fails with err %v", k, err)
+			}
+			if !tc.succeed && err == nil {
+				t.Errorf("test %s should fail but succeeds", k)
+			}
+			if !Equals(tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc) {
+				t.Errorf("The alloc of cluster 1 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc)
+			}
+			if !Equals(tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc) {
+				t.Errorf("The alloc of cluster 2 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc)
+			}
+			cache.RemoveNamespace(tc.newNamespace)
+		})
+
+		// test AddNamespace interface as well
+		t.Run(k, func(t *testing.T) {
+			err := cache.AddNamespace(tc.oldNamespace)
+			if err != nil {
+				t.Errorf("test %s fail to create old namespace with err %v", k, err)
+			}
+			err = cache.AddNamespace(tc.newNamespace)
+			if tc.succeed && err != nil {
+				t.Errorf("test %s should succeed but fails with err %v", k, err)
+			}
+			if !tc.succeed && err == nil {
+				t.Errorf("test %s should fail but succeeds", k)
+			}
+			if !Equals(tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc) {
+				t.Errorf("The alloc of cluster 1 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc)
+			}
+			if !Equals(tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc) {
+				t.Errorf("The alloc of cluster 2 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc)
+			}
+			cache.RemoveNamespace(tc.newNamespace)
+		})
+	}
+
+}
+
+func TestShadowCluster(t *testing.T) {
+	defaultCapacity := v1.ResourceList{
+		"cpu":    resource.MustParse("2000M"),
+		"memory": resource.MustParse("4Gi"),
+	}
+
+	defaultQuota := v1.ResourceList{
+		"cpu":    resource.MustParse("1000M"),
+		"memory": resource.MustParse("2Gi"),
+	}
+
+	defaultQuotaSlice := v1.ResourceList{
+		"cpu":    resource.MustParse("500M"),
+		"memory": resource.MustParse("1Gi"),
+	}
+
+	stop := make(chan struct{})
+	cache := NewSchedulerCache(stop)
+
+	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
+	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)
+
+	cache.AddCluster(cluster1)
+	cache.AddCluster(cluster2)
+
+	testcases := map[string]struct {
+		namespace  *Namespace
+		allocAfter map[string]v1.ResourceList
+		succeed    bool
+	}{
+		"add namespace with shadowcluster": {
+			namespace: NewNamespace(defaultTenant, defaultNamespace, nil, defaultQuota, defaultQuotaSlice,
+				[]*Placement{
+					NewPlacement(defaultCluster1, 1),
+					NewPlacement("shadow", 1),
+				}),
+			allocAfter: map[string]v1.ResourceList{
+				defaultCluster1: v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+				defaultCluster2: v1.ResourceList{
+					"cpu":    resource.MustParse("0"),
+					"memory": resource.MustParse("0"),
+				},
+				"shadow": v1.ResourceList{
+					"cpu":    resource.MustParse("500M"),
+					"memory": resource.MustParse("1Gi"),
+				},
+			},
+			succeed: true,
+		},
+	}
+
+	for k, tc := range testcases {
+		t.Run(k, func(t *testing.T) {
+			err := cache.AddNamespace(tc.namespace)
+			if tc.succeed && err != nil {
+				t.Errorf("test %s should succeed but fails with err %v", k, err)
+			}
+			if !tc.succeed && err == nil {
+				t.Errorf("test %s should fail but succeeds", k)
+			}
+			if !Equals(tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc) {
+				t.Errorf("The alloc of cluster 1 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster1], cache.clusters[defaultCluster1].alloc)
+
+			}
+			if !Equals(tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc) {
+				t.Errorf("The alloc of cluster 2 is not expected. Exp: %v, Got %v", tc.allocAfter[defaultCluster2], cache.clusters[defaultCluster2].alloc)
+			}
+
+			if !Equals(tc.allocAfter["shadow"], cache.clusters["shadow"].alloc) {
+				t.Errorf("The alloc of cluster shadow is not expected. Exp: %v, Got %v", tc.allocAfter["shadow"], cache.clusters["shadow"].alloc)
+			}
+
+			cluster3 := NewCluster("shadow", nil, defaultCapacity)
+			if Equals(cluster3.capacity, cache.clusters["shadow"].capacity) {
+				t.Errorf("The shadow cluster should have much bigger capacity. Got %v", cache.clusters["shadow"].capacity)
+			}
+			cache.AddCluster(cluster3)
+			if !Equals(cluster3.capacity, cache.clusters["shadow"].capacity) || cache.clusters["shadow"].shadow {
+				t.Errorf("The shadow cluster should have been reverted. Got %v", cache.clusters["shadow"].capacity)
+			}
+			if !Equals(tc.allocAfter["shadow"], cache.clusters["shadow"].alloc) {
+				t.Errorf("The alloc of cluster shadow is not expected. Exp: %v, Got %v", tc.allocAfter["shadow"], cache.clusters["shadow"].alloc)
+			}
+		})
+	}
 }

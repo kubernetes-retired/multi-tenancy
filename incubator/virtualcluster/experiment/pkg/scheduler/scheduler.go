@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -265,7 +264,8 @@ func (s *Scheduler) Bootstrap() error {
 	}
 	for _, each := range superList {
 		if err := util.SyncSuperClusterState(s.metaClusterClient, each, s.schedulerCache); err != nil {
-			DirtySuperClusters.Store(types.NamespacedName{Name: each.Name, Namespace: each.Namespace}, struct{}{})
+			key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(each)
+			DirtySuperClusters.Store(key, struct{}{})
 			// retry in super workerqueue
 			s.enqueueSuperCluster(each)
 		}
@@ -278,7 +278,8 @@ func (s *Scheduler) Bootstrap() error {
 
 	for _, each := range vcList {
 		if err := util.SyncVirtualClusterState(s.metaClusterClient, each, s.schedulerCache); err != nil {
-			DirtyVirtualClusters.Store(types.NamespacedName{Name: each.Name, Namespace: each.Namespace}, struct{}{})
+			key, _ := cache.DeletionHandlingMetaNamespaceKeyFunc(each)
+			DirtyVirtualClusters.Store(key, struct{}{})
 			// retry in vc workerqueue
 			s.enqueueVirtualCluster(each)
 		}

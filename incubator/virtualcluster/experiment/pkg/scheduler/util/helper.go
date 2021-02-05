@@ -118,7 +118,7 @@ func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Clust
 		}
 	}
 	klog.Infof("added cluster %s in cache", id)
-	// TODO: we need to check if the cluster has been added, if so, we need to UPDATE the cluster
+	// If the cluster already exists in the cluster, AddCluster will update it with latest label and capacity.
 	if err := cache.AddCluster(internalcache.NewCluster(id, labels, capacity)); err != nil {
 		return fmt.Errorf("failed to add cluster to cache: %s", id)
 	}
@@ -271,15 +271,15 @@ func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.Virtua
 			}
 		}
 		cNamespace := internalcache.NewNamespace(clustername, each.Name, labels, quota, quotaSlice, schedule)
-		// TODO: we need to check if the namespace has been added, if so, we need to UPDATE the namespace.
+		// If the namespace already exists, AddNamespace will update the cache with latest labels and schedule.
 		if err := cache.AddNamespace(cNamespace); err != nil {
-			return fmt.Errorf("failed to add namespace to cache: %s/%s", clustername, each.Name)
+			return fmt.Errorf("failed to add namespace to cache: %s/%s with error %v", clustername, each.Name, err)
 		}
 
 		// continue to check the Pods in the namespace that use the quota
 		podlist, err := client.CoreV1().Pods(each.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to list pods in namespace %s in cluster %s", each.Name, clustername)
+			return fmt.Errorf("failed to list pods in namespace %s in cluster %s with error %v", each.Name, clustername, err)
 		}
 		for _, pod := range podlist.Items {
 			supercluster, ok := pod.GetAnnotations()[utilconst.LabelScheduledCluster]
@@ -291,9 +291,9 @@ func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.Virtua
 				continue
 			}
 			cPod := internalcache.NewPod(clustername, each.Name, pod.Name, string(pod.UID), supercluster, GetPodRequirements(&pod))
-			// TODO: we need to check if the pod has been added, if so, we need to UPDATE the pod.
+			// If the pod already exists, AddPod will update the cache with latest schedule.
 			if err := cache.AddPod(cPod); err != nil {
-				return fmt.Errorf("failed to add pod to cache: %s/%s/%s", clustername, each.Name, pod.Name)
+				return fmt.Errorf("failed to add pod to cache: %s/%s/%s with error %v", clustername, each.Name, pod.Name, err)
 			}
 		}
 	}
