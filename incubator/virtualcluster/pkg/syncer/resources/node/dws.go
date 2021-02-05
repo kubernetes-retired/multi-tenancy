@@ -26,7 +26,7 @@ import (
 )
 
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-	return c.multiClusterNodeController.Start(stopCh)
+	return c.MultiClusterController.Start(stopCh)
 }
 
 // The reconcile logic for tenant master node informer, the main purpose is to maintain
@@ -34,7 +34,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.V(4).Infof("reconcile node %s for cluster %s", request.Name, request.ClusterName)
 	vExists := true
-	vNodeObj, err := c.multiClusterNodeController.Get(request.ClusterName, request.Namespace, request.Name)
+	vNodeObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err

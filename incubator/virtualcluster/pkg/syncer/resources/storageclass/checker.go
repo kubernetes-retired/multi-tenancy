@@ -40,13 +40,13 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.storageclassSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Service checker")
 	}
-	c.storageClassPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // ParollerDo check if StorageClass keeps consistency between super master and tenant masters.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterStorageClassController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up storage class period checker")
 		return
@@ -75,11 +75,11 @@ func (c *controller) PatrollerDo() {
 			continue
 		}
 		for _, clusterName := range clusterNames {
-			_, err := c.multiClusterStorageClassController.Get(clusterName, "", pStorageClass.Name)
+			_, err := c.MultiClusterController.Get(clusterName, "", pStorageClass.Name)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterStorageClasses").Inc()
-					c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
+					c.UpwardController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 				}
 				klog.Errorf("fail to get storageclass from cluster %s: %v", clusterName, err)
 			}
@@ -90,7 +90,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterStorageClassController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing storageclass from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -101,7 +101,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 		pStorageClass, err := c.storageclassLister.Get(vStorageClass.Name)
 		if errors.IsNotFound(err) {
 			// super master is the source of the truth for sc object, delete tenant master obj
-			tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(clusterName)
+			tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 			if err != nil {
 				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 				continue
@@ -127,7 +127,7 @@ func (c *controller) checkStorageClassOfTenantCluster(clusterName string) {
 			atomic.AddUint64(&numMissMatchedStorageClasses, 1)
 			klog.Warningf("spec of storageClass %v diff in super&tenant master", vStorageClass.Name)
 			if publicStorageClass(pStorageClass) {
-				c.upwardStorageClassController.AddToQueue(clusterName + "/" + pStorageClass.Name)
+				c.UpwardController.AddToQueue(clusterName + "/" + pStorageClass.Name)
 			}
 		}
 	}

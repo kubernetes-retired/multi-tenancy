@@ -17,8 +17,6 @@ limitations under the License.
 package secret
 
 import (
-	"fmt"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
@@ -29,25 +27,28 @@ import (
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
-	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
 
+func init() {
+	plugin.Register(&plugin.Registration{
+		ID: "secret",
+		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
+			return NewSecretController(ctx.Config.(*config.SyncerConfiguration), ctx.Client, ctx.Informer, ctx.VCClient, ctx.VCInformer, manager.ResourceSyncerOptions{})
+		},
+	})
+}
+
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master secret client
 	secretClient v1core.CoreV1Interface
 	// super master secret lister/synced function
 	secretLister listersv1.SecretLister
 	secretSynced cache.InformerSynced
-	// Connect to all tenant master secret informers
-	multiClusterSecretController *mc.MultiClusterController
-	// Periodic checker
-	secretPatroller *pa.Patroller
 }
 
 func NewSecretController(config *config.SyncerConfiguration,
@@ -55,17 +56,16 @@ func NewSecretController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
 		secretClient: client.CoreV1(),
 	}
 
-	multiClusterSecretController, err := mc.NewMCController(&v1.Secret{}, &v1.SecretList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1.Secret{}, &v1.SecretList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create secret mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterSecretController = multiClusterSecretController
 
 	c.secretLister = informer.Core().V1().Secrets().Lister()
 	if options.IsFake {
@@ -74,23 +74,10 @@ func NewSecretController(config *config.SyncerConfiguration,
 		c.secretSynced = informer.Core().V1().Secrets().Informer().HasSynced
 	}
 
-	secretPatroller, err := pa.NewPatroller(&v1.Secret{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1.Secret{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create secret patroller: %v", err)
+		return nil, err
 	}
-	c.secretPatroller = secretPatroller
 
-	return c, multiClusterSecretController, nil, nil
-}
-
-func (c *controller) StartUWS(stopCh <-chan struct{}) error {
-	return nil
-}
-
-func (c *controller) BackPopulate(string) error {
-	return nil
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterSecretController)
+	return c, nil
 }

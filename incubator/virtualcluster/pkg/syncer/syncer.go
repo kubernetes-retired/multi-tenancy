@@ -41,6 +41,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
@@ -50,12 +51,12 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/cluster"
 	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
 
 var (
@@ -108,7 +109,7 @@ func New(
 	superMasterClient clientset.Interface,
 	superMasterInformers informers.SharedInformerFactory,
 	recorder record.EventRecorder,
-) *Syncer {
+) (*Syncer, error) {
 	syncer := &Syncer{
 		config:      config,
 		superClient: superClient,
@@ -140,9 +141,49 @@ func New(
 	multiClusterControllerManager := manager.New()
 	syncer.controllerManager = multiClusterControllerManager
 
-	resources.Register(config, superMasterClient, superMasterInformers, virtualClusterClient, virtualClusterInformer, multiClusterControllerManager)
+	plugins := LoadPlugins(config)
+	initContext := &plugin.InitContext{
+		Context:    context.Background(),
+		Config:     config,
+		Client:     superMasterClient,
+		Informer:   superMasterInformers,
+		VCClient:   virtualClusterClient,
+		VCInformer: virtualClusterInformer,
+	}
 
-	return syncer
+	for _, p := range plugins {
+		klog.Infof("loading plugin %q...", p.ID)
+
+		result := p.Init(initContext)
+		instance, err := result.Instance()
+		if err != nil {
+			klog.Errorf("failed to load plugin %q", p.ID)
+			return nil, err
+		}
+
+		s, ok := instance.(manager.ResourceSyncer)
+		if ok {
+			multiClusterControllerManager.AddResourceSyncer(s)
+		} else {
+			klog.Warningf("unrecognized plugin %q", p.ID)
+		}
+	}
+
+	return syncer, nil
+}
+
+func LoadPlugins(config *config.SyncerConfiguration) []*plugin.Registration {
+	allPlugin := plugin.List()
+	var enablePlugin []*plugin.Registration
+	extraSets := sets.NewString(config.ExtraSyncingResources...)
+
+	for i, r := range allPlugin {
+		if !r.Disable || extraSets.Has(r.ID) {
+			enablePlugin = append(enablePlugin, allPlugin[i])
+		}
+	}
+
+	return enablePlugin
 }
 
 // enqueue deleted and running object.

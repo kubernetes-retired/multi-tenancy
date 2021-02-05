@@ -42,14 +42,14 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.configMapSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting ConfigMap checker")
 	}
-	c.configMapPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // PatrollerDo checks to see if configmaps in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterConfigMapController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -67,7 +67,7 @@ func (c *controller) PatrollerDo() {
 
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
-		listObj, err := c.multiClusterConfigMapController.List(cluster)
+		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing configmaps from cluster %s informer cache: %v", cluster, err)
 			continue
@@ -84,7 +84,7 @@ func (c *controller) PatrollerDo() {
 
 	configMapDiffer := differ.HandlerFuncs{}
 	configMapDiffer.AddFunc = func(vObj differ.ClusterObject) {
-		if err := c.multiClusterConfigMapController.RequeueObject(vObj.OwnerCluster, vObj.Object); err != nil {
+		if err := c.MultiClusterController.RequeueObject(vObj.OwnerCluster, vObj.Object); err != nil {
 			klog.Errorf("error requeue vConfigMap %v/%v in cluster %s: %v", vObj.GetNamespace(), vObj.GetName(), vObj.GetOwnerCluster(), err)
 		} else {
 			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantConfigMaps").Inc()
@@ -99,12 +99,12 @@ func (c *controller) PatrollerDo() {
 			configMapDiffer.OnDelete(pObj)
 			return
 		}
-		vc, err := util.GetVirtualClusterObject(c.multiClusterConfigMapController, vObj.GetOwnerCluster())
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, vObj.GetOwnerCluster())
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", vObj.GetOwnerCluster())
 			return
 		}
-		updated := conversion.Equality(c.config, vc).CheckConfigMapEquality(pCM, vCM)
+		updated := conversion.Equality(c.Config, vc).CheckConfigMapEquality(pCM, vCM)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedConfigMaps, 1)
 			klog.Warningf("ConfigMap %s diff in super&tenant master", pObj.Key)

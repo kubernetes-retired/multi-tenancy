@@ -36,7 +36,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.storageclassSynced) {
 		return fmt.Errorf("failed to wait for caches to sync storageclass")
 	}
-	return c.upwardStorageClassController.Start(stopCh)
+	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {
@@ -52,12 +52,12 @@ func (c *controller) BackPopulate(key string) error {
 		op = reconciler.DeleteEvent
 	}
 
-	tenantClient, err := c.multiClusterStorageClassController.GetClusterClient(clusterName)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create client from cluster %s config: %v", clusterName, err)
 	}
 
-	vStorageClassObj, err := c.multiClusterStorageClassController.Get(clusterName, "", scName)
+	vStorageClassObj, err := c.MultiClusterController.Get(clusterName, "", scName)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if op == reconciler.AddEvent {
@@ -82,7 +82,7 @@ func (c *controller) BackPopulate(key string) error {
 			return err
 		}
 	} else {
-		updatedStorageClass := conversion.Equality(c.config, nil).CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
+		updatedStorageClass := conversion.Equality(c.Config, nil).CheckStorageClassEquality(pStorageClass, vStorageClassObj.(*v1.StorageClass))
 		if updatedStorageClass != nil {
 			_, err := tenantClient.StorageV1().StorageClasses().Update(context.TODO(), updatedStorageClass, metav1.UpdateOptions{})
 			if err != nil {

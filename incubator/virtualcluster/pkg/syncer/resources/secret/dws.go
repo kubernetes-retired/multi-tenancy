@@ -37,7 +37,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.secretSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	return c.multiClusterSecretController.Start(stopCh)
+	return c.MultiClusterController.Start(stopCh)
 }
 
 // The reconcile logic for tenant master secret informer
@@ -45,7 +45,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	klog.V(4).Infof("reconcile secret %s/%s for cluster %s", request.Namespace, request.Name, request.ClusterName)
 	targetNamespace := conversion.ToSuperMasterNamespace(request.ClusterName, request.Namespace)
 	var vSecret *v1.Secret
-	vSecretObj, err := c.multiClusterSecretController.Get(request.ClusterName, request.Namespace, request.Name)
+	vSecretObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err == nil {
 		vSecret = vSecretObj.(*v1.Secret)
 	} else if !errors.IsNotFound(err) {
@@ -116,7 +116,7 @@ func (c *controller) reconcileSecretCreate(clusterName, targetNamespace, request
 }
 
 func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetNamespace string, vSecret *v1.Secret) error {
-	vcName, vcNS, _, err := c.multiClusterSecretController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetName
 	}
 
 	pSecret := newObj.(*v1.Secret)
-	conversion.VC(c.multiClusterSecretController, "").ServiceAccountTokenSecret(pSecret).Mutate(vSecret, clusterName)
+	conversion.VC(c.MultiClusterController, "").ServiceAccountTokenSecret(pSecret).Mutate(vSecret, clusterName)
 
 	_, err = c.secretClient.Secrets(targetNamespace).Create(context.TODO(), pSecret, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
@@ -138,7 +138,7 @@ func (c *controller) reconcileServiceAccountSecretCreate(clusterName, targetName
 }
 
 func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetNamespace string, pSecret, vSecret *v1.Secret) error {
-	updatedBinaryData, equal := conversion.Equality(c.config, nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
+	updatedBinaryData, equal := conversion.Equality(c.Config, nil).CheckBinaryDataEquality(pSecret.Data, vSecret.Data)
 	if equal {
 		return nil
 	}
@@ -154,7 +154,7 @@ func (c *controller) reconcileServiceAccountSecretUpdate(clusterName, targetName
 }
 
 func (c *controller) reconcileNormalSecretCreate(clusterName, targetNamespace, requestUID string, secret *v1.Secret) error {
-	vcName, vcNS, _, err := c.multiClusterSecretController.GetOwnerInfo(clusterName)
+	vcName, vcNS, _, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}
@@ -189,11 +189,11 @@ func (c *controller) reconcileNormalSecretUpdate(clusterName, targetNamespace, r
 	if pSecret.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pEndpoints %s/%s delegated UID is different from updated object.", targetNamespace, pSecret.Name)
 	}
-	vc, err := util.GetVirtualClusterObject(c.multiClusterSecretController, clusterName)
+	vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 	if err != nil {
 		return err
 	}
-	updatedSecret := conversion.Equality(c.config, vc).CheckSecretEquality(pSecret, vSecret)
+	updatedSecret := conversion.Equality(c.Config, vc).CheckSecretEquality(pSecret, vSecret)
 	if updatedSecret != nil {
 		pSecret, err = c.secretClient.Secrets(targetNamespace).Update(context.TODO(), updatedSecret, metav1.UpdateOptions{})
 		if err != nil {

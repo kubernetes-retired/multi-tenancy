@@ -35,7 +35,7 @@ func (c *controller) StartDWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.nsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	return c.multiClusterNamespaceController.Start(stopCh)
+	return c.MultiClusterController.Start(stopCh)
 }
 
 // The reconcile logic for tenant master namespace informer
@@ -51,7 +51,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		pExists = false
 	}
 	vExists := true
-	vNamespaceObj, err := c.multiClusterNamespaceController.Get(request.ClusterName, request.Namespace, request.Name)
+	vNamespaceObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconciler.Result{Requeue: true}, err
@@ -86,7 +86,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 }
 
 func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requestUID string, vNamespace *v1.Namespace) error {
-	vcName, vcNamespace, vcUID, err := c.multiClusterNamespaceController.GetOwnerInfo(clusterName)
+	vcName, vcNamespace, vcUID, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 	if err != nil {
 		return err
 	}

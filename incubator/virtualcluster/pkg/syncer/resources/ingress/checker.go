@@ -44,14 +44,14 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.ingressSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Ingress checker")
 	}
-	c.ingressPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // PatrollerDo check if ingresss keep consistency between super
 // master and tenant masters.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterIngressController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -83,7 +83,7 @@ func (c *controller) PatrollerDo() {
 			continue
 		}
 		shouldDelete := false
-		vIngressObj, err := c.multiClusterIngressController.Get(clusterName, vNamespace, pIngress.Name)
+		vIngressObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pIngress.Name)
 		if errors.IsNotFound(err) {
 			shouldDelete = true
 		}
@@ -110,7 +110,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterIngressController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing ingresss from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -121,7 +121,7 @@ func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
 		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vIngress.Namespace)
 		pIngress, err := c.ingressLister.Ingresses(targetNamespace).Get(vIngress.Name)
 		if errors.IsNotFound(err) {
-			if err := c.multiClusterIngressController.RequeueObject(clusterName, &ingList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &ingList.Items[i]); err != nil {
 				klog.Errorf("error requeue vingress %v/%v in cluster %s: %v", vIngress.Namespace, vIngress.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantIngresses").Inc()
@@ -139,16 +139,16 @@ func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
 			continue
 		}
 
-		vc, err := util.GetVirtualClusterObject(c.multiClusterIngressController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedIngress := conversion.Equality(c.config, vc).CheckIngressEquality(pIngress, &ingList.Items[i])
+		updatedIngress := conversion.Equality(c.Config, vc).CheckIngressEquality(pIngress, &ingList.Items[i])
 		if updatedIngress != nil {
 			atomic.AddUint64(&numSpecMissMatchedIngresses, 1)
 			klog.Warningf("spec of ingress %v/%v diff in super&tenant master", vIngress.Namespace, vIngress.Name)
-			if err := c.multiClusterIngressController.RequeueObject(clusterName, &ingList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &ingList.Items[i]); err != nil {
 				klog.Errorf("error requeue vingress %v/%v in cluster %s: %v", vIngress.Namespace, vIngress.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantIngresses").Inc()
@@ -156,7 +156,7 @@ func (c *controller) checkIngressesOfTenantCluster(clusterName string) {
 		}
 
 		enqueue := false
-		updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &ingList.Items[i].ObjectMeta)
+		updatedMeta := conversion.Equality(c.Config, vc).CheckUWObjectMetaEquality(&pIngress.ObjectMeta, &ingList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedIngresses, 1)
 			enqueue = true

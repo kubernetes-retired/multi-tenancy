@@ -30,28 +30,30 @@ import (
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
 
+func init() {
+	plugin.Register(&plugin.Registration{
+		ID: "service",
+		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
+			return NewServiceController(ctx.Config.(*config.SyncerConfiguration), ctx.Client, ctx.Informer, ctx.VCClient, ctx.VCInformer, manager.ResourceSyncerOptions{})
+		},
+	})
+}
+
 type controller struct {
-	config *config.SyncerConfiguration
+	manager.BaseResourceSyncer
 	// super master service client
 	serviceClient v1core.ServicesGetter
 	// super master informer/listers/synced functions
 	serviceLister listersv1.ServiceLister
 	serviceSynced cache.InformerSynced
-	// Connect to all tenant master service informers
-	multiClusterServiceController *mc.MultiClusterController
-	// UWcontroller
-	upwardServiceController *uw.UpwardController
-	// Periodic checker
-	servicePatroller *pa.Patroller
 }
 
 func NewServiceController(config *config.SyncerConfiguration,
@@ -59,18 +61,19 @@ func NewServiceController(config *config.SyncerConfiguration,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
-	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error) {
+	options manager.ResourceSyncerOptions) (manager.ResourceSyncer, error) {
 	c := &controller{
-		config:        config,
+		BaseResourceSyncer: manager.BaseResourceSyncer{
+			Config: config,
+		},
 		serviceClient: client.CoreV1(),
 	}
 
-	multiClusterServiceController, err := mc.NewMCController(&v1.Service{}, &v1.ServiceList{}, c,
-		mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+	var err error
+	c.MultiClusterController, err = mc.NewMCController(&v1.Service{}, &v1.ServiceList{}, c, mc.WithOptions(options.MCOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create service mc controller: %v", err)
+		return nil, err
 	}
-	c.multiClusterServiceController = multiClusterServiceController
 
 	c.serviceLister = informer.Core().V1().Services().Lister()
 	if options.IsFake {
@@ -79,18 +82,15 @@ func NewServiceController(config *config.SyncerConfiguration,
 		c.serviceSynced = informer.Core().V1().Services().Informer().HasSynced
 	}
 
-	upwardServiceController, err := uw.NewUWController(&v1.Service{}, c,
-		uw.WithMaxConcurrentReconciles(constants.UwsControllerWorkerLow), uw.WithOptions(options.UWOptions))
+	c.UpwardController, err = uw.NewUWController(&v1.Service{}, c, uw.WithOptions(options.UWOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create service upward controller: %v", err)
+		return nil, err
 	}
-	c.upwardServiceController = upwardServiceController
 
-	servicePatroller, err := pa.NewPatroller(&v1.Service{}, c, pa.WithOptions(options.PatrolOptions))
+	c.Patroller, err = pa.NewPatroller(&v1.Service{}, c, pa.WithOptions(options.PatrolOptions))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create service patroller: %v", err)
+		return nil, err
 	}
-	c.servicePatroller = servicePatroller
 
 	informer.Core().V1().Services().Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
@@ -121,7 +121,7 @@ func NewServiceController(config *config.SyncerConfiguration,
 				DeleteFunc: c.enqueueService,
 			},
 		})
-	return c, multiClusterServiceController, upwardServiceController, nil
+	return c, nil
 }
 
 func isBackPopulateService(svc *v1.Service) bool {
@@ -144,9 +144,5 @@ func (c *controller) enqueueService(obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))
 		return
 	}
-	c.upwardServiceController.AddToQueue(key)
-}
-
-func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.multiClusterServiceController)
+	c.UpwardController.AddToQueue(key)
 }

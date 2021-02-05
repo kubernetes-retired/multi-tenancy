@@ -28,8 +28,9 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
@@ -60,7 +61,7 @@ type Options struct {
 func NewUWController(objectType runtime.Object, rc reconciler.UWReconciler, opts ...OptConfig) (*UpwardController, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
-		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+		return nil, fmt.Errorf("uwcontroller: unknown object kind %+v", objectType)
 	}
 
 	name := fmt.Sprintf("%s-upward-controller", strings.ToLower(kinds[0].Kind))
@@ -70,7 +71,7 @@ func NewUWController(objectType runtime.Object, rc reconciler.UWReconciler, opts
 		Options: Options{
 			name:                    name,
 			JitterPeriod:            1 * time.Second,
-			MaxConcurrentReconciles: 1,
+			MaxConcurrentReconciles: constants.UwsControllerWorkerLow,
 			Reconciler:              rc,
 			Queue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
 		},
@@ -81,7 +82,7 @@ func NewUWController(objectType runtime.Object, rc reconciler.UWReconciler, opts
 	}
 
 	if c.Reconciler == nil {
-		return nil, fmt.Errorf("must specify UW Reconciler")
+		return nil, fmt.Errorf("uwcontroller %q: must specify UW Reconciler", c.objectKind)
 	}
 
 	return c, nil
@@ -128,7 +129,7 @@ func (c *UpwardController) processNextWorkItem() bool {
 	klog.V(4).Infof("%s back populate %+v", c.name, key)
 	err := c.Reconciler.BackPopulate(key)
 	if err == nil {
-		metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeOK)
+		metrics.RecordUWSOperationStatus(c.objectKind, utilconstants.StatusCodeOK)
 		c.Queue.Forget(obj)
 		return true
 	}
@@ -141,13 +142,13 @@ func (c *UpwardController) processNextWorkItem() bool {
 	}
 
 	utilruntime.HandleError(fmt.Errorf("%s error processing %s (will retry): %v", c.name, key, err))
-	if c.Queue.NumRequeues(key) >= constants.MaxReconcileRetryAttempts {
-		metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeExceedMaxRetryAttempts)
+	if c.Queue.NumRequeues(key) >= utilconstants.MaxReconcileRetryAttempts {
+		metrics.RecordUWSOperationStatus(c.objectKind, utilconstants.StatusCodeExceedMaxRetryAttempts)
 		klog.Warningf("%s uws request is dropped due to reaching max retry limit: %s", c.name, key)
 		c.Queue.Forget(obj)
 		return true
 	}
-	metrics.RecordUWSOperationStatus(c.objectKind, constants.StatusCodeError)
+	metrics.RecordUWSOperationStatus(c.objectKind, utilconstants.StatusCodeError)
 	c.Queue.AddRateLimited(obj)
 	return true
 }

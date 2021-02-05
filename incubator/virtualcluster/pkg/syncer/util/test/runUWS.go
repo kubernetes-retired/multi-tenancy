@@ -93,7 +93,7 @@ func RunUpwardSync(
 		IsFake:    true,
 	}
 
-	resourceSyncer, _, upwardController, err := newControllerFunc(
+	resourceSyncer, err := newControllerFunc(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
@@ -129,7 +129,7 @@ func RunUpwardSync(
 	}
 
 	// start testing
-	upwardController.AddToQueue(enqueueKey)
+	resourceSyncer.GetUpwardController().AddToQueue(enqueueKey)
 
 	// wait to be called
 	select {

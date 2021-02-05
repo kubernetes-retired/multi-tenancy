@@ -39,14 +39,14 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.saSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting SA checker")
 	}
-	c.serviceAccountPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
 // PatrollerDo checks to see if serviceaccounts in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterServiceAccountController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -75,7 +75,7 @@ func (c *controller) PatrollerDo() {
 			continue
 		}
 		shouldDelete := false
-		vSaObj, err := c.multiClusterServiceAccountController.Get(clusterName, vNamespace, pSa.Name)
+		vSaObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pSa.Name)
 		if errors.IsNotFound(err) {
 			shouldDelete = true
 		}
@@ -101,7 +101,7 @@ func (c *controller) PatrollerDo() {
 
 // ccheckServiceAccountsOfTenantCluste checks to see if serviceaccounts in specific cluster keeps consistency.
 func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterServiceAccountController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing serviceaccounts from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -113,7 +113,7 @@ func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
 		pSa, err := c.saLister.ServiceAccounts(targetNamespace).Get(vSa.Name)
 		if errors.IsNotFound(err) {
 			// pSa not found and vSa still exists, we need to create pSa again
-			if err := c.multiClusterServiceAccountController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
 				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServiceAccounts").Inc()

@@ -111,7 +111,7 @@ func RunDownwardSync(
 		IsFake:    true,
 	}
 
-	resourceSyncer, mccontroller, _, err := newControllerFunc(
+	resourceSyncer, err := newControllerFunc(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},
@@ -142,7 +142,7 @@ func RunDownwardSync(
 	}
 
 	// start testing
-	if err := mccontroller.RequeueObject(conversion.ToClusterKey(testTenant), enqueueObject); err != nil {
+	if err := resourceSyncer.GetMCController().RequeueObject(conversion.ToClusterKey(testTenant), enqueueObject); err != nil {
 		return nil, nil, fmt.Errorf("error enqueue object %v: %v", enqueueObject, err)
 	}
 

@@ -95,13 +95,17 @@ resource isolation policy specified in Tenant CRD.`,
 }
 
 func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
-	ss := syncer.New(&cc.ComponentConfig,
+	ss, err := syncer.New(&cc.ComponentConfig,
 		cc.SuperClient,
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
 		cc.SuperMasterClient,
 		cc.SuperMasterInformerFactory,
 		cc.Recorder)
+
+	if err != nil {
+		return fmt.Errorf("new syncer: %v", err)
+	}
 
 	// Prepare the event broadcaster.
 	if cc.Broadcaster != nil && cc.SuperMasterClient != nil {

@@ -124,7 +124,7 @@ func RunPatrol(
 		IsFake:        true,
 	}
 
-	resourceSyncer, _, _, err := newControllerFunc(
+	resourceSyncer, err := newControllerFunc(
 		&config.SyncerConfiguration{
 			DisableServiceAccountToken: true,
 		},

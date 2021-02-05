@@ -39,7 +39,7 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.endpointsSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Endpoint checker")
 	}
-	c.endPointsPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
@@ -47,7 +47,7 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 // keep consistency.
 // Note that eps are managed by tenant/super ep controller separately. The checker will not do GC but only report diff.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterEndpointsController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -71,7 +71,7 @@ func (c *controller) PatrollerDo() {
 
 // checkEndPointsOfTenantCluster checks to see if endpoints controller in tenant and super master working consistently.
 func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterEndpointsController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing endpoints from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -91,7 +91,7 @@ func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
 			klog.Errorf("error getting pEp %s/%s from super master cache: %v", targetNamespace, vEp.Name, err)
 			continue
 		}
-		updated := conversion.Equality(c.config, nil).CheckEndpointsEquality(pEp, &vEp)
+		updated := conversion.Equality(c.Config, nil).CheckEndpointsEquality(pEp, &vEp)
 		if updated != nil {
 			atomic.AddUint64(&numMissMatchedEndPoints, 1)
 			klog.Warningf("Endpoint %v/%v diff in super&tenant master", targetNamespace, vEp.Name)

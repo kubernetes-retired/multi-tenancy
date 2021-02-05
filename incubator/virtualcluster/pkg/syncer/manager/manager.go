@@ -54,6 +54,8 @@ type ResourceSyncer interface {
 	reconciler.DWReconciler
 	reconciler.UWReconciler
 	reconciler.PatrolReconciler
+	GetMCController() *mc.MultiClusterController
+	GetUpwardController() *uw.UpwardController
 	GetListener() listener.ClusterChangeListener
 	StartUWS(stopCh <-chan struct{}) error
 	StartDWS(stopCh <-chan struct{}) error
@@ -76,7 +78,52 @@ type ResourceSyncerNew func(*config.SyncerConfiguration,
 	clientset.Interface,
 	informers.SharedInformerFactory,
 	vcclient.Interface,
-	vcinformers.VirtualClusterInformer, ResourceSyncerOptions) (ResourceSyncer, *mc.MultiClusterController, *uw.UpwardController, error)
+	vcinformers.VirtualClusterInformer, ResourceSyncerOptions) (ResourceSyncer, error)
+
+type BaseResourceSyncer struct {
+	Config                 *config.SyncerConfiguration
+	MultiClusterController *mc.MultiClusterController
+	UpwardController       *uw.UpwardController
+	Patroller              *pa.Patroller
+}
+
+var _ ResourceSyncer = &BaseResourceSyncer{}
+
+func (b *BaseResourceSyncer) Reconcile(request reconciler.Request) (reconciler.Result, error) {
+	return reconciler.Result{}, nil
+}
+
+func (b *BaseResourceSyncer) BackPopulate(s string) error {
+	return nil
+}
+
+func (b *BaseResourceSyncer) PatrollerDo() {
+	return
+}
+
+func (b *BaseResourceSyncer) GetListener() listener.ClusterChangeListener {
+	return listener.NewMCControllerListener(b.MultiClusterController)
+}
+
+func (b *BaseResourceSyncer) GetMCController() *mc.MultiClusterController {
+	return b.MultiClusterController
+}
+
+func (b *BaseResourceSyncer) GetUpwardController() *uw.UpwardController {
+	return b.UpwardController
+}
+
+func (b *BaseResourceSyncer) StartUWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (b *BaseResourceSyncer) StartDWS(stopCh <-chan struct{}) error {
+	return nil
+}
+
+func (b *BaseResourceSyncer) StartPatrol(stopCh <-chan struct{}) error {
+	return nil
+}
 
 // Start gets all the unique caches of the controllers it manages, starts them,
 // then starts the controllers as soon as their respective caches are synced.

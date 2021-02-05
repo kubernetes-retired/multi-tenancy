@@ -39,7 +39,7 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.nsSynced, c.vcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Namespace checker")
 	}
-	c.namespacePatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
@@ -79,7 +79,7 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 // PatrollerDo checks to see if namespaces in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterNamespaceController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) != 0 {
 		wg := sync.WaitGroup{}
 		for _, clusterName := range clusterNames {
@@ -111,7 +111,7 @@ func (c *controller) PatrollerDo() {
 			if len(clusterName) == 0 || len(vNamespace) == 0 {
 				continue
 			}
-			vNamespaceObj, err := c.multiClusterNamespaceController.Get(clusterName, "", vNamespace)
+			vNamespaceObj, err := c.MultiClusterController.Get(clusterName, "", vNamespace)
 			if err != nil {
 				// if vc object is deleted, we should reach here
 				if errors.IsNotFound(err) || c.shouldBeGabageCollected(pNamespace) {
@@ -142,7 +142,7 @@ func (c *controller) PatrollerDo() {
 
 // checkNamespacesOfTenantCluster checks to see if namespaces in specific cluster keeps consistency.
 func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterNamespaceController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing namespaces from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -154,7 +154,7 @@ func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
 		pNamespace, err := c.nsLister.Get(targetNamespace)
 		if errors.IsNotFound(err) {
 			// pNamespace not found and vNamespace still exists, we need to create pNamespace again
-			if err := c.multiClusterNamespaceController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
 				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantNamespaces").Inc()

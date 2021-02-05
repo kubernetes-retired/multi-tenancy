@@ -54,7 +54,7 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.podSynced) {
 		return fmt.Errorf("failed to wait for caches to sync before starting Pod checker")
 	}
-	c.podPatroller.Start(stopCh)
+	c.Patroller.Start(stopCh)
 	return nil
 }
 
@@ -100,7 +100,7 @@ func (c *controller) vNodeGCDo() {
 }
 
 func (c *controller) deleteClusterVNode(cluster, nodeName string) {
-	tenantClient, err := c.multiClusterPodController.GetClusterClient(cluster)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(cluster)
 	if err != nil {
 		klog.Infof("cluster is removed, clear clusterVNodeGCMap entry for cluster %s", cluster)
 		c.Lock()
@@ -128,7 +128,7 @@ func (c *controller) deleteClusterVNode(cluster, nodeName string) {
 // PatrollerDo checks to see if pods in super master informer cache and tenant master
 // keep consistency.
 func (c *controller) PatrollerDo() {
-	clusterNames := c.multiClusterPodController.GetClusterNames()
+	clusterNames := c.MultiClusterController.GetClusterNames()
 	if len(clusterNames) == 0 {
 		klog.Infof("tenant masters has no clusters, give up period checker")
 		return
@@ -163,7 +163,7 @@ func (c *controller) PatrollerDo() {
 		}
 
 		shouldDelete := false
-		vPodObj, err := c.multiClusterPodController.Get(clusterName, vNamespace, pPod.Name)
+		vPodObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pPod.Name)
 		if errors.IsNotFound(err) && pPod.DeletionTimestamp == nil {
 			shouldDelete = true
 		}
@@ -173,7 +173,7 @@ func (c *controller) PatrollerDo() {
 				shouldDelete = true
 				klog.Warningf("Found pPod %s/%s delegated UID is different from tenant object.", pPod.Namespace, pPod.Name)
 			} else {
-				if conversion.Equality(c.config, nil).CheckUWPodStatusEquality(pPod, vPod) != nil {
+				if conversion.Equality(c.Config, nil).CheckUWPodStatusEquality(pPod, vPod) != nil {
 					numStatusMissMatchedPods++
 					klog.Warningf("status of pod %v/%v diff in super&tenant master", pPod.Namespace, pPod.Name)
 					if assignedPod(pPod) {
@@ -211,7 +211,7 @@ func (c *controller) PatrollerDo() {
 }
 
 func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod, graceful bool) {
-	client, err := c.multiClusterPodController.GetClusterClient(clusterName)
+	client, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
 	} else {
@@ -236,7 +236,7 @@ func (c *controller) forceDeletevPod(clusterName string, vPod *v1.Pod, graceful 
 
 // checkPodsOfTenantCluster checks to see if pods in specific cluster keeps consistency.
 func (c *controller) checkPodsOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterPodController.List(clusterName)
+	listObj, err := c.MultiClusterController.List(clusterName)
 	if err != nil {
 		klog.Errorf("error listing pods from cluster %s informer cache: %v", clusterName, err)
 		return
@@ -268,7 +268,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 					c.forceDeletevPod(clusterName, &vPod, false)
 					metrics.CheckerRemedyStats.WithLabelValues("DeletedTenantPodsDueToSuperEviction").Inc()
 				} else {
-					if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
+					if err := c.MultiClusterController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 						klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 					} else {
 						metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
@@ -296,16 +296,16 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 			metrics.CheckerRemedyStats.WithLabelValues("DeletedTenantPodsDueToNodeMissMatch").Inc()
 			continue
 		}
-		vc, err := util.GetVirtualClusterObject(c.multiClusterPodController, clusterName)
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
 		if err != nil {
 			klog.Errorf("fail to get cluster spec : %s", clusterName)
 			continue
 		}
-		updatedPod := conversion.Equality(c.config, vc).CheckPodEquality(pPod, &podList.Items[i])
+		updatedPod := conversion.Equality(c.Config, vc).CheckPodEquality(pPod, &podList.Items[i])
 		if updatedPod != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("spec of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
-			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
@@ -316,14 +316,14 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 		if updatedPodStatus != nil {
 			atomic.AddUint64(&numSpecMissMatchedPods, 1)
 			klog.Warningf("DWStatus of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
-			if err := c.multiClusterPodController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
+			if err := c.MultiClusterController.RequeueObject(clusterName, &podList.Items[i]); err != nil {
 				klog.Errorf("error requeue vpod %v/%v in cluster %s: %v", vPod.Namespace, vPod.Name, clusterName, err)
 			} else {
 				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPods").Inc()
 			}
 		}
 
-		updatedMeta := conversion.Equality(c.config, vc).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
+		updatedMeta := conversion.Equality(c.Config, vc).CheckUWObjectMetaEquality(&pPod.ObjectMeta, &podList.Items[i].ObjectMeta)
 		if updatedMeta != nil {
 			atomic.AddUint64(&numUWMetaMissMatchedPods, 1)
 			klog.Warningf("UWObjectMeta of pod %v/%v diff in super&tenant master", vPod.Namespace, vPod.Name)
@@ -340,7 +340,7 @@ func (c *controller) checkPodsOfTenantCluster(clusterName string) {
 // goes to tenant master directly. If this method causes performance issue, we should consider moving it to another
 // periodic thread with a larger check interval.
 func (c *controller) checkNodesOfTenantCluster(clusterName string) {
-	listObj, err := c.multiClusterPodController.ListByObjectType(clusterName, &v1.Node{})
+	listObj, err := c.MultiClusterController.ListByObjectType(clusterName, &v1.Node{})
 	if err != nil {
 		klog.Errorf("failed to list vNode from cluster %s config: %v", clusterName, err)
 		return

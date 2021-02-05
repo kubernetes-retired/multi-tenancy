@@ -47,7 +47,7 @@ type Options struct {
 func NewPatroller(objectType runtime.Object, rc reconciler.PatrolReconciler, opts ...OptConfig) (*Patroller, error) {
 	kinds, _, err := scheme.Scheme.ObjectKinds(objectType)
 	if err != nil || len(kinds) == 0 {
-		return nil, fmt.Errorf("unknown object kind %+v", objectType)
+		return nil, fmt.Errorf("patroller: unknown object kind %+v", objectType)
 	}
 
 	p := &Patroller{
@@ -64,7 +64,7 @@ func NewPatroller(objectType runtime.Object, rc reconciler.PatrolReconciler, opt
 	}
 
 	if p.Reconciler == nil {
-		return nil, fmt.Errorf("must specify patrol reconciler")
+		return nil, fmt.Errorf("patroller %q: must specify patrol reconciler", p.objectKind)
 	}
 	return p, nil
 }

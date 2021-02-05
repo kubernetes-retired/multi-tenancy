@@ -37,7 +37,7 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	if !cache.WaitForCacheSync(stopCh, c.pvSynced, c.pvcSynced) {
 		return fmt.Errorf("failed to wait for caches to sync persistentvolume")
 	}
-	return c.upwardPersistentVolumeController.Start(stopCh)
+	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {
@@ -68,12 +68,12 @@ func (c *controller) BackPopulate(key string) error {
 		return nil
 	}
 
-	tenantClient, err := c.multiClusterPersistentVolumeController.GetClusterClient(clusterName)
+	tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 	if err != nil {
 		return pkgerr.Wrapf(err, "failed to create client from cluster %s config", clusterName)
 	}
 
-	vPVObj, err := c.multiClusterPersistentVolumeController.Get(clusterName, "", key)
+	vPVObj, err := c.MultiClusterController.Get(clusterName, "", key)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Create a new pv with bound claim in tenant master
@@ -83,7 +83,7 @@ func (c *controller) BackPopulate(key string) error {
 				klog.Errorf("Cannot find the bound pvc %s/%s in tenant cluster %s for pv %v", vNamespace, pPVC.Name, clusterName, pPV)
 				return nil
 			}
-			vcName, vcNS, _, err := c.multiClusterPersistentVolumeController.GetOwnerInfo(clusterName)
+			vcName, vcNS, _, err := c.MultiClusterController.GetOwnerInfo(clusterName)
 			if err != nil {
 				return err
 			}
@@ -103,7 +103,7 @@ func (c *controller) BackPopulate(key string) error {
 	}
 
 	// We only update PV.Spec, PV.Status is managed by tenant/super pv binder controller independently.
-	updatedPVSpec := conversion.Equality(c.config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
+	updatedPVSpec := conversion.Equality(c.Config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
 	if updatedPVSpec != nil {
 		newPV := vPV.DeepCopy()
 		newPV.Spec = *updatedPVSpec
