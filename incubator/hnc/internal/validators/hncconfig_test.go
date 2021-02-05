@@ -30,7 +30,7 @@ var (
 
 func TestDeletingConfigObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
-		g := NewGomegaWithT(t)
+		g := NewWithT(t)
 		req := admission.Request{AdmissionRequest: k8sadm.AdmissionRequest{
 			Operation: k8sadm.Delete,
 			Name:      api.HNCConfigSingleton,
@@ -46,7 +46,7 @@ func TestDeletingConfigObject(t *testing.T) {
 
 func TestDeletingOtherObject(t *testing.T) {
 	t.Run("Delete config object", func(t *testing.T) {
-		g := NewGomegaWithT(t)
+		g := NewWithT(t)
 		req := admission.Request{AdmissionRequest: k8sadm.AdmissionRequest{
 			Operation: k8sadm.Delete,
 			Name:      "other",
@@ -90,7 +90,7 @@ func TestRBACTypes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 
@@ -147,7 +147,7 @@ func TestNonRBACTypes(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 			config := &HNCConfig{
@@ -201,7 +201,7 @@ func TestPropagateConflict(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			configs := []api.ResourceSpec{
 				{Group: "", Resource: "secrets", Mode: "Propagate"}}
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: configs}}

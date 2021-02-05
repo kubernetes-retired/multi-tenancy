@@ -35,7 +35,7 @@ func TestDeleteSubNamespace(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 
 			// Create a namespace instance a and add the subnamespace-of annotation.
 			sub := &corev1.Namespace{}
@@ -76,7 +76,7 @@ func TestDeleteOwnerNamespace(t *testing.T) {
 	c := f.Get("c")
 
 	t.Run("Delete a namespace with subnamespaces", func(t *testing.T) {
-		g := NewGomegaWithT(t)
+		g := NewWithT(t)
 		req := &nsRequest{
 			ns: aInst,
 			op: k8sadm.Delete,
@@ -133,7 +133,7 @@ func TestCreateNamespace(t *testing.T) {
 	ns.Name = nm
 
 	t.Run("Create namespace with an already existing name in external hierarchy", func(t *testing.T) {
-		g := NewGomegaWithT(t)
+		g := NewWithT(t)
 		req := &nsRequest{
 			ns: ns,
 			op: k8sadm.Create,
@@ -188,7 +188,7 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			tnsInst := tc.nsInst
 			if tc.managedBy == "" {
 				tnsInst.SetAnnotations(map[string]string{})

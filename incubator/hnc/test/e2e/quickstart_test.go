@@ -102,7 +102,7 @@ var _ = Describe("Quickstart", func() {
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsService1, "get secrets")
 	})
 
-	It("Should intergrate hierarchical network policy", func() {
+	It("Should integrate hierarchical network policy", func() {
 		CreateNamespace(nsOrg)
 		CreateSubnamespace(nsTeamA, nsOrg)
 		CreateSubnamespace(nsTeamB, nsOrg)

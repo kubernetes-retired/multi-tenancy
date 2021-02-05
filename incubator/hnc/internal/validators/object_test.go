@@ -67,7 +67,7 @@ func TestType(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			if tc.ns == "" {
 				tc.ns = "default"
 			}
@@ -127,7 +127,7 @@ func TestInheritedFromLabel(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			oldInst := &unstructured.Unstructured{}
 			metadata.SetLabel(oldInst, tc.oldLabel, tc.oldValue)
 			inst := &unstructured.Unstructured{}
@@ -690,7 +690,7 @@ func TestCreatingConflictSource(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			f := foresttest.Create(tc.forest)
 			createSecret(tc.conflictInstName, tc.conflictNamespace, f)
 			o := &Object{Forest: f}

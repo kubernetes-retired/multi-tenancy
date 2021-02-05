@@ -1,9 +1,9 @@
 package object
 
 import (
-	. "github.com/onsi/gomega"
 	"testing"
 
+	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
@@ -72,7 +72,7 @@ func TestCanonical(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			// Test
 			got := Canonical(tc.inst)
 			if tc.expected == nil {

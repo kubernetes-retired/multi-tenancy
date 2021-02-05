@@ -30,7 +30,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			anchor := &api.SubnamespaceAnchor{}
 			anchor.ObjectMeta.Namespace = tc.pnm
 			anchor.ObjectMeta.Name = tc.cnm
@@ -81,7 +81,7 @@ func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 			}
 
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			anchor := &api.SubnamespaceAnchor{}
 			anchor.ObjectMeta.Namespace = tc.pnm
 			anchor.ObjectMeta.Name = tc.cnm
