@@ -62,34 +62,35 @@ func (p *Plugin) Instance() (interface{}, error) {
 	return p.instance, p.err
 }
 
-var register = struct {
+type ResourceRegister struct {
 	sync.RWMutex
-	r map[string]*Registration
-}{}
+	resources map[string]*Registration
+}
+
+var SyncerResourceRegister ResourceRegister
 
 // Register allows plugins to register
-func Register(r *Registration) {
-	register.Lock()
-	defer register.Unlock()
+func (reg *ResourceRegister) Register(r *Registration) {
+	reg.Lock()
+	defer reg.Unlock()
 	if r.ID == "" {
 		panic(ErrNoPluginID)
 	}
 
-	if register.r == nil {
-		register.r = make(map[string]*Registration)
+	if reg.resources == nil {
+		reg.resources = make(map[string]*Registration)
 	}
 
-	register.r[r.ID] = r
+	reg.resources[r.ID] = r
 }
 
 // List returns the list of registered plugins for initialization.
-func List() []*Registration {
-	var res []*Registration
-	register.RLock()
-	defer register.RUnlock()
-	for id := range register.r {
-		res = append(res, register.r[id])
+func (reg *ResourceRegister) List() []*Registration {
+	var r []*Registration
+	reg.RLock()
+	defer reg.RUnlock()
+	for id := range reg.resources {
+		r = append(r, reg.resources[id])
 	}
-
-	return res
+	return r
 }

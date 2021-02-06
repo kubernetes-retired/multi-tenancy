@@ -83,7 +83,7 @@ func NewSchedulerCommand(stopChan <-chan struct{}) *cobra.Command {
 
 // Run start the scheduler.
 func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
-	scheduler := scheduler.New(&cc.ComponentConfig,
+	scheduler, err := scheduler.New(&cc.ComponentConfig,
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
 		cc.SuperClusterClient,
@@ -92,6 +92,9 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 		cc.MetaClusterInformerFactory,
 		stopCh,
 		cc.Recorder)
+	if err != nil {
+		return fmt.Errorf("failed to create scheduler instance: %v", err)
+	}
 
 	// Start all informers.
 	go cc.VirtualClusterInformer.Informer().Run(stopCh)

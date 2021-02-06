@@ -21,6 +21,7 @@ import (
 
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
 // WatchManager manages number of resource watchers.
@@ -35,6 +36,7 @@ func New() *WatchManager {
 
 // ResourceWatcher is the interface used by WatchManager to manage multiple resource watchers.
 type ResourceWatcher interface {
+	reconciler.DWReconciler
 	GetListener() listener.ClusterChangeListener
 	Start(stopCh <-chan struct{}) error
 }

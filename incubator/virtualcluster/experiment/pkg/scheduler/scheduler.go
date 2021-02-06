@@ -39,7 +39,6 @@ import (
 	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
-	superClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/supercluster"
 	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/virtualcluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -47,7 +46,10 @@ import (
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	virtualClusterLister "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/listers/tenancy/v1alpha1"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
+
+var SuperClusterResourceRegister plugin.ResourceRegister
 
 type Scheduler struct {
 	config            *schedulerconfig.SchedulerConfiguration
@@ -83,7 +85,7 @@ func New(
 	metaInformers informers.SharedInformerFactory,
 	stopCh <-chan struct{},
 	recorder record.EventRecorder,
-) *Scheduler {
+) (*Scheduler, error) {
 	scheduler := &Scheduler{
 		config:                config,
 		metaClusterClient:     metaClusterClient,
@@ -141,8 +143,27 @@ func New(
 
 	superWatcher := manager.New()
 	scheduler.superClusterWatcher = superWatcher
-	superClusterWatchers.Register(config, superWatcher)
-	return scheduler
+	// register super cluster resources
+	initContext := &plugin.InitContext{Config: config}
+	for _, p := range SuperClusterResourceRegister.List() {
+		klog.Infof("loading super cluster resource plugin %q...", p.ID)
+
+		result := p.Init(initContext)
+		instance, err := result.Instance()
+		if err != nil {
+			klog.Errorf("failed to load plugin %q", p.ID)
+			return nil, err
+		}
+
+		s, ok := instance.(manager.ResourceWatcher)
+		if ok {
+			scheduler.superClusterWatcher.AddResourceWatcher(s)
+		} else {
+			klog.Warningf("unrecognized super cluster resource plugin %q", p.ID)
+		}
+	}
+
+	return scheduler, nil
 }
 
 func (s *Scheduler) enqueueVirtualCluster(obj interface{}) {
