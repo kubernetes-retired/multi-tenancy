@@ -173,7 +173,7 @@ func New(
 }
 
 func LoadPlugins(config *config.SyncerConfiguration) []*plugin.Registration {
-	allPlugin := plugin.List()
+	allPlugin := plugin.SyncerResourceRegister.List()
 	var enablePlugin []*plugin.Registration
 	extraSets := sets.NewString(config.ExtraSyncingResources...)
 

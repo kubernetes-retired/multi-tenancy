@@ -48,7 +48,7 @@ import (
 )
 
 func init() {
-	plugin.Register(&plugin.Registration{
+	plugin.SyncerResourceRegister.Register(&plugin.Registration{
 		ID: "pod",
 		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
 			return NewPodController(ctx.Config.(*config.SyncerConfiguration), ctx.Client, ctx.Informer, ctx.VCClient, ctx.VCInformer, manager.ResourceSyncerOptions{})
