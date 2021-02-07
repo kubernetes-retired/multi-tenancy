@@ -255,15 +255,26 @@ func (c *schedulerCache) UpdateNamespace(oldNamespace, newNamespace *Namespace) 
 	return c.updateNamespaceWithoutLock(oldNamespace, newNamespace)
 }
 
-func (c *schedulerCache) revertShadowCluster(shadowCluster, newCluster *Cluster) {
+func (c *schedulerCache) updateClusterNonAllocationStates(curCluster, newCluster *Cluster) {
 	if newCluster.labels != nil {
-		shadowCluster.labels = make(map[string]string)
+		curCluster.labels = make(map[string]string)
 		for k, v := range newCluster.labels {
-			shadowCluster.labels[k] = v
+			curCluster.labels[k] = v
 		}
 	}
-	shadowCluster.capacity = newCluster.capacity.DeepCopy()
-	shadowCluster.shadow = false
+	curCluster.capacity = newCluster.capacity.DeepCopy()
+	curCluster.shadow = false
+
+	provisionItemsCopy := make(map[string][]*Slice)
+	for k, v := range newCluster.provisionItems {
+		s := make([]*Slice, 0, len(v))
+		for _, each := range v {
+			s = append(s, each.DeepCopy())
+		}
+		provisionItemsCopy[k] = s
+	}
+	curCluster.provisionItems = provisionItemsCopy
+	curCluster.provision = newCluster.provision.DeepCopy()
 }
 
 func (c *schedulerCache) addShadowCluster(name string) *Cluster {
@@ -278,10 +289,8 @@ func (c *schedulerCache) AddCluster(cluster *Cluster) error {
 	defer c.mu.Unlock()
 
 	if clusterState, ok := c.clusters[cluster.name]; ok {
-		if clusterState.shadow {
-			c.revertShadowCluster(clusterState, cluster)
-			return nil
-		}
+		c.updateClusterNonAllocationStates(clusterState, cluster)
+		return nil
 	}
 	clone := cluster.DeepCopy()
 	c.clusters[cluster.name] = clone

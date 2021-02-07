@@ -52,10 +52,10 @@ type Slice struct {
 	cluster string
 }
 
-func NewSlice(owner string, size v1.ResourceList, cluster string) *Slice {
+func NewSlice(owner string, sliceSize v1.ResourceList, cluster string) *Slice {
 	return &Slice{
 		owner:   owner,
-		size:    size,
+		size:    sliceSize.DeepCopy(),
 		cluster: cluster,
 	}
 }

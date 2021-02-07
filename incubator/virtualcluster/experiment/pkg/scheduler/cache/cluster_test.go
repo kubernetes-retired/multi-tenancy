@@ -124,7 +124,7 @@ func TestAddNamespace(t *testing.T) {
 			succeed: false,
 		},
 
-		"Fail to add due to exceeding capacity with multiple slices": {
+		"Fail to add due to exceeding capacity with multiple allocItems": {
 			cluster: NewCluster(defaultCluster, nil, defaultCapacity),
 			slices: []*Slice{
 				NewSlice(defaultNamespace, defaultQuotaSlice, defaultCluster),
@@ -146,6 +146,10 @@ func TestAddNamespace(t *testing.T) {
 			err := tc.cluster.AddNamespace(defaultNamespace, tc.slices)
 			if tc.succeed && err != nil {
 				t.Errorf("test %s should succeed but fails with err %v", k, err)
+			}
+
+			if tc.succeed && len(tc.cluster.allocItems[defaultNamespace]) != len(tc.slices) {
+				t.Errorf("test %s allocItems has wrong entry", k)
 			}
 
 			if !tc.succeed && err == nil {
@@ -197,7 +201,7 @@ func TestRemoveNamespace(t *testing.T) {
 			succeed: true,
 		},
 
-		"Succeed to remove two slices": {
+		"Succeed to remove two allocItems": {
 			cluster: NewCluster(defaultCluster, nil, defaultCapacity),
 			curSlices: []*Slice{
 				NewSlice(defaultNamespace, defaultQuotaSlice, defaultCluster),
@@ -228,7 +232,7 @@ func TestRemoveNamespace(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			tc.cluster.alloc = tc.curAlloc
 			for _, each := range tc.curSlices {
-				tc.cluster.slices[defaultNamespace] = append(tc.cluster.slices[defaultNamespace], each)
+				tc.cluster.allocItems[defaultNamespace] = append(tc.cluster.allocItems[defaultNamespace], each)
 			}
 
 			err := tc.cluster.RemoveNamespace(defaultNamespace)
@@ -274,9 +278,9 @@ func TestDeepCopy(t *testing.T) {
 	if clone.name != cluster.name ||
 		!equality.Semantic.DeepEqual(clone.capacity, cluster.capacity) ||
 		!equality.Semantic.DeepEqual(clone.alloc, cluster.alloc) ||
-		clone.slices[defaultNamespace][0].owner != cluster.slices[defaultNamespace][0].owner ||
-		!equality.Semantic.DeepEqual(clone.slices[defaultNamespace][0].size, cluster.slices[defaultNamespace][0].size) ||
-		clone.slices[defaultNamespace][0].cluster != cluster.slices[defaultNamespace][0].cluster ||
+		clone.allocItems[defaultNamespace][0].owner != cluster.allocItems[defaultNamespace][0].owner ||
+		!equality.Semantic.DeepEqual(clone.allocItems[defaultNamespace][0].size, cluster.allocItems[defaultNamespace][0].size) ||
+		clone.allocItems[defaultNamespace][0].cluster != cluster.allocItems[defaultNamespace][0].cluster ||
 		!equality.Semantic.DeepEqual(clone.pods[pod.GetNamespaceKey()], cluster.pods[pod.GetNamespaceKey()]) {
 		t.Errorf("deepcopy fails %v %v", clone, cluster)
 	}
