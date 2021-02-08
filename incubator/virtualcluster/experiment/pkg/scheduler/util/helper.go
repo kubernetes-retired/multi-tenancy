@@ -104,11 +104,11 @@ func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Clust
 	}
 	id, err := GetSuperClusterID(client)
 	if err != nil {
-		return fmt.Errorf("failed to get cluster id from super cluster: %v", err)
+		return fmt.Errorf("failed to get cluster id from super cluster %s/%s: %v", super.Namespace, super.Name, err)
 	}
 	capacity, err := GetSuperClusterCapacity(client)
 	if err != nil {
-		return fmt.Errorf("failed to get cluster capacity from super cluster: %v", err)
+		return fmt.Errorf("failed to get cluster capacity from super cluster %s/%s: %v", super.Namespace, super.Name, err)
 	}
 	var labels map[string]string
 	if super.GetLabels() != nil {
@@ -117,9 +117,45 @@ func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Clust
 			labels[k] = v
 		}
 	}
+	clusterInstance := internalcache.NewCluster(id, labels, capacity)
+
+	nslist, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get namespaces from super cluster %s/%s: %v", super.Namespace, super.Name, err)
+	}
+	for _, each := range nslist.Items {
+		clustername, ok := each.GetAnnotations()[syncerconst.LabelCluster]
+		if !ok {
+			// this is not a namespace created by the syncer
+			continue
+		}
+
+		var placements map[string]int
+		var quotaSlice v1.ResourceList
+		placements, quotaSlice, err = GetSchedulingInfo(&each)
+		if err != nil {
+			return fmt.Errorf("failed to get scheduling info in %s/%s: %v", super.Namespace, super.Name, err)
+		}
+
+		if placements == nil {
+			return fmt.Errorf("synced namespace does not have placement result %s", each.Name)
+		}
+		var num int
+		num, ok = placements[id]
+		if !ok {
+			return fmt.Errorf("synced namespace is in wrong cluster %s", each.Name)
+		}
+
+		var slices []*internalcache.Slice
+		key := fmt.Sprintf("%s/%s", clustername, each.Name)
+		for i := 0; i < num; i++ {
+			slices = append(slices, internalcache.NewSlice(key, quotaSlice, clustername))
+		}
+		clusterInstance.AddProvision(key, slices)
+	}
+
 	klog.Infof("added cluster %s in cache", id)
-	// If the cluster already exists in the cluster, AddCluster will update it with latest label and capacity.
-	if err := cache.AddCluster(internalcache.NewCluster(id, labels, capacity)); err != nil {
+	if err := cache.AddCluster(clusterInstance); err != nil {
 		return fmt.Errorf("failed to add cluster to cache: %s", id)
 	}
 	return nil
@@ -202,6 +238,32 @@ func parseSlice(slice map[string]string) (v1.ResourceList, error) {
 	return quotaslice, nil
 }
 
+// GetSchedulingInfo returns the placement result and the quotaslice size
+func GetSchedulingInfo(namespace *v1.Namespace) (map[string]int, v1.ResourceList, error) {
+	var err error
+	var placements map[string]int
+	if val, ok := namespace.GetAnnotations()[utilconst.LabelScheduledPlacements]; ok {
+		placements = make(map[string]int)
+		if err = json.Unmarshal([]byte(val), &placements); err != nil {
+			return nil, nil, fmt.Errorf("unknown format %s of key %s, ns %s: %v", val, utilconst.LabelScheduledPlacements, namespace.Name, err)
+		}
+	}
+	var quotaSlice v1.ResourceList
+	if val, ok := namespace.GetAnnotations()[utilconst.LabelNamespaceSlice]; ok {
+		slice := make(map[string]string)
+		if err = json.Unmarshal([]byte(val), &slice); err != nil {
+			return nil, nil, fmt.Errorf("unknown format %s of key %s, ns %s: %v", val, utilconst.LabelNamespaceSlice, namespace.Name, err)
+		}
+		quotaSlice, err = parseSlice(slice)
+		if err != nil {
+			return nil, nil, fmt.Errorf("wrong slice format:%v", err)
+		}
+	} else {
+		quotaSlice = utilconst.DefaultNamespaceSlice
+	}
+	return placements, quotaSlice, nil
+}
+
 func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.VirtualCluster, cache internalcache.Cache) error {
 	clustername := conversion.ToClusterKey(vc)
 	client, err := GetClientFromSecret(metaClient, syncerconst.KubeconfigAdminSecretName, clustername)
@@ -217,41 +279,29 @@ func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.Virtua
 
 		quota, err := GetNamespaceQuota(client, each.Name)
 		if err != nil {
-			return fmt.Errorf("failed in %s/%s: %v", vc.Namespace, vc.Name, err)
+			return fmt.Errorf("failed to get quota in %s/%s: %v", vc.Namespace, vc.Name, err)
 		}
 		cpu := quota[v1.ResourceCPU]
 		mem := quota[v1.ResourceMemory]
+		var placements map[string]int
+		var quotaSlice v1.ResourceList
+		placements, quotaSlice, err = GetSchedulingInfo(&each)
+		if err != nil {
+			return fmt.Errorf("failed to get scheduling info in %s/%s: %v", vc.Namespace, vc.Name, err)
+		}
 
-		val, ok := each.GetAnnotations()[utilconst.LabelScheduledPlacements]
 		if cpu.IsZero() && mem.IsZero() {
-			if ok {
+			if placements != nil {
 				// TODO: we may need to clear the schedule.
 			}
 			continue
 		}
 
-		if !ok {
+		if placements == nil {
 			// to be scheduled, skip
 			continue
 		}
-		placements := make(map[string]int)
-		if err = json.Unmarshal([]byte(val), &placements); err != nil {
-			return fmt.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", val, utilconst.LabelScheduledPlacements, vc.Name, each.Name, err)
-		}
 
-		var quotaSlice v1.ResourceList
-		if val, ok = each.GetAnnotations()[utilconst.LabelNamespaceSlice]; ok {
-			slice := make(map[string]string)
-			if err = json.Unmarshal([]byte(val), &slice); err != nil {
-				return fmt.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", val, utilconst.LabelNamespaceSlice, vc.Name, each.Name, err)
-			}
-			quotaSlice, err = parseSlice(slice)
-			if err != nil {
-				return fmt.Errorf("wrong slice format:%v", err)
-			}
-		} else {
-			quotaSlice = utilconst.DefaultNamespaceSlice
-		}
 		total, _ := internalcache.GetNumSlices(quota, quotaSlice)
 		numSched := 0
 		schedule := make([]*internalcache.Placement, 0)

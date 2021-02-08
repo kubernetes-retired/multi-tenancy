@@ -29,26 +29,32 @@ type Cluster struct {
 	capacity v1.ResourceList
 	shadow   bool // a shadow cluster has a fake capacity, hence is not involved in scheduling
 
-	alloc  v1.ResourceList
-	slices map[string][]*Slice            // ns key -> slice array
-	pods   map[string]map[string]struct{} // ns key -> Pod map
+	alloc      v1.ResourceList
+	allocItems map[string][]*Slice            // ns key -> slice array
+	pods       map[string]map[string]struct{} // ns key -> Pod map
+
+	// provision and provisionItems record the observed namespaces from the super cluster
+	provision      v1.ResourceList
+	provisionItems map[string][]*Slice
 }
 
 func NewCluster(name string, labels map[string]string, capacity v1.ResourceList) *Cluster {
-	alloc := capacity.DeepCopy()
+	zeroRes := capacity.DeepCopy()
 
-	for k, v := range alloc {
+	for k, v := range zeroRes {
 		v.Set(0)
-		alloc[k] = v
+		zeroRes[k] = v
 	}
 
 	return &Cluster{
-		name:     name,
-		labels:   labels,
-		capacity: capacity,
-		alloc:    alloc,
-		slices:   make(map[string][]*Slice),
-		pods:     make(map[string]map[string]struct{}),
+		name:           name,
+		labels:         labels,
+		capacity:       capacity,
+		alloc:          zeroRes,
+		allocItems:     make(map[string][]*Slice),
+		pods:           make(map[string]map[string]struct{}),
+		provision:      zeroRes,
+		provisionItems: make(map[string][]*Slice),
 	}
 }
 
@@ -63,14 +69,22 @@ func (c *Cluster) DeepCopy() *Cluster {
 
 	out := NewCluster(c.name, labelcopy, c.capacity.DeepCopy())
 
-	slicesCopy := make(map[string][]*Slice)
-
-	for k, v := range c.slices {
+	allocItemsCopy := make(map[string][]*Slice)
+	for k, v := range c.allocItems {
 		s := make([]*Slice, 0, len(v))
 		for _, each := range v {
 			s = append(s, each.DeepCopy())
 		}
-		slicesCopy[k] = s
+		allocItemsCopy[k] = s
+	}
+
+	provisionItemsCopy := make(map[string][]*Slice)
+	for k, v := range c.provisionItems {
+		s := make([]*Slice, 0, len(v))
+		for _, each := range v {
+			s = append(s, each.DeepCopy())
+		}
+		provisionItemsCopy[k] = s
 	}
 
 	podsCopy := make(map[string]map[string]struct{})
@@ -80,65 +94,96 @@ func (c *Cluster) DeepCopy() *Cluster {
 			podsCopy[k][name] = struct{}{}
 		}
 	}
-	out.slices = slicesCopy
-	out.pods = podsCopy
+	out.allocItems = allocItemsCopy
 	out.alloc = c.alloc.DeepCopy()
+	out.pods = podsCopy
+	out.provision = c.provision.DeepCopy()
+	out.provisionItems = provisionItemsCopy
 	return out
 }
 
-func (c *Cluster) AddNamespace(key string, slices []*Slice) error {
-	if _, ok := c.slices[key]; ok {
-		return fmt.Errorf("namespace key %s is already in cluster %s, cannot add twice", key, c.name)
+func (c *Cluster) addItem(key string, items map[string][]*Slice, alloc v1.ResourceList, slices []*Slice) (v1.ResourceList, error) {
+	if _, ok := items[key]; ok {
+		return nil, fmt.Errorf("key %s is already in cluster %s, cannot add twice", key, c.name)
 	}
-	allocCopy := c.alloc.DeepCopy()
+	allocCopy := alloc.DeepCopy()
 	for _, s := range slices {
 		if s.cluster != c.name {
-			return fmt.Errorf("slice %s is placed in cluster %s, not %s", s.owner, s.cluster, c.name)
+			return nil, fmt.Errorf("slice %s is placed in cluster %s, not %s", s.owner, s.cluster, c.name)
 		}
 		for k, v := range s.size {
 			each, ok := allocCopy[k]
 			if !ok {
-				return fmt.Errorf("slice %s has quota %s which is not in known cluster %s's allocable resources", s.owner, k, c.name)
+				return nil, fmt.Errorf("slice %s has quota %s which is not in known cluster %s's allocable resources", s.owner, k, c.name)
 			}
 			each.Add(v)
 			var upper resource.Quantity
 			upper, ok = c.capacity[k]
 			if !ok {
-				return fmt.Errorf("slice %s has quota %s which is not in known cluster %s's capacity resources", s.owner, k, c.name)
+				return nil, fmt.Errorf("slice %s has quota %s which is not in known cluster %s's capacity resources", s.owner, k, c.name)
 			}
 
 			if upper.Cmp(each) == -1 {
-				return fmt.Errorf("cluster %s's resource %s allocation is > capacity after adding %s's slices ", c.name, k, key)
+				return nil, fmt.Errorf("cluster %s's resource %s allocation is > capacity after adding %s's allocItems ", c.name, k, key)
 			}
 			allocCopy[k] = each
 		}
 	}
-	// apply changes only when no errors
-	c.alloc = allocCopy
-	c.slices[key] = slices
-	return nil
+	items[key] = slices
+	return allocCopy, nil
 }
 
-func (c *Cluster) RemoveNamespace(key string) error {
-	slices, ok := c.slices[key]
-	if !ok {
-		return fmt.Errorf("namespace key %s is not in cluster %s, cannot remove twice", key, c.name)
+func (c *Cluster) AddNamespace(key string, slices []*Slice) error {
+	ret, err := c.addItem(key, c.allocItems, c.alloc, slices)
+	if err == nil {
+		c.alloc = ret
 	}
-	allocCopy := c.alloc.DeepCopy()
+	return err
+}
+
+func (c *Cluster) removeItem(key string, items map[string][]*Slice, alloc v1.ResourceList) (v1.ResourceList, error) {
+	slices, ok := items[key]
+	if !ok {
+		return nil, fmt.Errorf("key %s is not in cluster %s, cannot remove twice", key, c.name)
+	}
+	allocCopy := alloc.DeepCopy()
 	for _, s := range slices {
 		for k, v := range s.size {
 			each, _ := allocCopy[k]
 			if each.Cmp(v) == -1 {
-				// This usually means the cache is messed up
-				return fmt.Errorf("cluster %s's resource %s allocation is < 0 after removing %s's slices ", c.name, k, key)
+				// this usually means the cache is messed up
+				return nil, fmt.Errorf("cluster %s's resource %s is < 0 after removing %s's slices ", c.name, k, key)
 			}
 			each.Sub(v)
 			allocCopy[k] = each
 		}
 	}
-	c.alloc = allocCopy
-	delete(c.slices, key)
-	return nil
+	delete(items, key)
+	return allocCopy, nil
+}
+
+func (c *Cluster) RemoveNamespace(key string) error {
+	ret, err := c.removeItem(key, c.allocItems, c.alloc)
+	if err == nil {
+		c.alloc = ret
+	}
+	return err
+}
+
+func (c *Cluster) AddProvision(key string, slices []*Slice) error {
+	ret, err := c.addItem(key, c.provisionItems, c.provision, slices)
+	if err == nil {
+		c.provision = ret
+	}
+	return err
+}
+
+func (c *Cluster) RemoveProvision(key string) error {
+	ret, err := c.removeItem(key, c.provisionItems, c.provision)
+	if err == nil {
+		c.provision = ret
+	}
+	return err
 }
 
 func (c *Cluster) AddPod(pod *Pod) error {
