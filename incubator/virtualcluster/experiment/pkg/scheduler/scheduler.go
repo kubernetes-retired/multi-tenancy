@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -144,7 +145,8 @@ func New(
 	superWatcher := manager.New()
 	scheduler.superClusterWatcher = superWatcher
 	// register super cluster resources
-	initContext := &plugin.InitContext{Config: config}
+	ctx := context.WithValue(context.Background(), constants.LabelSchedulerCache, scheduler.schedulerCache)
+	initContext := &plugin.InitContext{Context: ctx, Config: config}
 	for _, p := range SuperClusterResourceRegister.List() {
 		klog.Infof("loading super cluster resource plugin %q...", p.ID)
 

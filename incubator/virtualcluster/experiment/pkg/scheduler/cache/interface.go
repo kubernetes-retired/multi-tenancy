@@ -23,4 +23,6 @@ type Cache interface {
 	RemoveCluster(*Cluster) error
 	AddPod(*Pod) error
 	RemovePod(*Pod) error
+	AddProvision(string, string, []*Slice) error
+	RemoveProvision(string, string) error
 }

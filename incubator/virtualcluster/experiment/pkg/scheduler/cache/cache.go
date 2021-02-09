@@ -308,4 +308,29 @@ func (c *schedulerCache) RemoveCluster(cluster *Cluster) error {
 	return nil
 }
 
-// TODO: Add cluster update methods.
+func (c *schedulerCache) AddProvision(clustername, key string, slices []*Slice) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	clusterState, ok := c.clusters[clustername]
+	if !ok {
+		return fmt.Errorf("cluster %s is not in cache, cannot add provision for %s", clustername, key)
+	}
+
+	// clear old state if any
+	if err := clusterState.RemoveProvision(key); err != nil {
+		return err
+	}
+	return clusterState.AddProvision(key, slices)
+}
+
+func (c *schedulerCache) RemoveProvision(clustername, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	clusterState, ok := c.clusters[clustername]
+	if !ok {
+		return fmt.Errorf("cluster %s is not in cache, cannot remove provision for %s", clustername, key)
+	}
+	return clusterState.RemoveProvision(key)
+}

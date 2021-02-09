@@ -314,6 +314,10 @@ func (c *Cluster) SetSynced() {
 	c.synced = true
 }
 
+func (c *Cluster) SetKey(k string) {
+	c.key = k
+}
+
 // Stop send a msg to stopCh, stop the cache.
 func (c *Cluster) Stop() {
 	close(c.stopCh)

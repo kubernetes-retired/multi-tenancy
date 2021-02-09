@@ -303,8 +303,6 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 	}
 	s.superClusterLock.Unlock()
 
-	clusterName := fmt.Sprintf("%s/%s", super.Namespace, super.Name)
-
 	// we assume the super cluster kubeconfig is saved in a secret with the same name of the cluster CR in the same namespace.
 	// this may change in the future
 	adminKubeConfigSecret, err := s.metaClusterClient.CoreV1().Secrets(super.Namespace).Get(context.TODO(), super.Name, metav1.GetOptions{})
@@ -313,7 +311,7 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 	}
 	adminKubeConfigBytes := adminKubeConfigSecret.Data[constants.KubeconfigAdminSecretName]
 
-	superCluster, err := cluster.NewCluster(clusterName, super.Namespace, super.Name, string(super.UID), &superclusterGetter{lister: s.superClusterLister}, adminKubeConfigBytes, cluster.Options{})
+	superCluster, err := cluster.NewCluster("", super.Namespace, super.Name, string(super.UID), &superclusterGetter{lister: s.superClusterLister}, adminKubeConfigBytes, cluster.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to new super cluster %s/%s: %v", super.Namespace, super.Name, err)
 	}
@@ -324,6 +322,7 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 		return fmt.Errorf("failed to get super cluster id: %v", err)
 	}
 	klog.Infof("supercluster %s's ID is found: %v", key, id)
+	superCluster.SetKey(id)
 
 	// for each resource type of the newly added VirtualCluster, we add a listener
 	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {

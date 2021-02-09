@@ -97,6 +97,27 @@ func GetSuperClusterCapacity(client clientset.Interface) (v1.ResourceList, error
 	return getTotalNodeCapacity(nodelist), nil
 }
 
+func GetProvisionedSlices(namespace *v1.Namespace, clusterId, key string) ([]*internalcache.Slice, error) {
+	placements, quotaSlice, err := GetSchedulingInfo(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get scheduling info in %s: %v", namespace.Name, err)
+	}
+
+	if placements == nil {
+		return nil, fmt.Errorf("synced namespace does not have placement result %s", namespace.Name)
+	}
+	num, ok := placements[clusterId]
+	if !ok {
+		return nil, fmt.Errorf("synced namespace is in wrong cluster %s", namespace.Name)
+	}
+
+	var slices []*internalcache.Slice
+	for i := 0; i < num; i++ {
+		slices = append(slices, internalcache.NewSlice(key, quotaSlice, clusterId))
+	}
+	return slices, nil
+}
+
 func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Cluster, cache internalcache.Cache) error {
 	client, err := GetClientFromSecret(metaClient, super.Name, super.Namespace)
 	if err != nil {
@@ -118,38 +139,19 @@ func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Clust
 		}
 	}
 	clusterInstance := internalcache.NewCluster(id, labels, capacity)
-
 	nslist, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get namespaces from super cluster %s/%s: %v", super.Namespace, super.Name, err)
 	}
 	for _, each := range nslist.Items {
-		clustername, ok := each.GetAnnotations()[syncerconst.LabelCluster]
-		if !ok {
+		if _, ok := each.GetAnnotations()[syncerconst.LabelCluster]; !ok {
 			// this is not a namespace created by the syncer
 			continue
 		}
-
-		var placements map[string]int
-		var quotaSlice v1.ResourceList
-		placements, quotaSlice, err = GetSchedulingInfo(&each)
+		key := fmt.Sprintf("%s/%s", id, each.Name)
+		slices, err := GetProvisionedSlices(&each, id, key)
 		if err != nil {
-			return fmt.Errorf("failed to get scheduling info in %s/%s: %v", super.Namespace, super.Name, err)
-		}
-
-		if placements == nil {
-			return fmt.Errorf("synced namespace does not have placement result %s", each.Name)
-		}
-		var num int
-		num, ok = placements[id]
-		if !ok {
-			return fmt.Errorf("synced namespace is in wrong cluster %s", each.Name)
-		}
-
-		var slices []*internalcache.Slice
-		key := fmt.Sprintf("%s/%s", clustername, each.Name)
-		for i := 0; i < num; i++ {
-			slices = append(slices, internalcache.NewSlice(key, quotaSlice, clustername))
+			return fmt.Errorf("fail to sync %s/%s: %v", super.Namespace, super.Name, err)
 		}
 		clusterInstance.AddProvision(key, slices)
 	}
