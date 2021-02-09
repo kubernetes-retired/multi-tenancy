@@ -38,7 +38,7 @@ func TestStructure(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
 			hc.ObjectMeta.Name = api.Singleton
 			hc.ObjectMeta.Namespace = tc.nnm
@@ -82,7 +82,7 @@ func TestChangeParentOnManagedBy(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
 			hc.ObjectMeta.Name = api.Singleton
 			hc.ObjectMeta.Namespace = tc.nnm
@@ -133,7 +133,7 @@ func TestChangeParentWithConflict(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
 			hc.ObjectMeta.Name = api.Singleton
 			hc.ObjectMeta.Namespace = tc.nnm
@@ -177,7 +177,7 @@ func TestAuthz(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			f := foresttest.Create(tc.forest)
 			h := &Hierarchy{Forest: f, server: tc.server}
 			l := zap.New()

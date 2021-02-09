@@ -19,7 +19,7 @@ func TestSetParentAndAncestorNames(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			// Create the chain
 			f := NewForest()
 			var last *Namespace
@@ -49,7 +49,7 @@ func TestCycleNames(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			// Create the chain
 			f := NewForest()
 			var last *Namespace
@@ -105,7 +105,7 @@ func TestDescendantNames(t *testing.T) {
 	for _, tc := range tests {
 		sort.Strings(tc.want)
 		t.Run(tc.name, func(t *testing.T) {
-			g := NewGomegaWithT(t)
+			g := NewWithT(t)
 			root := f.Get(tc.root)
 			g.Expect(root.DescendantNames()).Should(Equal(tc.want))
 		})
