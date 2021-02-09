@@ -17,12 +17,18 @@ limitations under the License.
 package namespace
 
 import (
+	"fmt"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
+	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
+	syncerconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
@@ -33,19 +39,25 @@ func init() {
 	scheduler.SuperClusterResourceRegister.Register(&plugin.Registration{
 		ID: "namespace",
 		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
-			return NewNamespaceController(ctx.Config.(*schedulerconfig.SchedulerConfiguration))
+			v := ctx.Context.Value(constants.LabelSchedulerCache)
+			if v == nil {
+				return nil, fmt.Errorf("cannot found schedulercache in context")
+			}
+			return NewNamespaceController(v.(internalcache.Cache), ctx.Config.(*schedulerconfig.SchedulerConfiguration))
 		},
 	})
 }
 
 type controller struct {
+	SchedulerCache         internalcache.Cache
 	Config                 *schedulerconfig.SchedulerConfiguration
 	MultiClusterController *mc.MultiClusterController
 }
 
-func NewNamespaceController(config *schedulerconfig.SchedulerConfiguration) (manager.ResourceWatcher, error) {
+func NewNamespaceController(schedulerCache internalcache.Cache, config *schedulerconfig.SchedulerConfiguration) (manager.ResourceWatcher, error) {
 	c := &controller{
-		Config: config,
+		SchedulerCache: schedulerCache,
+		Config:         config,
 	}
 
 	var err error
@@ -66,6 +78,34 @@ func (c *controller) GetListener() listener.ClusterChangeListener {
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
 	klog.Infof("reconcile namespace %s for super cluster %s", request.Name, request.ClusterName)
+	key := fmt.Sprintf("%s/%s", request.ClusterName, request.Name)
+	exists := true
+	nsObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
+	ns := nsObj.(*v1.Namespace)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return reconciler.Result{Requeue: true}, err
+		}
+		exists = false
+	}
 
+	if exists {
+		if _, ok := ns.GetAnnotations()[syncerconst.LabelCluster]; !ok {
+			// this is not a namespace created by the syncer
+			return reconciler.Result{}, nil
+		}
+		var slices []*internalcache.Slice
+		slices, err = util.GetProvisionedSlices(ns, request.ClusterName, key)
+		if err != nil {
+			return reconciler.Result{Requeue: true}, fmt.Errorf("fail to reconcile %s/%s: %v", request.ClusterName, request.Name, err)
+		}
+		if err = c.SchedulerCache.AddProvision(request.ClusterName, key, slices); err != nil {
+			return reconciler.Result{Requeue: true}, err
+		}
+	} else {
+		if err = c.SchedulerCache.RemoveProvision(request.ClusterName, key); err != nil {
+			return reconciler.Result{Requeue: true}, err
+		}
+	}
 	return reconciler.Result{}, nil
 }

@@ -142,11 +142,11 @@ func (c *Cluster) AddNamespace(key string, slices []*Slice) error {
 }
 
 func (c *Cluster) removeItem(key string, items map[string][]*Slice, alloc v1.ResourceList) (v1.ResourceList, error) {
+	allocCopy := alloc.DeepCopy()
 	slices, ok := items[key]
 	if !ok {
-		return nil, fmt.Errorf("key %s is not in cluster %s, cannot remove twice", key, c.name)
+		return allocCopy, nil
 	}
-	allocCopy := alloc.DeepCopy()
 	for _, s := range slices {
 		for k, v := range s.size {
 			each, _ := allocCopy[k]

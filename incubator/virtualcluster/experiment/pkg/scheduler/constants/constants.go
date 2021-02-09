@@ -40,6 +40,8 @@ const (
 	SuperClusterWorker   = 3
 
 	KubeconfigAdminSecretName = "admin-kubeconfig"
+
+	LabelSchedulerCache = "tenancy.x-k8s.io/schedulercache"
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()
