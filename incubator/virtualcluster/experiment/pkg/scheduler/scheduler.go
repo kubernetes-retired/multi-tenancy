@@ -271,6 +271,12 @@ func (s *Scheduler) Run(stopChan <-chan struct{}) {
 		<-stopChan
 
 	}()
+
+	go wait.Until(s.Dump, 1*time.Minute, stopChan)
+}
+
+func (s *Scheduler) Dump() {
+	klog.Infof("Start dumping scheduler cache\n%s", s.schedulerCache.Dump())
 }
 
 // The dirty sets are used in bootstrap and in handling cluster offline. If a cluster was in dirty set and becomes online again,

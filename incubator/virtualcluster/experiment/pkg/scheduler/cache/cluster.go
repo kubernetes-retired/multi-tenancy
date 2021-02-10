@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -204,4 +205,78 @@ func (c *Cluster) RemovePod(pod *Pod) {
 	if len(c.pods[key]) == 0 {
 		delete(c.pods, key)
 	}
+}
+
+// dump structure is used for debugging
+type ClusterDump struct {
+	Name     string
+	Labels   map[string]string
+	Capacity v1.ResourceList
+	Shadow   bool
+
+	Alloc      v1.ResourceList
+	AllocItems map[string][]*SliceDump
+	Pods       map[string]map[string]struct{}
+
+	Provision      v1.ResourceList
+	ProvisionItems map[string][]*SliceDump
+}
+
+func (c *Cluster) Dump() string {
+	dump := ClusterDump{
+		Name:           c.name,
+		Capacity:       c.capacity.DeepCopy(),
+		Shadow:         c.shadow,
+		Alloc:          c.alloc.DeepCopy(),
+		AllocItems:     make(map[string][]*SliceDump),
+		Pods:           make(map[string]map[string]struct{}),
+		Provision:      c.provision.DeepCopy(),
+		ProvisionItems: make(map[string][]*SliceDump),
+	}
+
+	if c.labels != nil {
+		dump.Labels = make(map[string]string)
+		for k, v := range c.labels {
+			dump.Labels[k] = v
+		}
+	}
+
+	for k, v := range c.allocItems {
+		s := make([]*SliceDump, 0, len(v))
+		for _, each := range v {
+			d := &SliceDump{
+				Owner:   each.owner,
+				Size:    each.size.DeepCopy(),
+				Cluster: each.cluster,
+			}
+			s = append(s, d)
+		}
+		dump.AllocItems[k] = s
+	}
+
+	for k, v := range c.provisionItems {
+		s := make([]*SliceDump, 0, len(v))
+		for _, each := range v {
+			d := &SliceDump{
+				Owner:   each.owner,
+				Size:    each.size.DeepCopy(),
+				Cluster: each.cluster,
+			}
+			s = append(s, d)
+		}
+		dump.ProvisionItems[k] = s
+	}
+
+	for k, v := range c.pods {
+		dump.Pods[k] = make(map[string]struct{})
+		for name, _ := range v {
+			dump.Pods[k][name] = struct{}{}
+		}
+	}
+
+	b, err := json.MarshalIndent(dump, "", "\t")
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
