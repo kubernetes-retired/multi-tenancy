@@ -273,6 +273,8 @@ func (s *Scheduler) Run(stopChan <-chan struct{}) {
 	}()
 
 	go wait.Until(s.Dump, 1*time.Minute, stopChan)
+	go wait.Until(s.superClusterHealthPatrol, 1*time.Minute, stopChan)
+	go wait.Until(s.virtualClusterHealthPatrol, 1*time.Minute, stopChan)
 }
 
 func (s *Scheduler) Dump() {

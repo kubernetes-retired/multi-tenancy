@@ -336,6 +336,18 @@ func (c *schedulerCache) RemoveProvision(clustername, key string) error {
 	return clusterState.RemoveProvision(key)
 }
 
+func (c *schedulerCache) UpdateClusterCapacity(clustername string, newCapacity v1.ResourceList) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	clusterState, ok := c.clusters[clustername]
+	if !ok {
+		return fmt.Errorf("cluster %s is not in cache, cannot update the cluster capacity")
+	}
+	clusterState.UpdateCapacity(newCapacity)
+	return nil
+}
+
 func (c *schedulerCache) Dump() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()

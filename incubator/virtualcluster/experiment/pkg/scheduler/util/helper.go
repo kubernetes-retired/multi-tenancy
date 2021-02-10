@@ -71,12 +71,28 @@ func GetSuperClusterID(client clientset.Interface) (string, error) {
 	return id, nil
 }
 
+func GetNodeCondition(status *v1.NodeStatus, conditionType v1.NodeConditionType) (int, *v1.NodeCondition) {
+	if status == nil {
+		return -1, nil
+	}
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == conditionType {
+			return i, &status.Conditions[i]
+		}
+	}
+	return -1, nil
+}
+
 func getTotalNodeCapacity(nodelist *v1.NodeList) v1.ResourceList {
 	total := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse("0"),
 		v1.ResourceMemory: resource.MustParse("0"),
 	}
 	for _, each := range nodelist.Items {
+		_, condition := GetNodeCondition(&each.Status, v1.NodeReady)
+		if condition == nil || condition.Status != v1.ConditionTrue {
+			continue
+		}
 		cur := total[v1.ResourceCPU]
 		cur.Add(each.Status.Capacity[v1.ResourceCPU])
 		total[v1.ResourceCPU] = cur
