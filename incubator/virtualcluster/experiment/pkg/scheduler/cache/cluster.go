@@ -207,6 +207,10 @@ func (c *Cluster) RemovePod(pod *Pod) {
 	}
 }
 
+func (c *Cluster) UpdateCapacity(newCapacity v1.ResourceList) {
+	c.capacity = newCapacity.DeepCopy()
+}
+
 // dump structure is used for debugging
 type ClusterDump struct {
 	Name     string

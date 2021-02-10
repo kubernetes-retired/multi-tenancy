@@ -16,6 +16,10 @@ limitations under the License.
 
 package cache
 
+import (
+	v1 "k8s.io/api/core/v1"
+)
+
 type Cache interface {
 	AddNamespace(*Namespace) error
 	RemoveNamespace(*Namespace) error
@@ -25,5 +29,6 @@ type Cache interface {
 	RemovePod(*Pod) error
 	AddProvision(string, string, []*Slice) error
 	RemoveProvision(string, string) error
+	UpdateClusterCapacity(string, v1.ResourceList) error
 	Dump() string
 }

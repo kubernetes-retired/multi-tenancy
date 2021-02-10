@@ -19,8 +19,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	"k8s.io/apiserver/pkg/util/term"
 	"k8s.io/client-go/tools/leaderelection"
@@ -31,6 +34,7 @@ import (
 	schedulerappconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/cmd/scheduler/app/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/cmd/scheduler/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
@@ -140,6 +144,14 @@ func Run(cc *schedulerappconfig.CompletedConfig, stopCh <-chan struct{}) error {
 func startScheduler(ctx context.Context, s *scheduler.Scheduler, stopCh <-chan struct{}) func(context.Context) {
 	return func(ctx context.Context) {
 		s.Run(stopCh)
+		go func() {
+			metrics.Register()
+			mux := http.NewServeMux()
+			mux.Handle("/metrics", promhttp.Handler())
+			address := net.JoinHostPort("", "80")
+			klog.Fatal(http.ListenAndServe(address, mux))
+		}()
+
 		<-ctx.Done()
 	}
 }
