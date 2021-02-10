@@ -25,4 +25,5 @@ type Cache interface {
 	RemovePod(*Pod) error
 	AddProvision(string, string, []*Slice) error
 	RemoveProvision(string, string) error
+	Dump() string
 }

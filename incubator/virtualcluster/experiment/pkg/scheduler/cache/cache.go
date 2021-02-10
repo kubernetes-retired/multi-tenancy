@@ -18,6 +18,7 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
@@ -333,4 +334,27 @@ func (c *schedulerCache) RemoveProvision(clustername, key string) error {
 		return fmt.Errorf("cluster %s is not in cache, cannot remove provision for %s", clustername, key)
 	}
 	return clusterState.RemoveProvision(key)
+}
+
+func (c *schedulerCache) Dump() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := strings.Builder{}
+	out.WriteString("-- Dump Super Clusters --")
+	for k, v := range c.clusters {
+		out.WriteByte('\n')
+		out.WriteString(k)
+		out.WriteByte(' ')
+		out.WriteString(v.Dump())
+	}
+
+	out.WriteString("\n")
+	out.WriteString("-- Dump Namespaces --")
+	for k, v := range c.namespaces {
+		out.WriteByte('\n')
+		out.WriteString(k)
+		out.WriteByte(' ')
+		out.WriteString(v.Dump())
+	}
+	return out.String()
 }

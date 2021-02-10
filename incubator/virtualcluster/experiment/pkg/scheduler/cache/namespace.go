@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -120,4 +121,55 @@ func GetNumSlices(quota, quotaSlice v1.ResourceList) (int, error) {
 		return 0, fmt.Errorf("quota slice has missing resouces %v", more)
 	}
 	return num, nil
+}
+
+// dump structures are used for debugging
+type SliceDump struct {
+	Owner   string
+	Size    v1.ResourceList
+	Cluster string
+}
+
+type PlacementDump struct {
+	Cluster string
+	Num     int
+}
+
+type NamespaceDump struct {
+	Owner  string
+	Name   string
+	Labels map[string]string
+
+	Quota      v1.ResourceList
+	QuotaSlice v1.ResourceList
+
+	Schedule []*PlacementDump
+}
+
+func (n *Namespace) Dump() string {
+	dump := &NamespaceDump{
+		Owner:      n.owner,
+		Name:       n.name,
+		Labels:     make(map[string]string),
+		Quota:      n.quota.DeepCopy(),
+		QuotaSlice: n.quotaSlice.DeepCopy(),
+		Schedule:   make([]*PlacementDump, 0),
+	}
+
+	for _, each := range n.schedule {
+		p := &PlacementDump{
+			Cluster: each.cluster,
+			Num:     each.num,
+		}
+		dump.Schedule = append(dump.Schedule, p)
+	}
+	for k, v := range n.labels {
+		dump.Labels[k] = v
+	}
+
+	b, err := json.MarshalIndent(dump, "", "\t")
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
