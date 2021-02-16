@@ -41,7 +41,9 @@ const (
 
 	KubeconfigAdminSecretName = "admin-kubeconfig"
 
-	LabelSchedulerCache = "tenancy.x-k8s.io/schedulercache"
+	InternalSchedulerCache   = "tenancy.x-k8s.io/schedulercache"
+	InternalSchedulerEngine  = "tenancy.x-k8s.io/schedulerengine"
+	InternalSchedulerManager = "tenancy.x-k8s.io/schedulermanager"
 )
 
 var SchedulerUserAgent = "scheduler" + version.BriefVersion()

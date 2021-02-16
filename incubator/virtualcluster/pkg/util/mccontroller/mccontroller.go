@@ -262,7 +262,7 @@ func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name st
 }
 
 // List returns a list of objects with specific cluster.
-func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
+func (c *MultiClusterController) List(clusterName string, opts ...client.ListOption) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
@@ -272,12 +272,12 @@ func (c *MultiClusterController) List(clusterName string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = delegatingClient.List(context.TODO(), instanceList)
+	err = delegatingClient.List(context.TODO(), instanceList, opts...)
 	return instanceList, err
 }
 
 // ListByObjectType returns a list of objects with specific cluster and object type.
-func (c *MultiClusterController) ListByObjectType(clusterName string, objectType runtime.Object) (interface{}, error) {
+func (c *MultiClusterController) ListByObjectType(clusterName string, objectType runtime.Object, opts ...client.ListOption) (interface{}, error) {
 	cluster := c.getCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
@@ -290,7 +290,7 @@ func (c *MultiClusterController) ListByObjectType(clusterName string, objectType
 	if err != nil {
 		return nil, err
 	}
-	err = delegatingClient.List(context.TODO(), instanceList)
+	err = delegatingClient.List(context.TODO(), instanceList, opts...)
 	return instanceList, err
 }
 

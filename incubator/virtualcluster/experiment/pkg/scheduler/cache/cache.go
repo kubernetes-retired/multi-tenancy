@@ -39,7 +39,7 @@ type schedulerCache struct {
 	namespaces map[string]*Namespace
 }
 
-func NewSchedulerCache(stop <-chan struct{}) *schedulerCache {
+func NewSchedulerCache(stop <-chan struct{}) Cache {
 	return &schedulerCache{
 		stop:       stop,
 		clusters:   make(map[string]*Cluster),
@@ -342,7 +342,7 @@ func (c *schedulerCache) UpdateClusterCapacity(clustername string, newCapacity v
 
 	clusterState, ok := c.clusters[clustername]
 	if !ok {
-		return fmt.Errorf("cluster %s is not in cache, cannot update the cluster capacity")
+		return fmt.Errorf("cluster %s is not in cache, cannot update the cluster capacity", clustername)
 	}
 	clusterState.UpdateCapacity(newCapacity)
 	return nil
