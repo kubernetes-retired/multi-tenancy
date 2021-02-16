@@ -179,7 +179,7 @@ func SyncSuperClusterState(metaClient clientset.Interface, super *v1alpha4.Clust
 	return nil
 }
 
-func getMaxQuota(quotalist *v1.ResourceQuotaList) v1.ResourceList {
+func GetMaxQuota(quotalist *v1.ResourceQuotaList) v1.ResourceList {
 	quota := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse("0"),
 		v1.ResourceMemory: resource.MustParse("0"),
@@ -211,7 +211,7 @@ func GetNamespaceQuota(client clientset.Interface, namespace string) (v1.Resourc
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quota from namespace %s: %v", namespace, err)
 	}
-	return getMaxQuota(quotalist), nil
+	return GetMaxQuota(quotalist), nil
 }
 
 func GetPodRequirements(pod *v1.Pod) v1.ResourceList {

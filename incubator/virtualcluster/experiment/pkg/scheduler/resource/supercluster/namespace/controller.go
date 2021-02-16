@@ -39,7 +39,7 @@ func init() {
 	scheduler.SuperClusterResourceRegister.Register(&plugin.Registration{
 		ID: "namespace",
 		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
-			v := ctx.Context.Value(constants.LabelSchedulerCache)
+			v := ctx.Context.Value(constants.InternalSchedulerCache)
 			if v == nil {
 				return nil, fmt.Errorf("cannot found schedulercache in context")
 			}
@@ -74,6 +74,10 @@ func (c *controller) Start(stopCh <-chan struct{}) error {
 
 func (c *controller) GetListener() listener.ClusterChangeListener {
 	return listener.NewMCControllerListener(c.MultiClusterController)
+}
+
+func (c *controller) GetMCController() *mc.MultiClusterController {
+	return c.MultiClusterController
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {

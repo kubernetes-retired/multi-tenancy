@@ -39,8 +39,8 @@ import (
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/engine"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
-	virtualClusterWatchers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/resource/virtualcluster"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
@@ -51,6 +51,7 @@ import (
 )
 
 var SuperClusterResourceRegister plugin.ResourceRegister
+var VirtualClusterResourceRegister plugin.ResourceRegister
 
 type Scheduler struct {
 	config            *schedulerconfig.SchedulerConfiguration
@@ -73,7 +74,8 @@ type Scheduler struct {
 	virtualClusterLock    sync.Mutex
 	virtualClusterSet     map[string]mc.ClusterInterface
 
-	schedulerCache internalcache.Cache
+	schedulerCache  internalcache.Cache
+	schedulerEngine engine.Engine
 }
 
 func New(
@@ -137,35 +139,46 @@ func New(
 	scheduler.superClusterSynced = superInformer.Informer().HasSynced
 
 	scheduler.schedulerCache = internalcache.NewSchedulerCache(stopCh)
+	scheduler.schedulerEngine = engine.NewSchedulerEngine(scheduler.schedulerCache)
 
 	vcWatcher := manager.New()
 	scheduler.virtualClusterWatcher = vcWatcher
-	virtualClusterWatchers.Register(config, vcWatcher)
 
 	superWatcher := manager.New()
 	scheduler.superClusterWatcher = superWatcher
-	// register super cluster resources
-	ctx := context.WithValue(context.Background(), constants.LabelSchedulerCache, scheduler.schedulerCache)
-	initContext := &plugin.InitContext{Context: ctx, Config: config}
-	for _, p := range SuperClusterResourceRegister.List() {
-		klog.Infof("loading super cluster resource plugin %q...", p.ID)
+	// register virtual/super cluster resources
+	ctx := context.WithValue(context.Background(), constants.InternalSchedulerCache, scheduler.schedulerCache)
+	ctx = context.WithValue(ctx, constants.InternalSchedulerEngine, scheduler.schedulerEngine)
+	ctx = context.WithValue(ctx, constants.InternalSchedulerManager, scheduler.virtualClusterWatcher)
 
-		result := p.Init(initContext)
+	initContext := &plugin.InitContext{Context: ctx, Config: config}
+	if err := loadResourcePlugins(&SuperClusterResourceRegister, scheduler.superClusterWatcher, initContext); err != nil {
+		return nil, err
+	}
+	if err := loadResourcePlugins(&VirtualClusterResourceRegister, scheduler.virtualClusterWatcher, initContext); err != nil {
+		return nil, err
+	}
+	return scheduler, nil
+}
+
+func loadResourcePlugins(register *plugin.ResourceRegister, mgr *manager.WatchManager, initCtx *plugin.InitContext) error {
+	for _, p := range register.List() {
+		klog.Infof("loading cluster resource plugin %q...", p.ID)
+		result := p.Init(initCtx)
 		instance, err := result.Instance()
 		if err != nil {
 			klog.Errorf("failed to load plugin %q", p.ID)
-			return nil, err
+			return err
 		}
 
 		s, ok := instance.(manager.ResourceWatcher)
 		if ok {
-			scheduler.superClusterWatcher.AddResourceWatcher(s)
+			mgr.AddResourceWatcher(s)
 		} else {
-			klog.Warningf("unrecognized super cluster resource plugin %q", p.ID)
+			klog.Warningf("unrecognized cluster resource plugin %q", p.ID)
 		}
 	}
-
-	return scheduler, nil
+	return nil
 }
 
 func (s *Scheduler) enqueueVirtualCluster(obj interface{}) {

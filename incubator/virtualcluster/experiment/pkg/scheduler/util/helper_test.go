@@ -53,6 +53,12 @@ func TestGetTotalNodeCapacity(t *testing.T) {
 								"cpu":    resource.MustParse("0.5"),
 								"memory": resource.MustParse("10485760Ki"),
 							},
+							Conditions: []v1.NodeCondition{
+								{
+									Status: v1.ConditionTrue,
+									Type:   v1.NodeReady,
+								},
+							},
 						},
 					},
 				},
@@ -71,6 +77,12 @@ func TestGetTotalNodeCapacity(t *testing.T) {
 								"cpu":    resource.MustParse("1.8"),
 								"memory": resource.MustParse("2048Mi"),
 							},
+							Conditions: []v1.NodeCondition{
+								{
+									Status: v1.ConditionTrue,
+									Type:   v1.NodeReady,
+								},
+							},
 						},
 					},
 					{
@@ -78,6 +90,12 @@ func TestGetTotalNodeCapacity(t *testing.T) {
 							Capacity: v1.ResourceList{
 								"cpu":    resource.MustParse("0.5"),
 								"memory": resource.MustParse("10485760Ki"),
+							},
+							Conditions: []v1.NodeCondition{
+								{
+									Status: v1.ConditionTrue,
+									Type:   v1.NodeReady,
+								},
 							},
 						},
 					},
@@ -201,7 +219,7 @@ func TestGetMaxQuota(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			max := getMaxQuota(tc.quotalist)
+			max := GetMaxQuota(tc.quotalist)
 			if !Equals(tc.expect, max) {
 				t.Errorf("the max capacity is not expected. Exp: %v, Got %v", tc.expect, max)
 			}

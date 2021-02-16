@@ -21,6 +21,7 @@ import (
 
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
@@ -37,6 +38,7 @@ func New() *WatchManager {
 // ResourceWatcher is the interface used by WatchManager to manage multiple resource watchers.
 type ResourceWatcher interface {
 	reconciler.DWReconciler
+	GetMCController() *mc.MultiClusterController
 	GetListener() listener.ClusterChangeListener
 	Start(stopCh <-chan struct{}) error
 }
@@ -55,6 +57,15 @@ func (m *WatchManager) AddResourceWatcher(s ResourceWatcher) {
 
 func (m *WatchManager) GetListeners() []listener.ClusterChangeListener {
 	return m.listeners
+}
+
+func (m *WatchManager) GetResourceWatcherByMCControllerName(name string) ResourceWatcher {
+	for s := range m.resourceWatchers {
+		if s.GetMCController().GetControllerName() == name {
+			return s
+		}
+	}
+	return nil
 }
 
 func (m *WatchManager) Start(stop <-chan struct{}) error {
