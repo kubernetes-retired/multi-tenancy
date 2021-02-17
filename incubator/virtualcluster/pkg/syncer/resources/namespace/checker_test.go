@@ -169,7 +169,7 @@ func TestNamespacePatrol(t *testing.T) {
 		},
 		"pNS's owner vc exists but not managed by syncer ": {
 			ExistingObjectInSuper: []runtime.Object{
-				superGCCandidate(superDefaultNSName, "12345", "12345", "test", "tenant-1", "7374a172-c35d-45b1-9c8e-bf5c5b614937", "false"),
+				superGCCandidate(superDefaultNSName, "12345", "", "test", "tenant-1", "7374a172-c35d-45b1-9c8e-bf5c5b614937", "false"),
 			},
 			ExistingObjectInVCClient: []runtime.Object{
 				testTenant,

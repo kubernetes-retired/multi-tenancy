@@ -45,7 +45,12 @@ func (r *fakeUWReconciler) BackPopulate(key string) error {
 	} else {
 		err = fmt.Errorf("fake reconciler's upward controller is not initialized")
 	}
-	r.errCh <- err
+	select {
+	case <-r.errCh:
+	default:
+		// if channel not closed
+		r.errCh <- err
+	}
 	// Make sure the BackPopulate is called once by returning no error
 	return nil
 }
