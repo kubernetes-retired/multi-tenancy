@@ -26,7 +26,9 @@ kind create cluster --name ${CLUSTERNAME}
 echo
 echo "Building HNC artifacts"
 # Because we don't use the default Kind cluster name, the builtin "docker push"
-# in the makefile won't work here.
+# in the makefile won't work here. Also, in Prow, the default gcloud project is
+# k8s-prow-builds which we don't want to use here, so unset HNC_REGISTRY.
+export HNC_REGISTRY=
 CONFIG=kind make manifests
 CONFIG=kind make kubectl
 CONFIG=kind make docker-build
