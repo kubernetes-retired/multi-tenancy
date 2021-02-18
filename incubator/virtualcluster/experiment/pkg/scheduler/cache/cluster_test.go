@@ -30,24 +30,6 @@ const (
 	defaultCluster   = "testcluster"
 )
 
-func Equals(a v1.ResourceList, b v1.ResourceList) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for key, value1 := range a {
-		value2, found := b[key]
-		if !found {
-			return false
-		}
-		if value1.Cmp(value2) != 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
 func TestAddNamespace(t *testing.T) {
 	defaultCapacity := v1.ResourceList{
 		"cpu":    resource.MustParse("2000M"),

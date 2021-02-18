@@ -24,9 +24,35 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+func Equals(a v1.ResourceList, b v1.ResourceList) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for key, value1 := range a {
+		value2, found := b[key]
+		if !found {
+			return false
+		}
+		if value1.Cmp(value2) != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
 type Placement struct {
 	cluster string
 	num     int
+}
+
+func (p *Placement) GetCluster() string {
+	return p.cluster
+}
+
+func (p *Placement) GetNum() int {
+	return p.num
 }
 
 func NewPlacement(cluster string, num int) *Placement {
@@ -91,6 +117,35 @@ func (n *Namespace) DeepCopy() *Namespace {
 
 func (n *Namespace) GetKey() string {
 	return fmt.Sprintf("%s/%s", n.owner, n.name)
+}
+
+func (n *Namespace) GetPlacementMap() map[string]int {
+	m := make(map[string]int)
+	for _, each := range n.schedule {
+		m[each.GetCluster()] = each.GetNum()
+	}
+	return m
+}
+
+func (n *Namespace) GetTotalSlices() int {
+	t, _ := GetNumSlices(n.quota, n.quotaSlice)
+	return t
+}
+
+func (n *Namespace) Comparable(in *Namespace) bool {
+	// two namespaces are comparable only when they have the same quotaslice
+	return Equals(n.quotaSlice, in.GetQuotaSlice())
+}
+
+func (n *Namespace) GetQuotaSlice() v1.ResourceList {
+	return n.quotaSlice
+}
+
+func (n *Namespace) SetNewPlacements(p map[string]int) {
+	n.schedule = nil
+	for k, v := range p {
+		n.schedule = append(n.schedule, NewPlacement(k, v))
+	}
 }
 
 func GetNumSlices(quota, quotaSlice v1.ResourceList) (int, error) {

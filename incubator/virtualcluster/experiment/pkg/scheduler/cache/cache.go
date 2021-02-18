@@ -120,6 +120,12 @@ func (c *schedulerCache) RemovePod(pod *Pod) error {
 
 }
 
+func (c *schedulerCache) GetNamespace(key string) *Namespace {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.namespaces[key]
+}
+
 func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, slice v1.ResourceList) error {
 	if num == 0 {
 		return nil

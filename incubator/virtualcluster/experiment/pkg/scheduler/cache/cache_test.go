@@ -51,7 +51,7 @@ func TestAddRemoveNamespace(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
-	cache := NewSchedulerCache(stop)
+	cache := NewSchedulerCache(stop).(*schedulerCache)
 
 	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
 	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)
@@ -221,7 +221,7 @@ func TestUpdateNamespace(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
-	cache := NewSchedulerCache(stop)
+	cache := NewSchedulerCache(stop).(*schedulerCache)
 
 	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
 	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)
@@ -348,7 +348,7 @@ func TestShadowCluster(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
-	cache := NewSchedulerCache(stop)
+	cache := NewSchedulerCache(stop).(*schedulerCache)
 
 	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
 	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)

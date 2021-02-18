@@ -38,6 +38,13 @@ import (
 	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 )
 
+func Min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func GetClientFromSecret(metaClient clientset.Interface, name, namespace string) (*clientset.Clientset, error) {
 	adminKubeConfigSecret, err := metaClient.CoreV1().Secrets(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
