@@ -1,0 +1,164 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.3.0
+  creationTimestamp: null
+  name: clusters.cluster.x-k8s.io
+spec:
+  group: cluster.x-k8s.io
+  names:
+    kind: Cluster
+    listKind: ClusterList
+    plural: clusters
+    singular: cluster
+  scope: Namespaced
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+        spec:
+          properties:
+            clusterNetwork:
+              properties:
+                apiServerPort:
+                  format: int32
+                  type: integer
+                pods:
+                  properties:
+                    cidrBlocks:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - cidrBlocks
+                  type: object
+                serviceDomain:
+                  type: string
+                services:
+                  properties:
+                    cidrBlocks:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - cidrBlocks
+                  type: object
+              type: object
+            controlPlaneEndpoint:
+              properties:
+                host:
+                  type: string
+                port:
+                  format: int32
+                  type: integer
+              required:
+              - host
+              - port
+              type: object
+            controlPlaneRef:
+              properties:
+                apiVersion:
+                  type: string
+                fieldPath:
+                  type: string
+                kind:
+                  type: string
+                name:
+                  type: string
+                namespace:
+                  type: string
+                resourceVersion:
+                  type: string
+                uid:
+                  type: string
+              type: object
+            infrastructureRef:
+              properties:
+                apiVersion:
+                  type: string
+                fieldPath:
+                  type: string
+                kind:
+                  type: string
+                name:
+                  type: string
+                namespace:
+                  type: string
+                resourceVersion:
+                  type: string
+                uid:
+                  type: string
+              type: object
+            paused:
+              type: boolean
+          type: object
+        status:
+          properties:
+            conditions:
+              items:
+                properties:
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    type: string
+                  reason:
+                    type: string
+                  severity:
+                    type: string
+                  status:
+                    type: string
+                  type:
+                    type: string
+                required:
+                - status
+                - type
+                type: object
+              type: array
+            controlPlaneInitialized:
+              type: boolean
+            controlPlaneReady:
+              type: boolean
+            failureDomains:
+              additionalProperties:
+                properties:
+                  attributes:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  controlPlane:
+                    type: boolean
+                type: object
+              type: object
+            failureMessage:
+              type: string
+            failureReason:
+              type: string
+            infrastructureReady:
+              type: boolean
+            observedGeneration:
+              format: int64
+              type: integer
+            phase:
+              type: string
+          type: object
+      type: object
+  version: v1alpha4
+  versions:
+  - name: v1alpha4
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
