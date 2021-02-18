@@ -13,7 +13,13 @@
 #
 # Source: https://github.com/kubernetes/test-infra/tree/master/images/krte
 FROM gcr.io/k8s-testimages/krte:v20210129-3799a64-master
-WORKDIR /repo
+
+# For postsubmits, Prow will start the test in its own workdir (e.g.
+# /home/prow/go/src/sigs.k8s.io/multi-tenancy, though we shouldn't depend on
+# that). For periodics, I don't think Prow overrides the workdir. Either way,
+# set up the workdir in a place that makes sense for the periodics, but also
+# allows us to easily find the test script even if it's changed.
+WORKDIR /start
 
 # I'm not sure if the following two env vars are needed for HNC; they're probably not. GO111MODULE=on
 # should be redundant outside of GOPATH (which we are) on any post-1.13 version of Go (which we have);
@@ -29,6 +35,3 @@ RUN go get sigs.k8s.io/kind@v0.9.0
 # Add the actual script and set it as the default command for this image.
 COPY run-e2e-tests.sh run-e2e-tests.sh
 RUN chmod +x ./run-e2e-tests.sh
-
-# This needs to be re-specified in Prow
-CMD ["wrapper.sh", "./run-e2e-tests.sh"]
