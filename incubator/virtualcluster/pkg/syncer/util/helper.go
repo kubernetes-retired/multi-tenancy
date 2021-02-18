@@ -17,9 +17,13 @@ limitations under the License.
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
@@ -35,4 +39,22 @@ func GetVirtualClusterObject(mc *mc.MultiClusterController, clustername string) 
 	}
 
 	return vc, nil
+}
+
+func IsNamespaceScheduleToCluster(obj metav1.Object, clusterID string) error {
+	placements := make(map[string]int)
+	clist, ok := obj.GetAnnotations()[utilconstants.LabelScheduledPlacements]
+	if !ok {
+		return fmt.Errorf("missing annotation %s", utilconstants.LabelScheduledPlacements)
+	}
+	if err := json.Unmarshal([]byte(clist), &placements); err != nil {
+		return fmt.Errorf("unknown format %s of key %s: %v", clist, utilconstants.LabelScheduledPlacements, err)
+	}
+
+	_, ok = placements[clusterID]
+	if !ok {
+		return fmt.Errorf("not found")
+	}
+
+	return nil
 }

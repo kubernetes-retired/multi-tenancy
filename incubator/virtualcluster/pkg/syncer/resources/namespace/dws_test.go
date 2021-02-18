@@ -17,6 +17,7 @@ limitations under the License.
 package namespace
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -25,20 +26,38 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
-	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
+	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 )
 
 func tenantNamespace(name, uid string) *v1.Namespace {
-	return &v1.Namespace{
+	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			UID:  types.UID(uid),
 		},
 	}
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		ns.Annotations = map[string]string{
+			utilconst.LabelScheduledPlacements: fmt.Sprintf("{\"%s\":1}", utilconst.SuperClusterID),
+		}
+	}
+	return ns
+}
+
+func applyAnnotationToNS(ns *v1.Namespace, k, v string) *v1.Namespace {
+	anno := ns.GetAnnotations()
+	if anno == nil {
+		anno = make(map[string]string)
+	}
+	anno[k] = v
+	ns.SetAnnotations(anno)
+	return ns
 }
 
 func superNamespace(name, uid, clusterKey string) *v1.Namespace {

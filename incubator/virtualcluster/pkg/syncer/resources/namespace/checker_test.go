@@ -24,11 +24,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
-	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
+	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 )
 
 func superGCCandidate(name, uid, clusterKey, vcName, vcNamespace, vcUID, root string) *v1.Namespace {
@@ -67,17 +69,19 @@ func TestNamespacePatrol(t *testing.T) {
 
 	defaultClusterKey := conversion.ToClusterKey(testTenant)
 	superDefaultNSName := conversion.ToSuperMasterNamespace(defaultClusterKey, "default")
+	utilconst.SuperClusterID = "test-super"
 
 	testcases := map[string]struct {
-		ExistingObjectInSuper    []runtime.Object
-		ExistingObjectInTenant   []runtime.Object
-		ExistingObjectInVCClient []runtime.Object
-		ExpectedDeletedPObject   []string
-		ExpectedCreatedPObject   []string
-		ExpectedUpdatedPObject   []runtime.Object
-		ExpectedNoOperation      bool
-		WaitDWS                  bool // Make sure to set this flag if the test involves DWS.
-		WaitUWS                  bool // Make sure to set this flag if the test involves UWS.
+		ExistingObjectInSuper         []runtime.Object
+		ExistingObjectInTenant        []runtime.Object
+		ExistingObjectInVCClient      []runtime.Object
+		ExpectedDeletedPObject        []string
+		ExpectedCreatedPObject        []string
+		ExpectedUpdatedPObject        []runtime.Object
+		ExpectedNoOperation           bool
+		WaitDWS                       bool // Make sure to set this flag if the test involves DWS.
+		WaitUWS                       bool // Make sure to set this flag if the test involves UWS.
+		EnableSuperClusterPoolingOnly bool
 	}{
 		"pNS not created by vc": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -124,6 +128,18 @@ func TestNamespacePatrol(t *testing.T) {
 				superDefaultNSName,
 			},
 			WaitDWS: true,
+		},
+		"vNS pNS in normal case": {
+			ExistingObjectInSuper: []runtime.Object{
+				superNamespace(superDefaultNSName, "12345", defaultClusterKey),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantNamespace("default", "12345"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedNoOperation: true,
 		},
 		"pNS's owner vc does not exist ": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -176,10 +192,28 @@ func TestNamespacePatrol(t *testing.T) {
 			},
 			ExpectedNoOperation: true,
 		},
+		"vNS scheduler to other super cluster": {
+			ExistingObjectInSuper: []runtime.Object{
+				superNamespace(superDefaultNSName, "12345", defaultClusterKey),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyAnnotationToNS(tenantNamespace("default", "12345"), utilconst.LabelScheduledPlacements, "{\"test-super2\":1}"),
+			},
+			ExistingObjectInVCClient: []runtime.Object{
+				testTenant,
+			},
+			ExpectedDeletedPObject: []string{
+				superDefaultNSName,
+			},
+			EnableSuperClusterPoolingOnly: true,
+		},
 	}
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
+			if tc.EnableSuperClusterPoolingOnly {
+				defer util.SetFeatureGateDuringTest(t, featuregate.DefaultFeatureGate, featuregate.SuperClusterPooling, true)()
+			}
 			tenantActions, superActions, err := util.RunPatrol(NewNamespaceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, tc.ExistingObjectInVCClient, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
@@ -200,7 +234,7 @@ func TestNamespacePatrol(t *testing.T) {
 
 			if tc.ExpectedDeletedPObject != nil {
 				if len(tc.ExpectedDeletedPObject) != len(superActions) {
-					t.Errorf("%s: Expected to delete pPVC %#v. Actual actions were: %#v", k, tc.ExpectedDeletedPObject, superActions)
+					t.Errorf("%s: Expected to delete pNS %#v. Actual actions were: %#v", k, tc.ExpectedDeletedPObject, superActions)
 					return
 				}
 				for i, expectedName := range tc.ExpectedDeletedPObject {
@@ -211,13 +245,13 @@ func TestNamespacePatrol(t *testing.T) {
 					}
 					fullName := action.(core.DeleteAction).GetName()
 					if fullName != expectedName {
-						t.Errorf("%s: Expect to delete pPVC %s, got %s", k, expectedName, fullName)
+						t.Errorf("%s: Expect to delete pNS %s, got %s", k, expectedName, fullName)
 					}
 				}
 			}
 			if tc.ExpectedCreatedPObject != nil {
 				if len(tc.ExpectedCreatedPObject) != len(superActions) {
-					t.Errorf("%s: Expected to create PPVC %#v. Actual actions were: %#v", k, tc.ExpectedCreatedPObject, superActions)
+					t.Errorf("%s: Expected to create pNS %#v. Actual actions were: %#v", k, tc.ExpectedCreatedPObject, superActions)
 					return
 				}
 				for i, expectedName := range tc.ExpectedCreatedPObject {
@@ -229,13 +263,13 @@ func TestNamespacePatrol(t *testing.T) {
 					created := action.(core.CreateAction).GetObject().(*v1.Namespace)
 					fullName := created.Name
 					if fullName != expectedName {
-						t.Errorf("%s: Expect to create pPVC %s, got %s", k, expectedName, fullName)
+						t.Errorf("%s: Expect to create pNS %s, got %s", k, expectedName, fullName)
 					}
 				}
 			}
 			if tc.ExpectedUpdatedPObject != nil {
 				if len(tc.ExpectedUpdatedPObject) != len(superActions) {
-					t.Errorf("%s: Expected to update PPVC %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedPObject, superActions)
+					t.Errorf("%s: Expected to update pNS %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedPObject, superActions)
 					return
 				}
 				for i, obj := range tc.ExpectedUpdatedPObject {
@@ -245,7 +279,7 @@ func TestNamespacePatrol(t *testing.T) {
 					}
 					actionObj := action.(core.UpdateAction).GetObject()
 					if !equality.Semantic.DeepEqual(obj, actionObj) {
-						t.Errorf("%s: Expected updated pPVC is %v, got %v", k, obj, actionObj)
+						t.Errorf("%s: Expected updated pNS is %v, got %v", k, obj, actionObj)
 					}
 				}
 			}

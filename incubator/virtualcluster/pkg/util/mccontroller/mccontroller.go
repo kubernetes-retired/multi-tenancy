@@ -18,9 +18,7 @@ package mccontroller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/rest"
 	"net/http"
 	"strings"
 	"sync"
@@ -34,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -42,6 +41,7 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
@@ -528,19 +528,12 @@ func filterSuperClusterRelatedObject(c *MultiClusterController, clusterName, nsN
 		klog.Errorf("failed to get ns %s of cluster %s: %v", nsName, clusterName, err)
 		return true
 	}
-	placements := make(map[string]int)
-	clist, ok := nsObj.(*v1.Namespace).GetAnnotations()[utilconstants.LabelScheduledPlacements]
-	if !ok {
-		return true
-	}
-	if err = json.Unmarshal([]byte(clist), &placements); err != nil {
-		klog.Errorf("unknown format %s of key %s, cluster %s, ns %s: %v", clist, utilconstants.LabelScheduledPlacements, clusterName, nsName, err)
+
+	if util.IsNamespaceScheduleToCluster(nsObj.(*v1.Namespace), utilconstants.SuperClusterID) != nil {
 		return true
 	}
 
-	_, ok = placements[utilconstants.SuperClusterID]
-
-	return !ok
+	return false
 }
 
 func filterSuperClusterSchedulePod(c *MultiClusterController, req reconciler.Request) bool {
