@@ -21,6 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -68,15 +70,16 @@ func TestServicePatrol(t *testing.T) {
 	}
 
 	testcases := map[string]struct {
-		ExistingObjectInSuper  []runtime.Object
-		ExistingObjectInTenant []runtime.Object
-		ExpectedDeletedPObject []string
-		ExpectedCreatedPObject []string
-		ExpectedUpdatedPObject []runtime.Object
-		ExpectedUpdatedVObject []runtime.Object
-		ExpectedNoOperation    bool
-		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
-		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
+		ExistingObjectInSuper      []runtime.Object
+		ExistingObjectInTenant     []runtime.Object
+		ExpectedDeletedPObject     []string
+		ExpectedCreatedPObject     []string
+		ExpectedUpdatedPObject     []runtime.Object
+		ExpectedUpdatedVObject     []runtime.Object
+		SuperClusterServiceNetwork bool
+		ExpectedNoOperation        bool
+		WaitDWS                    bool // Make sure to set this flag if the test involves DWS.
+		WaitUWS                    bool // Make sure to set this flag if the test involves UWS.
 	}{
 		"pService not created by vc": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -102,6 +105,40 @@ func TestServicePatrol(t *testing.T) {
 			ExpectedDeletedPObject: []string{
 				superDefaultNSName + "/svc-3",
 			},
+		},
+		"pService exists without uid, vService exists": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyAnnotationToService(superService("svc-3", superDefaultNSName, "", defaultClusterKey), constants.AdoptableObjectKey, "true"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantService("svc-3", "default", "12345"),
+			},
+			ExpectedUpdatedPObject: []runtime.Object{
+				applyAnnotationToService(superService("svc-3", superDefaultNSName, "12345", defaultClusterKey), constants.AdoptableObjectKey, "true"),
+			},
+			SuperClusterServiceNetwork: true,
+		},
+		"pService exists without uid or adoptable, vService exists": {
+			ExistingObjectInSuper: []runtime.Object{
+				superService("svc-3", superDefaultNSName, "", defaultClusterKey),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantService("svc-3", "default", "12345"),
+			},
+			SuperClusterServiceNetwork: true,
+			ExpectedDeletedPObject: []string{
+				superDefaultNSName + "/svc-3",
+			},
+		},
+		"pService exists with uid and adoptable, vService exists": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyAnnotationToService(superService("svc-3", superDefaultNSName, "12345", defaultClusterKey), constants.AdoptableObjectKey, "true"),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				tenantService("svc-3", "default", "12345"),
+			},
+			SuperClusterServiceNetwork: true,
+			ExpectedNoOperation:        true,
 		},
 		"pService exists, vService exists with different spec": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -148,6 +185,9 @@ func TestServicePatrol(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
+		gates := map[string]bool{featuregate.SuperClusterServiceNetwork: tc.SuperClusterServiceNetwork}
+		featuregate.DefaultFeatureGate, _ = featuregate.NewFeatureGate(gates)
+
 		t.Run(k, func(t *testing.T) {
 			tenantActions, superActions, err := util.RunPatrol(NewServiceController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, nil, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {

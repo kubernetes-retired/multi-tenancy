@@ -21,12 +21,15 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
@@ -34,6 +37,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 )
 
 var numSpecMissMatchedServices uint64
@@ -103,9 +107,18 @@ func (c *controller) PatrollerDo() {
 		p := pObj.Object.(*v1.Service)
 
 		if p.Annotations[constants.LabelUID] != string(v.UID) {
-			klog.Warningf("Found pService %s delegated UID is different from tenant object", pObj.Key)
-			d.OnDelete(pObj)
-			return
+			// When a supercluster service is adoptable and doesn't have a UID
+			// we add fire off the missing UID checker to adopt the service
+			if adoptableService(p) {
+				if err = c.reconcileServiceMissingUID(p, v); err != nil {
+					klog.Errorf("error deleting pService %s/%s in super master: %v", p.Namespace, p.Name, err)
+				}
+				return
+			} else {
+				klog.Warningf("Found pService %s delegated UID is different from tenant object", pObj.Key)
+				d.OnDelete(pObj)
+				return
+			}
 		}
 
 		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, vObj.GetOwnerCluster())
@@ -140,11 +153,40 @@ func (c *controller) PatrollerDo() {
 		}
 	}
 	d.DeleteFunc = func(pObj differ.ClusterObject) {
-		deleteOptions := metav1.NewPreconditionDeleteOptions(string(pObj.GetUID()))
-		if err = c.serviceClient.Services(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
-			klog.Errorf("error deleting pService %s in super master: %v", pObj.Key, err)
+		pService := pObj.Object.(*v1.Service)
+		if !adoptableService(pService) {
+			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pObj.GetUID()))
+			if err = c.serviceClient.Services(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
+				klog.Errorf("error deleting pService %s in super master: %v", pObj.Key, err)
+			} else {
+				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
+			}
 		} else {
-			metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
+			// handle clean up of orphaned services
+			err := retry.OnError(retry.DefaultBackoff, func(error) bool { return err != nil }, func() error {
+				pSvcObj, err := c.MultiClusterController.GetByObjectType(pObj.OwnerCluster, pService.Annotations[constants.LabelVCNamespace], pService.GetName(), pService)
+				if errors.IsNotFound(err) {
+					return nil
+				}
+
+				if err != nil {
+					return err
+				}
+				pService := pSvcObj.(*v1.Service)
+				if adoptableService(pService) {
+					return fmt.Errorf("error pService %s in super master not adopted", pObj.Key)
+				}
+				return nil
+			})
+			// If this continues to error after backing off then remove the orphan
+			if err != nil {
+				deleteOptions := metav1.NewPreconditionDeleteOptions(string(pObj.GetUID()))
+				if err = c.serviceClient.Services(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
+					klog.Errorf("error deleting pService %s in super master: %v", pObj.Key, err)
+				} else {
+					metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
+				}
+			}
 		}
 	}
 
@@ -156,4 +198,10 @@ func (c *controller) PatrollerDo() {
 	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
 	metrics.CheckerMissMatchStats.WithLabelValues("StatusMissMatchedServices").Set(float64(numStatusMissMatchedServices))
 	metrics.CheckerMissMatchStats.WithLabelValues("UWMetaMissMatchedServices").Set(float64(numUWMetaMissMatchedServices))
+}
+
+func adoptableService(pService *v1.Service) bool {
+	return featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterServiceNetwork) &&
+		pService.Annotations[constants.AdoptableObjectKey] == "true" &&
+		pService.Annotations[constants.LabelUID] == ""
 }

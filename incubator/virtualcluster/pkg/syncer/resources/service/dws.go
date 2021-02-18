@@ -23,11 +23,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
@@ -101,8 +104,12 @@ func (c *controller) reconcileServiceCreate(clusterName, targetNamespace, reques
 	pService, err = c.serviceClient.Services(targetNamespace).Create(context.TODO(), pService, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		if pService.Annotations[constants.LabelUID] == requestUID {
-			klog.Infof("service %s/%s of cluster %s already exist in super master", targetNamespace, pService.Name, clusterName)
-			return nil
+			if adoptableService(pService) {
+				return c.reconcileServiceUnlinked(clusterName, service)
+			} else {
+				klog.Infof("service %s/%s of cluster %s already exist in super master", targetNamespace, pService.Name, clusterName)
+				return nil
+			}
 		} else {
 			return fmt.Errorf("pService %s/%s exists but its delegated object UID is different.", targetNamespace, pService.Name)
 		}
@@ -112,7 +119,15 @@ func (c *controller) reconcileServiceCreate(clusterName, targetNamespace, reques
 
 func (c *controller) reconcileServiceUpdate(clusterName, targetNamespace, requestUID string, pService, vService *v1.Service) error {
 	if pService.Annotations[constants.LabelUID] != requestUID {
-		return fmt.Errorf("pService %s/%s delegated UID is different from updated object.", targetNamespace, pService.Name)
+		// When a supercluster service is adoptable and doesn't have a UID
+		// we add fire off thr missing UID checker to adopt the service
+		if adoptableService(pService) {
+			if err := c.reconcileServiceMissingUID(pService, vService); err != nil {
+				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
+			}
+		} else {
+			return fmt.Errorf("pService %s/%s delegated UID is different from updated object.", targetNamespace, pService.Name)
+		}
 	}
 
 	vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
@@ -144,4 +159,56 @@ func (c *controller) reconcileServiceRemove(clusterName, targetNamespace, reques
 		return nil
 	}
 	return err
+}
+
+func (c *controller) reconcileServiceMissingUID(pService, vService *v1.Service) error {
+	// We need to add the UID to this object
+	klog.Infof("Found pre-synced service without UID updating pService %s/%s in super master related UID: %v", pService.Namespace, pService.Name, vService.UID)
+	pServiceCopy := pService.DeepCopy()
+	pServiceCopy.Annotations[constants.LabelUID] = string(vService.UID)
+	if _, err := c.serviceClient.Services(pService.Namespace).Update(context.TODO(), pServiceCopy, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("error updating pService %s/%s in super master: %v", pService.Namespace, pServiceCopy.Name, err)
+	}
+
+	metrics.CheckerRemedyStats.WithLabelValues("AdoptedSuperMasterService").Inc()
+	return nil
+}
+
+func (c *controller) reconcileServiceUnlinked(clusterName string, vService *v1.Service) error {
+	vCopy := vService.DeepCopy()
+	// reset uid and other metadata
+	vCopy.UID = types.UID("")
+	vCopy.CreationTimestamp = metav1.Now()
+	vCopy.Generation = 0
+	vCopy.ManagedFields = []metav1.ManagedFieldsEntry{}
+	vCopy.SelfLink = ""
+
+	// Delete service
+	client, err := c.MultiClusterController.GetClusterClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	if err := client.CoreV1().Services(vCopy.GetNamespace()).Delete(context.TODO(), vCopy.GetName(), metav1.DeleteOptions{}); err != nil {
+		return err
+	}
+
+	retrier := func(err error) bool {
+		if err != nil {
+			return true
+		}
+		return false
+	}
+
+	// Recreate service
+	return retry.OnError(retry.DefaultRetry, retrier, func() error {
+		svc, err := client.CoreV1().Services(vCopy.GetNamespace()).Create(context.TODO(), vCopy, metav1.CreateOptions{})
+		if errors.IsAlreadyExists(err) && string(svc.UID) == string(vService.UID) {
+			return err
+		} else if err != nil {
+			return err
+		} else {
+			return nil
+		}
+	})
 }

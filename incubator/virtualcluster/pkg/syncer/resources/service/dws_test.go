@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
@@ -47,8 +48,8 @@ func tenantService(name, namespace, uid string) *v1.Service {
 	}
 }
 
-func superService(name, namespace, uid, clusterKey string) *v1.Service {
-	return &v1.Service{
+func superService(name, namespace, uid, clusterKey string, fns ...func(*v1.Service)) *v1.Service {
+	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
@@ -59,6 +60,12 @@ func superService(name, namespace, uid, clusterKey string) *v1.Service {
 			},
 		},
 	}
+
+	for _, fn := range fns {
+		fn(service)
+	}
+
+	return service
 }
 
 func TestDWServiceCreation(t *testing.T) {
@@ -81,8 +88,10 @@ func TestDWServiceCreation(t *testing.T) {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant *v1.Service
 
-		ExpectedCreatedServices []string
-		ExpectedError           string
+		SuperClusterServiceNetwork bool
+		ExpectedCreatedServices    []string
+		ExpectedUpdatedServices    []string
+		ExpectedError              string
 	}{
 		"new service": {
 			ExistingObjectInSuper:   []runtime.Object{},
@@ -97,6 +106,14 @@ func TestDWServiceCreation(t *testing.T) {
 			ExpectedCreatedServices: []string{},
 			ExpectedError:           "",
 		},
+		"new service but already exists with SuperClusterServiceNetworking": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyAnnotationToService(superService("svc-1", superDefaultNSName, "", defaultClusterKey), constants.AdoptableObjectKey, "true"),
+			},
+			ExistingObjectInTenant:     tenantService("svc-1", "default", "54321"),
+			ExpectedUpdatedServices:    []string{superDefaultNSName + "/svc-1"},
+			SuperClusterServiceNetwork: true,
+		},
 		"new serivce but existing different uid one": {
 			ExistingObjectInSuper: []runtime.Object{
 				superService("svc-1", superDefaultNSName, "123456", defaultClusterKey),
@@ -108,6 +125,9 @@ func TestDWServiceCreation(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
+		gates := map[string]bool{featuregate.SuperClusterServiceNetwork: tc.SuperClusterServiceNetwork}
+		featuregate.DefaultFeatureGate, _ = featuregate.NewFeatureGate(gates)
+
 		t.Run(k, func(t *testing.T) {
 			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController,
 				testTenant,
@@ -132,7 +152,7 @@ func TestDWServiceCreation(t *testing.T) {
 				}
 			}
 
-			if len(tc.ExpectedCreatedServices) != len(actions) {
+			if len(tc.ExpectedCreatedServices) != 0 && len(tc.ExpectedCreatedServices) != len(actions) {
 				t.Errorf("%s: Expected to create service %#v. Actual actions were: %#v", k, tc.ExpectedCreatedServices, actions)
 				return
 			}
@@ -144,6 +164,25 @@ func TestDWServiceCreation(t *testing.T) {
 				createdSVC := action.(core.CreateAction).GetObject().(*v1.Service)
 				fullName := createdSVC.Namespace + "/" + createdSVC.Name
 				if fullName != expectedName {
+					t.Errorf("%s: Expected %s to be created, got %s", k, expectedName, fullName)
+				}
+			}
+
+			if len(tc.ExpectedUpdatedServices) != 0 && len(tc.ExpectedUpdatedServices) != len(actions) {
+				t.Errorf("%s: Expected to update service %#v. Actual actions were: %#v", k, tc.ExpectedUpdatedServices, actions)
+				return
+			}
+			for i, expectedName := range tc.ExpectedUpdatedServices {
+				action := actions[i]
+				if !action.Matches("update", "services") {
+					t.Errorf("%s: Unexpected action %s", k, action)
+				}
+				updatedSVC := action.(core.UpdateAction).GetObject().(*v1.Service)
+				fullName := updatedSVC.Namespace + "/" + updatedSVC.Name
+				if fullName != expectedName {
+					t.Errorf("%s: Expected %s to be updated, got %s", k, expectedName, fullName)
+				}
+				if updatedSVC.Annotations[constants.LabelUID] != string(tc.ExistingObjectInTenant.UID) {
 					t.Errorf("%s: Expected %s to be created, got %s", k, expectedName, fullName)
 				}
 			}
@@ -240,6 +279,16 @@ func applySpecToService(svc *v1.Service, spec *v1.ServiceSpec) *v1.Service {
 	return svc
 }
 
+func applyAnnotationToService(svc *v1.Service, key, value string) *v1.Service {
+	annotations := svc.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[key] = value
+	svc.Annotations = annotations
+	return svc
+}
+
 func TestDWServiceUpdate(t *testing.T) {
 	testTenant := &v1alpha1.VirtualCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -292,8 +341,9 @@ func TestDWServiceUpdate(t *testing.T) {
 		ExistingObjectInSuper  []runtime.Object
 		ExistingObjectInTenant *v1.Service
 
-		ExpectedUpdatedServices []runtime.Object
-		ExpectedError           string
+		ExpectedUpdatedServices    []runtime.Object
+		ExpectedError              string
+		SuperClusterServiceNetwork bool
 	}{
 		"no diff": {
 			ExistingObjectInSuper: []runtime.Object{
@@ -319,8 +369,30 @@ func TestDWServiceUpdate(t *testing.T) {
 			ExpectedUpdatedServices: []runtime.Object{},
 			ExpectedError:           "delegated UID is different",
 		},
+		"diff exists but uid is blank": {
+			ExistingObjectInSuper: []runtime.Object{
+				applySpecToService(superService("svc-1", superDefaultNSName, "", defaultClusterKey), spec1),
+			},
+			ExistingObjectInTenant:  applySpecToService(tenantService("svc-1", "default", "123456"), spec3),
+			ExpectedUpdatedServices: []runtime.Object{},
+			ExpectedError:           "delegated UID is different",
+		},
+		"diff exists but uid is blank and adoptable": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyAnnotationToService(applySpecToService(superService("svc-1", superDefaultNSName, "", defaultClusterKey), spec1), constants.AdoptableObjectKey, "true"),
+			},
+			ExistingObjectInTenant:     applySpecToService(tenantService("svc-1", "default", "12345"), spec1),
+			SuperClusterServiceNetwork: true,
+			ExpectedUpdatedServices: []runtime.Object{
+				applyAnnotationToService(applySpecToService(superService("svc-1", superDefaultNSName, "12345", defaultClusterKey), spec1), constants.AdoptableObjectKey, "true"),
+			},
+		},
 	}
 	for k, tc := range testcases {
+		// Flip feature gate on and off
+		gates := map[string]bool{featuregate.SuperClusterServiceNetwork: tc.SuperClusterServiceNetwork}
+		featuregate.DefaultFeatureGate, _ = featuregate.NewFeatureGate(gates)
+
 		t.Run(k, func(t *testing.T) {
 			actions, reconcileErr, err := util.RunDownwardSync(NewServiceController,
 				testTenant,

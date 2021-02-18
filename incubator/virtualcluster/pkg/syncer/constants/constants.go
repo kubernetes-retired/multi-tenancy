@@ -65,6 +65,10 @@ const (
 	// PublicObjectKey is a label key which marks the super master object that should be populated to every tenant master.
 	PublicObjectKey = "tenancy.x-k8s.io/super.public"
 
+	// AdoptableObjectKey is a label key that marks super master object as reclaimable via setting UID
+	// this uses the transparency. subdomain to force this label to not sync to the tenant
+	AdoptableObjectKey = "transparency.tenancy.x-k8s.io/super.adoptable"
+
 	LabelVirtualNode = "tenancy.x-k8s.io/virtualnode"
 
 	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
