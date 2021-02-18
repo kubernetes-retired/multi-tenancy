@@ -7,7 +7,7 @@ build:
 # ctrl-c while the tests are still running.
 run: build
 	@echo STARTING THE POSTSUBMIT TESTS IN THE CONTAINER
-	docker run -v /var/run/docker.sock:/var/run/docker.sock --network="host" -it ${IMG_NAME}
+	docker run -e IMAGE=${IMG_NAME} -e DOCKER_IN_DOCKER_ENABLED=true -v /var/run/docker.sock:/var/run/docker.sock --network="host" -it ${IMG_NAME}
 
 # After calling 'make run', the Kind cluster will still be present on the
 # *host* even though the Docker container has exited. Run this to find and

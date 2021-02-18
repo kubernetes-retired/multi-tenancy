@@ -1,26 +1,34 @@
-FROM golang:1.14.2-alpine
+# krte includes everything needed to run Docker-in-Docker, as well as cleaning
+# it up cleanly. Note that Prow uses containerd so typically, no Docker daemon
+# will be running on the node without using the contents of this image!
+#
+# This includes Go 1.15.7 and kubectl 1.17. UPGRADE TO A NEW VERSION WHEN WE
+# STOP SUPPORTING K8s 1.17 as that seems like a reasonable time. At that point,
+# I'd just upgrade to the latest image that works; we don't have to increment
+# one by one. Honestly I doubt the exact version of the base image makes too
+# much of a difference.
+#
+# Please update the version of Kind at the same time you update the version of
+# KRTE, if applicable!
+#
+# Source: https://github.com/kubernetes/test-infra/tree/master/images/krte
+FROM gcr.io/k8s-testimages/krte:v20210129-3799a64-master
 WORKDIR /repo
 
-# Since go modules isn't enabled by default.
+# I'm not sure if the following two env vars are needed for HNC; they're probably not. GO111MODULE=on
+# should be redundant outside of GOPATH (which we are) on any post-1.13 version of Go (which we have);
+# I don't *think* that we need CGO either. Feel free to try out removing them when you're next playing
+# around with this image.
 ENV GO111MODULE=on
-
-# Build static binaries; otherwise go test complains.
 ENV CGO_ENABLED=0
 
-# Install all basic dependencies. Bash is there in case you need to debug.
-# Curl, Docker, git and make are not included in the golang image.
-RUN apk add --no-cache bash curl docker git make
-#  bash curl docker gcc git jq make openssh-client
-
-# Install Kind
+# Install Kind. Feel free to update this version whenever you're updating the
+# KRTE base image too.
 RUN go get sigs.k8s.io/kind@v0.9.0
 
-# Install kubectl and make sure it's available in the PATH.
-RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
-RUN chmod +x ./kubectl
-RUN mv ./kubectl /bin
-
 # Add the actual script and set it as the default command for this image.
-COPY run-e2e.sh run-e2e.sh
-RUN chmod +x ./run-e2e.sh
-CMD ["./run-e2e.sh"]
+COPY run-e2e-tests.sh run-e2e-tests.sh
+RUN chmod +x ./run-e2e-tests.sh
+
+# This needs to be re-specified in Prow
+CMD ["wrapper.sh", "./run-e2e-tests.sh"]
