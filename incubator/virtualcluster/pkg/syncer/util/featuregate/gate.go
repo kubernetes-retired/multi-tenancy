@@ -30,12 +30,17 @@ type FeatureGate interface {
 }
 
 const (
+	// SuperClusterServiceNetwork is an experimental feature that allows the
+	// services to share the same ClusterIPs as the super cluster.
+	SuperClusterServiceNetwork = "SuperClusterServiceNetwork"
+
 	// SuperClusterPooling is an experimental feature
 	SuperClusterPooling = "SuperClusterPooling"
 )
 
 var defaultFeatures = FeatureList{
-	SuperClusterPooling: {Default: false},
+	SuperClusterPooling:        {Default: false},
+	SuperClusterServiceNetwork: {Default: false},
 }
 
 type Feature string

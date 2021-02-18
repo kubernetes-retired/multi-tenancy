@@ -7,8 +7,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 )
 
 func Test_mutateDownwardAPIField(t *testing.T) {
@@ -267,6 +267,67 @@ func TestToClusterKey(t *testing.T) {
 			key := ToClusterKey(tt.vc)
 			if key != tt.expectedKey {
 				tc.Errorf("expected key %s, got %s", tt.expectedKey, key)
+			}
+		})
+	}
+}
+
+func TestIsControlPlaneService(t *testing.T) {
+	type args struct {
+		service *v1.Service
+		cluster string
+	}
+	tests := []struct {
+		name           string
+		args           args
+		featureEnabled bool
+		want           bool
+	}{
+		{
+			"TestDefaultKubernetesService",
+			args{
+				&v1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "test-default", Name: "kubernetes"}},
+				"test",
+			},
+			false,
+			true,
+		},
+		{
+			"TestDefaultNginxService",
+			args{
+				&v1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "test-default", Name: "nginx"}},
+				"test",
+			},
+			false,
+			false,
+		},
+		{
+			"TestClusterAPIServiceSVC",
+			args{
+				&v1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "apiserver-svc"}},
+				"test",
+			},
+			true,
+			true,
+		},
+		{
+			"TestDefaultNginx",
+			args{
+				&v1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "nginx"}},
+				"test",
+			},
+			true,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		// Flip feature gate on and off
+		gates := map[string]bool{featuregate.SuperClusterServiceNetwork: tt.featureEnabled}
+		featuregate.DefaultFeatureGate, _ = featuregate.NewFeatureGate(gates)
+
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsControlPlaneService(tt.args.service, tt.args.cluster); got != tt.want {
+				t.Errorf("IsControlPlaneService() = %v, want %v", got, tt.want)
 			}
 		})
 	}

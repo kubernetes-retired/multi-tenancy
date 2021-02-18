@@ -32,20 +32,14 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 )
-
-const (
-	masterServiceNamespace = metav1.NamespaceDefault
-)
-
-var masterServices = sets.NewString("kubernetes")
 
 // ToClusterKey makes a unique key which is used to create the root namespace in super master for a virtual cluster.
 // To avoid name conflict, the key uses the format <namespace>-<hash>-<name>
@@ -226,4 +220,20 @@ func BuildVirtualPersistentVolume(cluster, vcNS, vcName string, pPV *v1.Persiste
 	vPV.Spec.ClaimRef.Namespace = vPVC.Namespace
 	vPV.Spec.ClaimRef.UID = vPVC.UID
 	return vPV
+}
+
+// IsControlPlaneService will return if the namespacedName matches the proper
+// NamespacedName in the tenant control plane
+func IsControlPlaneService(service *v1.Service, cluster string) bool {
+	kubernetesNamespace := ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)
+	kubernetesService := "kubernetes"
+
+	// If the super cluster service networking is enabled this supports allowing
+	// the "real" apiserver-svc to propagate to the tenant default/kubernetes service
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterServiceNetwork) {
+		kubernetesNamespace = cluster
+		kubernetesService = "apiserver-svc"
+	}
+
+	return service.Namespace == kubernetesNamespace && service.Name == kubernetesService
 }

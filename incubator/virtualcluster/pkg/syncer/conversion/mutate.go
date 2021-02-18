@@ -240,9 +240,6 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services 
 		apiServerService string
 	)
 
-	// the master service namespace of the given virtualcluster
-	tenantMasterSvcNs := ToSuperMasterNamespace(cluster, masterServiceNamespace)
-
 	// project the services in namespace ns onto the master services
 	for i := range services {
 		service := services[i]
@@ -252,12 +249,12 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services 
 		}
 		serviceName := service.Name
 
-		// We always want to add environment variabled for master services
+		// We always want to add environment variables for master services
 		// from the corresponding master service namespace of the virtualcluster,
 		// even if enableServiceLinks is false.
 		// We also add environment variables for other services in the same
 		// namespace, if enableServiceLinks is true.
-		if service.Namespace == tenantMasterSvcNs && masterServices.Has(serviceName) {
+		if IsControlPlaneService(service, cluster) {
 			apiServerService = service.Spec.ClusterIP
 			if _, exists := serviceMap[serviceName]; !exists {
 				serviceMap[serviceName] = service
