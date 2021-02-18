@@ -21,8 +21,10 @@ import (
 )
 
 type Cache interface {
+	GetNamespace(string) *Namespace
 	AddNamespace(*Namespace) error
 	RemoveNamespace(*Namespace) error
+	UpdateNamespace(*Namespace, *Namespace) error
 	AddCluster(*Cluster) error
 	RemoveCluster(*Cluster) error
 	AddPod(*Pod) error

@@ -17,16 +17,20 @@ limitations under the License.
 package engine
 
 import (
+	"fmt"
 	"sync"
 
+	"k8s.io/klog"
+
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/algorithm"
 	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
 )
 
 type Engine interface {
 	ScheduleNamespace(*internalcache.Namespace) (*internalcache.Namespace, error)
-	ReScheduleNamespace(*internalcache.Namespace) (*internalcache.Namespace, error)
-	UnReserveNamespace(key string) error
-	RollBackNamespace(*internalcache.Namespace) error
+	EnsureNamespacePlacements(*internalcache.Namespace) error
+	DeScheduleNamespace(key string) error
 }
 
 var _ Engine = &schedulerEngine{}
@@ -41,26 +45,100 @@ func NewSchedulerEngine(schedulerCache internalcache.Cache) Engine {
 	return &schedulerEngine{cache: schedulerCache}
 }
 
+func GetSlicesToSchedule(namespace *internalcache.Namespace, oldPlacements map[string]int) algorithm.SliceInfoArray {
+	key := namespace.GetKey()
+	slicesToSchedule := make(algorithm.SliceInfoArray, 0)
+	size := namespace.GetQuotaSlice()
+
+	remainingToSchedule := namespace.GetTotalSlices()
+	// handle slices that have mandatory placements
+	// TODO: sorting the mandatory placements
+	for k, v := range namespace.GetPlacementMap() {
+		if remainingToSchedule == 0 {
+			// it is possible when namespace quota is reduced
+			break
+		}
+		mandatory := util.Min(v, remainingToSchedule)
+		if val, ok := oldPlacements[k]; ok {
+			used := util.Min(val, mandatory)
+			oldPlacements[k] = val - used
+		}
+		slicesToSchedule.Repeat(mandatory, key, size, k, "")
+		remainingToSchedule = remainingToSchedule - mandatory
+	}
+
+	// use old placements as hints
+	// TODO: sorting the oldPlacements
+	for k, v := range oldPlacements {
+		if remainingToSchedule == 0 {
+			break
+		}
+		hinted := util.Min(v, remainingToSchedule)
+		slicesToSchedule.Repeat(hinted, key, size, "", k)
+		remainingToSchedule = remainingToSchedule - hinted
+	}
+	slicesToSchedule.Repeat(remainingToSchedule, key, size, "", "")
+	return slicesToSchedule
+}
+
 func (e *schedulerEngine) ScheduleNamespace(namespace *internalcache.Namespace) (*internalcache.Namespace, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return nil, nil
+
+	// The namespace may already exist in cache. The reasons could be:
+	// 1. it was scheduled successfully but the result was failed to be updated in tenant namespace;
+	// 2. it is rescheduled due to the namespace quota change or previous placement results were manually modified;
+	// All slices have to be re-examined against the cache since some placed clusters may become invalid. However,
+	// we can use old placement as hint for new placement. The idea is that we should maximally avoid
+	// changing the placement clusters since the overhead of switching super clusters is nontrivial.
+	var oldPlacements map[string]int
+	key := namespace.GetKey()
+	curState := e.cache.GetNamespace(key)
+	if curState != nil {
+		if !namespace.Comparable(curState) {
+			return nil, fmt.Errorf("updating namespace with quotaslcie change is not supported")
+		}
+		oldPlacements = curState.GetPlacementMap()
+	}
+
+	_ = GetSlicesToSchedule(namespace, oldPlacements)
+
+	var newPlacement map[string]int
+	// TODO: schedule the slicesToSchedule, and update newPlacements with the result if successful
+
+	ret := namespace.DeepCopy()
+	ret.SetNewPlacements(newPlacement)
+
+	// update the cache
+	var err error
+	if curState != nil {
+		err = e.cache.UpdateNamespace(curState, ret)
+	} else {
+		err = e.cache.AddNamespace(ret)
+	}
+	return ret, err
 }
 
-func (e *schedulerEngine) ReScheduleNamespace(namespace *internalcache.Namespace) (*internalcache.Namespace, error) {
+func (e *schedulerEngine) DeScheduleNamespace(key string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return nil, nil
-}
-
-func (e *schedulerEngine) UnReserveNamespace(key string) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	if ns := e.cache.GetNamespace(key); ns != nil {
+		e.cache.RemoveNamespace(ns)
+	} else {
+		klog.V(4).Infof("the namespace %s has been removed, deschedule is not needed", key)
+	}
 	return nil
 }
 
-func (e *schedulerEngine) RollBackNamespace(namespace *internalcache.Namespace) error {
+func (e *schedulerEngine) EnsureNamespacePlacements(namespace *internalcache.Namespace) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return nil
+
+	if ns := e.cache.GetNamespace(namespace.GetKey()); ns != nil {
+		if !namespace.Comparable(ns) {
+			return fmt.Errorf("updating namespace with quotaslcie change is not supported")
+		}
+		return e.cache.UpdateNamespace(ns, namespace)
+	}
+	return e.cache.AddNamespace(namespace)
 }

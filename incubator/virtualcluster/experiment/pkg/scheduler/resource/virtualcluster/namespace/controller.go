@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/engine"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
@@ -103,7 +102,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 			return reconciler.Result{Requeue: true}, err
 		}
 		// the namespace has been removed, we should update the scheduler cache
-		if err := c.SchedulerEngine.UnReserveNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
+		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
 			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
@@ -131,31 +130,35 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	}
 
 	expect, _ := internalcache.GetNumSlices(quota, quotaSlice)
-	if placements == nil {
-		if expect > 0 {
-			candidate := internalcache.NewNamespace(request.ClusterName, request.Name, namespace.GetLabels(), quota, quotaSlice, nil)
-			_, err := c.SchedulerEngine.ScheduleNamespace(candidate)
-			if err != nil {
-				return reconciler.Result{Requeue: true}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
-			}
-			// TODO: Update virtualcluster namespace with the scheduling result. If fails, call UnReserveNamespace.
+	if expect == 0 {
+		// the quota is gone. we should update the scheduler cache
+		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
+			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
+		}
+		return reconciler.Result{}, nil
+
+	}
+	numSched := 0
+	schedule := make([]*internalcache.Placement, 0)
+	for k, v := range placements {
+		numSched = numSched + v
+		schedule = append(schedule, internalcache.NewPlacement(k, v))
+	}
+
+	candidate := internalcache.NewNamespace(request.ClusterName, request.Name, namespace.GetLabels(), quota, quotaSlice, schedule)
+	// ensure the cache is consistent with the scheduled placements
+	if numSched == expect {
+		if err := c.SchedulerEngine.EnsureNamespacePlacements(candidate); err != nil {
+			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to ensure namespace %s's placements in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
 	}
-	numSched := 0
-	for _, v := range placements {
-		numSched = numSched + v
-	}
 
-	if expect == numSched {
-		// TODO: validate placement with scheduler cache
-		return reconciler.Result{}, nil
-	}
-	candidate := internalcache.NewNamespace(request.ClusterName, request.Name, namespace.GetLabels(), quota, quotaSlice, nil)
-	_, err = c.SchedulerEngine.ReScheduleNamespace(candidate)
+	// some (or all) slices need to be scheduled/rescheduled
+	_, err = c.SchedulerEngine.ScheduleNamespace(candidate)
 	if err != nil {
-		return reconciler.Result{Requeue: true}, fmt.Errorf("failed to reschedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
+		return reconciler.Result{Requeue: true}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
 	}
-	// TODO: Update virtualcluster namespace with the scheduling result. If fails, call RollBackNamespace.
+	// TODO: Update virtualcluster namespace with the scheduling result.
 	return reconciler.Result{}, nil
 }
