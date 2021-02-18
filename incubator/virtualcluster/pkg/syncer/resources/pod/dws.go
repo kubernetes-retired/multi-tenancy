@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
@@ -268,6 +269,14 @@ func (c *controller) getClusterNameServer(cluster string) (string, error) {
 
 func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.Service, error) {
 	var services []*v1.Service
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterServiceNetwork) {
+		apiserver, err := c.serviceLister.Services(cluster).Get("apiserver-svc")
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, apiserver)
+	}
+
 	list, err := c.serviceLister.Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
 	if err != nil {
 		return nil, err

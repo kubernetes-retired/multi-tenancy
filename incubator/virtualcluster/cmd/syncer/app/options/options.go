@@ -83,7 +83,10 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 			ExtraSyncingResources:      []string{},
 			VNAgentPort:                int32(10550),
-			FeatureGates:               map[string]bool{featuregate.SuperClusterPooling: false},
+			FeatureGates: map[string]bool{
+				featuregate.SuperClusterPooling:        false,
+				featuregate.SuperClusterServiceNetwork: false,
+			},
 		},
 		SyncerName: "vc",
 		Address:    "",
