@@ -129,7 +129,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		return reconciler.Result{Requeue: true}, fmt.Errorf("failed to get scheduling info in %s: %v", request.Namespace, err)
 	}
 
-	expect, _ := internalcache.GetNumSlices(quota, quotaSlice)
+	expect, _ := internalcache.GetLeastFitSliceNum(quota, quotaSlice)
 	if expect == 0 {
 		// the quota is gone. we should update the scheduler cache
 		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
@@ -139,7 +139,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 
 	}
 	numSched := 0
-	schedule := make([]*internalcache.Placement, 0)
+	var schedule []*internalcache.Placement
 	for k, v := range placements {
 		numSched = numSched + v
 		schedule = append(schedule, internalcache.NewPlacement(k, v))

@@ -53,28 +53,28 @@ func GetSlicesToSchedule(namespace *internalcache.Namespace, oldPlacements map[s
 	remainingToSchedule := namespace.GetTotalSlices()
 	// handle slices that have mandatory placements
 	// TODO: sorting the mandatory placements
-	for k, v := range namespace.GetPlacementMap() {
+	for cluster, num := range namespace.GetPlacementMap() {
 		if remainingToSchedule == 0 {
 			// it is possible when namespace quota is reduced
 			break
 		}
-		mandatory := util.Min(v, remainingToSchedule)
-		if val, ok := oldPlacements[k]; ok {
+		mandatory := util.Min(num, remainingToSchedule)
+		if val, ok := oldPlacements[cluster]; ok {
 			used := util.Min(val, mandatory)
-			oldPlacements[k] = val - used
+			oldPlacements[cluster] = val - used
 		}
-		slicesToSchedule.Repeat(mandatory, key, size, k, "")
+		slicesToSchedule.Repeat(mandatory, key, size, cluster, "")
 		remainingToSchedule = remainingToSchedule - mandatory
 	}
 
 	// use old placements as hints
 	// TODO: sorting the oldPlacements
-	for k, v := range oldPlacements {
+	for cluster, num := range oldPlacements {
 		if remainingToSchedule == 0 {
 			break
 		}
-		hinted := util.Min(v, remainingToSchedule)
-		slicesToSchedule.Repeat(hinted, key, size, "", k)
+		hinted := util.Min(num, remainingToSchedule)
+		slicesToSchedule.Repeat(hinted, key, size, "", cluster)
 		remainingToSchedule = remainingToSchedule - hinted
 	}
 	slicesToSchedule.Repeat(remainingToSchedule, key, size, "", "")
