@@ -22,6 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type Cluster struct {
@@ -37,6 +38,8 @@ type Cluster struct {
 	// provision and provisionItems record the observed namespaces from the super cluster
 	provision      v1.ResourceList
 	provisionItems map[string][]*Slice
+
+	lastUpdateTime metav1.Time
 }
 
 func NewCluster(name string, labels map[string]string, capacity v1.ResourceList) *Cluster {
@@ -56,6 +59,7 @@ func NewCluster(name string, labels map[string]string, capacity v1.ResourceList)
 		pods:           make(map[string]map[string]struct{}),
 		provision:      zeroRes,
 		provisionItems: make(map[string][]*Slice),
+		lastUpdateTime: metav1.Now(),
 	}
 }
 
@@ -208,10 +212,6 @@ func (c *Cluster) RemovePod(pod *Pod) {
 	}
 }
 
-func (c *Cluster) UpdateCapacity(newCapacity v1.ResourceList) {
-	c.capacity = newCapacity.DeepCopy()
-}
-
 func (c *Cluster) Dump() string {
 	o := map[string]interface{}{
 		"Name":           c.name,
@@ -223,6 +223,7 @@ func (c *Cluster) Dump() string {
 		"Pods":           c.pods,
 		"Provision":      c.provision,
 		"ProvisionItems": c.provisionItems,
+		"LastUpdateTime": c.lastUpdateTime,
 	}
 
 	b, err := json.MarshalIndent(o, "", "\t")

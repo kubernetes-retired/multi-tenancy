@@ -107,15 +107,14 @@ func (s *Scheduler) syncVirtualCluster(key string) error {
 	case v1alpha1.ClusterRunning:
 		return s.addVirtualCluster(key, vc)
 	case v1alpha1.ClusterError:
-		s.removeVirtualCluster(key)
-		return nil
+		return s.removeVirtualCluster(key)
 	default:
 		klog.Infof("virtual cluster %s/%s not ready to reconcile", vc.Namespace, vc.Name)
 		return nil
 	}
 }
 
-func (s *Scheduler) removeVirtualCluster(key string) {
+func (s *Scheduler) removeVirtualCluster(key string) error {
 	klog.Infof("remove virtualcluster %s", key)
 
 	s.virtualClusterLock.Lock()
@@ -124,7 +123,7 @@ func (s *Scheduler) removeVirtualCluster(key string) {
 	vc, exist := s.virtualClusterSet[key]
 	if !exist {
 		// already deleted
-		return
+		return nil
 	}
 
 	vc.Stop()
@@ -132,8 +131,11 @@ func (s *Scheduler) removeVirtualCluster(key string) {
 	for _, clusterChangeListener := range s.virtualClusterWatcher.GetListeners() {
 		clusterChangeListener.RemoveCluster(vc)
 	}
-
+	if err := s.schedulerCache.RemoveTenant(vc.GetClusterName()); err != nil {
+		return err
+	}
 	delete(s.virtualClusterSet, key)
+	return nil
 }
 
 func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) error {
@@ -163,6 +165,7 @@ func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) e
 		clusterChangeListener.AddCluster(tenantCluster)
 	}
 
+	s.schedulerCache.AddTenant(clusterName)
 	s.virtualClusterLock.Lock()
 	s.virtualClusterSet[key] = tenantCluster
 	s.virtualClusterLock.Unlock()
@@ -289,7 +292,7 @@ func (s *Scheduler) removeSuperCluster(key string) {
 	for _, clusterChangeListener := range s.superClusterWatcher.GetListeners() {
 		clusterChangeListener.RemoveCluster(super)
 	}
-
+	s.schedulerCache.RemoveCluster(super.GetClusterName())
 	delete(s.superClusterSet, key)
 }
 
