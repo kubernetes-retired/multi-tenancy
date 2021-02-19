@@ -18,6 +18,7 @@ package mccontroller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -41,7 +42,6 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
@@ -529,7 +529,7 @@ func filterSuperClusterRelatedObject(c *MultiClusterController, clusterName, nsN
 		return true
 	}
 
-	if util.IsNamespaceScheduleToCluster(nsObj.(*v1.Namespace), utilconstants.SuperClusterID) != nil {
+	if IsNamespaceScheduledToCluster(nsObj.(*v1.Namespace), utilconstants.SuperClusterID) != nil {
 		return true
 	}
 
@@ -549,4 +549,22 @@ func filterSuperClusterSchedulePod(c *MultiClusterController, req reconciler.Req
 	}
 
 	return cname != utilconstants.SuperClusterID
+}
+
+func IsNamespaceScheduledToCluster(obj metav1.Object, clusterID string) error {
+	placements := make(map[string]int)
+	clist, ok := obj.GetAnnotations()[utilconstants.LabelScheduledPlacements]
+	if !ok {
+		return fmt.Errorf("missing annotation %s", utilconstants.LabelScheduledPlacements)
+	}
+	if err := json.Unmarshal([]byte(clist), &placements); err != nil {
+		return fmt.Errorf("unknown format %s of key %s: %v", clist, utilconstants.LabelScheduledPlacements, err)
+	}
+
+	_, ok = placements[clusterID]
+	if !ok {
+		return fmt.Errorf("not found")
+	}
+
+	return nil
 }

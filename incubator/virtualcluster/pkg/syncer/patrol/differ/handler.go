@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
+
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 )
 
@@ -84,15 +86,23 @@ func (h FilteringHandler) OnDelete(obj ClusterObject) {
 	h.Handler.OnDelete(obj)
 }
 
-func DefaultDifferFilter(obj ClusterObject) bool {
-	if obj.OwnerCluster != "" {
-		return true
+func DefaultDifferFilter(blockedClusterSet sets.String) func(obj ClusterObject) bool {
+	return func(obj ClusterObject) bool {
+		// vObj
+		if obj.OwnerCluster != "" {
+			if blockedClusterSet.Has(obj.OwnerCluster) {
+				return false
+			}
+			return true
+		}
+
+		// pObj
+		clusterName, vNamespace := conversion.GetVirtualOwner(obj)
+		if clusterName != "" && vNamespace != "" && !blockedClusterSet.Has(clusterName) {
+			return true
+		}
+		return false
 	}
-	clusterName, vNamespace := conversion.GetVirtualOwner(obj)
-	if clusterName != "" && vNamespace != "" {
-		return true
-	}
-	return false
 }
 
 func DefaultClusterObjectKey(obj metav1.Object, ownerCluster string) string {

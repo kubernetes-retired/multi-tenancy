@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -65,11 +66,13 @@ func (c *controller) PatrollerDo() {
 		pSet.Insert(differ.ClusterObject{Object: pCM, Key: differ.DefaultClusterObjectKey(pCM, "")})
 	}
 
+	blockedClusterSet := sets.NewString()
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
 		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing configmaps from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
 		cmList := listObj.(*v1.ConfigMapList)
@@ -122,7 +125,7 @@ func (c *controller) PatrollerDo() {
 
 	vSet.Difference(pSet, differ.FilteringHandler{
 		Handler:    configMapDiffer,
-		FilterFunc: differ.DefaultDifferFilter,
+		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
 	})
 
 	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedConfigMaps").Set(float64(numMissMatchedConfigMaps))

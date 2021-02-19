@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
@@ -31,9 +32,9 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
@@ -95,17 +96,19 @@ func (c *controller) PatrollerDo() {
 		pSet.Insert(differ.ClusterObject{Object: p, Key: p.GetName()})
 	}
 
+	blockedClusterSet := sets.NewString()
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
 		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing namespaces from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
 		vList := listObj.(*v1.NamespaceList)
 		for i := range vList.Items {
 			if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
-				if err := util.IsNamespaceScheduleToCluster(&vList.Items[i], utilconstants.SuperClusterID); err != nil {
+				if err := mc.IsNamespaceScheduledToCluster(&vList.Items[i], utilconstants.SuperClusterID); err != nil {
 					klog.V(4).Infof("skip ns object which is not belongs to this super cluster: %v", err)
 					continue
 				}
@@ -151,7 +154,7 @@ func (c *controller) PatrollerDo() {
 			if obj.OwnerCluster == "" && obj.GetAnnotations()[constants.LabelVCRootNS] == "true" {
 				return true
 			}
-			return differ.DefaultDifferFilter(obj)
+			return differ.DefaultDifferFilter(blockedClusterSet)(obj)
 		},
 	})
 }
