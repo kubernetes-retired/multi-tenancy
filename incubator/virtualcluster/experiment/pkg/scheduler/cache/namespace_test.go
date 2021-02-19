@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"fmt"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -125,7 +126,7 @@ func TestGetNumSlices(t *testing.T) {
 
 	for k, tc := range testcases {
 		t.Run(k, func(t *testing.T) {
-			num, err := GetNumSlices(tc.quota, tc.quotaSlice)
+			num, err := GetLeastFitSliceNum(tc.quota, tc.quotaSlice)
 			if tc.succeed && err != nil {
 				t.Errorf("test %s should succeed but fails with err %v", k, err)
 			}
@@ -140,5 +141,20 @@ func TestGetNumSlices(t *testing.T) {
 
 		})
 	}
+}
 
+func TestNamespaceDump(t *testing.T) {
+	fullQuota := v1.ResourceList{
+		"cpu":    resource.MustParse("4000M"),
+		"memory": resource.MustParse("8Gi"),
+	}
+
+	p := []*Placement{
+		NewPlacement("a", 1),
+		NewPlacement("b", 1),
+	}
+
+	ns := NewNamespace("tttt", "kkkk", map[string]string{"k": "v"}, fullQuota, fullQuota, p)
+
+	fmt.Println(ns.Dump())
 }

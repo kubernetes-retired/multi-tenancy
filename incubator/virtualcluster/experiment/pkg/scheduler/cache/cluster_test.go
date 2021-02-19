@@ -51,6 +51,12 @@ func TestAddNamespace(t *testing.T) {
 		"memory": resource.MustParse("3Gi"),
 	}
 
+	unknownSlice := v1.ResourceList{
+		"cpu":     resource.MustParse("500M"),
+		"memory":  resource.MustParse("1Gi"),
+		"unknown": resource.MustParse("1Gi"),
+	}
+
 	testcases := map[string]struct {
 		cluster    *Cluster
 		slices     []*Slice
@@ -82,7 +88,7 @@ func TestAddNamespace(t *testing.T) {
 			succeed: true,
 		},
 
-		"Fail to due to exceeding cluster memory capacity": {
+		"Fail due to exceeding cluster memory capacity": {
 			cluster: NewCluster(defaultCluster, nil, defaultCapacity),
 			slices: []*Slice{
 				NewSlice(defaultNamespace, overMemQuotaSlice, defaultCluster),
@@ -121,6 +127,30 @@ func TestAddNamespace(t *testing.T) {
 			},
 			succeed: false,
 		},
+
+		"Fail due to wrong cluster name": {
+			cluster: NewCluster(defaultCluster, nil, defaultCapacity),
+			slices: []*Slice{
+				NewSlice(defaultNamespace, defaultQuotaSlice, defaultCluster1),
+			},
+			allocAfter: v1.ResourceList{
+				"cpu":    resource.MustParse("0"),
+				"memory": resource.MustParse("0"),
+			},
+			succeed: false,
+		},
+
+		"Fail due to unknown resource": {
+			cluster: NewCluster(defaultCluster, nil, defaultCapacity),
+			slices: []*Slice{
+				NewSlice(defaultNamespace, unknownSlice, defaultCluster),
+			},
+			allocAfter: v1.ResourceList{
+				"cpu":    resource.MustParse("0"),
+				"memory": resource.MustParse("0"),
+			},
+			succeed: false,
+		},
 	}
 
 	for k, tc := range testcases {
@@ -142,9 +172,27 @@ func TestAddNamespace(t *testing.T) {
 				t.Errorf("the alloc is not expected. Exp: %v, Got %v", tc.allocAfter, tc.cluster.alloc)
 			}
 		})
-
 	}
 
+	// duplicate add
+	cluster := NewCluster(defaultCluster, nil, defaultCapacity)
+	slices := []*Slice{NewSlice(defaultNamespace, defaultQuotaSlice, defaultCluster)}
+	allocAfter := v1.ResourceList{
+		"cpu":    resource.MustParse("500M"),
+		"memory": resource.MustParse("1Gi"),
+	}
+	if err := cluster.AddNamespace(defaultNamespace, slices); err != nil {
+		t.Errorf("add namespace should success but got err %v", err)
+	}
+	if !Equals(cluster.alloc, allocAfter) {
+		t.Errorf("the alloc is not expected. Exp: %v, Got %v", allocAfter, cluster.alloc)
+	}
+	if err := cluster.AddNamespace(defaultNamespace, slices); err == nil {
+		t.Errorf("duplicately add namespace should fails but success")
+	}
+	if !Equals(cluster.alloc, allocAfter) {
+		t.Errorf("the alloc is not expected. Exp: %v, Got %v", allocAfter, cluster.alloc)
+	}
 }
 
 func TestRemoveNamespace(t *testing.T) {
@@ -249,7 +297,7 @@ func TestDeepCopy(t *testing.T) {
 		"memory": resource.MustParse("1Gi"),
 	}
 
-	cluster := NewCluster(defaultCluster, nil, defaultCapacity)
+	cluster := NewCluster(defaultCluster, map[string]string{"k": "v"}, defaultCapacity)
 	pod := NewPod("tenant", defaultNamespace, "pod-1", "123456", defaultCluster, defaultRequest)
 
 	cluster.AddPod(pod)
@@ -259,9 +307,10 @@ func TestDeepCopy(t *testing.T) {
 
 	if clone.name != cluster.name ||
 		!equality.Semantic.DeepEqual(clone.capacity, cluster.capacity) ||
+		!equality.Semantic.DeepEqual(clone.labels, cluster.labels) ||
 		!equality.Semantic.DeepEqual(clone.alloc, cluster.alloc) ||
 		clone.allocItems[defaultNamespace][0].owner != cluster.allocItems[defaultNamespace][0].owner ||
-		!equality.Semantic.DeepEqual(clone.allocItems[defaultNamespace][0].size, cluster.allocItems[defaultNamespace][0].size) ||
+		!equality.Semantic.DeepEqual(clone.allocItems[defaultNamespace][0].unit, cluster.allocItems[defaultNamespace][0].unit) ||
 		clone.allocItems[defaultNamespace][0].cluster != cluster.allocItems[defaultNamespace][0].cluster ||
 		!equality.Semantic.DeepEqual(clone.pods[pod.GetNamespaceKey()], cluster.pods[pod.GetNamespaceKey()]) {
 		t.Errorf("deepcopy fails %v %v", clone, cluster)

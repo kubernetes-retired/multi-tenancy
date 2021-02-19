@@ -112,7 +112,7 @@ func (c *Cluster) addItem(key string, items map[string][]*Slice, alloc v1.Resour
 		if s.cluster != c.name {
 			return nil, fmt.Errorf("slice %s is placed in cluster %s, not %s", s.owner, s.cluster, c.name)
 		}
-		for k, v := range s.size {
+		for k, v := range s.unit {
 			each, ok := allocCopy[k]
 			if !ok {
 				return nil, fmt.Errorf("slice %s has quota %s which is not in known cluster %s's allocable resources", s.owner, k, c.name)
@@ -137,6 +137,7 @@ func (c *Cluster) addItem(key string, items map[string][]*Slice, alloc v1.Resour
 func (c *Cluster) AddNamespace(key string, slices []*Slice) error {
 	ret, err := c.addItem(key, c.allocItems, c.alloc, slices)
 	if err == nil {
+		// mutate data only if addItem success
 		c.alloc = ret
 	}
 	return err
@@ -149,7 +150,7 @@ func (c *Cluster) removeItem(key string, items map[string][]*Slice, alloc v1.Res
 		return allocCopy, nil
 	}
 	for _, s := range slices {
-		for k, v := range s.size {
+		for k, v := range s.unit {
 			each, _ := allocCopy[k]
 			if each.Cmp(v) == -1 {
 				// this usually means the cache is messed up
@@ -211,74 +212,20 @@ func (c *Cluster) UpdateCapacity(newCapacity v1.ResourceList) {
 	c.capacity = newCapacity.DeepCopy()
 }
 
-// dump structure is used for debugging
-type ClusterDump struct {
-	Name     string
-	Labels   map[string]string
-	Capacity v1.ResourceList
-	Shadow   bool
-
-	Alloc      v1.ResourceList
-	AllocItems map[string][]*SliceDump
-	Pods       map[string]map[string]struct{}
-
-	Provision      v1.ResourceList
-	ProvisionItems map[string][]*SliceDump
-}
-
 func (c *Cluster) Dump() string {
-	dump := ClusterDump{
-		Name:           c.name,
-		Capacity:       c.capacity.DeepCopy(),
-		Shadow:         c.shadow,
-		Alloc:          c.alloc.DeepCopy(),
-		AllocItems:     make(map[string][]*SliceDump),
-		Pods:           make(map[string]map[string]struct{}),
-		Provision:      c.provision.DeepCopy(),
-		ProvisionItems: make(map[string][]*SliceDump),
+	o := map[string]interface{}{
+		"Name":           c.name,
+		"Labels":         c.labels,
+		"Capacity":       c.capacity,
+		"Shadow":         c.shadow,
+		"Alloc":          c.alloc,
+		"AllocItems":     c.allocItems,
+		"Pods":           c.pods,
+		"Provision":      c.provision,
+		"ProvisionItems": c.provisionItems,
 	}
 
-	if c.labels != nil {
-		dump.Labels = make(map[string]string)
-		for k, v := range c.labels {
-			dump.Labels[k] = v
-		}
-	}
-
-	for k, v := range c.allocItems {
-		s := make([]*SliceDump, 0, len(v))
-		for _, each := range v {
-			d := &SliceDump{
-				Owner:   each.owner,
-				Size:    each.size.DeepCopy(),
-				Cluster: each.cluster,
-			}
-			s = append(s, d)
-		}
-		dump.AllocItems[k] = s
-	}
-
-	for k, v := range c.provisionItems {
-		s := make([]*SliceDump, 0, len(v))
-		for _, each := range v {
-			d := &SliceDump{
-				Owner:   each.owner,
-				Size:    each.size.DeepCopy(),
-				Cluster: each.cluster,
-			}
-			s = append(s, d)
-		}
-		dump.ProvisionItems[k] = s
-	}
-
-	for k, v := range c.pods {
-		dump.Pods[k] = make(map[string]struct{})
-		for name, _ := range v {
-			dump.Pods[k][name] = struct{}{}
-		}
-	}
-
-	b, err := json.MarshalIndent(dump, "", "\t")
+	b, err := json.MarshalIndent(o, "", "\t")
 	if err != nil {
 		return ""
 	}

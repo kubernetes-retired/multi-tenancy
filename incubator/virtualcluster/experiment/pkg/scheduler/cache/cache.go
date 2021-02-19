@@ -63,8 +63,7 @@ func (c *schedulerCache) AddPod(pod *Pod) error {
 	clone := pod.DeepCopy()
 	key := clone.GetKey()
 	curState, ok := c.pods[key]
-	switch {
-	case ok:
+	if ok {
 		if curState.cluster != clone.cluster {
 			// Pod scheduling result is changed
 			klog.Warningf("pod %s was added to cluster %s, but is adding to %s now", key, curState.cluster, clone.cluster)
@@ -77,14 +76,14 @@ func (c *schedulerCache) AddPod(pod *Pod) error {
 			}
 		}
 		c.pods[key] = clone
-	case !ok:
-		if err := c.addPod(clone); err != nil {
-			return fmt.Errorf("fail to add pod %s with error %v", key, err)
-		}
-		c.pods[key] = clone
-	default:
-		return fmt.Errorf("pod %v was already added", key)
+		return nil
 	}
+
+	if err := c.addPod(clone); err != nil {
+		return fmt.Errorf("fail to add pod %s with error %v", key, err)
+	}
+	c.pods[key] = clone
+
 	return nil
 }
 
@@ -103,19 +102,18 @@ func (c *schedulerCache) RemovePod(pod *Pod) error {
 	key := pod.GetKey()
 
 	curState, ok := c.pods[key]
-	switch {
-	case ok:
-		if curState.cluster != pod.cluster {
-			klog.Warningf("pod %s was added to cluster %s, but is adding to %s now, the cache is inconsistent", key, curState.cluster, pod.cluster)
-		}
-		if err := c.removePod(pod); err != nil {
-			return fmt.Errorf("fail to remove pod %s with error %v", key, err)
-		}
-		delete(c.pods, key)
-	default:
-		return fmt.Errorf("pod %v was already deleted", key)
-
+	if !ok {
+		return nil
 	}
+
+	if curState.cluster != pod.cluster {
+		klog.Warningf("pod %s was added to cluster %s, but is adding to %s now, the cache is inconsistent", key, curState.cluster, pod.cluster)
+	}
+	if err := c.removePod(pod); err != nil {
+		return fmt.Errorf("fail to remove pod %s with error %v", key, err)
+	}
+	delete(c.pods, key)
+
 	return nil
 
 }
@@ -130,8 +128,8 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 	if num == 0 {
 		return nil
 	}
-	clusterState, ok := c.clusters[cluster]
-	if !ok {
+	clusterState, exists := c.clusters[cluster]
+	if !exists {
 		klog.Warningf("namespace %s has a placement to a cluster %s that does not exist, create a shadow cluster", key, cluster)
 		clusterState = c.addShadowCluster(cluster)
 	}
@@ -139,7 +137,13 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 	for i := 0; i < num; i++ {
 		slices = append(slices, NewSlice(key, slice, cluster))
 	}
-	return clusterState.AddNamespace(key, slices)
+	if err := clusterState.AddNamespace(key, slices); err != nil {
+		return err
+	}
+	if !exists {
+		c.clusters[cluster] = clusterState
+	}
+	return nil
 }
 
 func (c *schedulerCache) AddNamespace(namespace *Namespace) error {
@@ -160,9 +164,8 @@ func (c *schedulerCache) addNamespaceWithoutLock(namespace *Namespace) error {
 		// Namespace update cannot be done in this method.
 		return fmt.Errorf("namespace %s was added to cache", key)
 	}
-	var err error
-	var expect int
-	expect, err = GetNumSlices(clone.quota, clone.quotaSlice)
+
+	expect, err := GetLeastFitSliceNum(clone.quota, clone.quotaSlice)
 	if err != nil {
 		return fmt.Errorf("fail to get the number of slices for namespace %s", key)
 	}
@@ -239,7 +242,7 @@ func (c *schedulerCache) removeNamespaceWithoutLock(namespace *Namespace) error 
 func (c *schedulerCache) updateNamespaceWithoutLock(oldNamespace, newNamespace *Namespace) error {
 	var err error
 	if oldNamespace.GetKey() != newNamespace.GetKey() {
-		return fmt.Errorf("cannot update namespaces with different keys.")
+		return fmt.Errorf("cannot update namespaces with different keys")
 	}
 	err = c.removeNamespaceWithoutLock(oldNamespace)
 	if err != nil {

@@ -55,6 +55,18 @@ func (p *Placement) GetNum() int {
 	return p.num
 }
 
+func (p Placement) String() string {
+	b, _ := p.MarshalJSON()
+	return string(b)
+}
+
+func (p Placement) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Cluster": p.cluster,
+		"Num":     p.num,
+	})
+}
+
 func NewPlacement(cluster string, num int) *Placement {
 	return &Placement{
 		cluster: cluster,
@@ -75,20 +87,33 @@ type Namespace struct {
 
 type Slice struct {
 	owner   string // namespace key
-	size    v1.ResourceList
+	unit    v1.ResourceList
 	cluster string
 }
 
 func NewSlice(owner string, sliceSize v1.ResourceList, cluster string) *Slice {
 	return &Slice{
 		owner:   owner,
-		size:    sliceSize.DeepCopy(),
+		unit:    sliceSize.DeepCopy(),
 		cluster: cluster,
 	}
 }
 
 func (s Slice) DeepCopy() *Slice {
-	return NewSlice(s.owner, s.size.DeepCopy(), s.cluster)
+	return NewSlice(s.owner, s.unit.DeepCopy(), s.cluster)
+}
+
+func (s Slice) String() string {
+	b, _ := s.MarshalJSON()
+	return string(b)
+}
+
+func (s Slice) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Owner":   s.owner,
+		"Unit":    s.unit,
+		"Cluster": s.cluster,
+	})
 }
 
 func NewNamespace(owner, name string, labels map[string]string, quota, quotaSlice v1.ResourceList, schedule []*Placement) *Namespace {
@@ -128,7 +153,7 @@ func (n *Namespace) GetPlacementMap() map[string]int {
 }
 
 func (n *Namespace) GetTotalSlices() int {
-	t, _ := GetNumSlices(n.quota, n.quotaSlice)
+	t, _ := GetLeastFitSliceNum(n.quota, n.quotaSlice)
 	return t
 }
 
@@ -148,7 +173,7 @@ func (n *Namespace) SetNewPlacements(p map[string]int) {
 	}
 }
 
-func GetNumSlices(quota, quotaSlice v1.ResourceList) (int, error) {
+func GetLeastFitSliceNum(quota, quotaSlice v1.ResourceList) (int, error) {
 	more := make(map[v1.ResourceName]struct{})
 	for k, _ := range quota {
 		more[k] = struct{}{}
@@ -168,7 +193,7 @@ func GetNumSlices(quota, quotaSlice v1.ResourceList) (int, error) {
 			return 0, fmt.Errorf("quota slice is larger than quota for resource %v", k)
 		}
 		n := math.Ceil(float64(q.Value()) / float64(v.Value()))
-		if n > float64(num) {
+		if int(n) > num {
 			num = int(n)
 		}
 	}
@@ -178,51 +203,17 @@ func GetNumSlices(quota, quotaSlice v1.ResourceList) (int, error) {
 	return num, nil
 }
 
-// dump structures are used for debugging
-type SliceDump struct {
-	Owner   string
-	Size    v1.ResourceList
-	Cluster string
-}
-
-type PlacementDump struct {
-	Cluster string
-	Num     int
-}
-
-type NamespaceDump struct {
-	Owner  string
-	Name   string
-	Labels map[string]string
-
-	Quota      v1.ResourceList
-	QuotaSlice v1.ResourceList
-
-	Schedule []*PlacementDump
-}
-
 func (n *Namespace) Dump() string {
-	dump := &NamespaceDump{
-		Owner:      n.owner,
-		Name:       n.name,
-		Labels:     make(map[string]string),
-		Quota:      n.quota.DeepCopy(),
-		QuotaSlice: n.quotaSlice.DeepCopy(),
-		Schedule:   make([]*PlacementDump, 0),
+	o := map[string]interface{}{
+		"Owner":      n.owner,
+		"Name":       n.name,
+		"Labels":     n.labels,
+		"Quota":      n.quota,
+		"QuotaSlice": n.quotaSlice,
+		"Schedule":   n.schedule,
 	}
 
-	for _, each := range n.schedule {
-		p := &PlacementDump{
-			Cluster: each.cluster,
-			Num:     each.num,
-		}
-		dump.Schedule = append(dump.Schedule, p)
-	}
-	for k, v := range n.labels {
-		dump.Labels[k] = v
-	}
-
-	b, err := json.MarshalIndent(dump, "", "\t")
+	b, err := json.MarshalIndent(o, "", "\t")
 	if err != nil {
 		return ""
 	}
