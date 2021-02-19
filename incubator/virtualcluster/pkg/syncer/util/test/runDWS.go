@@ -53,7 +53,13 @@ func (r *fakeReconciler) Reconcile(request reconciler.Request) (reconciler.Resul
 	} else {
 		res, err = reconciler.Result{}, fmt.Errorf("fake reconciler's controller is not initialized")
 	}
-	r.errCh <- err
+	select {
+	case <-r.errCh:
+	default:
+		// if channel not closed
+		r.errCh <- err
+	}
+
 	// Make sure Reconcile is called once by returning no error.
 	return res, nil
 }

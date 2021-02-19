@@ -18,6 +18,7 @@ package featuregate
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 )
 
@@ -27,6 +28,8 @@ var DefaultFeatureGate, _ = NewFeatureGate(nil)
 type FeatureGate interface {
 	// Enabled returns true if the key is enabled.
 	Enabled(key Feature) bool
+	// Set feature gate for known features.
+	Set(key Feature, value bool) error
 }
 
 const (
@@ -64,8 +67,9 @@ func Supports(featureList FeatureList, featureName string) bool {
 	return false
 }
 
-// featureGate implements FeatureGate as well as pflag.Value for flag parsing.
+// featureGate implements FeatureGate
 type featureGate struct {
+	mu sync.Mutex
 	// enabled holds a map[Feature]bool
 	enabled *atomic.Value
 }
@@ -99,4 +103,24 @@ func (f *featureGate) Enabled(key Feature) bool {
 	}
 
 	panic(fmt.Errorf("feature %q is not registered in FeatureGate", key))
+}
+
+// Set feature gate for known features.
+func (f *featureGate) Set(key Feature, value bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if _, known := defaultFeatures[key]; !known {
+		return fmt.Errorf("unrecognized feature gate: %s", key)
+	}
+
+	enabled := map[Feature]bool{}
+	for k, v := range f.enabled.Load().(map[Feature]bool) {
+		enabled[k] = v
+	}
+	enabled[key] = value
+
+	f.enabled.Store(enabled)
+
+	return nil
 }

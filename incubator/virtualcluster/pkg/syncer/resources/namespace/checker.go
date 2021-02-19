@@ -18,19 +18,23 @@ package namespace
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
+	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 )
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
@@ -43,8 +47,8 @@ func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
 	return nil
 }
 
-//  shouldBeGabageCollected checks if the owner vc object is deleted or not. If so, the namespace should be garbage collected.
-func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
+//  shouldBeGarbageCollected checks if the owner vc object is deleted or not. If so, the namespace should be garbage collected.
+func (c *controller) shouldBeGarbageCollected(ns *v1.Namespace) bool {
 	vcName := ns.Annotations[constants.LabelVCName]
 	vcNamespace := ns.Annotations[constants.LabelVCNamespace]
 	if vcName == "" || vcNamespace == "" {
@@ -76,98 +80,91 @@ func (c *controller) shouldBeGabageCollected(ns *v1.Namespace) bool {
 	return false
 }
 
-// PatrollerDo checks to see if namespaces in super master informer cache and tenant master
-// keep consistency.
 func (c *controller) PatrollerDo() {
 	clusterNames := c.MultiClusterController.GetClusterNames()
-	if len(clusterNames) != 0 {
-		wg := sync.WaitGroup{}
-		for _, clusterName := range clusterNames {
-			wg.Add(1)
-			go func(clusterName string) {
-				defer wg.Done()
-				c.checkNamespacesOfTenantCluster(clusterName)
-			}(clusterName)
-		}
-		wg.Wait()
-	} else {
-		klog.Infof("tenant masters has no clusters, still check pNamespace for gc purpose.")
+	if len(clusterNames) == 0 {
+		klog.V(4).Infof("tenant masters has no clusters, still check pNamespace for gc purpose")
 	}
 
-	pNamespaces, err := c.nsLister.List(labels.Everything())
+	pList, err := c.nsLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("error listing namespaces from super master informer cache: %v", err)
 		return
 	}
-
-	for _, pNamespace := range pNamespaces {
-		shouldDelete := false
-		if pNamespace.Annotations[constants.LabelVCRootNS] == "true" {
-			if c.shouldBeGabageCollected(pNamespace) {
-				shouldDelete = true
-			}
-		} else {
-			clusterName, vNamespace := conversion.GetVirtualOwner(pNamespace)
-			if len(clusterName) == 0 || len(vNamespace) == 0 {
-				continue
-			}
-			vNamespaceObj, err := c.MultiClusterController.Get(clusterName, "", vNamespace)
-			if err != nil {
-				// if vc object is deleted, we should reach here
-				if errors.IsNotFound(err) || c.shouldBeGabageCollected(pNamespace) {
-					shouldDelete = true
-				}
-			} else {
-				vNs := vNamespaceObj.(*v1.Namespace)
-				if pNamespace.Annotations[constants.LabelUID] != string(vNs.UID) {
-					shouldDelete = true
-					klog.Warningf("Found pNamespace %s delegated UID is different from tenant object.", pNamespace.Name)
-				}
-			}
-		}
-
-		if shouldDelete {
-			opts := &metav1.DeleteOptions{
-				PropagationPolicy: &constants.DefaultDeletionPolicy,
-				Preconditions:     metav1.NewUIDPreconditions(string(pNamespace.UID)),
-			}
-			if err := c.namespaceClient.Namespaces().Delete(context.TODO(), pNamespace.Name, *opts); err != nil {
-				klog.Errorf("error deleting pNamespace %s in super master: %v", pNamespace.Name, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterNamespaces").Inc()
-			}
-		}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: p.GetName()})
 	}
-}
 
-// checkNamespacesOfTenantCluster checks to see if namespaces in specific cluster keeps consistency.
-func (c *controller) checkNamespacesOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
-	if err != nil {
-		klog.Errorf("error listing namespaces from cluster %s informer cache: %v", clusterName, err)
-		return
-	}
-	klog.V(4).Infof("check namespaces consistency in cluster %s", clusterName)
-	namespaceList := listObj.(*v1.NamespaceList)
-	for i, vNamespace := range namespaceList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vNamespace.Name)
-		pNamespace, err := c.nsLister.Get(targetNamespace)
-		if errors.IsNotFound(err) {
-			// pNamespace not found and vNamespace still exists, we need to create pNamespace again
-			if err := c.MultiClusterController.RequeueObject(clusterName, &namespaceList.Items[i]); err != nil {
-				klog.Errorf("error requeue vNamespace %s in cluster %s: %v", vNamespace.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantNamespaces").Inc()
-			}
+	blockedClusterSet := sets.NewString()
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
+		if err != nil {
+			klog.Errorf("error listing namespaces from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
-
-		if err != nil {
-			klog.Errorf("error getting pNamespace %s from super master cache: %v", targetNamespace, err)
+		vList := listObj.(*v1.NamespaceList)
+		for i := range vList.Items {
+			if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+				if err := mc.IsNamespaceScheduledToCluster(&vList.Items[i], utilconstants.SuperClusterID); err != nil {
+					klog.V(4).Infof("skip ns object which is not belongs to this super cluster: %v", err)
+					continue
+				}
+			}
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          conversion.ToSuperMasterNamespace(cluster, vList.Items[i].GetName()),
+			})
 		}
+	}
 
-		if pNamespace.Annotations[constants.LabelUID] != string(vNamespace.UID) {
-			klog.Errorf("Found pNamespace %s delegated UID is different from tenant object.", targetNamespace)
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(vObj differ.ClusterObject) {
+		if err := c.MultiClusterController.RequeueObject(vObj.OwnerCluster, vObj.Object); err != nil {
+			klog.Errorf("error requeue vNamespace %v in cluster %s: %v", vObj.GetName(), vObj.GetOwnerCluster(), err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantNamespaces").Inc()
 		}
+	}
+	d.UpdateFunc = func(vObj, pObj differ.ClusterObject) {
+		v := vObj.Object.(*v1.Namespace)
+		p := pObj.Object.(*v1.Namespace)
+
+		// if vc object is deleted, we should reach here
+		if c.shouldBeGarbageCollected(p) || p.Annotations[constants.LabelUID] != string(v.UID) {
+			c.deleteNamespace(p)
+		}
+	}
+	d.DeleteFunc = func(pObj differ.ClusterObject) {
+		p := pObj.Object.(*v1.Namespace)
+		if p.Annotations[constants.LabelVCRootNS] == "true" {
+			if !c.shouldBeGarbageCollected(p) {
+				return
+			}
+		}
+		c.deleteNamespace(p)
+	}
+
+	vSet.Difference(pSet, differ.FilteringHandler{
+		Handler: d,
+		FilterFunc: func(obj differ.ClusterObject) bool {
+			if obj.OwnerCluster == "" && obj.GetAnnotations()[constants.LabelVCRootNS] == "true" {
+				return true
+			}
+			return differ.DefaultDifferFilter(blockedClusterSet)(obj)
+		},
+	})
+}
+
+func (c *controller) deleteNamespace(ns *v1.Namespace) {
+	deleteOptions := &metav1.DeleteOptions{}
+	deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(ns.GetUID()))
+	if err := c.namespaceClient.Namespaces().Delete(context.TODO(), ns.GetName(), *deleteOptions); err != nil {
+		klog.Errorf("error deleting pNamespace %s in super master: %v", ns.GetName(), err)
+	} else {
+		metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterNamespaces").Inc()
 	}
 }
