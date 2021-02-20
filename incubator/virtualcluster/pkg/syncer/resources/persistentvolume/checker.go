@@ -19,7 +19,6 @@ package persistentvolume
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +31,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 )
 
 var numClaimMissMatchedPVs uint64
@@ -53,105 +53,64 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	wg := sync.WaitGroup{}
 	numClaimMissMatchedPVs = 0
 	numSpecMissMatchedPVs = 0
 
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkPersistentVolumeOfTenantCluster(clusterName)
-		}(clusterName)
-	}
-	wg.Wait()
-
-	pvList, err := c.pvLister.List(labels.Everything())
+	pList, err := c.pvLister.List(labels.Everything())
 	if err != nil {
 		klog.Errorf("error listing pv from super master informer cache: %v", err)
 		return
 	}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: p.GetName()})
+	}
 
-	for _, pPV := range pvList {
-		if !boundPersistentVolume(pPV) {
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
+		if err != nil {
+			klog.Errorf("error listing pv from cluster %s informer cache: %v", cluster, err)
 			continue
 		}
+		vList := listObj.(*v1.PersistentVolumeList)
+		for i := range vList.Items {
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          vList.Items[i].GetName(),
+			})
+		}
+	}
+
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(pObj differ.ClusterObject) {
+		c.UpwardController.AddToQueue(pObj.GetName())
+		metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPVs").Inc()
+	}
+	d.UpdateFunc = func(pObj, vObj differ.ClusterObject) {
+		pPV := pObj.Object.(*v1.PersistentVolume)
+		vPV := vObj.Object.(*v1.PersistentVolume)
+
 		pPVC, err := c.pvcLister.PersistentVolumeClaims(pPV.Spec.ClaimRef.Namespace).Get(pPV.Spec.ClaimRef.Name)
 		if err != nil {
-			if !errors.IsNotFound(err) {
-				klog.Errorf("fail to get pPVC %s/%s in super master :%v", pPVC.Namespace, pPVC.Name, err)
-			}
-			continue
+			return
 		}
 		clusterName, vNamespace := conversion.GetVirtualOwner(pPVC)
 		if clusterName == "" {
 			// Bound PVC does not belong to any tenant.
-			continue
+			return
 		}
-		vPVObj, err := c.MultiClusterController.Get(clusterName, "", pPV.Name)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterPVs").Inc()
-				c.UpwardController.AddToQueue(pPV.Name)
-			}
-			klog.Errorf("fail to get pv %s from cluster %s: %v", pPV.Name, clusterName, err)
-		} else {
-			// Double check if the vPV is bound to the correct PVC.
-			vPV := vPVObj.(*v1.PersistentVolume)
-			if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
-				//klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV, clusterName)
-				numClaimMissMatchedPVs++
-			}
+
+		// Double check if the vPV is bound to the correct PVC.
+		if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
+			klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV.GetName(), clusterName)
+			numClaimMissMatchedPVs++
 		}
-	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("ClaimMissMatchedPVs").Set(float64(numClaimMissMatchedPVs))
-	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedPVs").Set(float64(numSpecMissMatchedPVs))
-}
-
-func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
-	if err != nil {
-		klog.Errorf("error listing pv from cluster %s informer cache: %v", clusterName, err)
-		return
-	}
-	klog.V(4).Infof("check pv consistency in cluster %s", clusterName)
-	pvList := listObj.(*v1.PersistentVolumeList)
-	for _, vPV := range pvList.Items {
-		pPV, err := c.pvLister.Get(vPV.Name)
-		shouldDelete := false
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				klog.Errorf("failed to get pPV %s from super master cache: %v", vPV.Name, err)
-				continue
-			}
-			shouldDelete = true
-			// We delete any PV created by tenant.
-			// If the pv is still bound to pvc, print an error msg. Normally, the deleted PV should be in Relased phase.
-			if vPV.Spec.ClaimRef != nil && vPV.Status.Phase == "Bound" {
-				klog.Errorf("Removed pv %s in cluster %s is bound to a pvc", vPV.Name, clusterName)
-			}
-
-		} else if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
-			klog.Errorf("Found vPV %s in cluster %s delegated UID is different from super master object.", vPV.Name, clusterName)
-			shouldDelete = true
-		}
-		if shouldDelete {
-			tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
-			if err != nil {
-				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)
-				continue
-			}
-			opts := &metav1.DeleteOptions{
-				PropagationPolicy: &constants.DefaultDeletionPolicy,
-				Preconditions:     metav1.NewUIDPreconditions(string(vPV.UID)),
-			}
-			if err := tenantClient.CoreV1().PersistentVolumes().Delete(context.TODO(), vPV.Name, *opts); err != nil {
-				klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantPVs").Inc()
-			}
-			continue
+		if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
+			d.OnDelete(vObj)
+			return
 		}
 
 		updatedPVSpec := conversion.Equality(c.Config, nil).CheckPVSpecEquality(&pPV.Spec, &vPV.Spec)
@@ -163,4 +122,64 @@ func (c *controller) checkPersistentVolumeOfTenantCluster(clusterName string) {
 			}
 		}
 	}
+	d.DeleteFunc = func(vObj differ.ClusterObject) {
+		vPV := vObj.Object.(*v1.PersistentVolume)
+
+		// We delete any PV created by tenant.
+		// If the pv is still bound to pvc, print an error msg. Normally, the deleted PV should be in Relased phase.
+		if vPV.Spec.ClaimRef != nil && vPV.Status.Phase == "Bound" {
+			klog.Errorf("Removed pv %s in cluster %s is bound to a pvc", vPV.Name, vObj.GetOwnerCluster())
+		}
+
+		tenantClient, err := c.MultiClusterController.GetClusterClient(vObj.GetOwnerCluster())
+		if err != nil {
+			klog.Errorf("error getting cluster %s clientset: %v", vObj.GetOwnerCluster(), err)
+			return
+		}
+		opts := &metav1.DeleteOptions{
+			PropagationPolicy: &constants.DefaultDeletionPolicy,
+			Preconditions:     metav1.NewUIDPreconditions(string(vPV.UID)),
+		}
+		if err := tenantClient.CoreV1().PersistentVolumes().Delete(context.TODO(), vPV.Name, *opts); err != nil {
+			klog.Errorf("error deleting pv %v in cluster %s: %v", vPV.Name, vObj.GetOwnerCluster(), err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanTenantPVs").Inc()
+		}
+	}
+
+	pSet.Difference(vSet, differ.FilteringHandler{
+		Handler: d,
+		FilterFunc: func(obj differ.ClusterObject) bool {
+			// if both vObj pObj exists, pObj may not pass the filter.
+			// differ will skip this onUpdate.
+			// don't worry to delete vObj accidentally.
+
+			if obj.OwnerCluster != "" {
+				return true
+			}
+
+			pPV := obj.Object.(*v1.PersistentVolume)
+			if !boundPersistentVolume(pPV) {
+				return false
+			}
+
+			pPVC, err := c.pvcLister.PersistentVolumeClaims(pPV.Spec.ClaimRef.Namespace).Get(pPV.Spec.ClaimRef.Name)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					klog.Errorf("fail to get pPVC %s/%s in super master :%v", pPVC.Namespace, pPVC.Name, err)
+				}
+				return false
+			}
+			clusterName, _ := conversion.GetVirtualOwner(pPVC)
+			if clusterName == "" {
+				// Bound PVC does not belong to any tenant.
+				return false
+			}
+			return true
+		},
+	})
+
+	metrics.CheckerMissMatchStats.WithLabelValues("ClaimMissMatchedPVs").Set(float64(numClaimMissMatchedPVs))
+	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedPVs").Set(float64(numSpecMissMatchedPVs))
+
 }
