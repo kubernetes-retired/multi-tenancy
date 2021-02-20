@@ -41,6 +41,7 @@ func TestSnapshotForNamespaceSched(t *testing.T) {
 
 	stop := make(chan struct{})
 	cache := NewSchedulerCache(stop).(*schedulerCache)
+	cache.AddTenant(defaultTenant)
 
 	cluster1 := NewCluster(defaultCluster1, nil, defaultCapacity)
 	cluster2 := NewCluster(defaultCluster2, nil, defaultCapacity)
