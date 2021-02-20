@@ -19,19 +19,19 @@ package persistentvolumeclaim
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
@@ -54,93 +54,79 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	wg := sync.WaitGroup{}
 	numMissMatchedPVCs = 0
 
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkPVCOfTenantCluster(clusterName)
-		}(clusterName)
-	}
-	wg.Wait()
-
-	pPVCs, err := c.pvcLister.List(labels.Everything())
+	pList, err := c.pvcLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("error listing PVCs from super master informer cache: %v", err)
+		klog.Errorf("error listing pvc from super master informer cache: %v", err)
 		return
 	}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
+	}
 
-	for _, pPVC := range pPVCs {
-		clusterName, vNamespace := conversion.GetVirtualOwner(pPVC)
-		if len(clusterName) == 0 || len(vNamespace) == 0 {
+	blockedClusterSet := sets.NewString()
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
+		if err != nil {
+			klog.Errorf("error listing pvc from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
-		shouldDelete := false
-		vPVCObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pPVC.Name)
-		if errors.IsNotFound(err) {
-			shouldDelete = true
-		}
-		if err == nil {
-			vPVC := vPVCObj.(*v1.PersistentVolumeClaim)
-			if pPVC.Annotations[constants.LabelUID] != string(vPVC.UID) {
-				shouldDelete = true
-				klog.Warningf("Found pPVC %s/%s delegated UID is different from tenant object.", pPVC.Namespace, pPVC.Name)
-			}
-		}
-		if shouldDelete {
-			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pPVC.UID))
-			if err = c.pvcClient.PersistentVolumeClaims(pPVC.Namespace).Delete(context.TODO(), pPVC.Name, *deleteOptions); err != nil {
-				klog.Errorf("error deleting pPVC %s/%s in super master: %v", pPVC.Namespace, pPVC.Name, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPVCs").Inc()
-			}
+		vList := listObj.(*v1.PersistentVolumeClaimList)
+		for i := range vList.Items {
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          differ.DefaultClusterObjectKey(&vList.Items[i], cluster),
+			})
 		}
 	}
 
-	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedPVCs").Set(float64(numMissMatchedPVCs))
-}
-
-func (c *controller) checkPVCOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
-	if err != nil {
-		klog.Errorf("error listing PVCs from cluster %s informer cache: %v", clusterName, err)
-		return
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(vObj differ.ClusterObject) {
+		if err := c.MultiClusterController.RequeueObject(vObj.OwnerCluster, vObj.Object); err != nil {
+			klog.Errorf("error requeue vPVC %s in cluster %s: %v", vObj.Key, vObj.GetOwnerCluster(), err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPVCs").Inc()
+		}
 	}
-	klog.V(4).Infof("check PVCs consistency in cluster %s", clusterName)
-	pvcList := listObj.(*v1.PersistentVolumeClaimList)
-	for i, vPVC := range pvcList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vPVC.Namespace)
-		pPVC, err := c.pvcLister.PersistentVolumeClaims(targetNamespace).Get(vPVC.Name)
-		if errors.IsNotFound(err) {
-			if err := c.MultiClusterController.RequeueObject(clusterName, &pvcList.Items[i]); err != nil {
-				klog.Errorf("error requeue vPVC %v/%v in cluster %s: %v", vPVC.Namespace, vPVC.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantPVCs").Inc()
-			}
-			continue
-		}
+	d.UpdateFunc = func(vObj, pObj differ.ClusterObject) {
+		v := vObj.Object.(*v1.PersistentVolumeClaim)
+		p := pObj.Object.(*v1.PersistentVolumeClaim)
 
+		if p.Annotations[constants.LabelUID] != string(v.UID) {
+			klog.Warningf("Found pPVC %s delegated UID is different from tenant object", pObj.Key)
+			d.OnDelete(pObj)
+			return
+		}
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, vObj.GetOwnerCluster())
 		if err != nil {
-			klog.Errorf("failed to get pPVC %s/%s from super master cache: %v", targetNamespace, vPVC.Name, err)
-			continue
+			klog.Errorf("fail to get cluster spec : %s", vObj.GetOwnerCluster())
+			return
 		}
-
-		if pPVC.Annotations[constants.LabelUID] != string(vPVC.UID) {
-			klog.Warningf("Found pPVC %s/%s delegated UID is different from tenant object.", pPVC.Namespace, pPVC.Name)
-			continue
-		}
-
-		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
-		if err != nil {
-			klog.Errorf("fail to get cluster spec : %s", clusterName)
-			continue
-		}
-		updatedPVC := conversion.Equality(c.Config, vc).CheckPVCEquality(pPVC, &vPVC)
+		updatedPVC := conversion.Equality(c.Config, vc).CheckPVCEquality(p, v)
 		if updatedPVC != nil {
 			atomic.AddUint64(&numMissMatchedPVCs, 1)
-			klog.Warningf("spec of pvc %v/%v diff in super&tenant master", vPVC.Namespace, vPVC.Name)
+			klog.Warningf("spec of pvc %s diff in super&tenant master", pObj.Key)
 		}
 	}
+	d.DeleteFunc = func(pObj differ.ClusterObject) {
+		deleteOptions := &metav1.DeleteOptions{}
+		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pObj.GetUID()))
+		if err = c.pvcClient.PersistentVolumeClaims(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
+			klog.Errorf("error deleting pPVC %s in super master: %v", pObj.Key, err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterPVCs").Inc()
+		}
+	}
+
+	vSet.Difference(pSet, differ.FilteringHandler{
+		Handler:    d,
+		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+	})
+
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedPVCs").Set(float64(numMissMatchedPVCs))
 }

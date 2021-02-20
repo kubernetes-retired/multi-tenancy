@@ -17,17 +17,18 @@ package endpoints
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 )
 
 var numMissingEndPoints uint64
@@ -55,46 +56,57 @@ func (c *controller) PatrollerDo() {
 
 	numMissingEndPoints = 0
 	numMissMatchedEndPoints = 0
-	wg := sync.WaitGroup{}
 
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkEndPointsOfTenantCluster(clusterName)
-		}(clusterName)
-	}
-	wg.Wait()
-	metrics.CheckerMissMatchStats.WithLabelValues("MissingEndPoints").Set(float64(numMissingEndPoints))
-	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
-}
-
-// checkEndPointsOfTenantCluster checks to see if endpoints controller in tenant and super master working consistently.
-func (c *controller) checkEndPointsOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
+	pList, err := c.endpointsLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("error listing endpoints from cluster %s informer cache: %v", clusterName, err)
+		klog.Errorf("error listing endpoints from super master informer cache: %v", err)
 		return
 	}
-	klog.V(4).Infof("check endpoints consistency in cluster %s", clusterName)
-	epList := listObj.(*v1.EndpointsList)
-	for _, vEp := range epList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vEp.Namespace)
-		pEp, err := c.endpointsLister.Endpoints(targetNamespace).Get(vEp.Name)
-		if errors.IsNotFound(err) {
-			// pEp not found and vEp still exists, report the inconsistent ep controller behavior
-			klog.Errorf("Cannot find pEp %v/%v in super master", targetNamespace, vEp.Name)
-			atomic.AddUint64(&numMissingEndPoints, 1)
-			continue
-		}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
+	}
+
+	blockedClusterSet := sets.NewString()
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
-			klog.Errorf("error getting pEp %s/%s from super master cache: %v", targetNamespace, vEp.Name, err)
+			klog.Errorf("error listing endpoints from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
-		updated := conversion.Equality(c.Config, nil).CheckEndpointsEquality(pEp, &vEp)
-		if updated != nil {
-			atomic.AddUint64(&numMissMatchedEndPoints, 1)
-			klog.Warningf("Endpoint %v/%v diff in super&tenant master", targetNamespace, vEp.Name)
+		vList := listObj.(*v1.EndpointsList)
+		for i := range vList.Items {
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          differ.DefaultClusterObjectKey(&vList.Items[i], cluster),
+			})
 		}
 	}
+
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(vObj differ.ClusterObject) {
+		// pEp not found and vEp still exists, report the inconsistent ep controller behavior
+		klog.Errorf("Cannot find pEp for vEp %s in cluster %s", vObj.Key, vObj.OwnerCluster)
+		atomic.AddUint64(&numMissingEndPoints, 1)
+	}
+	d.UpdateFunc = func(vObj, pObj differ.ClusterObject) {
+		v := vObj.Object.(*v1.Endpoints)
+		p := pObj.Object.(*v1.Endpoints)
+		updated := conversion.Equality(c.Config, nil).CheckEndpointsEquality(p, v)
+		if updated != nil {
+			atomic.AddUint64(&numMissMatchedEndPoints, 1)
+			klog.Warningf("Endpoint %s diff in super&tenant master", pObj.Key)
+		}
+	}
+
+	vSet.Difference(pSet, differ.FilteringHandler{
+		Handler:    d,
+		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+	})
+
+	metrics.CheckerMissMatchStats.WithLabelValues("MissingEndPoints").Set(float64(numMissingEndPoints))
+	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedEndPoints").Set(float64(numMissMatchedEndPoints))
 }
