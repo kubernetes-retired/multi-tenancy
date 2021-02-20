@@ -20,8 +20,11 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/constants"
@@ -34,19 +37,74 @@ type schedulerCache struct {
 
 	mu sync.RWMutex
 
+	tenants    map[string]struct{}
 	clusters   map[string]*Cluster
 	pods       map[string]*Pod
 	namespaces map[string]*Namespace
 }
 
 func NewSchedulerCache(stop <-chan struct{}) Cache {
-	return &schedulerCache{
+	c := &schedulerCache{
 		stop:       stop,
+		tenants:    make(map[string]struct{}),
 		clusters:   make(map[string]*Cluster),
 		pods:       make(map[string]*Pod),
 		namespaces: make(map[string]*Namespace),
 	}
+	go wait.Until(c.GarbageCollection, 3*time.Minute, stop)
+	return c
+}
 
+func (c *schedulerCache) GarbageCollection() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var csToDelete []*Cluster
+	for _, v := range c.clusters {
+		if v.shadow && metav1.Now().After(v.lastUpdateTime.Add(5*time.Minute)) {
+			csToDelete = append(csToDelete, v)
+		}
+	}
+	for _, each := range csToDelete {
+		delete(c.clusters, each.name)
+	}
+}
+
+func (c *schedulerCache) AddTenant(n string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tenants[n] = struct{}{}
+}
+
+func (c *schedulerCache) RemoveTenant(n string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var nsToDelete []*Namespace
+
+	for _, v := range c.namespaces {
+		if v.owner == n {
+			nsToDelete = append(nsToDelete, v)
+		}
+	}
+
+	var err error
+	i := -1
+	for _, each := range nsToDelete {
+		err := c.removeNamespaceWithoutLock(each)
+		if err != nil {
+			break
+		}
+		i++
+	}
+	if err != nil {
+		for ; i > -1; i-- {
+			c.addNamespaceWithoutLock(nsToDelete[i])
+		}
+	} else {
+		delete(c.tenants, n)
+	}
+	return err
 }
 
 func (c *schedulerCache) addPod(pod *Pod) error {
@@ -149,6 +207,10 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 func (c *schedulerCache) AddNamespace(namespace *Namespace) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if _, ok := c.tenants[namespace.owner]; !ok {
+		return nil
+	}
 
 	key := namespace.GetKey()
 	if old, ok := c.namespaces[key]; ok {
@@ -262,6 +324,9 @@ func (c *schedulerCache) updateNamespaceWithoutLock(oldNamespace, newNamespace *
 func (c *schedulerCache) UpdateNamespace(oldNamespace, newNamespace *Namespace) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if _, ok := c.tenants[oldNamespace.owner]; !ok {
+		return nil
+	}
 	return c.updateNamespaceWithoutLock(oldNamespace, newNamespace)
 }
 
@@ -307,14 +372,14 @@ func (c *schedulerCache) AddCluster(cluster *Cluster) error {
 	return nil
 }
 
-func (c *schedulerCache) RemoveCluster(cluster *Cluster) error {
+func (c *schedulerCache) RemoveCluster(name string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, ok := c.clusters[cluster.name]; !ok {
-		return fmt.Errorf("cluster %s was deleted from cache", cluster.name)
+	if _, ok := c.clusters[name]; !ok {
+		return fmt.Errorf("cluster %s was deleted from cache", name)
 	}
-	delete(c.clusters, cluster.name)
+	delete(c.clusters, name)
 	return nil
 }
 
@@ -353,7 +418,8 @@ func (c *schedulerCache) UpdateClusterCapacity(clustername string, newCapacity v
 	if !ok {
 		return fmt.Errorf("cluster %s is not in cache, cannot update the cluster capacity", clustername)
 	}
-	clusterState.UpdateCapacity(newCapacity)
+	clusterState.capacity = newCapacity.DeepCopy()
+	clusterState.lastUpdateTime = metav1.Now()
 	return nil
 }
 

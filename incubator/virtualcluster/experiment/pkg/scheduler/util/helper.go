@@ -291,6 +291,8 @@ func GetSchedulingInfo(namespace *v1.Namespace) (map[string]int, v1.ResourceList
 
 func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.VirtualCluster, cache internalcache.Cache) error {
 	clustername := conversion.ToClusterKey(vc)
+	cache.AddTenant(clustername)
+
 	client, err := GetClientFromSecret(metaClient, syncerconst.KubeconfigAdminSecretName, clustername)
 	if err != nil {
 		return fmt.Errorf("failed to get client for virtual cluster %s/%s: %v", vc.Namespace, vc.Name, err)
