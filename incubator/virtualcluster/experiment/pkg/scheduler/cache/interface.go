@@ -34,5 +34,6 @@ type Cache interface {
 	AddProvision(string, string, []*Slice) error
 	RemoveProvision(string, string) error
 	UpdateClusterCapacity(string, v1.ResourceList) error
+	SnapshotForNamespaceSched(...*Namespace) (*NamespaceSchedSnapshot, error)
 	Dump() string
 }

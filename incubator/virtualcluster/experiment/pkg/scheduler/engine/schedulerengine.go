@@ -104,6 +104,8 @@ func (e *schedulerEngine) ScheduleNamespace(namespace *internalcache.Namespace) 
 	_ = GetSlicesToSchedule(namespace, oldPlacements)
 
 	var newPlacement map[string]int
+	e.cache.SnapshotForNamespaceSched(curState)
+
 	// TODO: schedule the slicesToSchedule, and update newPlacements with the result if successful
 
 	ret := namespace.DeepCopy()
