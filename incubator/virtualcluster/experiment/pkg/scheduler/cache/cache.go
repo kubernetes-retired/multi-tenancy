@@ -189,7 +189,8 @@ func (c *schedulerCache) addNamespaceToCluster(cluster, key string, num int, sli
 	clusterState, exists := c.clusters[cluster]
 	if !exists {
 		klog.Warningf("namespace %s has a placement to a cluster %s that does not exist, create a shadow cluster", key, cluster)
-		clusterState = c.addShadowCluster(cluster)
+		clusterState = NewCluster(cluster, nil, constants.ShadowClusterCapacity)
+		clusterState.shadow = true
 	}
 	var slices []*Slice
 	for i := 0; i < num; i++ {
@@ -350,13 +351,6 @@ func (c *schedulerCache) updateClusterNonAllocationStates(curCluster, newCluster
 	}
 	curCluster.provisionItems = provisionItemsCopy
 	curCluster.provision = newCluster.provision.DeepCopy()
-}
-
-func (c *schedulerCache) addShadowCluster(name string) *Cluster {
-	shadowCluster := NewCluster(name, nil, constants.ShadowClusterCapacity)
-	shadowCluster.shadow = true
-	c.clusters[name] = shadowCluster
-	return shadowCluster
 }
 
 func (c *schedulerCache) AddCluster(cluster *Cluster) error {
