@@ -81,6 +81,17 @@ func GetSlicesToSchedule(namespace *internalcache.Namespace, oldPlacements map[s
 	return slicesToSchedule
 }
 
+func GetNewPlacement(slices algorithm.SliceInfoArray) (map[string]int, error) {
+	newPlacement := make(map[string]int)
+	for _, each := range slices {
+		if each.Err != nil {
+			return nil, each.Err
+		}
+		newPlacement[each.Result] = newPlacement[each.Result] + 1
+	}
+	return newPlacement, nil
+}
+
 func (e *schedulerEngine) ScheduleNamespace(namespace *internalcache.Namespace) (*internalcache.Namespace, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -101,18 +112,23 @@ func (e *schedulerEngine) ScheduleNamespace(namespace *internalcache.Namespace) 
 		oldPlacements = curState.GetPlacementMap()
 	}
 
-	_ = GetSlicesToSchedule(namespace, oldPlacements)
-
 	var newPlacement map[string]int
-	e.cache.SnapshotForNamespaceSched(curState)
-
-	// TODO: schedule the slicesToSchedule, and update newPlacements with the result if successful
-
+	var snapshot *internalcache.NamespaceSchedSnapshot
+	var err error
+	slicesToSchedule := GetSlicesToSchedule(namespace, oldPlacements)
+	snapshot, err = e.cache.SnapshotForNamespaceSched(curState)
+	if err != nil {
+		return nil, err
+	}
+	slicesToSchedule = algorithm.ScheduleNamespaceSlices(slicesToSchedule, snapshot)
+	newPlacement, err = GetNewPlacement(slicesToSchedule)
+	if err != nil {
+		return nil, err
+	}
 	ret := namespace.DeepCopy()
 	ret.SetNewPlacements(newPlacement)
 
 	// update the cache
-	var err error
 	if curState != nil {
 		err = e.cache.UpdateNamespace(curState, ret)
 	} else {
