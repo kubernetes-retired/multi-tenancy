@@ -18,19 +18,18 @@ package serviceaccount
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 )
 
 func (c *controller) StartPatrol(stopCh <-chan struct{}) error {
@@ -52,81 +51,65 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	wg := sync.WaitGroup{}
-
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkServiceAccountsOfTenantCluster(clusterName)
-		}(clusterName)
-	}
-	wg.Wait()
-
-	pServiceAccounts, err := c.saLister.List(labels.Everything())
+	pList, err := c.saLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("error listing serviceaccounts from super master informer cache: %v", err)
+		klog.Errorf("error listing pvc from super master informer cache: %v", err)
 		return
 	}
-
-	for _, pSa := range pServiceAccounts {
-		clusterName, vNamespace := conversion.GetVirtualOwner(pSa)
-		if len(clusterName) == 0 || len(vNamespace) == 0 {
-			continue
-		}
-		shouldDelete := false
-		vSaObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pSa.Name)
-		if errors.IsNotFound(err) {
-			shouldDelete = true
-		}
-		if err == nil {
-			vSa := vSaObj.(*v1.ServiceAccount)
-			if pSa.Annotations[constants.LabelUID] != string(vSa.UID) {
-				shouldDelete = true
-				klog.Warningf("Found pServiceAccount %s/%s delegated UID is different from tenant object.", pSa.Namespace, pSa.Name)
-			}
-		}
-		if shouldDelete {
-			// vSa not found and pSa still exist, we need to delete pSa manually
-			deleteOptions := &metav1.DeleteOptions{}
-			deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pSa.UID))
-			if err = c.saClient.ServiceAccounts(pSa.Namespace).Delete(context.TODO(), pSa.Name, *deleteOptions); err != nil {
-				klog.Errorf("error deleting pServiceAccount %v/%v in super master: %v", pSa.Namespace, pSa.Name, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServiceAccounts").Inc()
-			}
-		}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
 	}
-}
 
-// ccheckServiceAccountsOfTenantCluste checks to see if serviceaccounts in specific cluster keeps consistency.
-func (c *controller) checkServiceAccountsOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
-	if err != nil {
-		klog.Errorf("error listing serviceaccounts from cluster %s informer cache: %v", clusterName, err)
-		return
-	}
-	klog.V(4).Infof("check serviceaccounts consistency in cluster %s", clusterName)
-	saList := listObj.(*v1.ServiceAccountList)
-	for i, vSa := range saList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vSa.Namespace)
-		pSa, err := c.saLister.ServiceAccounts(targetNamespace).Get(vSa.Name)
-		if errors.IsNotFound(err) {
-			// pSa not found and vSa still exists, we need to create pSa again
-			if err := c.MultiClusterController.RequeueObject(clusterName, &saList.Items[i]); err != nil {
-				klog.Errorf("error requeue vServiceAccount %v/%v in cluster %s: %v", vSa.Namespace, vSa.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServiceAccounts").Inc()
-			}
-			continue
-		}
-
+	blockedClusterSet := sets.NewString()
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
-			klog.Errorf("error getting pServiceAccount %s/%s from super master cache: %v", targetNamespace, vSa.Name, err)
+			klog.Errorf("error listing serviceaccount from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
+			continue
 		}
-		// Serviceaccounts are handled by sa controller in tenant/super master separately. The secrets of pSa and vSa are not expected to be equal
-		if pSa.Annotations[constants.LabelUID] != string(vSa.UID) {
-			klog.Warningf("Found pServiceAccount %s/%s delegated UID is different from tenant object.", pSa.Namespace, pSa.Name)
+		vList := listObj.(*v1.ServiceAccountList)
+		for i := range vList.Items {
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          differ.DefaultClusterObjectKey(&vList.Items[i], cluster),
+			})
 		}
 	}
+
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(vObj differ.ClusterObject) {
+		if err := c.MultiClusterController.RequeueObject(vObj.OwnerCluster, vObj.Object); err != nil {
+			klog.Errorf("error requeue vServiceAccount %s in cluster %s: %v", vObj.Key, vObj.GetOwnerCluster(), err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServiceAccounts").Inc()
+		}
+	}
+	d.UpdateFunc = func(vObj, pObj differ.ClusterObject) {
+		v := vObj.Object.(*v1.ServiceAccount)
+		p := pObj.Object.(*v1.ServiceAccount)
+
+		if p.Annotations[constants.LabelUID] != string(v.UID) {
+			klog.Warningf("Found pServiceAccount %s delegated UID is different from tenant object", pObj.Key)
+			d.OnDelete(pObj)
+			return
+		}
+	}
+	d.DeleteFunc = func(pObj differ.ClusterObject) {
+		deleteOptions := &metav1.DeleteOptions{}
+		deleteOptions.Preconditions = metav1.NewUIDPreconditions(string(pObj.GetUID()))
+		if err = c.saClient.ServiceAccounts(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
+			klog.Errorf("error deleting pServiceAccount %s in super master: %v", pObj.Key, err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServiceAccounts").Inc()
+		}
+	}
+
+	vSet.Difference(pSet, differ.FilteringHandler{
+		Handler:    d,
+		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+	})
 }

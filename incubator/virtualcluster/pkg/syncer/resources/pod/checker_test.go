@@ -25,11 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
-	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
+	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
@@ -64,10 +64,19 @@ func TestPodPatrol(t *testing.T) {
 		NodeName: "n1",
 	}
 	statusPending := &v1.PodStatus{
-		Phase: "Pending",
+		Phase: v1.PodPending,
+	}
+	statusFail := &v1.PodStatus{
+		Phase: v1.PodFailed,
+		Conditions: []v1.PodCondition{
+			{
+				Type:   "PodScheduled",
+				Status: "True",
+			},
+		},
 	}
 	statusReadyAndRunning := &v1.PodStatus{
-		Phase: "Running",
+		Phase: v1.PodRunning,
 		Conditions: []v1.PodCondition{
 			{
 				Type:   "PodScheduled",
@@ -87,6 +96,7 @@ func TestPodPatrol(t *testing.T) {
 		ExpectedCreatedPPods   []string
 		ExpectedUpdatedPPods   []runtime.Object
 		ExpectedUpdatedVPods   []runtime.Object
+		ExpectedNoOperation    bool
 		WaitDWS                bool // Make sure to set this flag if the test involves DWS.
 		WaitUWS                bool // Make sure to set this flag if the test involves UWS.
 	}{
@@ -100,10 +110,10 @@ func TestPodPatrol(t *testing.T) {
 		},
 		"pPod exists, vPod exists with different uid": {
 			ExistingObjectInSuper: []runtime.Object{
-				superAssignedPod("pod-2", superDefaultNSName, "12345", "n1", defaultClusterKey),
+				applyStatusToPod(superAssignedPod("pod-2", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				tenantAssignedPod("pod-2", "default", "123456", "n1"),
+				applyStatusToPod(tenantAssignedPod("pod-2", "default", "123456", "n1"), statusReadyAndRunning),
 			},
 			ExpectedDeletedPPods: []string{
 				superDefaultNSName + "/pod-2",
@@ -126,7 +136,7 @@ func TestPodPatrol(t *testing.T) {
 				applyStatusToPod(superAssignedPod("pod-4", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
 			},
 			ExistingObjectInTenant: []runtime.Object{
-				applyStatusToPod(tenantAssignedPod("pod-4", "default", "12345", "n1"), statusPending),
+				applyStatusToPod(tenantAssignedPod("pod-4", "default", "12345", "n1"), statusFail),
 				fakeNode("n1"),
 			},
 			ExpectedUpdatedVPods: []runtime.Object{
@@ -157,6 +167,18 @@ func TestPodPatrol(t *testing.T) {
 				"default/pod-6",
 			},
 		},
+		"vPod scheduled with DeletionTimestamp, pPod does not in delete": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyStatusToPod(superAssignedPod("pod", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyStatusToPod(applyDeletionTimestampToPod(tenantAssignedPod("pod", "default", "12345", "n1"), time.Now(), 30), statusReadyAndRunning),
+			},
+			ExpectedDeletedPPods: []string{
+				superDefaultNSName + "/pod",
+			},
+			WaitDWS: true,
+		},
 		"vPod scheduled without DeletionTimestamp, pPod does not exists": {
 			ExistingObjectInTenant: []runtime.Object{
 				applyStatusToPod(tenantAssignedPod("pod-7", "default", "12345", "n1"), statusReadyAndRunning),
@@ -176,6 +198,24 @@ func TestPodPatrol(t *testing.T) {
 				"default/pod-8",
 			},
 		},
+		"pPod vPod in normal case": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyStatusToPod(superAssignedPod("pod", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyStatusToPod(tenantAssignedPod("pod", "default", "12345", "n1"), statusReadyAndRunning),
+			},
+			ExpectedNoOperation: true,
+		},
+		"vPod unscheduled with provided nodename": {
+			ExistingObjectInSuper: []runtime.Object{
+				applyStatusToPod(superAssignedPod("pod", superDefaultNSName, "12345", "n1", defaultClusterKey), statusReadyAndRunning),
+			},
+			ExistingObjectInTenant: []runtime.Object{
+				applyStatusToPod(tenantAssignedPod("pod", "default", "12345", "n1"), statusPending),
+			},
+			ExpectedNoOperation: true,
+		},
 	}
 
 	for k, tc := range testcases {
@@ -183,6 +223,18 @@ func TestPodPatrol(t *testing.T) {
 			tenantActions, superActions, err := util.RunPatrol(NewPodController, testTenant, tc.ExistingObjectInSuper, tc.ExistingObjectInTenant, nil, tc.WaitDWS, tc.WaitUWS, nil)
 			if err != nil {
 				t.Errorf("%s: error running patrol: %v", k, err)
+				return
+			}
+
+			if tc.ExpectedNoOperation {
+				if len(superActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v in super cluster", k, superActions)
+					return
+				}
+				if len(tenantActions) != 0 {
+					t.Errorf("%s: Expect no operation, got %v tenant cluster", k, tenantActions)
+					return
+				}
 				return
 			}
 

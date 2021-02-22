@@ -19,20 +19,20 @@ package service
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 )
 
@@ -57,119 +57,103 @@ func (c *controller) PatrollerDo() {
 		return
 	}
 
-	wg := sync.WaitGroup{}
 	numSpecMissMatchedServices = 0
 	numStatusMissMatchedServices = 0
 	numUWMetaMissMatchedServices = 0
 
-	for _, clusterName := range clusterNames {
-		wg.Add(1)
-		go func(clusterName string) {
-			defer wg.Done()
-			c.checkServicesOfTenantCluster(clusterName)
-		}(clusterName)
-	}
-	wg.Wait()
-
-	pServices, err := c.serviceLister.List(labels.Everything())
+	pList, err := c.serviceLister.List(labels.Everything())
 	if err != nil {
-		klog.Errorf("error listing services from super master informer cache: %v", err)
+		klog.Errorf("error listing service from super master informer cache: %v", err)
 		return
 	}
+	pSet := differ.NewDiffSet()
+	for _, p := range pList {
+		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
+	}
 
-	for _, pService := range pServices {
-		clusterName, vNamespace := conversion.GetVirtualOwner(pService)
-		if len(clusterName) == 0 || len(vNamespace) == 0 {
+	blockedClusterSet := sets.NewString()
+	vSet := differ.NewDiffSet()
+	for _, cluster := range clusterNames {
+		listObj, err := c.MultiClusterController.List(cluster)
+		if err != nil {
+			klog.Errorf("error listing service from cluster %s informer cache: %v", cluster, err)
+			blockedClusterSet.Insert(cluster)
 			continue
 		}
-		shouldDelete := false
-		vServiceObj, err := c.MultiClusterController.Get(clusterName, vNamespace, pService.Name)
-		if errors.IsNotFound(err) {
-			shouldDelete = true
+		vList := listObj.(*v1.ServiceList)
+		for i := range vList.Items {
+			vSet.Insert(differ.ClusterObject{
+				Object:       &vList.Items[i],
+				OwnerCluster: cluster,
+				Key:          differ.DefaultClusterObjectKey(&vList.Items[i], cluster),
+			})
 		}
-		if err == nil {
-			vService := vServiceObj.(*v1.Service)
-			if pService.Annotations[constants.LabelUID] != string(vService.UID) {
-				shouldDelete = true
-				klog.Warningf("Found pService %s/%s delegated UID is different from tenant object.", pService.Namespace, pService.Name)
+	}
+
+	d := differ.HandlerFuncs{}
+	d.AddFunc = func(vObj differ.ClusterObject) {
+		if err := c.MultiClusterController.RequeueObject(vObj.GetOwnerCluster(), vObj.Object); err != nil {
+			klog.Errorf("error requeue vService %s in cluster %s: %v", vObj.Key, vObj.GetOwnerCluster(), err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServices").Inc()
+		}
+	}
+	d.UpdateFunc = func(vObj, pObj differ.ClusterObject) {
+		v := vObj.Object.(*v1.Service)
+		p := pObj.Object.(*v1.Service)
+
+		if p.Annotations[constants.LabelUID] != string(v.UID) {
+			klog.Warningf("Found pService %s delegated UID is different from tenant object", pObj.Key)
+			d.OnDelete(pObj)
+			return
+		}
+
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, vObj.GetOwnerCluster())
+		if err != nil {
+			klog.Errorf("fail to get cluster spec : %s: %v", vObj.GetOwnerCluster(), err)
+			return
+		}
+		updatedService := conversion.Equality(c.Config, vc).CheckServiceEquality(p, v)
+		if updatedService != nil {
+			atomic.AddUint64(&numSpecMissMatchedServices, 1)
+			klog.Warningf("spec of service %s diff in super&tenant master", pObj.Key)
+			d.OnAdd(vObj)
+			return
+		}
+
+		if isBackPopulateService(p) {
+			enqueue := false
+			updatedMeta := conversion.Equality(c.Config, vc).CheckUWObjectMetaEquality(&p.ObjectMeta, &v.ObjectMeta)
+			if updatedMeta != nil {
+				atomic.AddUint64(&numUWMetaMissMatchedServices, 1)
+				enqueue = true
+				klog.Warningf("UWObjectMeta of service %s diff in super&tenant master", pObj.Key)
 			}
-		}
-		if shouldDelete {
-			deleteOptions := metav1.NewPreconditionDeleteOptions(string(pService.UID))
-			if err = c.serviceClient.Services(pService.Namespace).Delete(context.TODO(), pService.Name, *deleteOptions); err != nil {
-				klog.Errorf("error deleting pService %s/%s in super master: %v", pService.Namespace, pService.Name, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
+			if !equality.Semantic.DeepEqual(p.Status, v.Status) {
+				enqueue = true
+				atomic.AddUint64(&numStatusMissMatchedServices, 1)
+				klog.Warningf("Status of service %s diff in super&tenant master", pObj)
+			}
+			if enqueue {
+				c.enqueueService(p)
 			}
 		}
 	}
+	d.DeleteFunc = func(pObj differ.ClusterObject) {
+		deleteOptions := metav1.NewPreconditionDeleteOptions(string(pObj.GetUID()))
+		if err = c.serviceClient.Services(pObj.GetNamespace()).Delete(context.TODO(), pObj.GetName(), *deleteOptions); err != nil {
+			klog.Errorf("error deleting pService %s in super master: %v", pObj.Key, err)
+		} else {
+			metrics.CheckerRemedyStats.WithLabelValues("DeletedOrphanSuperMasterServices").Inc()
+		}
+	}
+
+	vSet.Difference(pSet, differ.FilteringHandler{
+		Handler:    d,
+		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+	})
 
 	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
 	metrics.CheckerMissMatchStats.WithLabelValues("StatusMissMatchedServices").Set(float64(numStatusMissMatchedServices))
 	metrics.CheckerMissMatchStats.WithLabelValues("UWMetaMissMatchedServices").Set(float64(numUWMetaMissMatchedServices))
-}
-
-func (c *controller) checkServicesOfTenantCluster(clusterName string) {
-	listObj, err := c.MultiClusterController.List(clusterName)
-	if err != nil {
-		klog.Errorf("error listing services from cluster %s informer cache: %v", clusterName, err)
-		return
-	}
-	klog.V(4).Infof("check services consistency in cluster %s", clusterName)
-	svcList := listObj.(*v1.ServiceList)
-	for i, vService := range svcList.Items {
-		targetNamespace := conversion.ToSuperMasterNamespace(clusterName, vService.Namespace)
-		pService, err := c.serviceLister.Services(targetNamespace).Get(vService.Name)
-		if errors.IsNotFound(err) {
-			if err := c.MultiClusterController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
-				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServices").Inc()
-			}
-			continue
-		}
-
-		if err != nil {
-			klog.Errorf("failed to get pService %s/%s from super master cache: %v", targetNamespace, vService.Name, err)
-			continue
-		}
-
-		if pService.Annotations[constants.LabelUID] != string(vService.UID) {
-			klog.Errorf("Found pService %s/%s delegated UID is different from tenant object.", targetNamespace, pService.Name)
-			continue
-		}
-
-		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
-		if err != nil {
-			klog.Errorf("fail to get cluster spec : %s", clusterName)
-			continue
-		}
-		updatedService := conversion.Equality(c.Config, vc).CheckServiceEquality(pService, &svcList.Items[i])
-		if updatedService != nil {
-			atomic.AddUint64(&numSpecMissMatchedServices, 1)
-			klog.Warningf("spec of service %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
-			if err := c.MultiClusterController.RequeueObject(clusterName, &svcList.Items[i]); err != nil {
-				klog.Errorf("error requeue vservice %v/%v in cluster %s: %v", vService.Namespace, vService.Name, clusterName, err)
-			} else {
-				metrics.CheckerRemedyStats.WithLabelValues("RequeuedTenantServices").Inc()
-			}
-		}
-		if isBackPopulateService(pService) {
-			enqueue := false
-			updatedMeta := conversion.Equality(c.Config, vc).CheckUWObjectMetaEquality(&pService.ObjectMeta, &svcList.Items[i].ObjectMeta)
-			if updatedMeta != nil {
-				atomic.AddUint64(&numUWMetaMissMatchedServices, 1)
-				enqueue = true
-				klog.Warningf("UWObjectMeta of vService %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
-			}
-			if !equality.Semantic.DeepEqual(vService.Status, pService.Status) {
-				enqueue = true
-				atomic.AddUint64(&numStatusMissMatchedServices, 1)
-				klog.Warningf("Status of vService %v/%v diff in super&tenant master", vService.Namespace, vService.Name)
-			}
-			if enqueue {
-				c.enqueueService(pService)
-			}
-		}
-	}
 }
