@@ -105,7 +105,7 @@ func (c *controller) PatrollerDo() {
 		// Double check if the vPV is bound to the correct PVC.
 		if vPV.Spec.ClaimRef == nil || vPV.Spec.ClaimRef.Name != pPVC.Name || vPV.Spec.ClaimRef.Namespace != vNamespace {
 			klog.Errorf("vPV %v from cluster %s is not bound to the correct pvc", vPV.GetName(), clusterName)
-			numClaimMissMatchedPVs++
+			atomic.AddUint64(&numClaimMissMatchedPVs, 1)
 		}
 
 		if vPV.Annotations[constants.LabelUID] != string(pPV.UID) {
