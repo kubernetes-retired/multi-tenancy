@@ -10,9 +10,16 @@ echo
 echo "Starting at $(date +%Y-%m-%d\ %H:%M:%S)"
 
 echo
-echo "Cloning repo into ${PWD}"
-git clone https://github.com/kubernetes-sigs/multi-tenancy
-cd multi-tenancy/incubator/hnc
+# For periodics, we need to clone the repo ourselves. For postsubmits, it will
+# already be there.
+if [ ! -d "incubator/hnc" ]; then
+  echo "Not in repo; cloning into ${PWD}"
+  git clone https://github.com/kubernetes-sigs/multi-tenancy
+  cd multi-tenancy
+else
+  echo "Repo already exists in ${PWD}"
+fi
+cd incubator/hnc
 
 # No-one else seems to clean up their Kind clusters, so I don't think we need to
 # either? Does Prow handle it? To make it easier to debug locally, let's just
