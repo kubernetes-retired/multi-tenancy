@@ -17,15 +17,19 @@ limitations under the License.
 package namespace
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
 	internalcache "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/cache"
@@ -33,6 +37,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/engine"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/manager"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/util"
+	utilconst "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
@@ -90,20 +95,22 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	// requeue if scheduler cache is not synchronized
 	vcName, vcNamespace, _, err := c.MultiClusterController.GetOwnerInfo(request.ClusterName)
 	if err != nil {
-		return reconciler.Result{Requeue: true}, err
+		return reconciler.Result{}, err
 	}
 	if _, ok := scheduler.DirtyVirtualClusters.Load(fmt.Sprintf("%s/%s", vcNamespace, vcName)); ok {
-		return reconciler.Result{Requeue: true, RequeueAfter: 5 * time.Second}, fmt.Errorf("virtual cluster %s/%s is in dirty set", vcNamespace, vcName)
+		klog.Warningf("virtual cluster %s/%s is in dirty set", vcNamespace, vcName)
+		return reconciler.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	nsObj, err := c.MultiClusterController.Get(request.ClusterName, "", request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return reconciler.Result{Requeue: true}, err
+			return reconciler.Result{}, err
 		}
+		klog.Infof("namespace %s/%s is removed", request.ClusterName, request.Name)
 		// the namespace has been removed, we should update the scheduler cache
 		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
-			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
 	}
@@ -112,7 +119,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	quotaListObj, err := c.MultiClusterController.ListByObjectType(request.ClusterName, &v1.ResourceQuota{}, client.InNamespace(request.Name))
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to get resource quota in %s/%s: %v", request.ClusterName, request.Name, err)
+			return reconciler.Result{}, fmt.Errorf("failed to get resource quota in %s/%s: %v", request.ClusterName, request.Name, err)
 		}
 		quota = v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("0"),
@@ -126,14 +133,14 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	namespace := nsObj.(*v1.Namespace)
 	placements, quotaSlice, err := util.GetSchedulingInfo(namespace)
 	if err != nil {
-		return reconciler.Result{Requeue: true}, fmt.Errorf("failed to get scheduling info in %s: %v", request.Namespace, err)
+		return reconciler.Result{}, fmt.Errorf("failed to get scheduling info in %s: %v", request.Namespace, err)
 	}
 
 	expect, _ := internalcache.GetLeastFitSliceNum(quota, quotaSlice)
 	if expect == 0 {
 		// the quota is gone. we should update the scheduler cache
 		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
-			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
 
@@ -149,16 +156,39 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	// ensure the cache is consistent with the scheduled placements
 	if numSched == expect {
 		if err := c.SchedulerEngine.EnsureNamespacePlacements(candidate); err != nil {
-			return reconciler.Result{Requeue: true}, fmt.Errorf("failed to ensure namespace %s's placements in %s: %v", request.Name, request.ClusterName, err)
+			return reconciler.Result{}, fmt.Errorf("failed to ensure namespace %s's placements in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
 	}
 
 	// some (or all) slices need to be scheduled/rescheduled
-	_, err = c.SchedulerEngine.ScheduleNamespace(candidate)
+	ret, err := c.SchedulerEngine.ScheduleNamespace(candidate)
 	if err != nil {
-		return reconciler.Result{Requeue: true}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
+		return reconciler.Result{}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
 	}
-	// TODO: Update virtualcluster namespace with the scheduling result.
-	return reconciler.Result{}, nil
+	// update virtualcluster namespace with the scheduling result.
+	vcClient, err := c.MultiClusterController.GetClusterClient(request.ClusterName)
+	if err != nil {
+		return reconciler.Result{}, fmt.Errorf("failed to get vc %s's client: %v", request.ClusterName, err)
+	}
+	updatedPlacement, _ := json.Marshal(ret.GetPlacementMap())
+	clone := namespace.DeepCopy()
+	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		if clone.Annotations == nil {
+			clone.Annotations = make(map[string]string)
+		}
+		clone.Annotations[utilconst.LabelScheduledPlacements] = string(updatedPlacement)
+		_, updateErr := vcClient.CoreV1().Namespaces().Update(context.TODO(), clone, metav1.UpdateOptions{})
+		if updateErr == nil {
+			return nil
+		}
+		if got, err := vcClient.CoreV1().Namespaces().Get(context.TODO(), clone.Name, metav1.GetOptions{}); err == nil {
+			clone = got
+		}
+		return updateErr
+	})
+	if err == nil {
+		klog.Infof("Successfully schedule namespace %s/%s with placement %s", request.ClusterName, request.Name, string(updatedPlacement))
+	}
+	return reconciler.Result{}, err
 }

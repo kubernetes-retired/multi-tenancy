@@ -39,8 +39,20 @@ type ClusterUsage struct {
 	provision v1.ResourceList
 }
 
+func (u *ClusterUsage) GetCapacity() v1.ResourceList {
+	return u.capacity
+}
+
+func (u *ClusterUsage) GetMaxAlloc() v1.ResourceList {
+	return MaxAlloc(u.alloc, u.provision)
+}
+
 type NamespaceSchedSnapshot struct {
 	clusterUsageMap map[string]*ClusterUsage
+}
+
+func (s *NamespaceSchedSnapshot) GetClusterUsageMap() map[string]*ClusterUsage {
+	return s.clusterUsageMap
 }
 
 func (s *NamespaceSchedSnapshot) AddSlices(slices []*Slice) error {
