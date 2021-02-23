@@ -30,7 +30,9 @@ ENV CGO_ENABLED=0
 
 # Install Kind. Feel free to update this version whenever you're updating the
 # KRTE base image too.
-RUN go get sigs.k8s.io/kind@v0.9.0
+#
+# For the 'cd' thing, see https://maelvls.dev/go111module-everywhere/
+RUN (cd && go get sigs.k8s.io/kind@v0.9.0)
 
 # Add the actual script and set it as the default command for this image.
 COPY run-e2e-tests.sh run-e2e-tests.sh
