@@ -1,3 +1,6 @@
+# WARNING: this will shortly be deleted entirely and the Prow configs will be updated to use
+# krte directly. Original Dockerfile follows...
+# ----
 # krte includes everything needed to run Docker-in-Docker, as well as cleaning
 # it up cleanly. Note that Prow uses containerd so typically, no Docker daemon
 # will be running on the node without using the contents of this image!
@@ -20,19 +23,6 @@ FROM gcr.io/k8s-testimages/krte:v20210129-3799a64-master
 # set up the workdir in a place that makes sense for the periodics, but also
 # allows us to easily find the test script even if it's changed.
 WORKDIR /start
-
-# I'm not sure if the following two env vars are needed for HNC; they're probably not. GO111MODULE=on
-# should be redundant outside of GOPATH (which we are) on any post-1.13 version of Go (which we have);
-# I don't *think* that we need CGO either. Feel free to try out removing them when you're next playing
-# around with this image.
-ENV GO111MODULE=on
-ENV CGO_ENABLED=0
-
-# Install Kind. Feel free to update this version whenever you're updating the
-# KRTE base image too.
-#
-# For the 'cd' thing, see https://maelvls.dev/go111module-everywhere/
-RUN (cd && go get sigs.k8s.io/kind@v0.9.0)
 
 # Add the actual script and set it as the default command for this image.
 COPY run-e2e-tests.sh run-e2e-tests.sh
