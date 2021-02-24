@@ -8,6 +8,8 @@ set -euf -o pipefail
 start_time="$(date -u +%s)"
 echo
 echo "Starting at $(date +%Y-%m-%d\ %H:%M:%S)"
+echo "Environment:"
+env
 
 echo
 # For periodics, we need to clone the repo ourselves. For postsubmits, it will
