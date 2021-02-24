@@ -17,8 +17,8 @@ Based on the specification, it either creates `apiserver`, `etcd` and `controlle
 or imports an existing cluster if a valid `kubeconfig` is provided.
 
 - **syncer**: A centralized controller that populates API objects needed for Pod provisioning from every tenant control plane
-to the super master, and bidirectionally syncs the object statuses. It also periodically scans the synced objects to ensure
-the states between tenant control plane and super master are consistent.
+to the super cluster, and bidirectionally syncs the object statuses. It also periodically scans the synced objects to ensure
+the states between tenant control plane and super cluster are consistent.
 
 - **vn-agent**: A node daemon that proxies all tenant kubelet API requests to the kubelet process that running
 in the node. It ensures each tenant can only access its own Pods in the node.
