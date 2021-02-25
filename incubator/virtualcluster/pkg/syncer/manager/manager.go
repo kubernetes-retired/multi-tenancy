@@ -102,7 +102,7 @@ func (b *BaseResourceSyncer) PatrollerDo() {
 }
 
 func (b *BaseResourceSyncer) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(b.MultiClusterController)
+	return listener.NewMCControllerListener(b.MultiClusterController, mc.WatchOptions{AttachUID: true})
 }
 
 func (b *BaseResourceSyncer) GetMCController() *mc.MultiClusterController {
