@@ -25,6 +25,7 @@ import (
 type EnqueueRequestForObject struct {
 	ClusterName string
 	Queue       Queue
+	AttachUID   bool
 }
 
 func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
@@ -37,7 +38,9 @@ func (e *EnqueueRequestForObject) enqueue(obj interface{}) {
 	r.ClusterName = e.ClusterName
 	r.Namespace = o.GetNamespace()
 	r.Name = o.GetName()
-	r.UID = string(o.GetUID())
+	if e.AttachUID {
+		r.UID = string(o.GetUID())
+	}
 
 	e.Queue.Add(r)
 }

@@ -149,6 +149,7 @@ func NewMCController(objectType, objectListType runtime.Object, rc reconciler.DW
 // WatchOptions is used as an argument of WatchResource methods (just a placeholder for now).
 // TODO: consider implementing predicates.
 type WatchOptions struct {
+	AttachUID bool // the object UID will be added to the reconciler request if it is true
 }
 
 // WatchClusterResource configures the Controller to watch resources of the same Kind as objectType,
@@ -165,7 +166,7 @@ func (c *MultiClusterController) WatchClusterResource(cluster ClusterInterface, 
 		return nil
 	}
 
-	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue}
+	h := &handler.EnqueueRequestForObject{ClusterName: cluster.GetClusterName(), Queue: c.Queue, AttachUID: o.AttachUID}
 	return cluster.AddEventHandler(c.objectType, h)
 }
 

@@ -56,6 +56,7 @@ func TestEnqueueRequestForObject(t *testing.T) {
 	queue := &EnqueueRequestForObject{
 		ClusterName: clusterName,
 		Queue:       internalQueue,
+		AttachUID:   true,
 	}
 
 	queue.OnAdd(invalidAPIObject{A: "a"})

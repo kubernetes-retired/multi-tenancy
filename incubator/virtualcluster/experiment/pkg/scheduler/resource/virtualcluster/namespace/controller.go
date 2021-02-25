@@ -82,7 +82,7 @@ func (c *controller) Start(stopCh <-chan struct{}) error {
 }
 
 func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.MultiClusterController)
+	return listener.NewMCControllerListener(c.MultiClusterController, mc.WatchOptions{})
 }
 
 func (c *controller) GetMCController() *mc.MultiClusterController {

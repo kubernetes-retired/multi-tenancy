@@ -76,7 +76,7 @@ func (c *controller) GetMCController() *mc.MultiClusterController {
 }
 
 func (c *controller) GetListener() listener.ClusterChangeListener {
-	return listener.NewMCControllerListener(c.MultiClusterController)
+	return listener.NewMCControllerListener(c.MultiClusterController, mc.WatchOptions{})
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
