@@ -82,3 +82,15 @@ func fitSlice(request v1.ResourceList, cluster *internalcache.ClusterUsage) erro
 	}
 	return nil
 }
+
+func SchedulePod(pod *internalcache.Pod, snapshot *internalcache.PodSchedSnapshot) (string, error) {
+	var err error
+	// First fit
+	for name, cluster := range snapshot.GetClusterUsageMap() {
+		if err := fitSlice(pod.GetRequest(), cluster); err == nil {
+			return name, nil
+		}
+	}
+	// return the last error
+	return "", err
+}

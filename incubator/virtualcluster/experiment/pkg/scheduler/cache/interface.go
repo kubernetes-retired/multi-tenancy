@@ -29,11 +29,13 @@ type Cache interface {
 	UpdateNamespace(*Namespace, *Namespace) error
 	AddCluster(*Cluster) error
 	RemoveCluster(string) error
+	GetPod(string) *Pod
 	AddPod(*Pod) error
 	RemovePod(*Pod) error
 	AddProvision(string, string, []*Slice) error
 	RemoveProvision(string, string) error
 	UpdateClusterCapacity(string, v1.ResourceList) error
 	SnapshotForNamespaceSched(...*Namespace) (*NamespaceSchedSnapshot, error)
+	SnapshotForPodSched(pod *Pod) (*PodSchedSnapshot, error)
 	Dump() string
 }

@@ -173,7 +173,12 @@ func (c *schedulerCache) RemovePod(pod *Pod) error {
 	delete(c.pods, key)
 
 	return nil
+}
 
+func (c *schedulerCache) GetPod(key string) *Pod {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.pods[key]
 }
 
 func (c *schedulerCache) GetNamespace(key string) *Namespace {
@@ -230,7 +235,7 @@ func (c *schedulerCache) addNamespaceWithoutLock(namespace *Namespace) error {
 
 	expect, err := GetLeastFitSliceNum(clone.quota, clone.quotaSlice)
 	if err != nil {
-		return fmt.Errorf("fail to get the number of slices for namespace %s", key)
+		return fmt.Errorf("fail to get the number of slices for namespace %s: %v", key, err)
 	}
 
 	sched := 0
@@ -432,6 +437,15 @@ func (c *schedulerCache) Dump() string {
 	out.WriteString("\n")
 	out.WriteString("-- Dump Namespaces --")
 	for k, v := range c.namespaces {
+		out.WriteByte('\n')
+		out.WriteString(k)
+		out.WriteByte(' ')
+		out.WriteString(v.Dump())
+	}
+
+	out.WriteString("\n")
+	out.WriteString("-- Dump Pods --")
+	for k, v := range c.pods {
 		out.WriteByte('\n')
 		out.WriteString(k)
 		out.WriteByte(' ')

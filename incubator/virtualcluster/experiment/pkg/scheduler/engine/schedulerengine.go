@@ -31,6 +31,9 @@ type Engine interface {
 	ScheduleNamespace(*internalcache.Namespace) (*internalcache.Namespace, error)
 	EnsureNamespacePlacements(*internalcache.Namespace) error
 	DeScheduleNamespace(key string) error
+	SchedulePod(pod *internalcache.Pod) (*internalcache.Pod, error)
+	DeSchedulePod(key string) error
+	GetPod(key string) *internalcache.Pod
 }
 
 var _ Engine = &schedulerEngine{}
@@ -159,4 +162,49 @@ func (e *schedulerEngine) EnsureNamespacePlacements(namespace *internalcache.Nam
 		return e.cache.UpdateNamespace(ns, namespace)
 	}
 	return e.cache.AddNamespace(namespace)
+}
+
+func (e *schedulerEngine) SchedulePod(pod *internalcache.Pod) (*internalcache.Pod, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	nsKey := pod.GetNamespaceKey()
+	ns := e.cache.GetNamespace(nsKey)
+	if ns == nil {
+		return nil, fmt.Errorf("namespace %s has not been schduled", nsKey)
+	}
+
+	snapshot, err := e.cache.SnapshotForPodSched(pod)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := algorithm.SchedulePod(pod, snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := pod.DeepCopy()
+	ret.SetCluster(result)
+
+	err = e.cache.AddPod(ret)
+
+	return ret, err
+}
+
+func (e *schedulerEngine) DeSchedulePod(key string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if pod := e.cache.GetPod(key); pod != nil {
+		e.cache.RemovePod(pod)
+	} else {
+		klog.V(4).Infof("the pod %s has been removed, deschedule is not needed", key)
+	}
+	return nil
+}
+
+func (e *schedulerEngine) GetPod(key string) *internalcache.Pod {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.cache.GetPod(key)
 }

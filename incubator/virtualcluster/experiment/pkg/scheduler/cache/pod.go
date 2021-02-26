@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"encoding/json"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -44,6 +45,22 @@ func NewPod(owner, namespace, name, uid, cluster string, request v1.ResourceList
 	}
 }
 
+func (p *Pod) GetUID() string {
+	return p.uid
+}
+
+func (p *Pod) GetCluster() string {
+	return p.cluster
+}
+
+func (p *Pod) GetRequest() v1.ResourceList {
+	return p.request
+}
+
+func (p *Pod) SetCluster(cluster string) {
+	p.cluster = cluster
+}
+
 func (p *Pod) DeepCopy() *Pod {
 	return NewPod(p.owner, p.namespace, p.name, p.uid, p.cluster, p.request.DeepCopy())
 }
@@ -53,5 +70,22 @@ func (p *Pod) GetNamespaceKey() string {
 }
 
 func (p *Pod) GetKey() string {
-	return fmt.Sprintf("%s/%s", p.GetNamespaceKey(), p.uid)
+	return fmt.Sprintf("%s/%s", p.GetNamespaceKey(), p.name)
+}
+
+func (p *Pod) Dump() string {
+	o := map[string]interface{}{
+		"Owner":     p.owner,
+		"Namespace": p.namespace,
+		"Name":      p.name,
+		"UID":       p.uid,
+		"Cluster":   p.cluster,
+		"Request":   p.request,
+	}
+
+	b, err := json.MarshalIndent(o, "", "\t")
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

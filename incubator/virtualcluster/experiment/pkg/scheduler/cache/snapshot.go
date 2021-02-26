@@ -135,3 +135,93 @@ func (c *schedulerCache) SnapshotForNamespaceSched(nsToRemove ...*Namespace) (*N
 	}
 	return s, nil
 }
+
+type PodSchedSnapshot struct {
+	clusterUsageMap map[string]*ClusterUsage
+}
+
+func NewPodSchedSnapshot() *PodSchedSnapshot {
+	return &PodSchedSnapshot{
+		clusterUsageMap: make(map[string]*ClusterUsage),
+	}
+}
+
+func (s *PodSchedSnapshot) GetClusterUsageMap() map[string]*ClusterUsage {
+	return s.clusterUsageMap
+}
+
+func (s *PodSchedSnapshot) AddUsage(cluster string, usage v1.ResourceList) error {
+	cur, exists := s.clusterUsageMap[cluster]
+	if !exists {
+		return fmt.Errorf("slices are added to nonexistence cluster")
+	}
+	for k, v := range usage {
+		val := cur.alloc[k].DeepCopy()
+		val.Add(v)
+		cur.alloc[k] = val
+	}
+	return nil
+}
+
+func (c *schedulerCache) SnapshotForPodSched(pod *Pod) (*PodSchedSnapshot, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	s := NewPodSchedSnapshot()
+	nsKey := pod.GetNamespaceKey()
+
+	ns := c.namespaces[nsKey]
+	if ns == nil {
+		return nil, fmt.Errorf("ns %s not found", nsKey)
+	}
+
+	for _, place := range ns.schedule {
+		capability := v1.ResourceList{}
+		alloc := v1.ResourceList{}
+
+		for k, v := range ns.quotaSlice {
+			val := v.DeepCopy()
+			val.Set(v.Value() * int64(place.num))
+			capability[k] = val
+			val2 := v.DeepCopy()
+			val2.Set(0)
+			alloc[k] = val2
+		}
+		s.clusterUsageMap[place.cluster] = &ClusterUsage{
+			capacity: capability,
+			alloc:    alloc,
+		}
+	}
+
+	// accumulate allocation for each pod
+	for _, cluster := range c.clusters {
+		for podName := range cluster.pods[nsKey] {
+			podKey := fmt.Sprintf("%s/%s", nsKey, podName)
+
+			// in case of rescheduling, the old pod needs to be removed from the snapshot
+			if podKey == pod.GetKey() {
+				continue
+			}
+
+			pod, ok := c.pods[podKey]
+			if !ok {
+				return nil, fmt.Errorf("cache is mess up, pod %s exists in ns but not in index", podKey)
+			}
+			rs, ok := s.clusterUsageMap[pod.cluster]
+			if !ok {
+				return nil, fmt.Errorf("cache is mess up, pod %s cluster %s is missing in ns %s", podKey, pod.cluster, nsKey)
+			}
+
+			for k, v := range pod.request {
+				a, ok := rs.alloc[k]
+				if !ok {
+					continue
+				}
+				a.Add(v)
+				rs.alloc[k] = a
+			}
+		}
+	}
+
+	return s, nil
+}
