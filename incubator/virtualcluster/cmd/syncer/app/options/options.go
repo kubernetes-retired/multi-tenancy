@@ -105,7 +105,7 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs.StringVar(&o.SyncerName, "syncer-name", o.SyncerName, "Syncer name (default vc).")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
-	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress)")
+	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress, crd)")
 	fs.Int32Var(&o.ComponentConfig.VNAgentPort, "vn-agent-port", 10550, "Port the vn-agent listens on")
 	fs.Var(cliflag.NewMapStringBool(&o.ComponentConfig.FeatureGates), "feature-gates", "A set of key=value pairs that describe featuregate gates for various features. ")
 

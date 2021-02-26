@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -211,6 +212,12 @@ func BuildVirtualPriorityClass(cluster string, pPriorityClass *v1scheduling.Prio
 	vPriorityClass := pPriorityClass.DeepCopy()
 	ResetMetadata(vPriorityClass)
 	return vPriorityClass
+}
+
+func BuildVirtualCRD(cluster string, pCRD *v1beta1.CustomResourceDefinition) *v1beta1.CustomResourceDefinition {
+	vCRD := pCRD.DeepCopy()
+	ResetMetadata(vCRD)
+	return vCRD
 }
 
 func BuildVirtualPersistentVolume(cluster, vcNS, vcName string, pPV *v1.PersistentVolume, vPVC *v1.PersistentVolumeClaim) *v1.PersistentVolume {

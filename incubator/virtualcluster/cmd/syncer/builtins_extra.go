@@ -19,4 +19,5 @@ package main
 import (
 	_ "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/ingress"
 	_ "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/priorityclass"
+	_ "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/resources/crd"
 )
