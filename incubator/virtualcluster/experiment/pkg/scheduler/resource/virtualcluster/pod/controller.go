@@ -14,21 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package namespace
+package pod
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler"
 	schedulerconfig "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/experiment/pkg/scheduler/apis/config"
@@ -46,13 +43,13 @@ import (
 
 func init() {
 	scheduler.VirtualClusterResourceRegister.Register(&plugin.Registration{
-		ID: "namespace",
+		ID: "pod",
 		InitFn: func(ctx *plugin.InitContext) (interface{}, error) {
 			v := ctx.Context.Value(constants.InternalSchedulerEngine)
 			if v == nil {
 				return nil, fmt.Errorf("cannot found schedulercache in context")
 			}
-			return NewNamespaceController(v.(engine.Engine), ctx.Config.(*schedulerconfig.SchedulerConfiguration))
+			return NewPodController(v.(engine.Engine), ctx.Config.(*schedulerconfig.SchedulerConfiguration))
 		},
 	})
 }
@@ -63,14 +60,14 @@ type controller struct {
 	MultiClusterController *mc.MultiClusterController
 }
 
-func NewNamespaceController(schedulerEngine engine.Engine, config *schedulerconfig.SchedulerConfiguration) (manager.ResourceWatcher, error) {
+func NewPodController(schedulerEngine engine.Engine, config *schedulerconfig.SchedulerConfiguration) (manager.ResourceWatcher, error) {
 	c := &controller{
 		SchedulerEngine: schedulerEngine,
 		Config:          config,
 	}
 
 	var err error
-	c.MultiClusterController, err = mc.NewMCController(&v1.Namespace{}, &v1.NamespaceList{}, c)
+	c.MultiClusterController, err = mc.NewMCController(&v1.Pod{}, &v1.PodList{}, c)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +87,7 @@ func (c *controller) GetMCController() *mc.MultiClusterController {
 }
 
 func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, error) {
-	klog.Infof("reconcile namespace %s for virtual cluster %s", request.Name, request.ClusterName)
+	klog.Infof("reconcile pod %s for virtual cluster %s", request.Name, request.ClusterName)
 
 	// requeue if scheduler cache is not synchronized
 	vcName, vcNamespace, _, err := c.MultiClusterController.GetOwnerInfo(request.ClusterName)
@@ -102,93 +99,64 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		return reconciler.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	nsObj, err := c.MultiClusterController.Get(request.ClusterName, "", request.Name)
+	podKey := fmt.Sprintf("%s/%s/%s", request.ClusterName, request.Namespace, request.Name)
+	podObj, err := c.MultiClusterController.Get(request.ClusterName, request.Namespace, request.Name)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconciler.Result{}, err
 		}
-		klog.Infof("namespace %s/%s is removed", request.ClusterName, request.Name)
-		// the namespace has been removed, we should update the scheduler cache
-		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
-			return reconciler.Result{}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
+
+		if err := c.SchedulerEngine.DeSchedulePod(podKey); err != nil {
+			return reconciler.Result{}, fmt.Errorf("failed to unreserve pod %s in %s: %v", request.Name, request.ClusterName, err)
 		}
 		return reconciler.Result{}, nil
 	}
 
-	var quota v1.ResourceList
-	quotaListObj, err := c.MultiClusterController.ListByObjectType(request.ClusterName, &v1.ResourceQuota{}, client.InNamespace(request.Name))
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconciler.Result{}, fmt.Errorf("failed to get resource quota in %s/%s: %v", request.ClusterName, request.Name, err)
-		}
-		quota = v1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("0"),
-			v1.ResourceMemory: resource.MustParse("0"),
-		}
-	} else {
-		quotaList := quotaListObj.(*v1.ResourceQuotaList)
-		quota = util.GetMaxQuota(quotaList)
-	}
-
-	namespace := nsObj.(*v1.Namespace)
-	placements, quotaSlice, err := util.GetSchedulingInfo(namespace)
-	if err != nil {
-		return reconciler.Result{}, fmt.Errorf("failed to get scheduling info in %s: %v", request.Name, err)
-	}
-
-	expect, _ := internalcache.GetLeastFitSliceNum(quota, quotaSlice)
-	if expect == 0 {
-		// the quota is gone. we should update the scheduler cache
-		if err := c.SchedulerEngine.DeScheduleNamespace(fmt.Sprintf("%s/%s", request.ClusterName, request.Name)); err != nil {
-			return reconciler.Result{}, fmt.Errorf("failed to unreserve namespace %s in %s: %v", request.Name, request.ClusterName, err)
-		}
-		return reconciler.Result{}, nil
-
-	}
-	numSched := 0
-	var schedule []*internalcache.Placement
-	for k, v := range placements {
-		numSched = numSched + v
-		schedule = append(schedule, internalcache.NewPlacement(k, v))
-	}
-
-	candidate := internalcache.NewNamespace(request.ClusterName, request.Name, namespace.GetLabels(), quota, quotaSlice, schedule)
-	// ensure the cache is consistent with the scheduled placements
-	if numSched == expect {
-		if err := c.SchedulerEngine.EnsureNamespacePlacements(candidate); err != nil {
-			return reconciler.Result{}, fmt.Errorf("failed to ensure namespace %s's placements in %s: %v", request.Name, request.ClusterName, err)
-		}
+	pod := podObj.(*v1.Pod)
+	if c.skipPodSchedule(pod) {
+		// skip irrelevant pod update event
+		// we assume pod's scheduling info won't be manually mutated during pod running by now.
 		return reconciler.Result{}, nil
 	}
 
-	// some (or all) slices need to be scheduled/rescheduled
-	ret, err := c.SchedulerEngine.ScheduleNamespace(candidate)
+	candidate := internalcache.NewPod(request.ClusterName, pod.Namespace, pod.Name, string(pod.UID), "", util.GetPodRequirements(pod))
+	ret, err := c.SchedulerEngine.SchedulePod(candidate)
 	if err != nil {
-		return reconciler.Result{}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
+		return reconciler.Result{}, fmt.Errorf("failed to schedule pod %s in %s: %v", request.Name, request.ClusterName, err)
 	}
-	// update virtualcluster namespace with the scheduling result.
+
+	// update virtualcluster pod with the scheduling result.
 	vcClient, err := c.MultiClusterController.GetClusterClient(request.ClusterName)
 	if err != nil {
 		return reconciler.Result{}, fmt.Errorf("failed to get vc %s's client: %v", request.ClusterName, err)
 	}
-	updatedPlacement, _ := json.Marshal(ret.GetPlacementMap())
-	clone := namespace.DeepCopy()
+
+	clone := pod.DeepCopy()
 	err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		if clone.Annotations == nil {
 			clone.Annotations = make(map[string]string)
 		}
-		clone.Annotations[utilconst.LabelScheduledPlacements] = string(updatedPlacement)
-		_, updateErr := vcClient.CoreV1().Namespaces().Update(context.TODO(), clone, metav1.UpdateOptions{})
+		clone.Annotations[utilconst.LabelScheduledCluster] = ret.GetCluster()
+		_, updateErr := vcClient.CoreV1().Pods(clone.Namespace).Update(context.TODO(), clone, metav1.UpdateOptions{})
 		if updateErr == nil {
 			return nil
 		}
-		if got, err := vcClient.CoreV1().Namespaces().Get(context.TODO(), clone.Name, metav1.GetOptions{}); err == nil {
+		if got, err := vcClient.CoreV1().Pods(clone.Namespace).Get(context.TODO(), clone.Name, metav1.GetOptions{}); err == nil {
 			clone = got
 		}
 		return updateErr
 	})
 	if err == nil {
-		klog.Infof("Successfully schedule namespace %s/%s with placement %s", request.ClusterName, request.Name, string(updatedPlacement))
+		klog.Infof("Successfully schedule pod %s with placement %s", ret.GetKey(), ret.GetCluster())
 	}
 	return reconciler.Result{}, err
+}
+
+func (c *controller) skipPodSchedule(pod *v1.Pod) bool {
+	if pod.DeletionTimestamp != nil {
+		klog.Infof("skip schedule deleting pod %s/%s", pod.GetNamespace(), pod.GetName())
+		return true
+	}
+
+	return util.GetPodSchedulingInfo(pod) != ""
 }

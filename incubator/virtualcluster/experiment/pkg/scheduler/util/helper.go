@@ -69,7 +69,7 @@ func GetClientFromSecret(metaClient clientset.Interface, name, namespace string)
 func GetSuperClusterID(client clientset.Interface) (string, error) {
 	cfg, err := client.CoreV1().ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
 	if err != nil {
-		return "", fmt.Errorf("failed to get super cluster info configmap in kube-system")
+		return "", fmt.Errorf("failed to get super cluster info configmap in kube-system: %v", err)
 	}
 	id, ok := cfg.Data[utilconst.SuperClusterIDKey]
 	if !ok {
@@ -287,6 +287,11 @@ func GetSchedulingInfo(namespace *v1.Namespace) (map[string]int, v1.ResourceList
 		quotaSlice = utilconst.DefaultNamespaceSlice
 	}
 	return placements, quotaSlice, nil
+}
+
+func GetPodSchedulingInfo(pod *v1.Pod) string {
+	cluster, _ := pod.GetAnnotations()[utilconst.LabelScheduledCluster]
+	return cluster
 }
 
 func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.VirtualCluster, cache internalcache.Cache) error {
