@@ -298,7 +298,7 @@ func TestDeepCopy(t *testing.T) {
 	}
 
 	cluster := NewCluster(defaultCluster, map[string]string{"k": "v"}, defaultCapacity)
-	pod := NewPod("tenant", defaultNamespace, "pod-1", "123456", defaultCluster, defaultRequest)
+	pod := NewPod("tenant", defaultNamespace, "pod-1", defaultCluster, defaultRequest)
 
 	cluster.AddPod(pod)
 	slices := []*Slice{NewSlice(defaultNamespace, defaultQuotaSlice, defaultCluster)}

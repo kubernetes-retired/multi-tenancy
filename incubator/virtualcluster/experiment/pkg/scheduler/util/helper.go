@@ -372,7 +372,7 @@ func SyncVirtualClusterState(metaClient clientset.Interface, vc *v1alpha1.Virtua
 				// TODO: Pod scheduling result is inconsistent, we need to delete the Pod or send warnings.
 				continue
 			}
-			cPod := internalcache.NewPod(clustername, each.Name, pod.Name, string(pod.UID), supercluster, GetPodRequirements(&pod))
+			cPod := internalcache.NewPod(clustername, each.Name, pod.Name, supercluster, GetPodRequirements(&pod))
 			// If the pod already exists, AddPod will update the cache with latest schedule.
 			if err := cache.AddPod(cPod); err != nil {
 				return fmt.Errorf("failed to add pod to cache: %s/%s/%s with error %v", clustername, each.Name, pod.Name, err)
