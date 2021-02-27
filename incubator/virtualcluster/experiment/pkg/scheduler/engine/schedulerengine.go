@@ -33,7 +33,6 @@ type Engine interface {
 	DeScheduleNamespace(key string) error
 	SchedulePod(pod *internalcache.Pod) (*internalcache.Pod, error)
 	DeSchedulePod(key string) error
-	GetPod(key string) *internalcache.Pod
 }
 
 var _ Engine = &schedulerEngine{}
@@ -201,10 +200,4 @@ func (e *schedulerEngine) DeSchedulePod(key string) error {
 		klog.V(4).Infof("the pod %s has been removed, deschedule is not needed", key)
 	}
 	return nil
-}
-
-func (e *schedulerEngine) GetPod(key string) *internalcache.Pod {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.cache.GetPod(key)
 }

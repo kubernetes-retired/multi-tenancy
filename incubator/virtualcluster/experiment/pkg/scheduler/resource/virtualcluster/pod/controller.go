@@ -119,7 +119,7 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 		return reconciler.Result{}, nil
 	}
 
-	candidate := internalcache.NewPod(request.ClusterName, pod.Namespace, pod.Name, string(pod.UID), "", util.GetPodRequirements(pod))
+	candidate := internalcache.NewPod(request.ClusterName, pod.Namespace, pod.Name, "", util.GetPodRequirements(pod))
 	ret, err := c.SchedulerEngine.SchedulePod(candidate)
 	if err != nil {
 		return reconciler.Result{}, fmt.Errorf("failed to schedule pod %s in %s: %v", request.Name, request.ClusterName, err)

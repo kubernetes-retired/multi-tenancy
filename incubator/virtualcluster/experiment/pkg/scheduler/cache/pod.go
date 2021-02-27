@@ -27,26 +27,20 @@ type Pod struct {
 	owner     string //tenant cluster name
 	namespace string
 	name      string
-	uid       string
 
 	request v1.ResourceList
 
 	cluster string // the scheduled cluster
 }
 
-func NewPod(owner, namespace, name, uid, cluster string, request v1.ResourceList) *Pod {
+func NewPod(owner, namespace, name, cluster string, request v1.ResourceList) *Pod {
 	return &Pod{
 		owner:     owner,
 		namespace: namespace,
 		name:      name,
-		uid:       uid,
 		request:   request,
 		cluster:   cluster,
 	}
-}
-
-func (p *Pod) GetUID() string {
-	return p.uid
 }
 
 func (p *Pod) GetCluster() string {
@@ -62,7 +56,7 @@ func (p *Pod) SetCluster(cluster string) {
 }
 
 func (p *Pod) DeepCopy() *Pod {
-	return NewPod(p.owner, p.namespace, p.name, p.uid, p.cluster, p.request.DeepCopy())
+	return NewPod(p.owner, p.namespace, p.name, p.cluster, p.request.DeepCopy())
 }
 
 func (p *Pod) GetNamespaceKey() string {
@@ -78,7 +72,6 @@ func (p *Pod) Dump() string {
 		"Owner":     p.owner,
 		"Namespace": p.namespace,
 		"Name":      p.name,
-		"UID":       p.uid,
 		"Cluster":   p.cluster,
 		"Request":   p.request,
 	}
