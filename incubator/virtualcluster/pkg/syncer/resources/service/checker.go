@@ -71,13 +71,13 @@ func (c *controller) PatrollerDo() {
 		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
 	}
 
-	blockedClusterSet := sets.NewString()
+	knownClusterSet := sets.NewString(clusterNames...)
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
 		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing service from cluster %s informer cache: %v", cluster, err)
-			blockedClusterSet.Insert(cluster)
+			knownClusterSet.Insert(cluster)
 			continue
 		}
 		vList := listObj.(*v1.ServiceList)
@@ -150,7 +150,7 @@ func (c *controller) PatrollerDo() {
 
 	vSet.Difference(pSet, differ.FilteringHandler{
 		Handler:    d,
-		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+		FilterFunc: differ.DefaultDifferFilter(knownClusterSet),
 	})
 
 	metrics.CheckerMissMatchStats.WithLabelValues("SpecMissMatchedServices").Set(float64(numSpecMissMatchedServices))
