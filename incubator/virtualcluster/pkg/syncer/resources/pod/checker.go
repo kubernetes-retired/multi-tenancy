@@ -152,13 +152,13 @@ func (c *controller) PatrollerDo() {
 		pSet.Insert(differ.ClusterObject{Object: p, Key: differ.DefaultClusterObjectKey(p, "")})
 	}
 
-	blockedClusterSet := sets.NewString()
+	knownClusterSet := sets.NewString(clusterNames...)
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
 		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing pod from cluster %s informer cache: %v", cluster, err)
-			blockedClusterSet.Insert(cluster)
+			knownClusterSet.Insert(cluster)
 			continue
 		}
 		vList := listObj.(*v1.PodList)
@@ -284,7 +284,7 @@ func (c *controller) PatrollerDo() {
 					c.updateClusterVNodePodMap(obj.GetOwnerCluster(), vPod.Spec.NodeName, string(vPod.UID), reconciler.UpdateEvent)
 				}
 			}
-			return differ.DefaultDifferFilter(blockedClusterSet)(obj)
+			return differ.DefaultDifferFilter(knownClusterSet)(obj)
 		},
 	})
 

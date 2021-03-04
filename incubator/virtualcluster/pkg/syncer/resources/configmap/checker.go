@@ -66,13 +66,13 @@ func (c *controller) PatrollerDo() {
 		pSet.Insert(differ.ClusterObject{Object: pCM, Key: differ.DefaultClusterObjectKey(pCM, "")})
 	}
 
-	blockedClusterSet := sets.NewString()
+	knownClusterSet := sets.NewString(clusterNames...)
 	vSet := differ.NewDiffSet()
 	for _, cluster := range clusterNames {
 		listObj, err := c.MultiClusterController.List(cluster)
 		if err != nil {
 			klog.Errorf("error listing configmaps from cluster %s informer cache: %v", cluster, err)
-			blockedClusterSet.Insert(cluster)
+			knownClusterSet.Delete(cluster)
 			continue
 		}
 		cmList := listObj.(*v1.ConfigMapList)
@@ -125,7 +125,7 @@ func (c *controller) PatrollerDo() {
 
 	vSet.Difference(pSet, differ.FilteringHandler{
 		Handler:    configMapDiffer,
-		FilterFunc: differ.DefaultDifferFilter(blockedClusterSet),
+		FilterFunc: differ.DefaultDifferFilter(knownClusterSet),
 	})
 
 	metrics.CheckerMissMatchStats.WithLabelValues("MissMatchedConfigMaps").Set(float64(numMissMatchedConfigMaps))

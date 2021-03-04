@@ -86,19 +86,19 @@ func (h FilteringHandler) OnDelete(obj ClusterObject) {
 	h.Handler.OnDelete(obj)
 }
 
-func DefaultDifferFilter(blockedClusterSet sets.String) func(obj ClusterObject) bool {
+func DefaultDifferFilter(knownClusterSet sets.String) func(obj ClusterObject) bool {
 	return func(obj ClusterObject) bool {
 		// vObj
 		if obj.OwnerCluster != "" {
-			if blockedClusterSet.Has(obj.OwnerCluster) {
-				return false
+			if knownClusterSet.Has(obj.OwnerCluster) {
+				return true
 			}
-			return true
+			return false
 		}
 
 		// pObj
 		clusterName, vNamespace := conversion.GetVirtualOwner(obj)
-		if clusterName != "" && vNamespace != "" && !blockedClusterSet.Has(clusterName) {
+		if clusterName != "" && vNamespace != "" && knownClusterSet.Has(clusterName) {
 			return true
 		}
 		return false
