@@ -49,7 +49,7 @@ func Equality(syncerConfig *config.SyncerConfiguration, vc *v1alpha1.VirtualClus
 // notes: we only care about the metadata and pod spec update.
 func (e vcEquality) CheckPodEquality(pPod, vPod *v1.Pod) *v1.Pod {
 	var updatedPod *v1.Pod
-	updatedMeta := e.checkDWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
+	updatedMeta := e.CheckDWObjectMetaEquality(&pPod.ObjectMeta, &vPod.ObjectMeta)
 	if updatedMeta != nil {
 		if updatedPod == nil {
 			updatedPod = pPod.DeepCopy()
@@ -114,7 +114,7 @@ func CheckDWPodConditionEquality(pPod, vPod *v1.Pod) *v1.PodStatus {
 	return nil
 }
 
-// checkDWObjectMetaEquality check whether super master object meta and virtual object meta
+// CheckDWObjectMetaEquality check whether super master object meta and virtual object meta
 // are logically equal. The source of truth is virtual object.
 // Reference to ObjectMetaUpdateValidation: https://github.com/kubernetes/kubernetes/blob/release-1.15/staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go#L227
 // Mutable fields:
@@ -126,7 +126,7 @@ func CheckDWPodConditionEquality(pPod, vPod *v1.Pod) *v1.PodStatus {
 // - finalizers: ignore. finalizer is observed by tenant controller.
 // - clusterName
 // - managedFields: ignore. observed by tenant. https://kubernetes.io/docs/reference/using-api/api-concepts/#field-management
-func (e vcEquality) checkDWObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *metav1.ObjectMeta {
+func (e vcEquality) CheckDWObjectMetaEquality(pObj, vObj *metav1.ObjectMeta) *metav1.ObjectMeta {
 	var updatedObj *metav1.ObjectMeta
 	if pObj.GenerateName != vObj.GenerateName {
 		if updatedObj == nil {
@@ -448,7 +448,7 @@ func (e vcEquality) checkInt64Equality(pObj, vObj *int64) (*int64, bool) {
 // are logically equal. The source of truth is virtual object.
 func (e vcEquality) CheckConfigMapEquality(pObj, vObj *v1.ConfigMap) *v1.ConfigMap {
 	var updated *v1.ConfigMap
-	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	updatedMeta := e.CheckDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
 	if updatedMeta != nil {
 		if updated == nil {
 			updated = pObj.DeepCopy()
@@ -523,7 +523,7 @@ func (e vcEquality) CheckSecretEquality(pObj, vObj *v1.Secret) *v1.Secret {
 	}
 
 	var updated *v1.Secret
-	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	updatedMeta := e.CheckDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
 	if updatedMeta != nil {
 		if updated == nil {
 			updated = pObj.DeepCopy()
@@ -648,7 +648,7 @@ func filterNodePort(svc *v1.Service) *v1.ServiceSpec {
 
 func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 	var updated *v1.Service
-	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	updatedMeta := e.CheckDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
 	if updatedMeta != nil {
 		if updated == nil {
 			updated = pObj.DeepCopy()
@@ -679,7 +679,7 @@ func (e vcEquality) CheckServiceEquality(pObj, vObj *v1.Service) *v1.Service {
 func (e vcEquality) CheckPVCEquality(pObj, vObj *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	var updated *v1.PersistentVolumeClaim
 	// PVC meta can be changed
-	updatedMeta := e.checkDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	updatedMeta := e.CheckDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
 	if updatedMeta != nil {
 		if updated == nil {
 			updated = pObj.DeepCopy()
