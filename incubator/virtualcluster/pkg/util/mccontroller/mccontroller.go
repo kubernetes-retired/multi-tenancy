@@ -225,7 +225,7 @@ func (c *MultiClusterController) GetObjectKind() string {
 
 // Get returns object with specific cluster, namespace and name.
 func (c *MultiClusterController) Get(clusterName, namespace, name string) (interface{}, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -243,7 +243,7 @@ func (c *MultiClusterController) Get(clusterName, namespace, name string) (inter
 
 // GetByObjectType returns object with specific cluster, namespace and name and object type
 func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name string, objectType runtime.Object) (interface{}, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -264,7 +264,7 @@ func (c *MultiClusterController) GetByObjectType(clusterName, namespace, name st
 
 // List returns a list of objects with specific cluster.
 func (c *MultiClusterController) List(clusterName string, opts ...client.ListOption) (interface{}, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -279,7 +279,7 @@ func (c *MultiClusterController) List(clusterName string, opts ...client.ListOpt
 
 // ListByObjectType returns a list of objects with specific cluster and object type.
 func (c *MultiClusterController) ListByObjectType(clusterName string, objectType runtime.Object, opts ...client.ListOption) (interface{}, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -295,7 +295,7 @@ func (c *MultiClusterController) ListByObjectType(clusterName string, objectType
 	return instanceList, err
 }
 
-func (c *MultiClusterController) getCluster(clusterName string) ClusterInterface {
+func (c *MultiClusterController) GetCluster(clusterName string) ClusterInterface {
 	c.Lock()
 	defer c.Unlock()
 	return c.clusters[clusterName]
@@ -303,7 +303,7 @@ func (c *MultiClusterController) getCluster(clusterName string) ClusterInterface
 
 // GetClusterClient returns the cluster's clientset client for direct access to tenant apiserver
 func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset.Interface, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -311,7 +311,7 @@ func (c *MultiClusterController) GetClusterClient(clusterName string) (clientset
 }
 
 func (c *MultiClusterController) GetClusterObject(clusterName string) (runtime.Object, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return nil, errors.NewClusterNotFound(clusterName)
 	}
@@ -323,7 +323,7 @@ func (c *MultiClusterController) GetClusterObject(clusterName string) (runtime.O
 }
 
 func (c *MultiClusterController) GetOwnerInfo(clusterName string) (string, string, string, error) {
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return "", "", "", errors.NewClusterNotFound(clusterName)
 	}
@@ -388,7 +388,7 @@ func (c *MultiClusterController) RequeueObject(clusterName string, obj interface
 		return err
 	}
 
-	cluster := c.getCluster(clusterName)
+	cluster := c.GetCluster(clusterName)
 	if cluster == nil {
 		return errors.NewClusterNotFound(clusterName)
 	}
@@ -443,7 +443,7 @@ func (c *MultiClusterController) processNextWorkItem() bool {
 		// Return true, don't take a break
 		return true
 	}
-	if c.getCluster(req.ClusterName) == nil {
+	if c.GetCluster(req.ClusterName) == nil {
 		// The virtual cluster has been removed, do not reconcile for its dws requests.
 		klog.Warningf("The cluster %s has been removed, drop the dws request %v", req.ClusterName, req)
 		c.Queue.Forget(obj)

@@ -17,6 +17,7 @@ limitations under the License.
 package conversion
 
 import (
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -603,6 +604,19 @@ func (e vcEquality) CheckPriorityClassEquality(pObj, vObj *v1scheduling.Priority
 	pObjCopy.ObjectMeta = vObj.ObjectMeta
 	// pObj.TypeMeta is empty
 	pObjCopy.TypeMeta = vObj.TypeMeta
+
+	if !equality.Semantic.DeepEqual(vObj, pObjCopy) {
+		return pObjCopy
+	} else {
+		return nil
+	}
+}
+
+func (e vcEquality) CheckCRDEquality(pObj, vObj *v1beta1.CustomResourceDefinition) *v1beta1.CustomResourceDefinition {
+	pObjCopy := pObj.DeepCopy()
+	pObjCopy.ObjectMeta = vObj.ObjectMeta
+	pObjCopy.TypeMeta = vObj.TypeMeta
+	pObjCopy.Status.Conditions = vObj.Status.Conditions
 
 	if !equality.Semantic.DeepEqual(vObj, pObjCopy) {
 		return pObjCopy

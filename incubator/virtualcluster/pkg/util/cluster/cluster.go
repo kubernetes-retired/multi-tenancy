@@ -173,7 +173,7 @@ func (c *Cluster) getMapper() (meta.RESTMapper, error) {
 		return c.mapper, nil
 	}
 
-	mapper, err := apiutil.NewDiscoveryRESTMapper(c.RestConfig)
+	mapper, err := apiutil.NewDynamicRESTMapper(c.RestConfig)
 	if err != nil {
 		return nil, err
 	}

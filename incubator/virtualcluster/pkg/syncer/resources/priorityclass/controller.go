@@ -18,7 +18,6 @@ package priorityclass
 
 import (
 	"fmt"
-
 	v1 "k8s.io/api/scheduling/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
@@ -55,7 +54,7 @@ type controller struct {
 	// super master priorityclasses client
 	client v1priorityclass.PriorityClassesGetter
 	// super master priorityclasses informer/lister/synced functions
-	informer            priorityclassinformers.Interface //weiling
+	informer            priorityclassinformers.Interface
 	priorityclassLister listersv1.PriorityClassLister
 	priorityclassSynced cache.InformerSynced
 }
