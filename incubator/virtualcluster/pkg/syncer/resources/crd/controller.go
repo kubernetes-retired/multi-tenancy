@@ -16,32 +16,34 @@ package crd
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	fakeapiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	apiextensionclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes/scheme"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	apiextensionclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
-	fakeapiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	rinformer "sigs.k8s.io/controller-runtime/pkg/cache"
-	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	dclient "sigs.k8s.io/controller-runtime/pkg/client"
+
 	vcclient "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/clientset/versioned"
 	vcinformers "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/client/informers/externalversions/tenancy/v1alpha1"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
-	"sync"
 )
 
 var SchemeGroupVersion = schema.GroupVersion{
@@ -97,7 +99,7 @@ type controller struct {
 	// Periodic checker
 	crdPatroller *pa.Patroller
 	// Super cluster restful config
-	restConfig *restclient.Config
+	restConfig          *restclient.Config
 	superClient         dclient.Client
 	crdcache            rinformer.Cache
 	informer            rinformer.Informer
@@ -106,7 +108,7 @@ type controller struct {
 }
 
 func NewCrdController(config *config.SyncerConfiguration,
-	client  clientset.Interface,
+	client clientset.Interface,
 	informer informers.SharedInformerFactory,
 	vcClient vcclient.Interface,
 	vcInformer vcinformers.VirtualClusterInformer,
@@ -119,9 +121,9 @@ func NewCrdController(config *config.SyncerConfiguration,
 		BaseResourceSyncer: manager.BaseResourceSyncer{
 			Config: config,
 		},
-		config:              config,
-		restConfig:          config.RestConfig,
-		crdcache:            nil,
+		config:     config,
+		restConfig: config.RestConfig,
+		crdcache:   nil,
 	}
 
 	if config.RestConfig == nil {
@@ -142,7 +144,7 @@ func NewCrdController(config *config.SyncerConfiguration,
 	if err != nil {
 		return nil, err
 	}
-	c.informer , err = c.crdcache.GetInformer(context.Background(), &v1beta1.CustomResourceDefinition{})
+	c.informer, err = c.crdcache.GetInformer(context.Background(), &v1beta1.CustomResourceDefinition{})
 	if err != nil {
 		return nil, err
 	}

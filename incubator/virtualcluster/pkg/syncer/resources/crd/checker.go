@@ -17,19 +17,21 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
+
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextensionclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
-	"sync/atomic"
 )
 
 var numMissMatchedCRD uint64
@@ -77,7 +79,7 @@ func (c *controller) PatrollerDo() {
 			if err != nil {
 				if errors.IsNotFound(err) {
 					metrics.CheckerRemedyStats.WithLabelValues("RequeuedSuperMasterCRD").Inc()
-					klog.Infof("patroller create crd %v in virtual cluster", clusterName + "/" + pCRD.Name)
+					klog.Infof("patroller create crd %v in virtual cluster", clusterName+"/"+pCRD.Name)
 					c.UpwardController.AddToQueue(clusterName + "/" + pCRD.Name)
 				}
 			}
