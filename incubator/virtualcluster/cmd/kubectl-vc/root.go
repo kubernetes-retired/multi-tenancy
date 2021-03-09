@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version"
 )
