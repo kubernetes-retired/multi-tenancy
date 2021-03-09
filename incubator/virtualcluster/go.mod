@@ -7,7 +7,6 @@ require (
 	github.com/emicklei/go-restful v2.9.6+incompatible
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.0
-	github.com/martin-helmich/kubernetes-crd-example v0.0.0-20200430145357-285d5204a934
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/pkg/errors v0.8.1
