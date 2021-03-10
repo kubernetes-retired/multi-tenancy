@@ -47,6 +47,10 @@ func translateRawQuery(req *restful.Request, containerName string) {
 		switch k {
 		case "command":
 			query.Add("command", v[0])
+		case "follow":
+			if v[0] == "true" {
+				query.Add("follow", "true")
+			}
 		case "input":
 			if v[0] == "1" {
 				query.Add("stdin", "true")
