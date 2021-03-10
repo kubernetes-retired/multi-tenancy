@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ import (
 	pa "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/provider"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
@@ -74,7 +74,7 @@ type controller struct {
 	clusterVNodeGCMap  map[string]map[string]VNodeGCStatus
 	vNodeGCGracePeriod time.Duration
 	// vnodeProvider manages vnode object.
-	vnodeProvider vnode.VirtualNodeProvider
+	vnodeProvider provider.VirtualNodeProvider
 }
 
 type VirtulNodeDeletionPhase string
@@ -104,7 +104,7 @@ func NewPodController(config *config.SyncerConfiguration,
 		clusterVNodePodMap: make(map[string]map[string]map[string]struct{}),
 		clusterVNodeGCMap:  make(map[string]map[string]VNodeGCStatus),
 		vNodeGCGracePeriod: constants.DefaultvNodeGCGracePeriod,
-		vnodeProvider:      native.NewNativeVirtualNodeProvider(config.VNAgentPort),
+		vnodeProvider:      vnode.GetNodeProvider(config, client),
 	}
 
 	var err error
@@ -268,7 +268,7 @@ func (c *controller) updateClusterVNodePodMap(clusterName, nodeName, requestUID 
 	}
 }
 
-func (c *controller) SetVNodeProvider(provider vnode.VirtualNodeProvider) {
+func (c *controller) SetVNodeProvider(provider provider.VirtualNodeProvider) {
 	c.Lock()
 	c.vnodeProvider = provider
 	c.Unlock()

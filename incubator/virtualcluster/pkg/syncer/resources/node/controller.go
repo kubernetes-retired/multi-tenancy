@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/manager"
 	uw "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/uwcontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode"
-	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/provider"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/plugin"
 )
@@ -59,7 +59,7 @@ type controller struct {
 	// super master node lister/synced function
 	nodeLister    listersv1.NodeLister
 	nodeSynced    cache.InformerSynced
-	vnodeProvider vnode.VirtualNodeProvider
+	vnodeProvider provider.VirtualNodeProvider
 }
 
 func NewNodeController(config *config.SyncerConfiguration,
@@ -74,7 +74,7 @@ func NewNodeController(config *config.SyncerConfiguration,
 		},
 		nodeNameToCluster: make(map[string]map[string]struct{}),
 		nodeClient:        client.CoreV1(),
-		vnodeProvider:     native.NewNativeVirtualNodeProvider(config.VNAgentPort),
+		vnodeProvider:     vnode.GetNodeProvider(config, client),
 	}
 
 	var err error
@@ -120,7 +120,7 @@ func NewNodeController(config *config.SyncerConfiguration,
 	return c, nil
 }
 
-func (c *controller) SetVNodeProvider(provider vnode.VirtualNodeProvider) {
+func (c *controller) SetVNodeProvider(provider provider.VirtualNodeProvider) {
 	c.Lock()
 	c.vnodeProvider = provider
 	c.Unlock()

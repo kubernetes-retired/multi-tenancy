@@ -83,9 +83,11 @@ func NewResourceSyncerOptions() (*ResourceSyncerOptions, error) {
 			DefaultOpaqueMetaDomains:   []string{"kubernetes.io", "k8s.io"},
 			ExtraSyncingResources:      []string{},
 			VNAgentPort:                int32(10550),
+			VNAgentNamespacedName:      "vc-manager/vn-agent",
 			FeatureGates: map[string]bool{
 				featuregate.SuperClusterPooling:        false,
 				featuregate.SuperClusterServiceNetwork: false,
+				featuregate.VNodeProviderService:       false,
 			},
 		},
 		SyncerName: "vc",
@@ -106,8 +108,9 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 	fs.StringSliceVar(&o.ComponentConfig.DefaultOpaqueMetaDomains, "default-opaque-meta-domains", o.ComponentConfig.DefaultOpaqueMetaDomains, "DefaultOpaqueMetaDomains is the default opaque meta configuration for each Virtual Cluster.")
 	fs.StringSliceVar(&o.ComponentConfig.ExtraSyncingResources, "extra-syncing-resources", o.ComponentConfig.ExtraSyncingResources, "ExtraSyncingResources defines additional resources that need to be synced for each Virtual Cluster. (priorityclass, ingress, crd)")
-	fs.Int32Var(&o.ComponentConfig.VNAgentPort, "vn-agent-port", 10550, "Port the vn-agent listens on")
 	fs.Var(cliflag.NewMapStringBool(&o.ComponentConfig.FeatureGates), "feature-gates", "A set of key=value pairs that describe featuregate gates for various features.")
+	fs.Int32Var(&o.ComponentConfig.VNAgentPort, "vn-agent-port", 10550, "Port the vn-agent listens on")
+	fs.StringVar(&o.ComponentConfig.VNAgentNamespacedName, "vn-agent-namespace-name", "vc-manager/vn-agent", "Namespace/Name of the vn-agent running in cluster, used for VNodeProviderService")
 
 	serverFlags := fss.FlagSet("metricsServer")
 	serverFlags.StringVar(&o.Address, "address", o.Address, "The server address.")

@@ -27,18 +27,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
+	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/apis/config"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/provider"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/service"
 )
 
-// NodeProvider is the interface used for registering the node address.
-type VirtualNodeProvider interface {
-	GetNodeDaemonEndpoints(node *v1.Node) (v1.NodeDaemonEndpoints, error)
-	GetNodeAddress(node *v1.Node) ([]v1.NodeAddress, error)
+func GetNodeProvider(config *config.SyncerConfiguration, client clientset.Interface) provider.VirtualNodeProvider {
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.VNodeProviderService) {
+		return service.NewServiceVirtualNodeProvider(config.VNAgentPort, config.VNAgentNamespacedName, client)
+	}
+	return native.NewNativeVirtualNodeProvider(config.VNAgentPort)
 }
 
-func NewVirtualNode(provider VirtualNodeProvider, node *v1.Node) (vnode *v1.Node, err error) {
+func NewVirtualNode(provider provider.VirtualNodeProvider, node *v1.Node) (vnode *v1.Node, err error) {
 	now := metav1.Now()
 	n := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
