@@ -37,7 +37,8 @@ const (
 	// services to share the same ClusterIPs as the super cluster.
 	SuperClusterServiceNetwork = "SuperClusterServiceNetwork"
 
-	// SuperClusterPooling is an experimental feature
+	// SuperClusterPooling is an experimental feature that allows the syncer to
+	// pool multiple super clusters for use with the experimental scheduler
 	SuperClusterPooling = "SuperClusterPooling"
 )
 
