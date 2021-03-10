@@ -42,6 +42,7 @@ func TranslatePath(req *restful.Request, tenantName string) {
 // translateRawQuery translates the rawquery for super apiserver
 func translateRawQuery(req *restful.Request, containerName string) {
 	vals := req.Request.URL.Query()
+	klog.V(5).Infof("the origin URL query values are: %v", vals)
 	query := url.Values{}
 	for k, v := range vals {
 		switch k {
@@ -68,6 +69,12 @@ func translateRawQuery(req *restful.Request, containerName string) {
 			if v[0] == "0" {
 				query.Add("stdout", "false")
 			}
+		case "tailLines":
+			klog.V(5).Infof("the tail parameter is %s", v[0])
+			if v[0] != "all" {
+				// "all" is the same as omitting tail
+				query["tailLines"] = []string{v[0]}
+			}
 		default:
 			klog.Errorf("unknown rawquery: %s", k)
 		}
@@ -75,11 +82,13 @@ func translateRawQuery(req *restful.Request, containerName string) {
 	if containerName != "" {
 		query.Add("container", containerName)
 	}
+	klog.V(5).Infof("the new URL query is: %v", query)
 	req.Request.URL.RawQuery = query.Encode()
 }
 
 // TranslatePathForSuper translates the URL path to kubelet to super apiserver
 func TranslatePathForSuper(req *restful.Request, tenantName string) error {
+	klog.V(5).Infof("will translate the URL %s for super apiserver", req.Request.URL)
 	action := strings.Split(req.Request.URL.Path[1:], "/")[0]
 	var apiserverPath string
 	// req.PathParameter inclouding containerName, podID, podNamespace
