@@ -7,6 +7,7 @@ require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.0
 	github.com/emicklei/go-restful v2.10.0+incompatible // indirect
 	github.com/go-logr/logr v0.3.0
+	github.com/go-logr/zapr v0.2.0
 	github.com/go-openapi/spec v0.19.5 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/onsi/ginkgo v1.14.1

@@ -22,9 +22,11 @@ import (
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
+	"github.com/go-logr/zapr"
 	corev1 "k8s.io/api/core/v1"
 
 	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
+	stdzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -135,7 +137,14 @@ func main() {
 	if debugLogs {
 		logLevel = zapcore.DebugLevel
 	}
-	log := zap.New(zap.Level(logLevel), zap.StacktraceLevel(zapcore.PanicLevel))
+	// Create a raw (upstream) zap logger that we can pass to both
+	// the zap stdlib log redirect and logr.Logger shim we use for controller-runtime.
+	// Stdlib is redirected at ErrorLevel since it should only log
+	// if it can't return an error, like in http.Server before a handler is invoked,
+	// and we expect other libraries to do the same.
+	rawlog := zap.NewRaw(zap.Level(logLevel), zap.StacktraceLevel(zapcore.PanicLevel))
+	stdzap.RedirectStdLogAt(rawlog, zapcore.ErrorLevel)
+	log := zapr.NewLogger(rawlog)
 	ctrl.SetLogger(log)
 	cfg := ctrl.GetConfigOrDie()
 	cfg.QPS = float32(qps)
