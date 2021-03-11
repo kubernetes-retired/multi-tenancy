@@ -80,6 +80,7 @@ func (c *controller) Reconcile(request reconciler.Request) (res reconciler.Resul
 			}
 			c.MultiClusterController.Eventf(request.ClusterName, &v1.ObjectReference{
 				Kind:      "Pod",
+				Name:      vPod.Name,
 				Namespace: vPod.Namespace,
 				UID:       vPod.UID,
 			}, v1.EventTypeWarning, "FailedCreate", "Error creating: %v", err)
@@ -164,6 +165,7 @@ func (c *controller) reconcilePodCreate(clusterName, targetNamespace, requestUID
 		// For now, we skip vPod that has NodeName set to prevent tenant from deploying DaemonSet or DaemonSet alike CRDs.
 		err := c.MultiClusterController.Eventf(clusterName, &v1.ObjectReference{
 			Kind:      "Pod",
+			Name:      vPod.Name,
 			Namespace: vPod.Namespace,
 			UID:       vPod.UID,
 		}, v1.EventTypeWarning, "NotSupported", "The Pod has nodeName set in the spec which is not supported for now")

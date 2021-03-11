@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -49,6 +50,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/fairqueue"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/handler"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/record"
 )
 
 // MultiClusterController implements the multicluster controller pattern.
@@ -353,7 +355,6 @@ func (c *MultiClusterController) GetClusterNames() []string {
 // 'message' is intended to be human readable.
 //
 // The resulting event will be created in the same namespace as the reference object.
-// TODO(zhuangqh): consider maintain an event sink for each tenant.
 func (c *MultiClusterController) Eventf(clusterName string, ref *v1.ObjectReference, eventtype string, reason, messageFmt string, args ...interface{}) error {
 	tenantClient, err := c.GetClusterClient(clusterName)
 	if err != nil {
@@ -369,6 +370,10 @@ func (c *MultiClusterController) Eventf(clusterName string, ref *v1.ObjectRefere
 			Name:      fmt.Sprintf("%v.%x", ref.Name, eventTime.UnixNano()),
 			Namespace: namespace,
 		},
+		Source: v1.EventSource{
+			Host: clusterName,
+		},
+		Count:               1, // the count needs to be set for event sinker to work
 		InvolvedObject:      *ref,
 		Type:                eventtype,
 		Reason:              reason,
@@ -377,8 +382,9 @@ func (c *MultiClusterController) Eventf(clusterName string, ref *v1.ObjectRefere
 		LastTimestamp:       eventTime,
 		ReportingController: "vc-syncer",
 	}
-	_, err = tenantClient.CoreV1().Events(namespace).Create(context.TODO(), event, metav1.CreateOptions{})
-	return err
+
+	sink := &v1core.EventSinkImpl{Interface: tenantClient.CoreV1().Events(namespace)}
+	return record.EventSinkerInstance.RecordToSink(sink, event)
 }
 
 // RequeueObject requeues the cluster object, thus reconcileHandler can reconcile it again.
@@ -392,7 +398,6 @@ func (c *MultiClusterController) RequeueObject(clusterName string, obj interface
 	if cluster == nil {
 		return errors.NewClusterNotFound(clusterName)
 	}
-	//FIXME: we dont need event here.
 	r := reconciler.Request{}
 	r.ClusterName = clusterName
 	r.Namespace = o.GetNamespace()
