@@ -122,6 +122,12 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	candidate := internalcache.NewPod(request.ClusterName, pod.Namespace, pod.Name, "", util.GetPodRequirements(pod))
 	ret, err := c.SchedulerEngine.SchedulePod(candidate)
 	if err != nil {
+		c.MultiClusterController.Eventf(request.ClusterName, &v1.ObjectReference{
+			Kind:      "Pod",
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			UID:       pod.UID,
+		}, v1.EventTypeNormal, "Failed", "failed to schedule pod %s/%s to any cluster: %v", request.Namespace, request.Name, err)
 		return reconciler.Result{}, fmt.Errorf("failed to schedule pod %s in %s: %v", request.Name, request.ClusterName, err)
 	}
 
@@ -148,6 +154,12 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	})
 	if err == nil {
 		klog.Infof("Successfully schedule pod %s with placement %s", ret.GetKey(), ret.GetCluster())
+		err = c.MultiClusterController.Eventf(request.ClusterName, &v1.ObjectReference{
+			Kind:      "Pod",
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			UID:       pod.UID,
+		}, v1.EventTypeNormal, "Scheduled", "Successfully schedule pod %s to cluster %s", ret.GetKey(), ret.GetCluster())
 	}
 	return reconciler.Result{}, err
 }

@@ -164,6 +164,12 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	// some (or all) slices need to be scheduled/rescheduled
 	ret, err := c.SchedulerEngine.ScheduleNamespace(candidate)
 	if err != nil {
+		c.MultiClusterController.Eventf(request.ClusterName, &v1.ObjectReference{
+			Kind:      "Namespace",
+			Name:      namespace.Name,
+			Namespace: namespace.Name,
+			UID:       namespace.UID,
+		}, v1.EventTypeNormal, "Failed", "Failed to schedule namespace %s: %v", request.Name, err)
 		return reconciler.Result{}, fmt.Errorf("failed to schedule namespace %s in %s: %v", request.Name, request.ClusterName, err)
 	}
 	// update virtualcluster namespace with the scheduling result.
@@ -189,6 +195,12 @@ func (c *controller) Reconcile(request reconciler.Request) (reconciler.Result, e
 	})
 	if err == nil {
 		klog.Infof("Successfully schedule namespace %s/%s with placement %s", request.ClusterName, request.Name, string(updatedPlacement))
+		err = c.MultiClusterController.Eventf(request.ClusterName, &v1.ObjectReference{
+			Kind:      "Namespace",
+			Name:      namespace.Name,
+			Namespace: namespace.Name,
+			UID:       namespace.UID,
+		}, v1.EventTypeNormal, "Scheduled", "Successfully schedule namespace %s with placement %s", request.Name, string(updatedPlacement))
 	}
 	return reconciler.Result{}, err
 }
