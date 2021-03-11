@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/vn-agent/config"
 )
 
@@ -49,6 +50,9 @@ type ServerOption struct {
 
 	// Port is the vn-agent server listening on.
 	Port uint
+
+	// FeatureGates enabled by the user.
+	FeatureGates map[string]bool
 }
 
 // Subset of the full options exposed in k8s.io/kubernetes/pkg/kubelet/client.KubeletClientConfig
@@ -65,6 +69,9 @@ type KubeletClientConfig struct {
 func NewVnAgentOptions() (*Options, error) {
 	return &Options{
 		KubeletOption: KubeletClientConfig{},
+		ServerOption: ServerOption{
+			FeatureGates: map[string]bool{},
+		},
 	}, nil
 }
 
@@ -77,7 +84,8 @@ func (o *Options) Flags() cliflag.NamedFlagSets {
 	serverFS.StringVar(&o.CertDirectory, "cert-dir", o.CertDirectory, "CertDirectory is the directory where the TLS certs are located")
 	serverFS.StringVar(&o.TLSCertFile, "tls-cert-file", o.TLSCertFile, "TLSCertFile is the file containing x509 Certificate for HTTPS")
 	serverFS.StringVar(&o.TLSPrivateKeyFile, "tls-private-key-file", o.TLSPrivateKeyFile, "TLSPrivateKeyFile is the file containing x509 private key matching tlsCertFile")
-	serverFS.UintVar(&o.Port, "port", 10550, "Port is the server listen on")
+	serverFS.UintVar(&o.Port, "port", 10550, "Port is the server listening on")
+	serverFS.Var(cliflag.NewMapStringBool(&o.ServerOption.FeatureGates), "feature-gates", "A set of key=value pairs that describe featuregate gates for various features.")
 
 	kubeletFS := fss.FlagSet("kubelet")
 	kubeletFS.StringVar(&o.KubeletOption.CertFile, "kubelet-client-certificate", o.KubeletOption.CertFile, "Path to a client cert file for TLS")
@@ -105,6 +113,12 @@ func (o *Options) Config() (*config.Config, *ServerOption, error) {
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to load kubelet tls config")
 	}
+
+	featuregate.DefaultFeatureGate, err = featuregate.NewFeatureGate(o.ServerOption.FeatureGates)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return &config.Config{
 		KubeletClientCert: &kubeletClientCertPair,
 		KubeletServerHost: fmt.Sprintf("https://127.0.0.1:%v", o.KubeletOption.Port),
