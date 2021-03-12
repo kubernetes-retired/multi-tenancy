@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -588,14 +589,14 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 		// all descendant namespaces, and this will fail. In order to handle this
 		// case, we try to delete and re-create the rolebinding here
 
-		// We only found this issue with the RoleBinding object, but we *think* this
-		// will also be helpful for other similar objects that end up with the same error
-		// type. If we find out later that this assumption is not true, we can update the
-		// logic here to only deal with RoleBinding.
+		// We don't apply this logic to other objects because if another object has an
+		// ownerReference pointing to the object we're deleting, it could be deleted as
+		// well, which is undesirable.
 
 		// The error type is 'Invalid' after I tested it out with different error types
 		// from https://godoc.org/k8s.io/apimachinery/pkg/api/errors
-		if err != nil && errors.IsInvalid(err) {
+		api := strings.Split(inst.GetAPIVersion(), "/")[0]
+		if err != nil && errors.IsInvalid(err) && inst.GetKind() == "RoleBinding" && api == "rbac.authorization.k8s.io" {
 			// Log this error because we're about to throw it away.
 			log.Error(err, "Couldn't update propagated object; will try to delete and recreate instead")
 			if err = r.Delete(ctx, inst); err == nil {
