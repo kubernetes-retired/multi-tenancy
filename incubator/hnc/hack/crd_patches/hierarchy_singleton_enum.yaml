@@ -1,6 +1,6 @@
-          # This is patched by hack/crd_patches/singleton-enum-patch.sh
-          properties:
-            name:
-              type: string
-              enum:
-                - hierarchy
+            # This is patched by hack/crd_patches/singleton-enum-patch.sh
+            properties:
+              name:
+                type: string
+                enum:
+                  - hierarchy

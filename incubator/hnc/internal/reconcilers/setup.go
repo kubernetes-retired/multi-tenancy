@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"

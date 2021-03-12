@@ -34,7 +34,7 @@ const (
 // Note: the validating webhook FAILS OPEN. This means that if the webhook goes down, all further
 // changes to the objects are allowed.
 //
-// +kubebuilder:webhook:path=/validate-objects,mutating=false,failurePolicy=ignore,groups="*",resources="*",verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-objects,mutating=false,failurePolicy=ignore,groups="*",resources="*",sideEffects=None,verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
 
 type Object struct {
 	Log     logr.Logger

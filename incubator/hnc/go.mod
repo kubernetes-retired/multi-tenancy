@@ -13,14 +13,14 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/open-policy-agent/cert-controller v0.0.0-20210202184811-4842e4760ab0
-	github.com/spf13/cobra v1.0.0
+	github.com/spf13/cobra v1.1.1
 	go.opencensus.io v0.22.3
 	go.uber.org/zap v1.15.0
-	k8s.io/api v0.19.2
-	k8s.io/apiextensions-apiserver v0.19.2
-	k8s.io/apimachinery v0.19.2
-	k8s.io/cli-runtime v0.19.2
-	k8s.io/client-go v0.19.2
-	sigs.k8s.io/controller-runtime v0.7.0
-	sigs.k8s.io/controller-tools v0.2.8
+	k8s.io/api v0.20.4
+	k8s.io/apiextensions-apiserver v0.20.4
+	k8s.io/apimachinery v0.20.4
+	k8s.io/cli-runtime v0.20.4
+	k8s.io/client-go v0.20.4
+	sigs.k8s.io/controller-runtime v0.8.3
+	sigs.k8s.io/controller-tools v0.5.0
 )

@@ -14,7 +14,7 @@
 
 set -e
 
-# This file is run by Prow during all presuubmits
+# This file is run by Prow during all presubmits
 
 # Not included or existing by default in Prow
 #  - This is part of an ongoing discussion present on the issue:
