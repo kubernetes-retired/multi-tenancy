@@ -54,6 +54,10 @@ type SyncerConfiguration struct {
 	// VNAgentPort defines the port that the VN Agent is running on per host
 	VNAgentPort int32
 
+	// VNAgentNamespacedName defines the namespace/name of the VN Agent Kubernetes
+	// service, this is used for feature VNodeProviderService.
+	VNAgentNamespacedName string
+
 	// FeatureGates enabled by the user.
 	FeatureGates map[string]bool
 

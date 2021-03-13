@@ -40,11 +40,17 @@ const (
 	// SuperClusterPooling is an experimental feature that allows the syncer to
 	// pool multiple super clusters for use with the experimental scheduler
 	SuperClusterPooling = "SuperClusterPooling"
+
+	// VNodeProviderService is an experimental feature that allows the
+	// vn-agent to run as a load balanced deployment proxy to the super
+	// cluster API Server
+	VNodeProviderService = "VNodeProviderService"
 )
 
 var defaultFeatures = FeatureList{
 	SuperClusterPooling:        {Default: false},
 	SuperClusterServiceNetwork: {Default: false},
+	VNodeProviderService:       {Default: false},
 }
 
 type Feature string

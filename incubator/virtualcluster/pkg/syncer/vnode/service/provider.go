@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,21 +14,32 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package native
+package service
 
 import (
+	"context"
+	"strings"
+
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	vnodeprovider "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/provider"
 )
 
 type provider struct {
-	vnAgentPort int32
+	vnAgentPort          int32
+	vnAgentNamespaceName string
+	client               clientset.Interface
 }
 
 var _ vnodeprovider.VirtualNodeProvider = &provider{}
 
-func NewNativeVirtualNodeProvider(vnAgentPort int32) vnodeprovider.VirtualNodeProvider {
-	return &provider{vnAgentPort: vnAgentPort}
+func NewServiceVirtualNodeProvider(vnAgentPort int32, vnAgentNamespaceName string, client clientset.Interface) vnodeprovider.VirtualNodeProvider {
+	return &provider{
+		vnAgentPort:          vnAgentPort,
+		vnAgentNamespaceName: vnAgentNamespaceName,
+		client:               client,
+	}
 }
 
 func (p *provider) GetNodeDaemonEndpoints(node *v1.Node) (v1.NodeDaemonEndpoints, error) {
@@ -41,13 +52,15 @@ func (p *provider) GetNodeDaemonEndpoints(node *v1.Node) (v1.NodeDaemonEndpoints
 
 func (p *provider) GetNodeAddress(node *v1.Node) ([]v1.NodeAddress, error) {
 	var addresses []v1.NodeAddress
-	for _, a := range node.Status.Addresses {
-		// notes: drop host name address because tenant apiserver using cluster dns.
-		// It could not find the node by hostname through this dns.
-		if a.Type != v1.NodeHostName {
-			addresses = append(addresses, a)
-		}
+	namespaceName := strings.Split(p.vnAgentNamespaceName, "/")
+	svc, err := p.client.CoreV1().Services(namespaceName[0]).Get(context.TODO(), namespaceName[1], metav1.GetOptions{})
+	if err != nil {
+		return addresses, err
 	}
 
+	addresses = append(addresses, v1.NodeAddress{
+		Type:    v1.NodeInternalIP,
+		Address: svc.Spec.ClusterIP,
+	})
 	return addresses, nil
 }
