@@ -28,7 +28,7 @@ import (
 	// Change to use v1 when we only need to support 1.17 and higher kubernetes versions.
 	stdzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -72,7 +72,7 @@ func init() {
 
 	_ = v1a2.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
-	_ = v1beta1.AddToScheme(scheme)
+	_ = apiextensions.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	crdmarkers "sigs.k8s.io/controller-tools/pkg/crd/markers"
 
 	"sigs.k8s.io/controller-tools/pkg/loader"
 	"sigs.k8s.io/controller-tools/pkg/markers"
@@ -67,15 +68,18 @@ type schemaContext struct {
 
 	schemaRequester schemaRequester
 	PackageMarkers  markers.MarkerValues
+
+	allowDangerousTypes bool
 }
 
 // newSchemaContext constructs a new schemaContext for the given package and schema requester.
 // It must have type info added before use via ForInfo.
-func newSchemaContext(pkg *loader.Package, req schemaRequester) *schemaContext {
+func newSchemaContext(pkg *loader.Package, req schemaRequester, allowDangerousTypes bool) *schemaContext {
 	pkg.NeedTypesInfo()
 	return &schemaContext{
-		pkg:             pkg,
-		schemaRequester: req,
+		pkg:                 pkg,
+		schemaRequester:     req,
+		allowDangerousTypes: allowDangerousTypes,
 	}
 }
 
@@ -83,9 +87,10 @@ func newSchemaContext(pkg *loader.Package, req schemaRequester) *schemaContext {
 // as this one, except with the given type information.
 func (c *schemaContext) ForInfo(info *markers.TypeInfo) *schemaContext {
 	return &schemaContext{
-		pkg:             c.pkg,
-		info:            info,
-		schemaRequester: c.schemaRequester,
+		pkg:                 c.pkg,
+		info:                info,
+		schemaRequester:     c.schemaRequester,
+		allowDangerousTypes: c.allowDangerousTypes,
 	}
 }
 
@@ -200,7 +205,7 @@ func localNamedToSchema(ctx *schemaContext, ident *ast.Ident) *apiext.JSONSchema
 		return &apiext.JSONSchemaProps{}
 	}
 	if basicInfo, isBasic := typeInfo.(*types.Basic); isBasic {
-		typ, fmt, err := builtinToType(basicInfo)
+		typ, fmt, err := builtinToType(basicInfo, ctx.allowDangerousTypes)
 		if err != nil {
 			ctx.pkg.AddError(loader.ErrFromNode(err, ident))
 		}
@@ -297,6 +302,8 @@ func mapToSchema(ctx *schemaContext, mapType *ast.MapType) *apiext.JSONSchemaPro
 			ctx.pkg.AddError(loader.ErrFromNode(fmt.Errorf("map values must be a named type, not %T", mapType.Value), mapType.Value))
 			return &apiext.JSONSchemaProps{}
 		}
+	case *ast.StarExpr:
+		valSchema = typeToSchema(ctx.ForInfo(&markers.TypeInfo{}), val)
 	default:
 		ctx.pkg.AddError(loader.ErrFromNode(fmt.Errorf("map values must be a named type, not %T", mapType.Value), mapType.Value))
 		return &apiext.JSONSchemaProps{}
@@ -372,7 +379,12 @@ func structToSchema(ctx *schemaContext, structType *ast.StructType) *apiext.JSON
 			}
 		}
 
-		propSchema := typeToSchema(ctx.ForInfo(&markers.TypeInfo{}), field.RawField.Type)
+		var propSchema *apiext.JSONSchemaProps
+		if field.Markers.Get(crdmarkers.SchemalessName) != nil {
+			propSchema = &apiext.JSONSchemaProps{}
+		} else {
+			propSchema = typeToSchema(ctx.ForInfo(&markers.TypeInfo{}), field.RawField.Type)
+		}
 		propSchema.Description = field.Doc
 
 		applyMarkers(ctx, field.Markers, propSchema, field.RawField)
@@ -390,8 +402,8 @@ func structToSchema(ctx *schemaContext, structType *ast.StructType) *apiext.JSON
 
 // builtinToType converts builtin basic types to their equivalent JSON schema form.
 // It *only* handles types allowed by the kubernetes API standards. Floats are not
-// allowed.
-func builtinToType(basic *types.Basic) (typ string, format string, err error) {
+// allowed unless allowDangerousTypes is true
+func builtinToType(basic *types.Basic, allowDangerousTypes bool) (typ string, format string, err error) {
 	// NB(directxman12): formats from OpenAPI v3 are slightly different than those defined
 	// in JSONSchema.  This'll use the OpenAPI v3 ones, since they're useful for bounding our
 	// non-string types.
@@ -403,6 +415,8 @@ func builtinToType(basic *types.Basic) (typ string, format string, err error) {
 		typ = "string"
 	case basicInfo&types.IsInteger != 0:
 		typ = "integer"
+	case basicInfo&types.IsFloat != 0 && allowDangerousTypes:
+		typ = "number"
 	default:
 		// NB(directxman12): floats are *NOT* allowed in kubernetes APIs
 		return "", "", fmt.Errorf("unsupported type %q", basic.String())

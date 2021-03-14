@@ -28,7 +28,7 @@ const (
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are denied.
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha2-hncconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hncconfigurations,verbs=create;update;delete,versions=v1alpha2,name=hncconfigurations.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-hnc-x-k8s-io-v1alpha2-hncconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hncconfigurations,sideEffects=None,verbs=create;update;delete,versions=v1alpha2,name=hncconfigurations.hnc.x-k8s.io
 
 type HNCConfig struct {
 	Log        logr.Logger

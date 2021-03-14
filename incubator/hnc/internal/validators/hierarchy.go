@@ -34,7 +34,7 @@ const (
 // changes to the hierarchy are forbidden. However, new objects will still be propagated according
 // to the existing hierarchy (unless the reconciler is down too).
 //
-// +kubebuilder:webhook:path=/validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hierarchyconfigurations,verbs=create;update,versions=v1alpha2,name=hierarchyconfigurations.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hierarchyconfigurations,sideEffects=None,verbs=create;update,versions=v1alpha2,name=hierarchyconfigurations.hnc.x-k8s.io
 
 type Hierarchy struct {
 	Log     logr.Logger
