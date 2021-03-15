@@ -249,4 +249,38 @@ spec:
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
 		RunShouldContain("ActivitiesHalted (ParentMissing):", defTimeout, "kubectl hns describe", nsStaging)
 	})
+
+	It("Should demonstrate exceptions", func() {
+		// set up initial structure
+		CreateNamespace(nsOrg)
+		CreateSubnamespace(nsTeamA, nsOrg)
+		CreateSubnamespace(nsTeamB, nsOrg)
+
+		MustRun("kubectl -n", nsOrg, "create secret generic my-secret --from-literal=password=iamacme")
+		// allow secret to propagate
+		MustRun("kubectl hns config set-resource secrets --mode Propagate --force")
+		// check that the secrete has been propagated to both subnamespaces
+		RunShouldContain("my-secret", defTimeout, "kubectl -n", nsTeamA, "get secrets")
+		RunShouldContain("my-secret", defTimeout, "kubectl -n", nsTeamB, "get secrets")
+
+		// add exceptions annotation
+		MustRun("kubectl annotate secret my-secret -n", nsOrg, "propagate.hnc.x-k8s.io/treeSelect=!team-b")
+		// check that the secret is no longer accessible from team-b
+		RunShouldNotContain("my-secret", defTimeout, "kubectl -n", nsTeamB, "get secrets")
+
+		// delete secret and re-create from the yaml file
+		MustRun("kubectl delete secret my-secret -n", nsOrg)
+		RunShouldNotContain("my-secret", defTimeout, "kubectl -n", nsTeamA, "get secrets")
+		secret := `# quickstart_test.go: a secret with exceptions annotation
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    propagate.hnc.x-k8s.io/treeSelect: team-a
+  name: my-secret
+  namespace: acme-org`
+  		MustApplyYAML(secret)
+  		RunShouldContain("my-secret", defTimeout, "kubectl -n", nsTeamA, "get secrets")
+		RunShouldNotContain("my-secret", defTimeout, "kubectl -n", nsTeamB, "get secrets")
+	})
 })
