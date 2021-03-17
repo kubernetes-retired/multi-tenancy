@@ -637,7 +637,7 @@ _Demonstrates: exceptions_
 Now let’s say your `acme-org` has a secret that you originally wanted to share with all the teams. We created this `Secret` as follows:
 
 ```bash
-kubectl -n acme-org create secret my-secret --from-literal=password=iamacme
+kubectl -n acme-org create secret generic my-secret --from-literal=password=iamacme
 ```
 
 You’ll see that `my-secret` is propagated to both `team-a` and `team-b`:
@@ -672,7 +672,7 @@ or the `none`  annotation to turn off propagation completely. See
 Of course, the annotation can also be part of the object when you create it:
 
 ```bash
-k delete secret my-creds -n acme-org
+kubectl delete secret my-secret -n acme-org
 cat << EOF | k create -f -
 apiVersion: v1
 kind: Secret
@@ -680,7 +680,7 @@ metadata:
   annotations:
     propagate.hnc.x-k8s.io/treeSelect: team-a
   name: my-secret
-  amespace: acme-org
+  namespace: acme-org
 ... other fields ...
 EOF
 ```
