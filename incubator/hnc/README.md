@@ -139,6 +139,8 @@ cycle looks like the following:
       special-purpose directories in `test/`. These are basically glorified
       `bash` scripts with better error checking, and directly invoke `kubectl`.
   - Ensure `make test` passes - this runs unit tests only.
+    - If you see all tests fail with `no matches for v1/CRD` [error](https://gist.github.com/yiqigao217/9394c2aadaa515e82184684a005187af)
+      , remove your `/usr/local/kubebuilder/` directory and [reinstall kubebuilder](https://book.kubebuilder.io/quick-start.html#installation).
   - Deploy to your cluster with `make deploy`
   - Test your changes by hand and verify that your changes are working
     correctly. Some ways you can do that are:
