@@ -394,6 +394,15 @@ func PodMutateAutoMountServiceAccountToken(disable bool) PodMutator {
 	}
 }
 
+func PodMutateServiceLink(disableServiceLinks bool) PodMutator {
+	return func(p *podMutateCtx) error {
+		if disableServiceLinks {
+			p.pPod.Spec.EnableServiceLinks = pointer.BoolPtr(false)
+		}
+		return nil
+	}
+}
+
 type ServiceMutateInterface interface {
 	Mutate(vService *v1.Service)
 }
