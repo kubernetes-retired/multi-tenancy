@@ -51,6 +51,12 @@ type SyncerConfiguration struct {
 	// DisableServiceAccountToken indicates whether disable service account token automatically mounted.
 	DisableServiceAccountToken bool
 
+	// DisablePodServiceLinks indicates whether to disable the `EnableServiceLinks` field in pPod spec.
+	// Defaults to false, it won‘t mutate the EnableServiceLinks field in pPod spec.
+	// If set to true, it will disable service links for all of the pPods to avoid massive env injections
+	// from syncer which replace the kubelet generated envs.
+	DisablePodServiceLinks bool
+
 	// VNAgentPort defines the port that the VN Agent is running on per host
 	VNAgentPort int32
 
