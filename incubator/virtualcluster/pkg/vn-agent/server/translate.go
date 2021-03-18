@@ -48,10 +48,6 @@ func translateRawQuery(req *restful.Request, containerName string) {
 		switch k {
 		case "command":
 			query.Add("command", v[0])
-		case "follow":
-			if v[0] == "true" {
-				query.Add("follow", "true")
-			}
 		case "input":
 			if v[0] == "1" {
 				query.Add("stdin", "true")
@@ -73,12 +69,11 @@ func translateRawQuery(req *restful.Request, containerName string) {
 			if v[0] == "0" {
 				query.Add("stdout", "false")
 			}
-		case "tailLines":
-			klog.V(5).Infof("the tail parameter is %s", v[0])
-			if v[0] != "all" {
-				// "all" is the same as omitting tail
-				query["tailLines"] = []string{v[0]}
-			}
+		case "tailLines", "insecureSkipTLSVerifyBackend", "limitBytes",
+			"follow", "container", "previous", "sinceTime", "timestamps":
+			// for log options
+			klog.V(5).Infof("the parameter %s is %s", k, v[0])
+			query.Add(k, v[0])
 		default:
 			klog.Errorf("unknown rawquery: %s", k)
 		}
