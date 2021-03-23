@@ -85,7 +85,7 @@ type HierarchyConfigReconciler struct {
 
 // Reconcile sets up some basic variables and then calls the business logic.
 func (r *HierarchyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	if config.EX[req.Namespace] {
+	if config.ExcludedNamespaces[req.Namespace] {
 		return ctrl.Result{}, nil
 	}
 
@@ -112,6 +112,10 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 		return err
 	}
 	origNS := nsInst.DeepCopy()
+
+	// Remove excluded namespace label if there's one on the namespace since
+	// the excluded namespaces should be already skipped earlier.
+	r.removeExcludedNamespaceLabel(log, nsInst)
 
 	// Get singleton from apiserver. If it doesn't exist, initialize one.
 	inst, deletingCRD, err := r.getSingleton(ctx, nm)
@@ -168,6 +172,17 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 		ns.UnsetExists()
 		log.Info("Namespace has been deleted")
 	}
+}
+
+// removeExcludedNamespaceLabel removes the `hnc.x-k8s.io/excluded-namespace`
+// label from the namespace.
+func (r *HierarchyConfigReconciler) removeExcludedNamespaceLabel(log logr.Logger, nsInst *corev1.Namespace) {
+	lbs := nsInst.Labels
+	if _, found := lbs[api.LabelExcludedNamespace]; found {
+		log.Info("Illegal excluded-namespace label found; removing")
+		delete(lbs, api.LabelExcludedNamespace)
+	}
+	nsInst.SetLabels(lbs)
 }
 
 // updateFinalizers ensures that the HC can't be deleted if there are any subnamespace anchors in

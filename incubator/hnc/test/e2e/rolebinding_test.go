@@ -40,6 +40,9 @@ var _ = Describe("HNC should delete and create a new Rolebinding instead of upda
 		// 5s fairly arbitrarily, but it works well. Feel free to try lower values it you like.
 		//   - aludwin, Sep 2020
 		MustRun("kubectl delete deployment --all -n hnc-system")
+		// Since the object webhook fails close, we need to remove VWHConfiguration
+		// so that the rolebinding object can be deleted later.
+		MustRun("kubectl delete validatingwebhookconfigurations.admissionregistration.k8s.io hnc-validating-webhook-configuration")
 		time.Sleep(5 * time.Second)
 
 		// Replace the source rolebinding

@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
@@ -75,12 +76,18 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 
 	switch req.op {
 	case k8sadm.Create:
+		if rsp := v.illegalExcludedNamespaceLabel(req); !rsp.Allowed {
+			return rsp
+		}
 		// This check only applies to the Create operation since namespace name
 		// cannot be updated.
 		if rsp := v.nameExistsInExternalHierarchy(req); !rsp.Allowed {
 			return rsp
 		}
 	case k8sadm.Update:
+		if rsp := v.illegalExcludedNamespaceLabel(req); !rsp.Allowed {
+			return rsp
+		}
 		// This check only applies to the Update operation. Creating a namespace
 		// with external manager is allowed and we will prevent this conflict by not
 		// allowing setting a parent when validating the HierarchyConfiguration.
@@ -96,6 +103,23 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 		}
 	}
 
+	return allow("")
+}
+
+func (v *Namespace) illegalExcludedNamespaceLabel(req *nsRequest) admission.Response {
+	for l := range req.ns.Labels {
+		if l == api.LabelExcludedNamespace && !config.ExcludedNamespaces[req.ns.Name] {
+			// Note: this only blocks the request if it has a newly added illegal
+			// excluded-namespace label because existing illegal excluded-namespace
+			// label should have already been removed by our reconciler. For example,
+			// even when the VWHConfiguration is removed, adding the label to a non-
+			// excluded namespace would pass but the label is immediately removed; when
+			// the VWHConfiguration is there but the reconcilers are down, any request
+			// gets denied anyway.
+			msg := fmt.Sprintf("You cannot exclude this namespace using the %q label. See https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#excluded-namespace-label for detail.", api.LabelExcludedNamespace)
+			return deny(metav1.StatusReasonForbidden, msg)
+		}
+	}
 	return allow("")
 }
 

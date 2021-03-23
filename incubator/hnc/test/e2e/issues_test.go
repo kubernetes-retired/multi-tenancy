@@ -1,6 +1,8 @@
 package e2e
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
 )
@@ -335,6 +337,10 @@ var _ = Describe("Issues that require repairing HNC", func() {
 	const (
 		nsParent = "parent"
 		nsChild  = "child"
+		nsNonExcluded = "regular"
+		// Use `hnc-system` for this test because HNC adds excluded namespace label
+		// to `hnc-system` namespace by default.
+		nsExcluded = "hnc-system"
 	)
 
 	BeforeEach(func() {
@@ -368,5 +374,35 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		RecoverHNC()
 		MustRun("kubectl delete ns", nsChild)
 		MustNotRun("kubectl get ns", nsChild)
+	})
+
+	It("Should allow operations of objects in the excluded namespaces even when the webhooks are not responding - issue #1023", func() {
+		// Create a non-excluded namespace.
+		CreateNamespace(nsNonExcluded)
+		// Should be able to create an object in both excluded and non-excluded
+		// namespaces.
+		MustRun("kubectl create rolebinding test --clusterrole=admin --serviceaccount=default:default -n", nsNonExcluded)
+		MustRun("kubectl create rolebinding test --clusterrole=admin --serviceaccount=default:default -n", nsExcluded)
+
+		// Tear down the webhook services but keep the VWHConfiguration as is.
+		// Note: The following comments copied from rolebinding_test.go apply here:
+		// It takes a while for the pods to actually be deleted - over 60s, in some cases (especially on
+		// Kind, I think). But we don't actually need to wait for the pods to be fully deleted - waiting
+		// a few moments seems to be fine, and then the terminated pods don't get in the way. I picked
+		// 5s fairly arbitrarily, but it works well. Feel free to try lower values it you like.
+		//   - aludwin, Sep 2020
+		MustRun("kubectl delete deployment --all -n hnc-system")
+		time.Sleep(5 * time.Second)
+
+		// Should not be able to delete an object in a non-excluded namespace because
+		// the VWHConfiguration is still there but the webhook service is down.
+		MustNotRun("kubectl delete rolebinding test -n", nsNonExcluded)
+		// Should be able to delete an object in an excluded namespace anyway.
+		MustRun("kubectl delete rolebinding test -n", nsExcluded)
+
+		// After webhook service is back, the object in a non-excluded namespace
+		// should be able to get deleted.
+		RecoverHNC()
+		MustRun("kubectl delete rolebinding test -n", nsNonExcluded)
 	})
 })

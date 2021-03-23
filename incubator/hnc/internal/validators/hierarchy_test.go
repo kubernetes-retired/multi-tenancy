@@ -9,31 +9,39 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
 )
 
 func TestStructure(t *testing.T) {
 	f := foresttest.Create("-a-") // a <- b; c
 	h := &Hierarchy{Forest: f}
 	l := zap.New()
+	// For this unit test, we only set `kube-system` as an excluded namespace.
+	config.ExcludedNamespaces = map[string]bool{"kube-system": true}
 
 	tests := []struct {
-		name string
-		nnm  string
-		pnm  string
-		fail bool
+		name        string
+		nnm         string
+		pnm         string
+		fail        bool
+		msgContains string
 	}{
 		{name: "ok", nnm: "a", pnm: "c"},
-		{name: "missing parent", nnm: "a", pnm: "brumpf", fail: true},
-		{name: "self-cycle", nnm: "a", pnm: "a", fail: true},
-		{name: "other cycle", nnm: "a", pnm: "b", fail: true},
-		{name: "exclude kube-system", nnm: "a", pnm: "kube-system", fail: true},
-		{name: "exclude kube-public", nnm: "a", pnm: "kube-public", fail: true},
-		{name: "exclude hnc-system", nnm: "a", pnm: "hnc-system", fail: true},
-		{name: "exclude cert-manager", nnm: "a", pnm: "cert-manager", fail: true},
+		{name: "missing parent", nnm: "a", pnm: "brumpf", fail: true, msgContains: "does not exist"},
+		{name: "self-cycle", nnm: "a", pnm: "a", fail: true, msgContains: "Illegal parent"},
+		{name: "other cycle", nnm: "a", pnm: "b", fail: true, msgContains: "Illegal parent"},
+		// Since we only set `kube-system` as excluded namespaces for this test, we
+		// should see denial message of excluded namespace for `kube-system`. As for
+		// `kube-public`, we will see missing parent/child instead of excluded
+		// namespaces denial message for it.
+		{name: "exclude parent kube-system", nnm: "a", pnm: "kube-system", fail: true, msgContains: "Cannot set the parent to the excluded namespace"},
+		{name: "missing parent kube-public", nnm: "a", pnm: "kube-public", fail: true, msgContains: "does not exist"},
+		{name: "exclude child kube-system", nnm: "kube-system", pnm: "a", fail: true, msgContains: "Cannot set the excluded namespace"},
+		{name: "missing child kube-public", nnm: "kube-public", pnm: "a", fail: true, msgContains: "HNC has not reconciled namespace"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,6 +58,7 @@ func TestStructure(t *testing.T) {
 			// Report
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+			g.Expect(got.Result.Message).Should(ContainSubstring(tc.msgContains))
 		})
 	}
 }

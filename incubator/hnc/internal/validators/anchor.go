@@ -79,8 +79,13 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	switch req.op {
 	case k8sadm.Create:
 		// Can't create subnamespaces in excluded namespaces
-		if config.EX[pnm] {
-			msg := fmt.Sprintf("The namespace %s is not allowed to create subnamespaces. Please create subnamespaces in a different namespace.", pnm)
+		if config.ExcludedNamespaces[pnm] {
+			msg := fmt.Sprintf("Cannot create a subnamespace in the excluded namespace %q", pnm)
+			return deny(metav1.StatusReasonForbidden, msg)
+		}
+		// Can't create subnamespaces using excluded namespace names
+		if config.ExcludedNamespaces[cnm] {
+			msg := fmt.Sprintf("Cannot create a subnamespace using the excluded namespace name %q", cnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 
@@ -89,7 +94,7 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 		if cns.Exists() {
 			childIsMissingAnchor := (cns.Parent().Name() == pnm && cns.IsSub)
 			if !childIsMissingAnchor {
-				msg := fmt.Sprintf("The requested namespace %s already exists. Please use a different name.", cnm)
+				msg := fmt.Sprintf("Cannot create a subnamespace using an existing namespace name %q", cnm)
 				return deny(metav1.StatusReasonConflict, msg)
 			}
 		}

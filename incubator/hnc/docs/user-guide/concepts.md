@@ -498,7 +498,6 @@ objects, in addition to using the custom resources it defines.
 These annotations may be added to any namespaced object to define exceptions to
 propagation rules. More information to come.
 
-
 #### hnc.x-k8s.io/managed-by (annotation on namespaces)
 
 This annotation is mainly designed for use by external products such as GKE
@@ -529,6 +528,25 @@ namespace if this annotation already exists. The two are mutually exclusive.
 
 We are considering replacing this with the standard
 `app.kubernetes.io/managed-by` label in the future.
+
+<a name="excluded-namespace-label">
+
+#### hnc.x-k8s.io/excluded-namespace (label on namespaces)
+
+This label should be added to namespaces such as `kube-system` and `kube-public`
+so that HNC's validating webhook cannot accidentally prevent operations in these
+namespaces and block critical cluster operations.
+
+Before installing HNC, users can customize the excluded namespace list in the HNC
+deployment with a container arg called `excluded-namespace` in
+`config/manager/manager.yaml` and then set this label on the excluded namespaces.
+Setting this label on namespaces that are not
+listed in the HNC deployment as an `excluded-namespace` is not allowed.
+
+As of March 2021, the default excluded namespaces listed in [config/manager/manager.yaml](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/config/manager/manager.yaml)
+are `kube-system`, `kube-public`, `hnc-system` and
+`kube-node-lease`. HNC adds this label to `hnc-system` namespace by default, so
+users will have to add this label to other excluded namespaces manually.
 
 <a name="admin-labels-set">
 

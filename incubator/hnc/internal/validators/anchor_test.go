@@ -5,7 +5,9 @@ import (
 
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
+
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
 )
 
@@ -14,6 +16,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 	// namespace "c".
 	f := foresttest.Create("-Aa")
 	h := &Anchor{Forest: f}
+	config.ExcludedNamespaces = map[string]bool{"kube-system": true}
 
 	tests := []struct {
 		name string
@@ -23,6 +26,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 	}{
 		{name: "with a non-existing name", pnm: "a", cnm: "brumpf"},
 		{name: "in excluded ns", pnm: "kube-system", cnm: "brumpf", fail: true},
+		{name: "using excluded ns name", pnm: "brumpf", cnm: "kube-system", fail: true},
 		{name: "with an existing ns name (the ns is not a subnamespace of it)", pnm: "c", cnm: "b", fail: true},
 		{name: "for existing non-subns child", pnm: "a", cnm: "c", fail: true},
 		{name: "for existing subns", pnm: "a", cnm: "b"},
