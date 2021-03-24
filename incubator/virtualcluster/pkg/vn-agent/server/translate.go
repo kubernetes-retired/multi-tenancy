@@ -47,7 +47,9 @@ func translateRawQuery(req *restful.Request, containerName string) {
 	for k, v := range vals {
 		switch k {
 		case "command":
-			query.Add("command", v[0])
+			for _, cmd := range v {
+				query.Add("command", cmd)
+			}
 		case "input":
 			if v[0] == "1" {
 				query.Add("stdin", "true")
@@ -61,6 +63,13 @@ func translateRawQuery(req *restful.Request, containerName string) {
 			}
 			if v[0] == "0" {
 				query.Add("stdout", "false")
+			}
+		case "error":
+			if v[0] == "1" {
+				query.Add("stderr", "true")
+			}
+			if v[0] == "0" {
+				query.Add("stderr", "false")
 			}
 		case "tty":
 			if v[0] == "1" {
