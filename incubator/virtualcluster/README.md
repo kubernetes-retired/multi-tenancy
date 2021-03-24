@@ -24,6 +24,7 @@ the states between tenant control plane and super cluster are consistent.
 in the node. It ensures each tenant can only access its own Pods in the node.
 
 With all above, from the tenant’s perspective, each tenant control plane behaves like an intact Kubernetes with nearly full API capabilities.
+For more technical details, please check our [ICDCS 2021 paper.](./doc/vc-icdcs.pdf) 
 
 ## Live Demos/Presentations
 
