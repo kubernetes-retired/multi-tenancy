@@ -19,7 +19,6 @@ package config
 import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/record"
@@ -34,20 +33,21 @@ type Config struct {
 	// config is the syncer's configuration object.
 	ComponentConfig syncerconfig.SyncerConfiguration
 
-	// the super cluster client
-	SuperClient corev1.CoreV1Interface
 	// virtual cluster CR client
 	VirtualClusterClient   vcclient.Interface
 	VirtualClusterInformer vcinformers.VirtualClusterInformer
 
-	// the super master client
-	SuperMasterClient          clientset.Interface
-	SuperMasterInformerFactory informers.SharedInformerFactory
+	// the meta cluster client
+	MetaClusterClient clientset.Interface
+
+	// the super cluster client
+	SuperClusterClient          clientset.Interface
+	SuperClusterInformerFactory informers.SharedInformerFactory
 
 	// the client only used for leader election
 	LeaderElectionClient clientset.Interface
 
-	// the rest config for the master
+	// the rest config for the super cluster
 	Kubeconfig *restclient.Config
 
 	// the event sink

@@ -48,10 +48,9 @@ func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use: "syncer",
-		Long: `The resource syncer is a daemon that watches tenant masters to
-keep tenant requests are synchronized to super master by creating corresponding
-custom resources on behalf of the tenant users in super master, following the
-resource isolation policy specified in Tenant CRD.`,
+		Long: `The resource syncer is a daemon that watches tenant clusters to
+keep tenant requests are synchronized to super cluster by creating corresponding
+custom resources on behalf of the tenant users in super cluster.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			var err error
 			var c *syncerconfig.Config
@@ -96,11 +95,11 @@ resource isolation policy specified in Tenant CRD.`,
 
 func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	ss, err := syncer.New(&cc.ComponentConfig,
-		cc.SuperClient,
 		cc.VirtualClusterClient,
 		cc.VirtualClusterInformer,
-		cc.SuperMasterClient,
-		cc.SuperMasterInformerFactory,
+		cc.MetaClusterClient,
+		cc.SuperClusterClient,
+		cc.SuperClusterInformerFactory,
 		cc.Recorder)
 
 	if err != nil {
@@ -108,16 +107,16 @@ func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	}
 
 	// Prepare the event broadcaster.
-	if cc.Broadcaster != nil && cc.SuperMasterClient != nil {
-		cc.Broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: cc.SuperMasterClient.CoreV1().Events("")})
+	if cc.Broadcaster != nil && cc.SuperClusterClient != nil {
+		cc.Broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: cc.SuperClusterClient.CoreV1().Events("")})
 	}
 
 	// Start all informers.
 	go cc.VirtualClusterInformer.Informer().Run(stopCh)
-	cc.SuperMasterInformerFactory.Start(stopCh)
+	cc.SuperClusterInformerFactory.Start(stopCh)
 
 	// Wait for all caches to sync before resource sync.
-	cc.SuperMasterInformerFactory.WaitForCacheSync(stopCh)
+	cc.SuperClusterInformerFactory.WaitForCacheSync(stopCh)
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()

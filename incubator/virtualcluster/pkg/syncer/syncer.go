@@ -35,7 +35,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -66,7 +65,8 @@ var (
 
 type Syncer struct {
 	config            *config.SyncerConfiguration
-	superClient       v1core.CoreV1Interface
+	metaClient        clientset.Interface
+	superClient       clientset.Interface
 	recorder          record.EventRecorder
 	controllerManager *manager.ControllerManager
 	// lister that can list virtual clusters from a shared cache
@@ -103,16 +103,17 @@ type Bootstrap interface {
 
 func New(
 	config *config.SyncerConfiguration,
-	superClient v1core.CoreV1Interface,
 	virtualClusterClient vcclient.Interface,
 	virtualClusterInformer vcinformers.VirtualClusterInformer,
-	superMasterClient clientset.Interface,
-	superMasterInformers informers.SharedInformerFactory,
+	metaClusterClient clientset.Interface,
+	superClusterClient clientset.Interface,
+	superClusterInformers informers.SharedInformerFactory,
 	recorder record.EventRecorder,
 ) (*Syncer, error) {
 	syncer := &Syncer{
 		config:      config,
-		superClient: superClient,
+		metaClient:  metaClusterClient,
+		superClient: superClusterClient,
 		recorder:    recorder,
 		queue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "virtual_cluster"),
 		workers:     constants.UwsControllerWorkerLow,
@@ -145,8 +146,8 @@ func New(
 	initContext := &plugin.InitContext{
 		Context:    context.Background(),
 		Config:     config,
-		Client:     superMasterClient,
-		Informer:   superMasterInformers,
+		Client:     superClusterClient,
+		Informer:   superClusterInformers,
 		VCClient:   virtualClusterClient,
 		VCInformer: virtualClusterInformer,
 	}
@@ -215,7 +216,7 @@ func (s *Syncer) enqueueVirtualCluster(obj interface{}) {
 func (s *Syncer) Run(stopChan <-chan struct{}) {
 	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
 		klog.Infof("SuperClusterPooling featuregate is enabled!")
-		cfg, err := s.superClient.ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
+		cfg, err := s.superClient.CoreV1().ConfigMaps("kube-system").Get(context.TODO(), utilconst.SuperClusterInfoCfgMap, metav1.GetOptions{})
 		if err != nil {
 			klog.Infof("Fail to get configmap kube-system/%v from super cluster which is required for SuperClusterPooling feature. Quit!", utilconst.SuperClusterInfoCfgMap)
 			os.Exit(1)
@@ -353,7 +354,7 @@ func (s *Syncer) addCluster(key string, vc *v1alpha1.VirtualCluster) error {
 
 	clusterName := conversion.ToClusterKey(vc)
 
-	adminKubeConfigBytes, err := conversion.GetKubeConfigOfVC(s.superClient, vc)
+	adminKubeConfigBytes, err := conversion.GetKubeConfigOfVC(s.metaClient.CoreV1(), vc)
 	if err != nil {
 		return err
 	}

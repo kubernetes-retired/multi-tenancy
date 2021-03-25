@@ -55,13 +55,18 @@ type ResourceSyncerOptions struct {
 	// The syncer configuration.
 	ComponentConfig syncerconfig.SyncerConfiguration
 
-	SuperMaster           string
-	SuperMasterKubeconfig string
-	SyncerName            string
-	Address               string
-	Port                  string
-	CertFile              string
-	KeyFile               string
+	MetaClusterAddress string
+	// MetaClusterClientConnection specifies the kubeconfig file and client connection
+	// settings for the proxy server to use when communicating with the meta cluster apiserver.
+	MetaClusterClientConnection componentbaseconfig.ClientConnectionConfiguration
+
+	DeployOnMetaCluster bool
+	SuperClusterAddress string
+	SyncerName          string
+	Address             string
+	Port                string
+	CertFile            string
+	KeyFile             string
 }
 
 // NewResourceSyncerOptions creates a new resource syncer with a default config.
@@ -102,8 +107,11 @@ func (o *ResourceSyncerOptions) Flags() cliflag.NamedFlagSets {
 	fss := cliflag.NamedFlagSets{}
 
 	fs := fss.FlagSet("server")
-	fs.StringVar(&o.SuperMaster, "super-master", o.SuperMaster, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
+	fs.StringVar(&o.SuperClusterAddress, "super-master", o.SuperClusterAddress, "The address of the super master Kubernetes API server (overrides any value in super-master-kubeconfig).")
 	fs.StringVar(&o.ComponentConfig.ClientConnection.Kubeconfig, "super-master-kubeconfig", o.ComponentConfig.ClientConnection.Kubeconfig, "Path to kubeconfig file with authorization and master location information.")
+	fs.StringVar(&o.MetaClusterAddress, "meta-cluster-address", o.MetaClusterAddress, "The address of the meta cluster Kubernetes API server (overrides any value in meta-cluster-kubeconfig).")
+	fs.StringVar(&o.MetaClusterClientConnection.Kubeconfig, "meta-cluster-kubeconfig", o.MetaClusterClientConnection.Kubeconfig, "Path to kubeconfig file of the meta cluster. If it is not provided, the super cluster is used")
+	fs.BoolVar(&o.DeployOnMetaCluster, "deployment-on-meta", o.DeployOnMetaCluster, "Whether vc-syncer deploy on meta cluster")
 	fs.StringVar(&o.SyncerName, "syncer-name", o.SyncerName, "Syncer name (default vc).")
 	fs.BoolVar(&o.ComponentConfig.DisableServiceAccountToken, "disable-service-account-token", o.ComponentConfig.DisableServiceAccountToken, "DisableServiceAccountToken indicates whether disable service account token automatically mounted.")
 	fs.BoolVar(&o.ComponentConfig.DisablePodServiceLinks, "disable-service-links", o.ComponentConfig.DisablePodServiceLinks, "DisablePodServiceLinks indicates whether to disable the `EnableServiceLinks` field in pPod spec.")
@@ -156,7 +164,47 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	c.ComponentConfig = o.ComponentConfig
 
 	// Prepare kube clients
-	leaderElectionClient, virtualClusterClient, superMasterClient, restConfig, err := createClients(c.ComponentConfig.ClientConnection, o.SuperMaster, c.ComponentConfig.LeaderElection.RenewDeadline.Duration)
+	var (
+		metaRestConfig, superRestConfig *restclient.Config
+		leaderElectionRestConfig        restclient.Config
+		err                             error
+	)
+	superRestConfig, err = getClientConfig(c.ComponentConfig.ClientConnection, o.SuperClusterAddress, !o.DeployOnMetaCluster)
+	if err != nil {
+		return nil, err
+	}
+	if o.DeployOnMetaCluster || o.MetaClusterClientConnection.Kubeconfig != "" {
+		metaRestConfig, err = getClientConfig(o.MetaClusterClientConnection, o.MetaClusterAddress, o.DeployOnMetaCluster)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		metaRestConfig = superRestConfig
+	}
+
+	if o.DeployOnMetaCluster {
+		leaderElectionRestConfig = *metaRestConfig
+	} else {
+		leaderElectionRestConfig = *superRestConfig
+	}
+
+	superClusterClient, err := clientset.NewForConfig(restclient.AddUserAgent(superRestConfig, constants.ResourceSyncerUserAgent))
+	if err != nil {
+		return nil, err
+	}
+	metaClusterClient, err := clientset.NewForConfig(restclient.AddUserAgent(metaRestConfig, constants.ResourceSyncerUserAgent))
+	if err != nil {
+		return nil, err
+	}
+
+	// using deployment side cluster for leader election for better stability
+	leaderElectionRestConfig.Timeout = c.ComponentConfig.LeaderElection.RenewDeadline.Duration
+	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&leaderElectionRestConfig, constants.ResourceSyncerUserAgent+"-leader-election"))
+	if err != nil {
+		return nil, err
+	}
+
+	virtualClusterClient, err := vcclient.NewForConfig(metaRestConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -185,12 +233,12 @@ func (o *ResourceSyncerOptions) Config() (*syncerappconfig.Config, error) {
 	if err := apis.AddToScheme(scheme.Scheme); err != nil {
 		return nil, err
 	}
-	c.ComponentConfig.RestConfig = restConfig
-	c.SuperClient = superMasterClient.CoreV1()
+	c.ComponentConfig.RestConfig = superRestConfig
 	c.VirtualClusterClient = virtualClusterClient
 	c.VirtualClusterInformer = vcinformers.NewSharedInformerFactory(virtualClusterClient, 0).Tenancy().V1alpha1().VirtualClusters()
-	c.SuperMasterClient = superMasterClient
-	c.SuperMasterInformerFactory = informers.NewSharedInformerFactory(superMasterClient, 0)
+	c.MetaClusterClient = metaClusterClient
+	c.SuperClusterClient = superClusterClient
+	c.SuperClusterInformerFactory = informers.NewSharedInformerFactory(superClusterClient, 0)
 	c.Broadcaster = eventBroadcaster
 	c.Recorder = recorder
 	c.LeaderElectionClient = leaderElectionClient
@@ -263,16 +311,15 @@ func getInClusterNamespace() (string, error) {
 	return string(namespace), nil
 }
 
-// createClients creates a meta cluster kube client and a super master custer client from the given config and masterOverride.
-func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface,
-	vcclient.Interface, clientset.Interface, *restclient.Config, error) {
+// getClientConfig creates a Kubernetes client rest config from the given config and masterOverride.
+func getClientConfig(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, inCluster bool) (*restclient.Config, error) {
 	// This creates a client, first loading any specified kubeconfig
 	// file, and then overriding the Master flag, if non-empty.
 	var (
 		restConfig *restclient.Config
 		err        error
 	)
-	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
+	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 && inCluster {
 		klog.Info("Neither kubeconfig file nor master URL was specified. Falling back to in-cluster config.")
 		restConfig, err = rest.InClusterConfig()
 	} else {
@@ -284,7 +331,7 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 	}
 
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
 
 	if restConfig.Timeout == 0 {
@@ -301,23 +348,5 @@ func createClients(config componentbaseconfig.ClientConnectionConfiguration, mas
 		restConfig.Burst = constants.DefaultSyncerClientBurst
 	}
 
-	superMasterClient, err := clientset.NewForConfig(restclient.AddUserAgent(restConfig, constants.ResourceSyncerUserAgent))
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	virtualClusterClient, err := vcclient.NewForConfig(restConfig)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	// shallow copy, do not modify the kubeConfig.Timeout.
-	leaderElectionRestConfig := *restConfig
-	restConfig.Timeout = timeout
-	leaderElectionClient, err := clientset.NewForConfig(restclient.AddUserAgent(&leaderElectionRestConfig, "leader-election"))
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	return leaderElectionClient, virtualClusterClient, superMasterClient, restConfig, nil
+	return restConfig, nil
 }

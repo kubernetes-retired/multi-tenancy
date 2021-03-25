@@ -35,7 +35,7 @@ type SyncerConfiguration struct {
 
 	// DefaultOpaqueMetaDomains is the default configuration for each Virtual Cluster.
 	// The key prefix of labels or annotations match this domain would be invisible to Virtual Cluster but
-	// are kept in super master.
+	// are kept in super cluster.
 	// take tenant labels(annotations) ["foo=bar", "foo.kubernetes.io/foo=bar"] for example,
 	// different configurations and possible final states are as follows:
 	// DefaultOpaqueMetaDomains | labels(annotations) in super cluster
@@ -67,7 +67,7 @@ type SyncerConfiguration struct {
 	// FeatureGates enabled by the user.
 	FeatureGates map[string]bool
 
-	// Super master rest config
+	// Super cluster rest config
 	RestConfig *rest.Config
 }
 
