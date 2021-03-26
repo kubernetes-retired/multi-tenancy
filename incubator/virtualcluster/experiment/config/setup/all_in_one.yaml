@@ -1,3 +1,245 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vc-manager
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: vc-manager-role
+rules:
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - signers
+    resourceNames:
+      # Support legacy versions, before signerName was added
+      - kubernetes.io/legacy-unknown
+    verbs:
+      - approve
+  - apiGroups:
+      - certificates.k8s.io
+    resources:
+      - certificatesigningrequests
+      - certificatesigningrequests/approval
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - clusterversions
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - clusterversions/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - services/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - secrets/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - virtualclusters
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - virtualclusters/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - clusterversions
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - tenancy.x-k8s.io
+    resources:
+      - clusterversions/status
+    verbs:
+      - get
+  - apiGroups:
+      - admissionregistration.k8s.io
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vc-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vc-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: vc-manager
+    namespace: vc-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vc-manager
+  namespace: vc-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vc-manager
+  namespace: vc-manager
+  labels:
+    app: vc-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vc-manager
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: vc-manager
+        virtualcluster-webhook: "true"
+    spec:
+      serviceAccountName: vc-manager
+      containers:
+        - command:
+            - manager
+          args:
+            - --disable-stacktrace=true
+            - --enable-webhook=true
+          image: virtualcluster/manager-amd64
+          imagePullPolicy: Always
+          name: vc-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
