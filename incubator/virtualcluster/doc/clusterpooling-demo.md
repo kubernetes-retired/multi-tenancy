@@ -1,128 +1,113 @@
-# VirtualCluster ClusterPooling Walkthrough Demo
+# Supporting Multiple Super Clusters
 
-This demo illustrates how to setup a VirtualCluster and scheduling pods to multi clusters
-which are set up by [`minikube`](https://minikube.sigs.k8s.io/). 
+This demo illustrates how to setup a VirtualCluster environment to support scheduling tenant Pods to multiple super clusters.
 
-## Create Meta Cluster
+## Architecture
 
-First create a meta cluster to deploy VirtualCluster controller components and simply named it with the name "meta".
+The demo will realize the following architecture.
+
+<div align="left">
+  <img src="./demo-arch.png" width=70% title="Architecture">
+</div>
+
+A few notes:
+- Most of the CRDs, components such as the namespace scheduler, the per super cluster syncer controller, are installed in the meta cluster. 
+`vn-agent` needs to be installed in each super cluster using DaemonSet (skipped in this demo).
+- In this demo, the tenant cluster is created by vc-manager using the VirutalCluster CRD. The super clusters are created using existing tools, e.g., `minikube`. 
+However, we leverage the CAPI [`Cluster`](https://github.com/kubernetes-sigs/cluster-api/tree/master/api/v1alpha4/cluster_types.go)
+CRD to represent the super clusters so that the namespace scheduler can find the super cluster access credential.
+
+
+## Environment
+### Step 1: Setup the Meta Cluster
+
+Choose an existing cluster or create a new cluster to serve as a meta cluster. Take `minikube` for an example,
 
 ```bash
 minikube start -p meta
 ```
 
-### Install VirtualCluster CRDs and components
-
-To install VirtualCluster CRDs:
+Besides the VirtualCluster and ClusterVersion CRDs, the Cluster CRD needs be installed as well:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/cluster.x-k8s.io_clusters.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_clusterversions.yaml
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/tenancy.x-k8s.io_virtualclusters.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/crds/cluster.x-k8s.io_clusters.yaml
 ```
 
-To install vc-manager and vc-scheduler:
+Install vc-manager and vc-scheduler in the vc-manager namespacing using the following command:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/experiment/config/setup/all_in_one.yaml
 ```
 
-Let's check out what we've installed:
+Although the per super cluster syncer will be installed in the meta cluster, its configuration relies on the super cluster deployment. We will describe
+its installation in Step 3.
 
-```bash
-# A dedicated namespace named "vc-manager" is created
-$ kubectl get ns
-NAME              STATUS   AGE
-default           Active   14m
-kube-node-lease   Active   14m
-kube-public       Active   14m
-kube-system       Active   14m
-vc-manager        Active   74s
 
-# And the components, including vc-manager and vc-scheduler are installed within namespace `vc-manager`
-$ kubectl --context meta get all -n vc-manager
-NAME                                READY   STATUS    RESTARTS   AGE
-pod/vc-manager-76c5878465-l4vzd     1/1     Running   10         3d7h
-pod/vc-scheduler-689c978648-mnsw8   1/1     Running   0          16m
 
-NAME                                     TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
-service/virtualcluster-webhook-service   ClusterIP   10.103.157.228   <none>        9443/TCP   3d7h
+### Step 2: Create a VirtualCluster
 
-NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/vc-manager     1/1     1            1           3d7h
-deployment.apps/vc-scheduler   1/1     1            1           6h3m
-
-NAME                                      DESIRED   CURRENT   READY   AGE
-replicaset.apps/vc-manager-76c5878465     1         1         1       3d7h
-replicaset.apps/vc-scheduler-689c978648   1         1         1       6h3m
-```
-
-## Create VirtualCluster
-
-Create a ClusterVersion.
-
-```bash
-$ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/clusterversion_v1_nodeport.yaml
-```
-
-Create a VirtualCluster refers to the `ClusterVersion` that we just created.
-
-The `vc-manager` will create a tenant master, where its tenant apiserver can be exposed through nodeport, or load balancer.
+Follow the exact same steps in the VirtualCluster [demo](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/virtualcluster/doc/demo.md#create-clusterversion) to create a VirtualCluster. For example, using the following command to create a VirtualCluster named `vc-sample-1`.
 
 ```bash
 $ kubectl vc create -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/incubator/virtualcluster/config/sampleswithspec/virtualcluster_1_nodeport.yaml -o vc-1.kubeconfig
-2021/03/24 11:13:26 etcd is ready
-2021/03/24 11:13:46 apiserver is ready
-2021/03/24 11:14:12 controller-manager is ready
-2021/03/24 11:14:12 VirtualCluster default/vc-sample-1 setup successfully
 ```
 
-The command will create a tenant master named `vc-sample-1`, exposed by NodePort.
+Once it is created, a kubeconfig file, namely `vc-1.kubeconfig`, will be created in the current directory.
 
-Once it's created, a kubeconfig file specified by `-o`, namely `vc-1.kubeconfig`, will be created in the current directory.
+### Step 3: Setup the Super Clusters
 
-## Create Super Cluster
+We can use existing clusters as super clusters or create new super clusters using existing tools. Take `minikube` for an example:
 
-There is a script help us to create a super cluster and related manifest from minikube. We will create two super cluster in this demo.
-They are `r1` and `r2`. Let's try to set up one of them.
+```bash
+minikube start -p $SUPER_ID
+```
 
-````bash
-$ experiment/config/setup/create-cluster-minikube.sh r1
-$ ls cluster_r1
-cluster-cr.yaml           cluster-id.yaml           config-for-scheduler.yaml config-for-vc-syncer.yaml kubeconfig                vc-syncer.yaml
-````
+We have prepared a scripts (`setup-supercluster-minikube.sh`) to help set up the super clusters. This script assumes that
+`minikube` was used to create the super cluster. The script takes the `$SUPER_ID` as the input
+and will generate five yamls and one kubeconfig for the super cluster.
 
-Create the identity configmap on the super cluster `r1`, it is used to identity this super cluster in vc-syncer and vc-scheduler.
+```bash
+$ $VC_REPO/experiment/config/setup/setup-supercluster-minikube.sh $SUPER_ID
+$ ls cluster_$SUPER_ID
+cluster-cr.yaml  cluster-id.yaml  kubeconfig  secret-for-scheduler.yaml  secret-for-vc-syncer.yaml  vc-syncer.yaml
+```
 
+The reason why we create two secrets for the same super cluster is because in this demo, the scheduler requires the `Cluster` CR and the secret
+to be in the same namespace (`default`) and the syncer requires the secret to exist in its own namespace (`vc-manager`). 
+
+Next, we can apply the yamls in corresponding clusters. The `supercluster-info` configmap needs to be installed in the super cluster.
 ```bash
 kubectl --kubeconfig kubeconfig apply -f cluster-id.yaml
 ```
 
-Register super cluster `r1` to vc-scheduler and deploy the standalone vc-syncer for cluster `r1` on meta cluster.
+The `Cluster` CR, vc-syncer and two secrets need to be installed in the meta cluster.
 
 ```bash
-kubectl --context meta apply -f cluster-cr.yaml
-kubectl --context meta apply -f config-for-scheduler.yaml
-kubectl --context meta apply -f config-for-vc-syncer.yaml
-kubectl --context meta apply -f vc-syncer.yaml
+$ kubectl --context meta apply -f cluster-cr.yaml
+$ kubectl --context meta apply -f secret-for-scheduler.yaml
+$ kubectl --context meta apply -f vc-syncer.yaml
+$ kubectl --context meta apply -f secret-for-vc-syncer.yaml
 ```
 
-Let's check the status of vc-syncer for cluster `r1`.
+We can check the status of vc-syncer for the super cluster `$SUPER_ID`:
 
 ```bash
-# kubectl --context meta get deploy -n vc-manager vc-syncer-r1
-NAME           READY   UP-TO-DATE   AVAILABLE   AGE
-vc-syncer-r1   1/1     1            1           31h
+$ kubectl --context meta get deploy -n vc-manager vc-syncer-$SUPER_ID
 ```
 
-So does cluster `r2`.
+We repeat this step multiple times to configure more super clusters.
 
-## Create Pod on VirtualCluster
+## Experiment 
 
-First configure namespace slice for ns `default`, this is the ns scheduling unit. Add an annotation
-`scheduler.tenancy.x-k8s.io/placements: '{"r1":1,"r2":1}'` to ns `default`.
+Assuming we have created two super clusters: r1 and r2 and one virtual cluster following the above steps,  
+we use the `default` namespace in the virtual cluster to do the experiment.
 
-Then create a quota for ns `default`, it totally contains two slices.
+First, we configure the namespace slice, which is the scheduling unit used in the namespace scheduler, by
+adding an annotation `scheduler.tenancy.x-k8s.io/slice: '{"cpu":"100m", "memory":"100Mi"}'` to the `default` namespace.
+
+Then we create a resource quota in the `default` namespace, which has the capacity of two slices in total.
 
 ```bash
 apiVersion: v1
@@ -136,10 +121,11 @@ spec:
     memory: 200Mi
 ```
 
-If everything works fine, vc-scheduler will place the scheduling result on the ns annotation.
+The namespace scheduler should update the scheduling result in the `default` namespace's annotation shortly
+using the key `scheduler.tenancy.x-k8s.io/placements`.
 
 ```bash
-$ kubectl --kubeconfig vc-1.kubeconfig get ns default -oyaml
+$ kubectl --kubeconfig vc-1.kubeconfig get ns default -o yaml
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -158,9 +144,9 @@ status:
   phase: Active
 ```
 
-As we see, vc-scheduler schedule ns to different clusters separately.
+The placement result indicates that the quota is distributed to two super clusters, each has the quota of one slice.
 
-It's time to create a pod on this virtualcluster. There is a pod exactly fit one slice resource.
+Now we create a Deployment in the virtual cluster whose Pod has the resource request that exactly fits one slice.
 
 ```bash
 apiVersion: apps/v1
@@ -194,9 +180,10 @@ spec:
             memory: 100Mi
 ```
 
-Let's see what happen to this pod. vc-scheduler update the placement to this pod, it says this pod was scheduled to cluster `r1`.
+The namespace scheduler should update the cluster placement to this Pod's annotation, saying this Pod was scheduled to the super cluster `r1`.
+
 ```bash
-# kubectl get pod -n default     test-1-684cc8d565-4qnh6 -o yaml
+$ kubectl get pod -n default test-1-684cc8d565-4qnh6 -o yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -207,41 +194,16 @@ metadata:
   labels:
     app: test-1
     pod-template-hash: 684cc8d565
-  name: test-1-684cc8d565-4qnh6
-  namespace: default
-  ownerReferences:
-  - apiVersion: apps/v1
-    blockOwnerDeletion: true
-    controller: true
-    kind: ReplicaSet
-    name: test-1-684cc8d565
-    uid: 33657b29-2300-46b9-ba1d-8ae96259da7a
-  resourceVersion: "1416"
-  selfLink: /api/v1/namespaces/default/pods/test-1-684cc8d565-4qnh6
-  uid: cb2ba310-de62-42b1-9f41-b8e8c5f6201a
 ```
 
-Create another pod, and it would be scheduled to another super cluster. It means VirtualCluster pods are running on different clusters separately
+We can increase the replica number of the Deployment to 2 , and the second Pod should be scheduled to another super cluster.
 
 ```bash
 $ kubectl --context r2 get pod -A
 NAMESPACE                            NAME                           READY   STATUS    RESTARTS   AGE
 default-e8818d-vc-sample-1-default   test-1-74d68bc5bd-2jzfz        1/1     Running   0          19s
-kube-system                          coredns-74ff55c5b-zf5s9        1/1     Running   5          3d8h
-kube-system                          etcd-r2                        1/1     Running   5          3d8h
-kube-system                          kube-apiserver-r2              1/1     Running   5          3d8h
-kube-system                          kube-controller-manager-r2     1/1     Running   5          3d8h
-kube-system                          kube-proxy-wcx6r               1/1     Running   5          3d8h
-kube-system                          kube-scheduler-r2              1/1     Running   5          3d8h
-kube-system                          storage-provisioner            1/1     Running   13         3d8h
+
 $ kubectl  --context r1 get pod -A
 NAMESPACE                            NAME                             READY   STATUS    RESTARTS   AGE
-default-e8818d-vc-sample-1-default   test-2-684cc8d565-4qnh6          1/1     Running   0          12s
-kube-system                          coredns-74ff55c5b-6z6mz          1/1     Running   6          3d8h
-kube-system                          etcd-r1                          1/1     Running   6          3d8h
-kube-system                          kube-apiserver-r1                1/1     Running   6          3d8h
-kube-system                          kube-controller-manager-r1       1/1     Running   6          3d8h
-kube-system                          kube-proxy-mwlnb                 1/1     Running   6          3d8h
-kube-system                          kube-scheduler-r1                1/1     Running   6          3d8h
-kube-system                          storage-provisioner              1/1     Running   17         3d8h
+default-e8818d-vc-sample-1-default   test-1-684cc8d565-4qnh6          1/1     Running   0          12s
 ```

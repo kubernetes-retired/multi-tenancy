@@ -17,14 +17,11 @@ ${now} $*
 EOF
 }
 
-log "start cluster $CLUSTER_ID from minikube"
-minikube start -p $CLUSTER_ID #--driver hyperkit
-
 WORKDIR="$DIR/cluster-$CLUSTER_ID"
 KUBECONFIG_PATH="$WORKDIR/kubeconfig"
 KUBECONFIG_SECRET_NAME="cluster-${CLUSTER_ID}-config"
-KUBECONFIG_SECRET_PATH_SYNCER="$WORKDIR/config-for-vc-syncer.yaml"
-KUBECONFIG_SECRET_PATH_SCHEDULER="$WORKDIR/config-for-scheduler.yaml"
+KUBECONFIG_SECRET_PATH_SYNCER="$WORKDIR/secret-for-vc-syncer.yaml"
+KUBECONFIG_SECRET_PATH_SCHEDULER="$WORKDIR/secret-for-scheduler.yaml"
 CLUSTER_ID_YAML_PATH="$WORKDIR/cluster-id.yaml"
 SYNCER_YAML_PATH="$WORKDIR/vc-syncer.yaml"
 CLUSTER_CR_YAML_PATH="$WORKDIR/cluster-cr.yaml"
