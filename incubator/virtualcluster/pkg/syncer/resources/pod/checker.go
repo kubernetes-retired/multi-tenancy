@@ -36,6 +36,8 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
@@ -163,6 +165,12 @@ func (c *controller) PatrollerDo() {
 		}
 		vList := listObj.(*v1.PodList)
 		for i := range vList.Items {
+			if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+				cname, ok := vList.Items[i].GetAnnotations()[utilconstants.LabelScheduledCluster]
+				if !ok || cname != utilconstants.SuperClusterID {
+					continue
+				}
+			}
 			vSet.Insert(differ.ClusterObject{
 				Object:       &vList.Items[i],
 				OwnerCluster: cluster,
@@ -367,6 +375,9 @@ func (c *controller) checkNodesOfTenantCluster(clusterName string) {
 		func() {
 			c.Lock()
 			defer c.Unlock()
+			if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) && vNode.GetLabels()[constants.LabelSuperClusterID] != utilconstants.SuperClusterID {
+				return
+			}
 			if _, exist := c.clusterVNodePodMap[clusterName]; exist {
 				if _, exist := c.clusterVNodePodMap[clusterName][vNode.Name]; exist {
 					// Active Node
