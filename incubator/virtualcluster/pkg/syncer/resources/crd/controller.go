@@ -215,7 +215,7 @@ func (c *controller) GetListener() listener.ClusterChangeListener {
 
 func publicCRD(e *v1beta1.CustomResourceDefinition) bool {
 	// We only backpopulate specific crds to tenant masters
-	return e.Annotations[constants.PublicObjectKey] == "true"
+	return e.Labels[constants.PublicObjectKey] == "true"
 }
 
 func (c *controller) enqueueCRD(obj interface{}) {
