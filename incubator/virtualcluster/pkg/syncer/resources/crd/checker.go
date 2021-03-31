@@ -94,12 +94,9 @@ func (c *controller) checkCRDOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing CRD from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.V(4).Infof("check crd consistency in cluster %s", clusterName)
 
 	crdList := listObj.(*v1beta1.CustomResourceDefinitionList)
-
 	vcrestconfig := c.multiClusterCrdController.GetCluster(clusterName).GetRestConfig()
-
 	var vcapiextensionsClient apiextensionclientset.CustomResourceDefinitionsGetter
 
 	if vcrestconfig == nil {
