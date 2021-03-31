@@ -95,7 +95,7 @@ func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing priorityclass from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.V(4).Infof("check priorityclass consistency in cluster %s", clusterName)
+
 	scList := listObj.(*v1.PriorityClassList)
 	for i, vPriorityClass := range scList.Items {
 		pPriorityClass, err := c.priorityclassLister.Get(vPriorityClass.Name)
