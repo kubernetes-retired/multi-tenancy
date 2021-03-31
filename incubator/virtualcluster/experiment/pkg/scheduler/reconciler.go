@@ -170,6 +170,11 @@ func (s *Scheduler) addVirtualCluster(key string, vc *v1alpha1.VirtualCluster) e
 	s.virtualClusterSet[key] = tenantCluster
 	s.virtualClusterLock.Unlock()
 
+	// note that the cache will be updated twice when scheduler restarts, to be improved
+	if err := util.SyncVirtualClusterState(s.metaClusterClient, vc, s.schedulerCache); err != nil {
+		return fmt.Errorf("failed to update the scheduler cache for the added virtual cluster %s:%v", key, err)
+	}
+
 	go s.syncVirtualClusterCache(tenantCluster, vc)
 
 	return nil
@@ -335,6 +340,11 @@ func (s *Scheduler) addSuperCluster(key string, super *v1alpha4.Cluster) error {
 	s.superClusterLock.Lock()
 	s.superClusterSet[key] = superCluster
 	s.superClusterLock.Unlock()
+
+	// note that the cache will be updated twice when scheduler restarts, to be improved
+	if err := util.SyncSuperClusterState(s.metaClusterClient, super, s.schedulerCache); err != nil {
+		return fmt.Errorf("failed to update the scheduler cache for super cluster %s:%v", key, err)
+	}
 
 	go s.syncSuperClusterCache(superCluster, super)
 

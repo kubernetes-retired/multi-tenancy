@@ -34,7 +34,7 @@ cat > $KUBECONFIG_PATH << EOL
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority-data: $(cat $HOME/.minikube/ca.crt |base64)
+    certificate-authority-data: $(cat $HOME/.minikube/ca.crt |base64 |tr -d \\n)
     server: https://$(minikube ip -p ${CLUSTER_ID}):8443
   name: ${CLUSTER_ID}
 contexts:
@@ -49,8 +49,8 @@ preferences: {}
 users:
 - name: ${CLUSTER_ID}
   user:
-    client-certificate-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.crt |base64)
-    client-key-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.key |base64)
+    client-certificate-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.crt |base64 |tr -d \\n)
+    client-key-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.key |base64 |tr -d \\n)
 EOL
 
 log "generate vc-syncer kubeconfig secret"
