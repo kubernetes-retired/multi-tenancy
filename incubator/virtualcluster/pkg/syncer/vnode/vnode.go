@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/native"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/provider"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/vnode/service"
+	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 )
 
 func GetNodeProvider(config *config.SyncerConfiguration, client clientset.Interface) provider.VirtualNodeProvider {
@@ -66,6 +67,11 @@ func NewVirtualNode(provider provider.VirtualNodeProvider, node *v1.Node) (vnode
 	labels := map[string]string{
 		constants.LabelVirtualNode: "true",
 	}
+
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		labels[constants.LabelSuperClusterID] = utilconstants.SuperClusterID
+	}
+
 	for k, v := range node.GetLabels() {
 		if _, isWellKnown := wellKnownNodeLabelsMap[k]; isWellKnown {
 			labels[k] = v
