@@ -1,6 +1,7 @@
 # Supporting Multiple Super Clusters
 
 This demo illustrates how to setup a VirtualCluster environment to support scheduling tenant Pods to multiple super clusters.
+The demo relies on the experimental namespace scheduler and the enablement of the `SuperClusterPooling` feature gate in the syncer.
 
 ## Architecture
 
