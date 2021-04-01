@@ -111,12 +111,14 @@ func (c *controller) checkCRDOfTenantCluster(clusterName string) {
 	vcapiextensionsClient = vcc.ApiextensionsV1beta1()
 
 	for i, vCRD := range crdList.Items {
+		if !publicCRD(&vCRD) {
+			continue
+		}
 		pCRD := &v1beta1.CustomResourceDefinition{}
 		err := c.superClient.Get(context.Background(), client.ObjectKey{
 			Name: vCRD.Name,
 		}, pCRD)
 		if errors.IsNotFound(err) {
-			// super master is the source of the truth for sc object, delete tenant master obj
 			opts := &metav1.DeleteOptions{
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 			}
