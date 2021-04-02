@@ -11,7 +11,7 @@ CR Syncer relies on CR specific components, e.g. CR controller, CR Downward Sync
 
 In order for CR Syncer to work, custom defined resource type (CRD) must be deployed in both super cluster and tenant virtual cluster. CRD synchronization has been handled by: virtualcluster/pkg/syncer/resources/crd/
 
-CRDs with annotation: [tenancy.x-k8s.io/super.public](http://tenancy.x-k8s.io/super.public) will be synced up  into tenant’s virtual cluster. The syncing happens when virtual cluster is created or once the annotation is changed. 
+CRDs with annotation: [tenancy.x-k8s.io/super.public](https://sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants/constants.go#L65-L66) will be synced up into tenant’s virtual cluster. The syncing happens when virtual cluster is created or once the annotation is changed. 
 
 CRD synchronization ensures all custom defined resource type is deployed in virtual cluster, and CRD cache is properly initialized.
 
@@ -55,24 +55,25 @@ CR specific synchronization operations are handled by CR Controller, CR Downward
 
 The Main runs Syncer Server utility: multi-tenancy/incubator/virtualcluster/cmd/syncer/app/server.go, which initializes all pre-included syncer controllers and bootstraps reconciling.
 
-<img width="1176" alt="CR-Syncer-Diagram" src="https://user-images.githubusercontent.com/50972190/112764849-37a4ba00-8fbf-11eb-962d-f2ebcf66406f.png">
+![diagram](images/cr-syncer.png)
 
 ### Multi-tenancy Infrastructure Utility Object Construction
 
 CR controller is responsible for instantiating CR specific Mccontroller, Patroller and Listener from following packages:
 
 ```
- Import (
- "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
- "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
- "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener")
+ import (
+        "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
+        "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol"
+        "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/listener"
+        )
 ```
 
 Foo Mccontroller can be constructed as:
 
 ```
 multiClusterFooController, err := mccontroller.NewMCController(&v1alpha1.Foo{}, &v1alpha1.FooList{}, c,
- mc.WithMaxConcurrentReconciles(constants.DwsControllerWorkerLow), mc.WithOptions(options.MCOptions))
+ mc.WithOptions(options.MCOptions))
 ```
 
 Foo Protroller can be constructed as:
@@ -85,7 +86,7 @@ Foo Listener is constructed as:
 
 ```
 func (c *controller) GetListener() listener.ClusterChangeListener {
-        return listener.NewMCControllerListener(c.multiClusterFooController, mc.WatchOptions{})
+   return listener.NewMCControllerListener(c.multiClusterFooController, mc.WatchOptions{})
 }
 ```
 
@@ -96,14 +97,16 @@ Current Multi-tenancy syncer uses client-go library to build shared client and i
 Following code shows how to constructing CR Client and informer for super cluster:
 
 ```
-import ("sigs.k8s.io/controller-runtime/pkg/client"
-       "sigs.k8s.io/controller-runtime/pkg/cache")
+import (
+       "sigs.k8s.io/controller-runtime/pkg/client"
+       "sigs.k8s.io/controller-runtime/pkg/cache"
+       )
 
  
  superFooClient, err := client.New(config.RestConfig, client.Options{})
  
-superFoocache, err = cache.New(config.RestConfig, cache.Options{})
-superFooInformer, err := c.superFoocache.GetInformer(context.Background(), &alpha1.Foo{})
+ superFoocache, err = cache.New(config.RestConfig, cache.Options{})
+ superFooInformer, err := c.superFoocache.GetInformer(context.Background(), &alpha1.Foo{})
   
 ```
 
@@ -111,12 +114,12 @@ CR cache needs to be bootstrapped, We can put the bootstrap logic in DWS or UWS 
 
 ```
 func (c *controller) StartDWS(stopCh <-chan struct{}) error {
-go superFoocache.Start(stopCh)
+   go superFoocache.Start(stopCh)
 }
 ```
 
 
-For Virtual Cluster CR Client, we can either get informer from CR specific Mccontroller, or construct client using tenant virtual cluster Restful config.
+For Virtual Cluster CR Client, we can either get informer from CR Mccontroller, or construct client using tenant virtual cluster Restful config.
 
 ```
  clusterInformer, err := c.multiClusterFooController.GetCluster(cluster).GetInformer(&alpha1.foo{})
@@ -130,21 +133,14 @@ For Virtual Cluster CR Client, we can either get informer from CR specific Mccon
 Custom Resource Scheme installation happens in Init function of each CR Syncer package.  Controller runtime scheme builder is used here.
 
 ```
-import ( 
-    "k8s.io/apimachinery/pkg/runtime"
-    "k8s.io/apimachinery/pkg/runtime/schema"
-    )
-var SchemeGroupVersion = schema.GroupVersion{
-        Group:   "foo.example.com",
-        Version: "v1alpha1",
-}
-var (
-        SchemeBuilder      runtime.SchemeBuilder
-        localSchemeBuilder = &SchemeBuilder
-)
+import (
+       "k8s.io/sample-controller/pkg/apis/samplecontroller/v1alpha1" 
+       "k8s.io/apimachinery/pkg/runtime"
+       )
+
+var scheme = runtime.NewScheme() 
 func init() {
-        localSchemeBuilder.Register(addKnownTypes)
-        localSchemeBuilder.AddToScheme(scheme.Scheme)
+     v1alpha1.AddToScheme(scheme)
 }
 ```
 
@@ -160,7 +156,7 @@ Foo CRD should be added into virtualcluster/pkg/syncer/util/scheme  to enable CR
 
 ## CR Syncer Testing 
 
-CR syncer relies on self constructed CR clients to perform synchronization between virtual and super clusters . Current testing framework in multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test uses /k8s.io/client-go/ fake client to initialize resource controllers:
+CR syncer relies on self constructed CR clients to perform synchronization between virtual and super clusters. Current testing framework in multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test uses /k8s.io/client-go/ fake client to initialize resource controllers:
 
 ```
 func NewFooController(config *config.SyncerConfiguration,
@@ -171,15 +167,5 @@ func NewFooController(config *config.SyncerConfiguration,
         options manager.ResourceSyncerOptions)
 ```
 
-/k8s.io/client-go client cannot be extended to embed CR client. Therefore a different different NewFooController will be built to pass in CR fake client/informer instances to CR Syncer. 
-
-When multi-tenancy code base is migrated  from /[k8s.io/client-go/](http://k8s.io/client-go/) client  to [sigs.k8s.io/controller-runtime/](http://sigs.k8s.io/controller-runtime/) client, CR client can be included in client interface,  Multi-tenancy test framework can then be used for CR Syncer testing.
-
-
-
-
-
-
-
-
+/k8s.io/client-go client cannot be extended to embed CR client. Therefore a different NewFooController will be built to pass in CR fake client/informer instances to CR Syncer. 
 
