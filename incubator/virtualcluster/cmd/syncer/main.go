@@ -23,8 +23,10 @@ import (
 
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/component-base/logs"
+	"k8s.io/klog"
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 )
 
 func main() {
@@ -35,7 +37,13 @@ func main() {
 
 	stopChan := genericapiserver.SetupSignalHandler()
 
-	if err := app.NewSyncerCommand(stopChan).Execute(); err != nil {
+	s, err := options.NewResourceSyncerOptions()
+	if err != nil {
+		klog.Fatalf("unable to initialize command options: %v", err)
+		os.Exit(1)
+	}
+
+	if err := app.NewSyncerCommand(stopChan, s).Execute(); err != nil {
 		os.Exit(1)
 	}
 }

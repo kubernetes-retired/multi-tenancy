@@ -40,12 +40,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
-func NewSyncerCommand(stopChan <-chan struct{}) *cobra.Command {
-	s, err := options.NewResourceSyncerOptions()
-	if err != nil {
-		klog.Fatalf("unable to initialize command options: %v", err)
-	}
-
+func NewSyncerCommand(stopChan <-chan struct{}, s *options.ResourceSyncerOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "syncer",
 		Long: `The resource syncer is a daemon that watches tenant clusters to
