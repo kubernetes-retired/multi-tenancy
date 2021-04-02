@@ -40,16 +40,14 @@ func (c *controller) StartUWS(stopCh <-chan struct{}) error {
 	} else {
 		klog.Errorf("crd cache is nil")
 	}
+
 	if !cache.WaitForCacheSync(stopCh, c.crdSynced) {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
-	klog.V(1).Infof("start crd uws")
 	return c.UpwardController.Start(stopCh)
 }
 
 func (c *controller) BackPopulate(key string) error {
-	klog.V(1).Infof("crd uws BackPopulate")
-
 	// The key format is clustername/pcName.
 	clusterName, crdName, _ := cache.SplitMetaNamespaceKey(key)
 	op := reconciler.AddEvent
@@ -86,7 +84,6 @@ func (c *controller) BackPopulate(key string) error {
 				if err != nil {
 					return err
 				}
-				klog.V(1).Infof("crd creation done")
 			}
 			return nil
 		}
@@ -95,19 +92,17 @@ func (c *controller) BackPopulate(key string) error {
 	}
 
 	if op == reconciler.DeleteEvent {
-		klog.Infof("delete CRD")
 		opts := &metav1.DeleteOptions{
 			PropagationPolicy: &constants.DefaultDeletionPolicy,
 		}
 		err = vcapiextensionsClient.CustomResourceDefinitions().Delete(context.TODO(), crdName, *opts)
 		if err != nil {
-			klog.Errorf("cannot deelete with err=%v", err)
+			klog.Errorf("cannot delete with err=%v", err)
 			return err
 		}
 	} else {
 		updatedCRD := conversion.Equality(c.Config, nil).CheckCRDEquality(pCRD, vCRDObj.(*v1beta1.CustomResourceDefinition))
 		if updatedCRD != nil {
-			klog.V(1).Infof("update crd")
 			_, err = vcapiextensionsClient.CustomResourceDefinitions().Update(context.TODO(), updatedCRD, metav1.UpdateOptions{})
 			if err != nil {
 				return err
