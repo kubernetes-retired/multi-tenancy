@@ -101,7 +101,6 @@ import (
        "sigs.k8s.io/controller-runtime/pkg/client"
        "sigs.k8s.io/controller-runtime/pkg/cache"
        )
-
  
  superFooClient, err := client.New(config.RestConfig, client.Options{})
  
