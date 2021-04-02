@@ -57,6 +57,17 @@ func TestPriorityClassPatrol(t *testing.T) {
 			},
 			ExpectedNoOperation: true,
 		},
+		"vPriorityClass not public": {
+			ExistingObjectInTenant: []runtime.Object{
+				makePriorityClass("sc", "12345", func(class *v1.PriorityClass) {
+					class.Labels = map[string]string{
+						constants.PublicObjectKey: "false",
+					}
+					class.Value = 10000
+				}),
+			},
+			ExpectedNoOperation: true,
+		},
 		"pPriorityClass exists, vPriorityClass does not exists": {
 			ExistingObjectInSuper: []runtime.Object{
 				makePriorityClass("sc", "12345", func(class *v1.PriorityClass) {
@@ -72,7 +83,11 @@ func TestPriorityClassPatrol(t *testing.T) {
 		},
 		"pPriorityClass not found, vPriorityClass exists": {
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("sc", "12345"),
+				makePriorityClass("sc", "12345", func(class *v1.PriorityClass) {
+					class.Labels = map[string]string{
+						constants.PublicObjectKey: "true",
+					}
+				}),
 			},
 			ExpectedDeletedVObject: []string{
 				"sc",
@@ -89,11 +104,17 @@ func TestPriorityClassPatrol(t *testing.T) {
 			},
 			ExistingObjectInTenant: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Labels = map[string]string{
+						constants.PublicObjectKey: "true",
+					}
 					class.Value = 20000
 				}),
 			},
 			ExpectedUpdatedVObject: []runtime.Object{
 				makePriorityClass("pc", "123456", func(class *v1.PriorityClass) {
+					class.Labels = map[string]string{
+						constants.PublicObjectKey: "true",
+					}
 					class.Value = 10000
 					class.PreemptionPolicy = &policy
 				}),
