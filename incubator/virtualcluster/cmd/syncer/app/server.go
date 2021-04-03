@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/cmd/syncer/app/options"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer"
 	utilflag "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/flag"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/runnable"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/version/verflag"
 )
 
@@ -154,6 +155,11 @@ func Run(cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) error {
 	return fmt.Errorf("finished without leader elect")
 }
 
+type hasConfig interface {
+	runnable.Runnable
+	InjectConfig(*syncerconfig.CompletedConfig)
+}
+
 func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.CompletedConfig, stopCh <-chan struct{}) func(context.Context) {
 	return func(ctx context.Context) {
 		s.Run(stopCh)
@@ -170,6 +176,14 @@ func startSyncer(ctx context.Context, s syncer.Bootstrap, cc *syncerconfig.Compl
 			healthz.InstallHandler(mux)
 			klog.Fatal(http.ListenAndServe(":8080", mux))
 		}()
+		for _, server := range runnable.SyncerRunnableRegister.List() {
+			go func(r runnable.Runnable) {
+				if hasConfig, ok := r.(hasConfig); ok {
+					hasConfig.InjectConfig(cc)
+				}
+				r.Start(stopCh)
+			}(server)
+		}
 		<-ctx.Done()
 	}
 }
