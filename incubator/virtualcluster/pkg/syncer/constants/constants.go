@@ -66,6 +66,8 @@ const (
 	PublicObjectKey = "tenancy.x-k8s.io/super.public"
 
 	LabelVirtualNode = "tenancy.x-k8s.io/virtualnode"
+	// LabelSuperClusterID is a label key added to the vNode object in tenant when SuperClusterPooling feature is enabled.
+	LabelSuperClusterID = "tenancy.x-k8s.io/superclusterid"
 
 	// DefaultvNodeGCGracePeriod is the grace period of time before deleting an orphan vNode in tenant master.
 	DefaultvNodeGCGracePeriod = time.Second * 120

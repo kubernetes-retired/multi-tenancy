@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog"
 	rinformer "sigs.k8s.io/controller-runtime/pkg/cache"
 	dclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -201,7 +200,6 @@ func NewCrdController(config *config.SyncerConfiguration,
 				DeleteFunc: c.enqueueCRD,
 			},
 		})
-	klog.Infof("NewCrdController creation done")
 	return c, nil
 }
 
@@ -215,11 +213,10 @@ func (c *controller) GetListener() listener.ClusterChangeListener {
 
 func publicCRD(e *v1beta1.CustomResourceDefinition) bool {
 	// We only backpopulate specific crds to tenant masters
-	return e.Annotations[constants.PublicObjectKey] == "true"
+	return e.Labels[constants.PublicObjectKey] == "true"
 }
 
 func (c *controller) enqueueCRD(obj interface{}) {
-	klog.V(1).Infof("enqueueCRD")
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %v: %v", obj, err))

@@ -95,12 +95,15 @@ func (c *controller) checkPriorityClassOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing priorityclass from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.V(4).Infof("check priorityclass consistency in cluster %s", clusterName)
+
 	scList := listObj.(*v1.PriorityClassList)
 	for i, vPriorityClass := range scList.Items {
+		if !publicPriorityClass(&vPriorityClass) {
+			continue
+		}
 		pPriorityClass, err := c.priorityclassLister.Get(vPriorityClass.Name)
 		if errors.IsNotFound(err) {
-			// super master is the source of the truth for sc object, delete tenant master obj
+			// super master is the source of the truth for priorityclass object, delete tenant master obj
 			tenantClient, err := c.MultiClusterController.GetClusterClient(clusterName)
 			if err != nil {
 				klog.Errorf("error getting cluster %s clientset: %v", clusterName, err)

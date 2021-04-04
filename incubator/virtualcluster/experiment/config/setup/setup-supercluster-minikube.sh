@@ -17,14 +17,11 @@ ${now} $*
 EOF
 }
 
-log "start cluster $CLUSTER_ID from minikube"
-minikube start -p $CLUSTER_ID #--driver hyperkit
-
 WORKDIR="$DIR/cluster-$CLUSTER_ID"
 KUBECONFIG_PATH="$WORKDIR/kubeconfig"
 KUBECONFIG_SECRET_NAME="cluster-${CLUSTER_ID}-config"
-KUBECONFIG_SECRET_PATH_SYNCER="$WORKDIR/config-for-vc-syncer.yaml"
-KUBECONFIG_SECRET_PATH_SCHEDULER="$WORKDIR/config-for-scheduler.yaml"
+KUBECONFIG_SECRET_PATH_SYNCER="$WORKDIR/secret-for-vc-syncer.yaml"
+KUBECONFIG_SECRET_PATH_SCHEDULER="$WORKDIR/secret-for-scheduler.yaml"
 CLUSTER_ID_YAML_PATH="$WORKDIR/cluster-id.yaml"
 SYNCER_YAML_PATH="$WORKDIR/vc-syncer.yaml"
 CLUSTER_CR_YAML_PATH="$WORKDIR/cluster-cr.yaml"
@@ -37,7 +34,7 @@ cat > $KUBECONFIG_PATH << EOL
 apiVersion: v1
 clusters:
 - cluster:
-    certificate-authority-data: $(cat $HOME/.minikube/ca.crt |base64)
+    certificate-authority-data: $(cat $HOME/.minikube/ca.crt |base64 |tr -d \\n)
     server: https://$(minikube ip -p ${CLUSTER_ID}):8443
   name: ${CLUSTER_ID}
 contexts:
@@ -52,8 +49,8 @@ preferences: {}
 users:
 - name: ${CLUSTER_ID}
   user:
-    client-certificate-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.crt |base64)
-    client-key-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.key |base64)
+    client-certificate-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.crt |base64 |tr -d \\n)
+    client-key-data: $(cat $HOME/.minikube/profiles/$CLUSTER_ID/client.key |base64 |tr -d \\n)
 EOL
 
 log "generate vc-syncer kubeconfig secret"

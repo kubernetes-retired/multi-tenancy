@@ -28,8 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
-
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/apis/tenancy/v1alpha1"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	utilscheme "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/scheme"
 	util "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/test"
@@ -267,7 +267,11 @@ func TestUWPCDeletion(t *testing.T) {
 	}{
 		"pPC not found, vPC exists": {
 			ExistingObjectInTenant: []runtime.Object{
-				makePriorityClass("pc", "12345"),
+				makePriorityClass("pc", "12345", func(class *v1.PriorityClass) {
+					class.Labels = map[string]string{
+						constants.PublicObjectKey: "true",
+					}
+				}),
 			},
 			EnqueuedKey: defaultClusterKey + "/pc",
 			ExpectedDeletedObject: []string{

@@ -94,12 +94,9 @@ func (c *controller) checkCRDOfTenantCluster(clusterName string) {
 		klog.Errorf("error listing CRD from cluster %s informer cache: %v", clusterName, err)
 		return
 	}
-	klog.V(4).Infof("check crd consistency in cluster %s", clusterName)
 
 	crdList := listObj.(*v1beta1.CustomResourceDefinitionList)
-
 	vcrestconfig := c.multiClusterCrdController.GetCluster(clusterName).GetRestConfig()
-
 	var vcapiextensionsClient apiextensionclientset.CustomResourceDefinitionsGetter
 
 	if vcrestconfig == nil {
@@ -114,12 +111,14 @@ func (c *controller) checkCRDOfTenantCluster(clusterName string) {
 	vcapiextensionsClient = vcc.ApiextensionsV1beta1()
 
 	for i, vCRD := range crdList.Items {
+		if !publicCRD(&vCRD) {
+			continue
+		}
 		pCRD := &v1beta1.CustomResourceDefinition{}
 		err := c.superClient.Get(context.Background(), client.ObjectKey{
 			Name: vCRD.Name,
 		}, pCRD)
 		if errors.IsNotFound(err) {
-			// super master is the source of the truth for sc object, delete tenant master obj
 			opts := &metav1.DeleteOptions{
 				PropagationPolicy: &constants.DefaultDeletionPolicy,
 			}

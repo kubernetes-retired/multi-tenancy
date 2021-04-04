@@ -30,7 +30,7 @@ run the Pod. Only the syncer in the scheduled super cluster will synchronize the
 
 ## Quick Start
 
-To be added.
+Please follow this [demo](./doc/demo.md) as a quick start.
 
 ## FAQ
 

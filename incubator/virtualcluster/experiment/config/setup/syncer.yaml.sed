@@ -134,7 +134,7 @@ spec:
       containers:
         - command:
             - syncer
-            - --deployment-on-meta
+            - --deployment-on-meta=true
             - --super-master-kubeconfig=/etc/supercluster/config
             - --syncer-name=SYNCER_NAME
             - --feature-gates
