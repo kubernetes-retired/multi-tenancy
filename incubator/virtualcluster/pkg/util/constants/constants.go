@@ -31,13 +31,13 @@ const (
 
 const (
 	// LabelScheduledCluster is the super cluster the pod schedules to.
-	LabelScheduledCluster = "scheduler.tenancy.x-k8s.io/superCluster"
+	LabelScheduledCluster = "scheduler.virtualcluster.io/superCluster"
 
 	// LabelScheduledPlacements is the scheduled placements the namespace schedules to.
-	LabelScheduledPlacements = "scheduler.tenancy.x-k8s.io/placements"
+	LabelScheduledPlacements = "scheduler.virtualcluster.io/placements"
 
 	// LabelScheduledSlice is the scheduled slice size of the namespace.
-	LabelNamespaceSlice = "scheduler.tenancy.x-k8s.io/slice"
+	LabelNamespaceSlice = "scheduler.virtualcluster.io/slice"
 )
 
 var DefaultNamespaceSlice = v1.ResourceList{

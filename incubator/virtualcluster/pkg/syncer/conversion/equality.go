@@ -709,3 +709,13 @@ func (e vcEquality) CheckPVSpecEquality(pObj, vObj *v1.PersistentVolumeSpec) *v1
 	}
 	return updatedPVSpec
 }
+
+func (e vcEquality) CheckNamespaceEquality(pObj, vObj *v1.Namespace) *v1.Namespace {
+	var updated *v1.Namespace
+	updatedMeta := e.CheckDWObjectMetaEquality(&pObj.ObjectMeta, &vObj.ObjectMeta)
+	if updatedMeta != nil {
+		updated = pObj.DeepCopy()
+		updated.ObjectMeta = *updatedMeta
+	}
+	return updated
+}
