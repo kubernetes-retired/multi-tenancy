@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/patrol/differ"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	utilconstants "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/constants"
 	mc "sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/mccontroller"
@@ -136,6 +137,19 @@ func (c *controller) PatrollerDo() {
 		// if vc object is deleted, we should reach here
 		if c.shouldBeGarbageCollected(p) || p.Annotations[constants.LabelUID] != string(v.UID) {
 			c.deleteNamespace(p)
+		}
+		// update namespace meta is a generic operation, guarded by SuperClusterPooling for now
+		if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+			vc, err := util.GetVirtualClusterObject(c.MultiClusterController, vObj.GetOwnerCluster())
+			if err != nil {
+				klog.Errorf("fail to get cluster spec : %s", vObj.GetOwnerCluster())
+				return
+			}
+			updatedNamespace := conversion.Equality(c.Config, vc).CheckNamespaceEquality(p, v)
+			if updatedNamespace != nil {
+				klog.Warningf("metadata of namespace %s diff in super&tenant cluster", pObj.Key)
+				d.OnAdd(vObj)
+			}
 		}
 	}
 	d.DeleteFunc = func(pObj differ.ClusterObject) {

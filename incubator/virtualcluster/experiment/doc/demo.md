@@ -106,7 +106,7 @@ Assuming we have created two super clusters: r1 and r2 and one virtual cluster f
 we use the `default` namespace in the virtual cluster to do the experiment.
 
 First, we configure the namespace slice, which is the scheduling unit used in the namespace scheduler, by
-adding an annotation `scheduler.tenancy.x-k8s.io/slice: '{"cpu":"100m", "memory":"100Mi"}'` to the `default` namespace.
+adding an annotation `scheduler.virtualcluster.io/slice: '{"cpu":"100m", "memory":"100Mi"}'` to the `default` namespace.
 
 Then we create a resource quota in the `default` namespace, which has the capacity of two slices in total.
 
@@ -123,7 +123,7 @@ spec:
 ```
 
 The namespace scheduler should update the scheduling result in the `default` namespace's annotation shortly
-using the key `scheduler.tenancy.x-k8s.io/placements`.
+using the key `scheduler.virtualcluster.io/placements`.
 
 ```bash
 $ kubectl --kubeconfig vc-1.kubeconfig get ns default -o yaml
@@ -131,8 +131,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   annotations:
-    scheduler.tenancy.x-k8s.io/placements: '{"r1":1,"r2":1}'
-    scheduler.tenancy.x-k8s.io/slice: '{"cpu":"100m", "memory":"100Mi"}'
+    scheduler.virtualcluster.io/placements: '{"r1":1,"r2":1}'
+    scheduler.virtualcluster.io/slice: '{"cpu":"100m", "memory":"100Mi"}'
   creationTimestamp: "2021-03-25T02:20:20Z"
   name: default
   resourceVersion: "356"
@@ -189,7 +189,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   annotations:
-    scheduler.tenancy.x-k8s.io/superCluster: r1
+    scheduler.virtualcluster.io/superCluster: r1
   creationTimestamp: "2021-03-25T16:09:33Z"
   generateName: zhijin-test-2-684cc8d565-
   labels:

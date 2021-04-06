@@ -28,6 +28,8 @@ import (
 
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util"
+	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/util/featuregate"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/util/reconciler"
 )
 
@@ -107,6 +109,21 @@ func (c *controller) reconcileNamespaceCreate(clusterName, targetNamespace, requ
 func (c *controller) reconcileNamespaceUpdate(clusterName, targetNamespace, requestUID string, pNamespace, vNamespace *v1.Namespace) error {
 	if pNamespace.Annotations[constants.LabelUID] != requestUID {
 		return fmt.Errorf("pNamespace %s exists but its delegated UID is different", targetNamespace)
+	}
+
+	// update namespace meta is a generic operation, guarded by SuperClusterPooling for now
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		vc, err := util.GetVirtualClusterObject(c.MultiClusterController, clusterName)
+		if err != nil {
+			return err
+		}
+		updatedNamespace := conversion.Equality(c.Config, vc).CheckNamespaceEquality(pNamespace, vNamespace)
+		if updatedNamespace != nil {
+			_, err = c.namespaceClient.Namespaces().Update(context.TODO(), updatedNamespace, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
