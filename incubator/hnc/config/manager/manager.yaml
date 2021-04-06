@@ -3,6 +3,12 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    # Add excluded namespace label on `hnc-system` namespace by default because
+    # without this label when installing HNC, there will be a deadlock that
+    # the object webhook fails close so the cert-rotator cannot create/update
+    # `hnc-webhook-server-cert` secret object for VWHConfiguration, thus the
+    # webhooks will never be ready.
+    hnc.x-k8s.io/excluded-namespace: "true"
   name: system
 ---
 apiVersion: apps/v1
@@ -44,6 +50,10 @@ spec:
         - "--apiserver-qps-throttle=50"
         - "--enable-internal-cert-management"
         - "--cert-restart-on-secret-refresh"
+        - "--excluded-namespace=kube-system"
+        - "--excluded-namespace=kube-public"
+        - "--excluded-namespace=hnc-system"
+        - "--excluded-namespace=kube-node-lease"
         image: controller:latest
         name: manager
         resources:

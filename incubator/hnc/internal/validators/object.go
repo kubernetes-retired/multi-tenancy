@@ -31,10 +31,16 @@ const (
 	ObjectsServingPath = "/validate-objects"
 )
 
-// Note: the validating webhook FAILS OPEN. This means that if the webhook goes down, all further
-// changes to the objects are allowed.
+// Note: the validating webhook FAILS CLOSE. This means that if the webhook goes
+// down, all further changes are forbidden. In addition, the webhook `rules`
+// (groups, resources, versions, verbs) specified in the below kubebuilder marker
+// are overwritten by the `rules` configured in config/webhook/webhook_patch.yaml,
+// because there's no marker for `scope` and we only want this object webhook
+// to work on `namespaced` objects. Please make sure you edit the webhook_patch.yaml
+// file if you want to change the webhook `rules` and better make the rules
+// here the same as what's in the webhook_patch.yaml.
 //
-// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-objects,mutating=false,failurePolicy=ignore,groups="*",resources="*",sideEffects=None,verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-objects,mutating=false,failurePolicy=fail,groups="*",resources="*",sideEffects=None,verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
 
 type Object struct {
 	Log     logr.Logger
@@ -50,7 +56,10 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	// This reduces the chance we'll hose some aspect of the cluster we weren't supposed to touch.
 	//
 	// Firstly, skip namespaces we're excluded from (like kube-system).
-	if config.EX[req.Namespace] {
+	// Note: This is added just in case the "hnc.x-k8s.io/excluded-namespace=true"
+	// label is not added on the excluded namespaces. VWHConfiguration of this VWH
+	// already has a `namespaceSelector` to exclude namespaces with the label.
+	if config.ExcludedNamespaces[req.Namespace] {
 		return allow("excluded namespace " + req.Namespace)
 	}
 	// Allow changes to the types that are not in propagate mode. This is to dynamically enable/disable

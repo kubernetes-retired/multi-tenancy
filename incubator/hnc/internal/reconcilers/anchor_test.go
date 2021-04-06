@@ -8,6 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
 var _ = Describe("Anchor", func() {
@@ -50,6 +51,7 @@ var _ = Describe("Anchor", func() {
 	})
 
 	It("should set the anchor.status.state to Forbidden if the parent is not allowed to have subnamespaces", func() {
+		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
 		kube_system_anchor_bar := newAnchor(barName, "kube-system")
 		updateAnchor(ctx, kube_system_anchor_bar)
 		Eventually(getAnchorState(ctx, "kube-system", barName)).Should(Equal(api.Forbidden))

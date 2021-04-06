@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
 	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
@@ -219,4 +220,49 @@ func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 		a[api.SubnamespaceOf] = pnm
 	}
 	ns.SetAnnotations(a)
+}
+
+func TestIllegalExcludedNamespace(t *testing.T) {
+	f := foresttest.Create("-a-c") // a <- b; c <- d
+	vns := &Namespace{Forest: f}
+
+	// Non-excluded namespaces with excluded-namespace label are illegal.
+	illegalInst := &corev1.Namespace{}
+	illegalInst.Name = "illegal"
+	illegalInst.SetLabels(map[string]string{api.LabelExcludedNamespace: "true"})
+	legalInst := &corev1.Namespace{}
+	legalInst.Name = "legal"
+	legalInst.SetLabels(map[string]string{api.LabelExcludedNamespace: "true"})
+	config.ExcludedNamespaces["legal"] = true
+
+	tests := []struct {
+		name   string
+		nsInst *corev1.Namespace
+		op     k8sadm.Operation
+		fail   bool
+	}{
+		{name: "allow updating legal", nsInst: legalInst, op: k8sadm.Update},
+		{name: "allow creating legal", nsInst: legalInst, op: k8sadm.Create},
+		{name: "allow deleting legal", nsInst: legalInst, op: k8sadm.Delete},
+		{name: "deny updating illegal", nsInst: illegalInst, op: k8sadm.Update, fail: true},
+		{name: "deny creating illegal", nsInst: illegalInst, op: k8sadm.Create, fail: true},
+		{name: "allow deleting illegal", nsInst: illegalInst, op: k8sadm.Delete},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g := NewWithT(t)
+
+			req := &nsRequest{
+				ns: tc.nsInst,
+				op: tc.op,
+			}
+
+			// Test
+			got := vns.handle(req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
 }

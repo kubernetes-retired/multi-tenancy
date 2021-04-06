@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
 )
 
 var _ = Describe("Hierarchy", func() {
@@ -355,6 +356,28 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, nms[5], nms[3]+api.LabelTreeDepthSuffix)).Should(Equal("1"))
 		Eventually(getLabel(ctx, nms[5], nms[1]+api.LabelTreeDepthSuffix)).Should(Equal("2"))
 		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("3"))
+	})
+
+	It("should remove excluded namespace labels from non-excluded namespaces", func() {
+		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		l := map[string]string{api.LabelExcludedNamespace: "true"}
+
+		// Set excluded namespace labels on foo and bar. We are not verifying the
+		// labels are added here because our reconciler will remove it and the
+		// verification would be flaky.
+		fooName := createNSWithLabel(ctx, "foo", l)
+		barName := createNSWithLabel(ctx, "bar", l)
+
+		kubeSystem := getNamespace(ctx, "kube-system")
+		kubeSystem.SetLabels(l)
+		updateNamespace(ctx, kubeSystem)
+		Eventually(getLabel(ctx, "kube-system", api.LabelExcludedNamespace)).Should(Equal("true"))
+
+		// Verify the excluded namespace label is removed from both foo and bar, but
+		// is not removed from kube-system.
+		Eventually(getLabel(ctx, fooName, api.LabelExcludedNamespace)).Should(Equal(""))
+		Eventually(getLabel(ctx, barName, api.LabelExcludedNamespace)).Should(Equal(""))
+		Eventually(getLabel(ctx, "kube-system", api.LabelExcludedNamespace)).Should(Equal("true"))
 	})
 })
 

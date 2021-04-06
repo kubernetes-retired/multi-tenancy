@@ -119,6 +119,15 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 		return allow("HNC SA")
 	}
 
+	if config.ExcludedNamespaces[req.hc.Namespace] {
+		reason := fmt.Sprintf("Cannot set the excluded namespace %q as a child of another namespace", req.hc.Namespace)
+		return deny(metav1.StatusReasonForbidden, reason)
+	}
+	if config.ExcludedNamespaces[req.hc.Spec.Parent] {
+		reason := fmt.Sprintf("Cannot set the parent to the excluded namespace %q", req.hc.Spec.Parent)
+		return deny(metav1.StatusReasonForbidden, reason)
+	}
+
 	// Do all checks that require holding the in-memory lock. Generate a list of server checks we
 	// should perform once the lock is released.
 	serverChecks, resp := v.checkForest(log, req.hc)
@@ -185,11 +194,6 @@ func (v *Hierarchy) checkParent(ns, curParent, newParent *forest.Namespace) admi
 
 	if curParent == newParent {
 		return allow("parent unchanged")
-	}
-
-	if config.EX[newParent.Name()] {
-		reason := fmt.Sprintf("Cannot set the parent to an excluded namespace %q", newParent.Name())
-		return deny(metav1.StatusReasonForbidden, "Excluded parent: "+reason)
 	}
 
 	// Prevent changing parent of a subnamespace

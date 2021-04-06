@@ -194,7 +194,7 @@ func (r *ObjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	resp := ctrl.Result{}
 	log := loggerWithRID(r.Log).WithValues("trigger", req.NamespacedName)
 
-	if config.EX[req.Namespace] {
+	if config.ExcludedNamespaces[req.Namespace] {
 		return resp, nil
 	}
 

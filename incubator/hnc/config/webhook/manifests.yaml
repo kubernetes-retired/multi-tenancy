@@ -100,7 +100,7 @@ webhooks:
       name: webhook-service
       namespace: system
       path: /validate-objects
-  failurePolicy: Ignore
+  failurePolicy: Fail
   name: objects.hnc.x-k8s.io
   rules:
   - apiGroups:

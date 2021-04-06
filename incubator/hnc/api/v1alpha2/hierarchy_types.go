@@ -43,6 +43,10 @@ const (
 	// LabelManagedByStandard will eventually replace our own managed-by annotation (we didn't know
 	// about this standard label when we invented our own).
 	LabelManagedByApps = "app.kubernetes.io/managed-by"
+
+	// LabelExcludedNamespace is the label added by users on the namespaces that
+	// should be excluded from our validators, e.g. "kube-system".
+	LabelExcludedNamespace = MetaGroup + "/excluded-namespace"
 )
 
 const (
