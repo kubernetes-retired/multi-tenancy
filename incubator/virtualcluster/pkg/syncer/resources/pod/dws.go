@@ -30,6 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/constants"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/conversion"
 	"sigs.k8s.io/multi-tenancy/incubator/virtualcluster/pkg/syncer/metrics"
@@ -280,9 +282,27 @@ func (c *controller) getPodRelatedServices(cluster string, pPod *v1.Pod) ([]*v1.
 		services = append(services, apiserver)
 	}
 
-	list, err := c.serviceLister.Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
-	if err != nil {
-		return nil, err
+	var list []*v1.Service
+	var err error
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		// In case of super cluster pooling, it is possible that the tenant default namespace is not synced to current super cluster.
+		// We need to query the tenant apiserver to get the services in tenant default namespace.
+		// Note that the cluster ip in the service from the tenant default namespace can be a bogus value.
+		// We expect an external loadbalancer is used for each tenant service.
+		var serviceListObj interface{}
+		serviceListObj, err = c.MultiClusterController.ListByObjectType(cluster, &v1.Service{}, client.InNamespace(metav1.NamespaceDefault))
+		if err != nil {
+			return nil, err
+		}
+		serviceList := serviceListObj.(*v1.ServiceList)
+		for i, _ := range serviceList.Items {
+			list = append(list, &serviceList.Items[i])
+		}
+	} else {
+		list, err = c.serviceLister.Services(conversion.ToSuperMasterNamespace(cluster, metav1.NamespaceDefault)).List(labels.Everything())
+		if err != nil {
+			return nil, err
+		}
 	}
 	services = append(services, list...)
 

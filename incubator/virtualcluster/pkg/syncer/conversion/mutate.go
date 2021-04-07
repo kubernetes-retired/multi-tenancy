@@ -255,6 +255,9 @@ func getServiceEnvVarMap(ns, cluster string, enableServiceLinks *bool, services 
 		// We also add environment variables for other services in the same
 		// namespace, if enableServiceLinks is true.
 		if IsControlPlaneService(service, cluster) {
+			// TODO: If superclusterpooling feature is enabled, an external loadbalancer is
+			// expected for the APIserver service. Hence, we should use the Ingress IP instead
+			// of the ClusterIP.
 			apiServerService = service.Spec.ClusterIP
 			if _, exists := serviceMap[serviceName]; !exists {
 				serviceMap[serviceName] = service

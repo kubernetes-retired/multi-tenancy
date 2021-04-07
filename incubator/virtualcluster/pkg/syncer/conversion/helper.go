@@ -242,5 +242,11 @@ func IsControlPlaneService(service *v1.Service, cluster string) bool {
 		kubernetesService = "apiserver-svc"
 	}
 
+	// If the super cluster pooling is enabled, the service in tenant default namepsace
+	// is used.
+	if featuregate.DefaultFeatureGate.Enabled(featuregate.SuperClusterPooling) {
+		kubernetesNamespace = metav1.NamespaceDefault
+		kubernetesService = "kubernetes"
+	}
 	return service.Namespace == kubernetesNamespace && service.Name == kubernetesService
 }
