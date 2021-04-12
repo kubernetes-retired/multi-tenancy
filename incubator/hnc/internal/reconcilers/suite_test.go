@@ -71,11 +71,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		// We set path to "../../manifests/envtest/" as a workaround for a known
-		// envtest bug. We should set it back to "../../config/crd/bases/" after the
-		// bug is fixed in controller-runtime. See issue -
-		// https://github.com/kubernetes-sigs/multi-tenancy/issues/1148
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "manifests", "envtest")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
 	}
 
 	var err error
