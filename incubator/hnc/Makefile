@@ -92,7 +92,6 @@ all: test docker-build
 
 # Run tests
 test: build
-	./hack/crd_patches/ensure-all-served-for-envtest.sh
 	@echo
 	@echo "If tests fail due to no matches for kind \"CustomResourceDefinition\" in version \"apiextensions.k8s.io/v1\","
 	@echo "please remove the old kubebuilder and reinstall it - https://book.kubebuilder.io/quick-start.html#installation"
