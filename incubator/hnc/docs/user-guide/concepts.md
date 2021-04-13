@@ -533,6 +533,8 @@ We are considering replacing this with the standard
 
 #### hnc.x-k8s.io/excluded-namespace (label on namespaces)
 
+***Excluded namespaces configuration is only available in HNC v0.8 and later***
+
 This label should be added to namespaces such as `kube-system` and `kube-public`
 so that HNC's validating webhook cannot accidentally prevent operations in these
 namespaces and block critical cluster operations.
