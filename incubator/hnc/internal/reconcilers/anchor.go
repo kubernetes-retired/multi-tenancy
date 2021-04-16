@@ -99,6 +99,12 @@ func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// If the subnamespace doesn't exist, create it.
 	if inst.Status.State == api.Missing {
 		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
+			// Write the "Missing" state to the anchor status if the subnamespace
+			// cannot be created for some reason. Without it, the anchor status will
+			// remain empty by default.
+			if anchorErr := r.writeInstance(ctx, log, inst); anchorErr != nil {
+				log.Error(anchorErr, "while setting anchor state", "state", api.Missing, "reason", err)
+			}
 			return ctrl.Result{}, err
 		}
 	}
