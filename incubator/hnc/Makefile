@@ -247,7 +247,28 @@ kind-deploy:
 # Go test suite has a 10m timeout, and the flag disables that timeout (as of
 # July 2020, these tests take ~15m and that number is expected to grow).
 .PHONY: test-e2e
-test-e2e:
+test-e2e: exclude-system-namespaces
+	go clean -testcache
+	go test -v -timeout 0 ./test/e2e/...
+
+# This batch test will run e2e tests N times on the current cluster the user
+# deployed (either kind or a kubernetes cluster), e.g. "make test-e2e-batch N=10"
+.PHONY: test-e2e-batch
+test-e2e-batch: exclude-system-namespaces
+	number=1 ; while [[ $$number -le $N ]] ; do \
+		echo $$number ; \
+    ((number = number + 1)) ; \
+		go clean -testcache ; \
+		go test -v -timeout 0 ./test/e2e/... ; \
+	done
+
+exclude-system-namespaces:
+	@echo
+	@echo "Ensuring all system namespaces are excluded from HNC..."
+	@kubectl label ns hnc-system hnc.x-k8s.io/excluded-namespace=true --overwrite
+	@kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true --overwrite
+	@kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true --overwrite
+	@kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true --overwrite
 	@echo
 	@echo "If these tests fail due to the webhook not being ready, wait 30s and try again. Note that webhooks can take up to 30s to become ready"
 	@echo "after HNC is first deployed in a cluster."
@@ -260,8 +281,6 @@ ifndef HNC_REPAIR
 	@echo
 	@sleep 5
 endif
-	go clean -testcache
-	go test -v -timeout 0 ./test/e2e/...
 
 ###################### RELEASE ACTIONS #########################
 # Build the container image by Cloud Build and build YAMLs locally
