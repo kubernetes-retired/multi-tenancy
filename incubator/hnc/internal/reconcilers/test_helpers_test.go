@@ -51,6 +51,17 @@ func getHierarchy(ctx context.Context, nm string) *api.HierarchyConfiguration {
 	return hier
 }
 
+func canGetHierarchy(ctx context.Context, nm string) func() bool {
+	return func() bool {
+		nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
+		hier := &api.HierarchyConfiguration{}
+		if err := k8sClient.Get(ctx, nnm, hier); err != nil {
+			return false
+		}
+		return true
+	}
+}
+
 func updateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) {
 	if h.CreationTimestamp.IsZero() {
 		ExpectWithOffset(1, k8sClient.Create(ctx, h)).Should(Succeed())

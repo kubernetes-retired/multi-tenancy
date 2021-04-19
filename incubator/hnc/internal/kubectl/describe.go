@@ -39,7 +39,7 @@ var describeCmd = &cobra.Command{
 		nnm := args[0]
 		fmt.Printf("Hierarchy configuration for namespace %s\n", nnm)
 		hier := client.getHierarchy(nnm)
-		anms := client.getAnchorNames(nnm)
+		as := client.getAnchorStatus(nnm)
 
 		// Parent
 		if hier.Spec.Parent != "" {
@@ -53,11 +53,11 @@ var describeCmd = &cobra.Command{
 		for _, cn := range hier.Status.Children {
 			childrenAndStatus[cn] = ""
 		}
-		for _, cn := range anms {
+		for cn, st := range as {
 			if _, ok := childrenAndStatus[cn]; ok {
 				childrenAndStatus[cn] = "subnamespace"
 			} else {
-				childrenAndStatus[cn] = "missing subnamespace"
+				childrenAndStatus[cn] = st + " subnamespace"
 			}
 		}
 		if len(childrenAndStatus) > 0 {

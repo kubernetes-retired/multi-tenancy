@@ -25,7 +25,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
@@ -43,12 +42,13 @@ var rootCmd *cobra.Command
 var client Client
 
 type realClient struct{}
+type anchorStatus map[string]string
 
 type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
 	createAnchor(nnm string, hnnm string)
-	getAnchorNames(nnm string) []string
+	getAnchorStatus(nnm string) anchorStatus
 	getHNCConfig() *api.HNCConfiguration
 	updateHNCConfig(*api.HNCConfiguration)
 }
@@ -137,28 +137,25 @@ func (cl *realClient) getHierarchy(nnm string) *api.HierarchyConfiguration {
 	return hier
 }
 
-func (cl *realClient) getAnchorNames(nnm string) []string {
+func (cl *realClient) getAnchorStatus(nnm string) anchorStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var anms []string
-
 	// List all the anchors in the namespace.
-	ul := &unstructured.UnstructuredList{}
-	ul.SetKind(api.AnchorKind)
-	ul.SetAPIVersion(api.AnchorAPIVersion)
-	err := hncClient.Get().Resource(api.Anchors).Namespace(nnm).Do(ctx).Into(ul)
+	al := &api.SubnamespaceAnchorList{}
+	err := hncClient.Get().Resource(api.Anchors).Namespace(nnm).Do(ctx).Into(al)
 	if err != nil && !errors.IsNotFound(err) {
 		fmt.Printf("Error listing subnamespace anchors for %s: %s\n", nnm, err)
 		os.Exit(1)
 	}
 
-	// Create a list of strings of the anchor names.
-	for _, inst := range ul.Items {
-		anms = append(anms, inst.GetName())
+	// Create the map from anchor names to their status.
+	as := make(anchorStatus)
+	for _, inst := range al.Items {
+		as[inst.Name] = string(inst.Status.State)
 	}
 
-	return anms
+	return as
 }
 
 func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason string) {

@@ -22,6 +22,7 @@ var _ = Describe("Hierarchy", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
+		config.ExcludedNamespaces = nil
 	})
 
 	It("should set a child on the parent", func() {
@@ -29,6 +30,28 @@ var _ = Describe("Hierarchy", func() {
 		fooHier.Spec.Parent = barName
 		updateHierarchy(ctx, fooHier)
 		Eventually(hasChild(ctx, barName, fooName)).Should(Equal(true))
+	})
+
+	It("should remove the hierarchyconfiguration singleton in an excluded namespacee", func() {
+		// Set the excluded-namespace "kube-system"'s parent to "bar".
+		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		exHier := newHierarchy("kube-system")
+		exHier.Spec.Parent = barName
+		updateHierarchy(ctx, exHier)
+
+		// Verify the hierarchyconfiguration singleton is deleted.
+		Eventually(canGetHierarchy(ctx, "kube-system")).Should(Equal(false))
+	})
+
+	It("should set IllegalParent condition if the parent is an excluded namespace", func() {
+		// Set bar's parent to the excluded-namespace "kube-system".
+		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		barHier := newHierarchy(barName)
+		barHier.Spec.Parent = "kube-system"
+		updateHierarchy(ctx, barHier)
+		// Bar singleton should have "IllegalParent" and no "ParentMissing" condition.
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonIllegalParent)).Should(Equal(true))
+		Eventually(hasCondition(ctx, barName, api.ConditionActivitiesHalted, api.ReasonParentMissing)).Should(Equal(false))
 	})
 
 	It("should set ParentMissing condition if the parent is missing", func() {

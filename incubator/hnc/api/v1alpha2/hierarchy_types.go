@@ -59,6 +59,7 @@ const (
 	ReasonDeletingCRD   string = "DeletingCRD"
 	ReasonInCycle       string = "InCycle"
 	ReasonParentMissing string = "ParentMissing"
+	ReasonIllegalParent string = "IllegalParent"
 	ReasonAnchorMissing string = "SubnamespaceAnchorMissing"
 )
 
@@ -71,6 +72,7 @@ var AllConditions = map[string][]string{
 		ReasonDeletingCRD,
 		ReasonInCycle,
 		ReasonParentMissing,
+		ReasonIllegalParent,
 	},
 	ConditionBadConfiguration: {
 		ReasonAnchorMissing,
