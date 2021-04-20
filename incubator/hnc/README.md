@@ -272,7 +272,7 @@ Within the `reconcilers` directory, there are four reconcilers:
 HNC uses Prow to run tests, which is configured
 [here](https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/wg-multi-tenancy).
 The presubmits run `hack/ci-test.sh` in this repo, and the postsubmits and
-periodics run `hack/prow-e2e`.  Results are displayed on
+periodics run `hack/prow-run-e2e.sh`.  Results are displayed on
 [testgrid](https://k8s-testgrid.appspot.com/wg-multi-tenancy-hnc) and are
 configured
 [here](https://github.com/kubernetes/test-infra/tree/master/config/testgrids/kubernetes/wg-multi-tenancy).
