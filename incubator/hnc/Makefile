@@ -180,12 +180,23 @@ controller-gen:
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config.
 #
-# We only delete and redeploy the deployment, and nothing else, because a)
-# deleting the CRDs will cause all the existing hierarchy configs to be wiped
-# away and b) if we don't delete the deployment, a new image won't be pulled
-# unless the tag changes.
+# We only delete the deployment and the validatingwebhookconfiguration if they
+# exist before applying the manifest, because
+# a) deleting the CRDs will cause all the existing CRs to be wiped away;
+# b) if not deleting the deployment, a new image won't be pulled unless the tag changes;
+# c) if not deleting the validatingwebhookconfiguration, we cannot label
+#    namespaces to exclude them if the HNC pod is already in a bad state.
+#
+# Then we ensure the system namespaces are excluded before we deploy HNC. This
+# step is critical because if the HNC pod is ever in a bad state, the object
+# webhook service would not respond and would stop everything in the system
+# namespaces, such as "kube-system", thus breaking the whole cluster.
 deploy: docker-push kubectl manifests
 	-kubectl -n hnc-system delete deployment hnc-controller-manager
+	-kubectl delete validatingwebhookconfiguration hnc-validating-webhook-configuration
+	-kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true --overwrite
+	-kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true --overwrite
+	-kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true --overwrite
 	kubectl apply -f manifests/${HNC_IMG_NAME}.yaml
 
 deploy-watch:
@@ -262,6 +273,11 @@ test-e2e-batch: exclude-system-namespaces
 		go test -v -timeout 0 ./test/e2e/... ; \
 	done
 
+# exclude-system-namespaces is called before we run any e2e tests. We do ensure
+# the system namespaces are excluded in the "deploy" target. However, we need to
+# do it here too in case users install HNC by applying manifests. Ensuring the
+# system namespaces excluded is critical, because otherwise when HNC pod is in a
+# bad state, the whole cluster will break.
 exclude-system-namespaces:
 	@echo
 	@echo "Ensuring all system namespaces are excluded from HNC..."
