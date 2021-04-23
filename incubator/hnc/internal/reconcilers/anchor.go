@@ -18,6 +18,7 @@ package reconcilers
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -72,12 +73,21 @@ func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Report "Forbidden" state and early exit if the namespace is not allowed to have subnamespaces
-	// but has bypassed the webhook and successfully created the anchor. Forbidden anchors won't have
-	// finalizers.
-	// TODO refactor/split the ExcludedNamespaces map for 1) reconciler exclusion and 2) subnamespaces exclusion
-	//  purposes. See issue: https://github.com/kubernetes-sigs/multi-tenancy/issues/495
+	// Always delete anchor (and any other HNC CRs) in the excluded namespaces and
+	// early exit.
 	if config.ExcludedNamespaces[pnm] {
+		// Since the anchors in the excluded namespaces are never synced by HNC,
+		// there are no finalizers on the anchors that we can delete them without
+		// removing the finalizers first.
+		log.Info("Deleting anchor in an excluded namespace")
+		return ctrl.Result{}, r.deleteInstance(ctx, log, inst)
+	}
+
+	// Report "Forbidden" state and early exit if the anchor name is an excluded
+	// namespace that should not be created as a subnamespace, but the webhook has
+	// been bypassed and the anchor has been successfully created. Forbidden
+	// anchors won't have finalizers.
+	if config.ExcludedNamespaces[nm] {
 		inst.Status.State = api.Forbidden
 		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 	}
@@ -331,6 +341,15 @@ func (r *AnchorReconciler) writeInstance(ctx context.Context, log logr.Logger, i
 			log.Error(err, "while updating on apiserver")
 			return err
 		}
+	}
+	return nil
+}
+
+// deleteInstance deletes the anchor instance. Note: Make sure there's no
+// finalizers on the instance before calling this function.
+func (r *AnchorReconciler) deleteInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
+	if err := r.Delete(ctx, inst); err != nil {
+		return fmt.Errorf("while deleting on apiserver: %w", err)
 	}
 	return nil
 }

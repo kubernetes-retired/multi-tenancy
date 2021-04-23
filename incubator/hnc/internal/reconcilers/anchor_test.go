@@ -22,6 +22,7 @@ var _ = Describe("Anchor", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNSName("bar")
+		config.ExcludedNamespaces = nil
 	})
 
 	It("should create an subnamespace and update the hierarchy according to the anchor", func() {
@@ -50,11 +51,18 @@ var _ = Describe("Anchor", func() {
 		Eventually(getAnchorState(ctx, fooName, barName)).Should(Equal(api.Ok))
 	})
 
-	It("should set the anchor.status.state to Forbidden if the parent is not allowed to have subnamespaces", func() {
+	It("should remove the anchor in an excluded namespace", func() {
 		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
 		kube_system_anchor_bar := newAnchor(barName, "kube-system")
 		updateAnchor(ctx, kube_system_anchor_bar)
-		Eventually(getAnchorState(ctx, "kube-system", barName)).Should(Equal(api.Forbidden))
+		Eventually(canGetAnchor(ctx, barName, "kube-system")).Should(Equal(false))
+	})
+
+	It("should set the anchor.status.state to Forbidden if the subnamespace is an excluded namespace", func() {
+		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		foo_anchor_kube_system := newAnchor("kube-system", fooName)
+		updateAnchor(ctx, foo_anchor_kube_system)
+		Eventually(getAnchorState(ctx, fooName, "kube-system")).Should(Equal(api.Forbidden))
 	})
 
 	It("should set the anchor.status.state to Conflict if a namespace of the same name already exists", func() {
@@ -120,6 +128,17 @@ func getAnchorWithOffset(offset int, ctx context.Context, pnm, nm string) *api.S
 		return k8sClient.Get(ctx, nsn, anchor)
 	}).Should(Succeed())
 	return anchor
+}
+
+func canGetAnchor(ctx context.Context, pnm, nm string) func() bool {
+	return func() bool {
+		nsn := types.NamespacedName{Name: nm, Namespace: pnm}
+		anchor := &api.SubnamespaceAnchor{}
+		if err := k8sClient.Get(ctx, nsn, anchor); err != nil {
+			return false
+		}
+		return true
+	}
 }
 
 func updateAnchor(ctx context.Context, anchor *api.SubnamespaceAnchor) {
