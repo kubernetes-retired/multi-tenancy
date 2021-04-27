@@ -45,6 +45,9 @@ func TestMain(m *testing.M) {
 
 		// List the clusters available
 		clusterList, err := provider.List()
+		if err != nil {
+			return err
+		}
 		clusters := strings.Join(clusterList, " ")
 
 		// Checks if the main cluster (test) is running
@@ -62,6 +65,9 @@ func TestMain(m *testing.M) {
 
 		// Create the K8s clientSet
 		cfg, err := kubecfgFlags.ToRESTConfig()
+		if err != nil {
+			return err
+		}
 		k8sClient, err := kubernetes.NewForConfig(cfg)
 		if err != nil {
 			return err
@@ -70,6 +76,9 @@ func TestMain(m *testing.M) {
 		options.Logger = log.GetLogger(true)
 		rest := k8sClient.CoreV1().RESTClient()
 		apiExtensions, err = apiextensionspkg.NewForConfig(cfg)
+		if err != nil {
+			return err
+		}
 
 		// Initialize testclient
 		testClient = unittestutils.TestNewClient("unittests", k8sClient, apiExtensions, rest, cfg)
