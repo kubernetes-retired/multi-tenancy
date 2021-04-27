@@ -257,10 +257,19 @@ kind-deploy:
 # Note the `-timeout 0` that's passed to the `go test` command - by default, a
 # Go test suite has a 10m timeout, and the flag disables that timeout (as of
 # July 2020, these tests take ~15m and that number is expected to grow).
+#
+# To focus on specific tests, use the HNC_FOCUS var as follows:
+#
+# HNC_FOCUS=772 make test-e2e # only runs the test for issue 772
+# HNC_FOCUS=Quickstart make test-e2e # Runs all tests in the "Quickstart" Describe block
 .PHONY: test-e2e
 test-e2e: exclude-system-namespaces
 	go clean -testcache
+ifndef HNC_FOCUS
 	go test -v -timeout 0 ./test/e2e/...
+else
+	go test -v -timeout 0 ./test/e2e/... -args --ginkgo.focus ${HNC_FOCUS}
+endif
 
 # This batch test will run e2e tests N times on the current cluster the user
 # deployed (either kind or a kubernetes cluster), e.g. "make test-e2e-batch N=10"

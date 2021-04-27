@@ -408,10 +408,8 @@ EOF
 
 ### Install or upgrade HNC on a cluster
 
-We recommend installing HNC onto clusters running Kubernetes v1.15 or later.
-Earlier versions of Kubernetes are missing some admission controller features
-that leave us unable to validate certain dangerous operations such as deleting
-namespaces (see [#680](https://github.com/kubernetes-sigs/multi-tenancy/issues/680)).
+HNC requires Kubernetes v1.16 or later, since it relies on APIs (such as CRDs
+and webhooks) that were only introduced in v1.16.
 
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.

@@ -16,22 +16,22 @@ we're not constantly on Slack.
 
 ## What are HNC's minimum requirements?
 
-HNC technically requires Kubernetes 1.15 or higher, although we don't test on
+HNC technically requires Kubernetes 1.16 or higher, although we don't test on
 every version of Kubernetes. See the release notes for the version you're
 downloading for a full list of the K8s distributions on which that release has
 been tested.
 
-By default, HNC's service account is given the equivalent of the [admin cluster
-role](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles),
-and therefore is able to propagate RoleBindings to that role, since (under the
-normal rules of RBAC) an account is not allowed to grant rolebindings to
-permission it does not have. For example, HNC is not able to propagate
-`cluster-admin` rolebindings.
+By default, HNC's service account is given the ability to perform any verb on
+any resource. HNC does not need these permissions itself, but it does require
+them to be able to propagate RoleBindings with arbitrary permissions. This
+includes namespace RoleBindings to the [`cluster-admin` cluster
+role](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles).
 
-You may modify HNC's own role bindings in the `hnc-system` namespace to grant it
-addition (or fewer) permissions if you wish. At a minimum, HNC must be able to
-access (create, read, list, watch, update and delete) all of its own CRs as well
-as namespaces, roles, and role bindings.
+You may modify HNC's own role bindings in the `hnc-system` namespace to restrict
+its permissions if you wish, but then it will be unable to propagate
+RoleBindings that include the missing permissions. At a minimum, HNC must be
+able to access (create, read, list, watch, update and delete) all of its own CRs
+as well as namespaces, roles, and role bindings.
 
 ## Is there a limit to how many levels of child namespaces you can have?
 

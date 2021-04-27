@@ -227,13 +227,13 @@ var _ = Describe("Issues", func() {
 		RunShouldContain("Could not write from source namespace \""+nsParent+"\"", defTimeout, "kubectl get events -n", nsChild, "--field-selector reason=CannotUpdateObject")
 	})
 
-	It("Should propogate admin rolebindings - issue #772", func() {
+	It("Should propagate cluster-admin rolebindings - issue #772, #1311", func() {
 		// set up
 		CreateNamespace(nsParent)
 		CreateNamespace(nsChild)
 		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
 		// Creating admin rolebinding object
-		MustRun("kubectl create rolebinding --clusterrole=admin --serviceaccount=default:default -n", nsParent, "foo")
+		MustRun("kubectl create rolebinding --clusterrole=cluster-admin --serviceaccount=default:default -n", nsParent, "foo")
 		// Object should exist in the child, and there should be no conditions
 		MustRun("kubectl get rolebinding foo -n", nsChild, "-oyaml")
 	})
