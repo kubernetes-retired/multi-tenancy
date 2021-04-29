@@ -144,13 +144,13 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	r.updateFinalizers(ctx, log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	initial := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
+	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
 
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
 	// isn't the first time we're syncing.
 	updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst)
-	updated = updated || initial
-	if !updated || err != nil {
+	needUpdateObjects = updated || needUpdateObjects
+	if !needUpdateObjects || err != nil {
 		return err
 	}
 
@@ -223,7 +223,8 @@ func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log lo
 // guarded by the forest mutex, which means that none of the other namespaces being reconciled will
 // be able to proceed until this one is finished. While the results of the reconiliation may not be
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
-// the in-memory forest) so this is fine.
+// the in-memory forest) so this is fine. Return true, if the namespace is just synced or the
+// namespace labels are changed that requires updating all objects in the namespaces.
 func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
@@ -257,9 +258,9 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncConditions(log, inst, ns, deletingCRD, hadCrit)
 
 	// Sync the tree labels. This should go last since it can depend on the conditions.
-	r.syncLabel(log, nsInst, ns)
+	nsCustomerLabelUpdated := r.syncLabel(log, nsInst, ns)
 
-	return initial
+	return initial || nsCustomerLabelUpdated
 }
 
 // syncExternalNamespace sets external tree labels to the namespace in the forest
@@ -420,10 +421,11 @@ func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Name
 	}
 }
 
-func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
+// Sync namespace tree labels and other labels. Return true if the labels are updated.
+func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
 	if ns.IsExternal() {
 		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
-		return
+		return false
 	}
 
 	// Remove all existing depth labels.
@@ -461,7 +463,11 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	}
 	// Update the labels in the forest so that we can quickly access the labels and
 	// compare if they match the given selector
-	ns.SetLabels(nsInst.Labels)
+	if ns.SetLabels(nsInst.Labels) {
+		log.Info("Namespace labels have been updated.")
+		return true
+	}
+	return false
 }
 
 func (r *HierarchyConfigReconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {

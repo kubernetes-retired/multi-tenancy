@@ -1,6 +1,8 @@
 package forest
 
 import (
+	"reflect"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -92,12 +94,15 @@ func (ns *Namespace) GetLabels() labels.Set {
 	return labels.Set(ns.labels)
 }
 
-// Deep copy the input labels so that it'll not be changed after
-func (ns *Namespace) SetLabels(labels map[string]string) {
+// Deep copy the input labels so that it'll not be changed after. It returns
+// true if the labels are updated; returns false if there's no change.
+func (ns *Namespace) SetLabels(labels map[string]string) bool {
+	updated := !reflect.DeepEqual(ns.labels, labels)
 	ns.labels = make(map[string]string)
 	for key, val := range labels {
 		ns.labels[key] = val
 	}
+	return updated
 }
 
 // clean garbage collects this namespace if it has a zero value.

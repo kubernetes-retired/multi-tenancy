@@ -108,6 +108,22 @@ func createNSes(ctx context.Context, num int) []string {
 	return nms
 }
 
+func addNamespaceLabel(ctx context.Context, nm, k, v string) {
+	ns := getNamespace(ctx, nm)
+	l := ns.Labels
+	l[k] = v
+	ns.SetLabels(l)
+	updateNamespace(ctx, ns)
+}
+
+func removeNamespaceLabel(ctx context.Context, nm, k string) {
+	ns := getNamespace(ctx, nm)
+	l := ns.Labels
+	delete(l, k)
+	ns.SetLabels(l)
+	updateNamespace(ctx, ns)
+}
+
 func updateNamespace(ctx context.Context, ns *corev1.Namespace) {
 	ExpectWithOffset(1, k8sClient.Update(ctx, ns)).Should(Succeed())
 }

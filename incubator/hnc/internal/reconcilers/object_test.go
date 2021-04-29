@@ -231,6 +231,106 @@ var _ = Describe("Exceptions", func() {
 			})
 		}
 	})
+
+	Context("Update the descendant namespaces after 'select' exception annotation is set", func() {
+		const (
+			label        = "propagate-label"
+			p            = "parent"
+			labeledchild = "labeledchild"
+			nolabelchild = "nolabelchild"
+			labeledns    = "labeledns"
+			nolabelns    = "nolabelns"
+		)
+		tests := []struct {
+			name       string
+			toLabel    string
+			toUnlabel  string
+			toAddChild string
+			want       []string
+			notWant    []string
+		}{{
+			name:    "propagate object only to children with the label",
+			want:    []string{labeledchild},
+			notWant: []string{nolabelchild},
+		}, {
+			name:    "propagate object to a newly-labeled child - issue #1448",
+			toLabel: nolabelchild,
+			want:    []string{labeledchild, nolabelchild},
+			notWant: []string{},
+		}, {
+			name:      "not propagate object to a newly-unlabeled child - issue #1448",
+			toUnlabel: labeledchild,
+			want:      []string{},
+			notWant:   []string{labeledchild, nolabelchild},
+		}, {
+			name:       "propagate object to a new child with the label",
+			toAddChild: labeledns,
+			want:       []string{labeledchild, labeledns},
+			notWant:    []string{nolabelchild},
+		}, {
+			name:       "not propagate object to a new child without the label",
+			toAddChild: nolabelns,
+			want:       []string{labeledchild},
+			notWant:    []string{nolabelchild, nolabelns},
+		}}
+
+		for _, tc := range tests {
+			// Making a local copy of tc is necessary to ensure the correct value is passed to the closure,
+			// for more details look at https://onsi.github.io/ginkgo/ and search for 'closure'
+			tc := tc
+			It("Should "+tc.name, func() {
+				// Set up namespaces
+				names := map[string]string{
+					p:            createNS(ctx, p),
+					labeledchild: createNSWithLabel(ctx, labeledchild, map[string]string{label: "true"}),
+					nolabelchild: createNS(ctx, nolabelchild),
+					labeledns:    createNSWithLabel(ctx, labeledns, map[string]string{label: "true"}),
+					nolabelns:    createNS(ctx, nolabelns),
+				}
+				setParent(ctx, names[labeledchild], names[p])
+				setParent(ctx, names[nolabelchild], names[p])
+
+				// Create a Role and verify it's propagated to all children.
+				makeObject(ctx, api.RoleResource, names[p], "testrole")
+				Eventually(hasObject(ctx, api.RoleResource, names[labeledchild], "testrole")).Should(BeTrue(), "When propagating testrole to %s", names[labeledchild])
+				Eventually(hasObject(ctx, api.RoleResource, names[nolabelchild], "testrole")).Should(BeTrue(), "When propagating testrole to %s", names[nolabelchild])
+				// Add `select` exception annotation with propagate label and verify the
+				// object is only propagated to children with the label.
+				updateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
+					api.AnnotationSelector: label,
+				})
+				Eventually(hasObject(ctx, api.RoleResource, names[nolabelchild], "testrole")).Should(BeFalse(), "When propagating testrole to %s", names[nolabelchild])
+				Consistently(hasObject(ctx, api.RoleResource, names[nolabelchild], "testrole")).Should(BeFalse(), "When propagating testrole to %s", names[nolabelchild])
+				Consistently(hasObject(ctx, api.RoleResource, names[labeledchild], "testrole")).Should(BeTrue(), "When propagating testrole to %s", names[labeledchild])
+
+				// Add the label to the namespace if the value is not empty.
+				if tc.toLabel != "" {
+					addNamespaceLabel(ctx, names[tc.toLabel], label, "true")
+				}
+
+				// Unlabel the namespace if the value is not empty.
+				if tc.toUnlabel != "" {
+					removeNamespaceLabel(ctx, names[tc.toUnlabel], label)
+				}
+
+				// Set a new child if the value is not empty.
+				if tc.toAddChild != "" {
+					setParent(ctx, names[tc.toAddChild], names[p])
+				}
+
+				// then check that the objects are kept in these namespaces
+				for _, ns := range tc.want {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
+				}
+				// make sure the changes are propagated
+				for _, ns := range tc.notWant {
+					ns = replaceStrings(ns, names)
+					Eventually(hasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeFalse(), "When propagating testrole to %s", ns)
+				}
+			})
+		}
+	})
 })
 
 var _ = Describe("Basic propagation", func() {
