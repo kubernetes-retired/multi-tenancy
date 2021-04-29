@@ -1,4 +1,4 @@
-# HNC User Guide v0.7 (and v0.6)
+# HNC User Guide v0.8 (and v0.7)
 
 Authors: aludwin@google.com and other contributors from wg-multitenancy
 
@@ -12,7 +12,7 @@ This guide explains how to use hierarchical namespaces, explains some of the
 concepts behind them for a more in-depth understanding, and covers some best
 practices.
 
-**Note: this doc covers HNC v0.7.x and v0.6.x.** For older versions of HNC,
+**Note: this doc covers HNC v0.8.x and v0.7.x.** For older versions of HNC,
 see below.
 
 ## Table of contents
@@ -25,6 +25,7 @@ see below.
 
 ## Older user guides
 
+* [HNC v0.6](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.6/incubator/hnc/docs/user-guide)
 * [HNC v0.5](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.5/incubator/hnc/docs/user-guide)
 * [HNC v0.4](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.4/incubator/hnc/docs/user-guide)
 * [HNC v0.3](https://docs.google.com/document/d/1XVVv1ha4j1WUaszu3mmlACeWPUJXbJhA6zntxswrsco)

@@ -318,8 +318,6 @@ application.
 
 ### Exceptions and propagation control
 
-***Exceptions are only available in HNC v0.7***
-
 By default, HNC propagates _all_ objects of a [specified type](how-to.md#admin-resources)
 from ancestor namespaces to descendant namespaces. However, sometimes this is
 too restrictive, and you need to create ***exceptions*** to certain policies. For example:
@@ -537,18 +535,8 @@ We are considering replacing this with the standard
 
 This label should be added to namespaces such as `kube-system` and `kube-public`
 so that HNC's validating webhook cannot accidentally prevent operations in these
-namespaces and block critical cluster operations.
-
-Before installing HNC, users can customize the excluded namespace list in the HNC
-deployment with a container arg called `excluded-namespace` in
-`config/manager/manager.yaml` and then set this label on the excluded namespaces.
-Setting this label on namespaces that are not
-listed in the HNC deployment as an `excluded-namespace` is not allowed.
-
-As of March 2021, the default excluded namespaces listed in [config/manager/manager.yaml](https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/config/manager/manager.yaml)
-are `kube-system`, `kube-public`, `hnc-system` and
-`kube-node-lease`. HNC adds this label to `hnc-system` namespace by default, so
-users will have to add this label to other excluded namespaces manually.
+namespaces and block critical cluster operations. See [Excluding namespaces from
+HNC](how-to.md#admin-excluded-namespaces) for more information.
 
 <a name="admin-labels-set">
 
