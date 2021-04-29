@@ -370,7 +370,7 @@ endif
 	@echo "Starting build."
 	@echo "*********************************************"
 	@echo "*********************************************"
-	gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=${HNC_GCB_SUBS}
+	gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=${HNC_GCB_SUBS} --timeout=30m
 	@echo "*********************************************"
 	@echo "*********************************************"
 	@echo "Pushing ${HNC_IMG} to ${HNC_RELEASE_IMG}"
