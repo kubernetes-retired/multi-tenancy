@@ -630,7 +630,7 @@ also show up in the HNC logs, and in its [metrics](how-to.md#admin-metrics).
 
 <a name="exceptions"/>
 
-## Keeping objects out of certain namespaces (v0.7 only)
+## Keeping objects out of certain namespaces
 
 _Demonstrates: exceptions_
 

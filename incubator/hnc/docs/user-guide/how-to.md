@@ -18,6 +18,7 @@ This document describes common tasks you might want to accomplish using HNC.
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
+  * [Excluding namespaces from HNC](#admin-excluded-namespaces)
   * [Backing up and restoring HNC data](#admin-backup-restore)
   * [Administer who has access to HNC properties](#admin-access)
   * [Modify the resources propagated by HNC](#admin-resources)
@@ -343,8 +344,6 @@ $ kubectl hns set --root <namespace>
 
 ### Limit the propagation of an object to descendant namespaces
 
-***Exceptions are only available in HNC v0.7***
-
 To limit the propagation of an object, annotate it with an ***exception***. You
 can use any of the following annotations:
 
@@ -414,6 +413,26 @@ and webhooks) that were only introduced in v1.16.
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
+#### Prerequisite
+
+***These prerequisites apply to HNC v0.8 and higher***
+
+Prior to installing HNC, add the `hnc.x-k8s.io/excluded-namespaces` label to
+your critical system namespaces:
+
+```
+kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true
+kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true
+kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true
+```
+
+Failure to do so may result in HNC being unable to start, and your cluster's
+operations being degraded until you delete HNC or apply the labels.
+
+If you wish, you may also [exclude additional namespaces from
+HNC](#admin-excluded-namespaces), but be aware that only the three namespaces
+listed above can be excluded _by default_.
+
 #### Install an official release and the kubectl plugin
 
 [The most recent official release is
@@ -477,6 +496,52 @@ kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete 
 # Delete the rest of HNC.
 kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
+
+<a name="admin-excluded-namespaces"/>
+
+### Excluding namespaces from HNC
+
+***The following instructions are only required for HNC v0.8.x and higher***
+
+HNC installs a validating webhook on _all_ objects in your cluster. If HNC
+itself is damaged or inaccessible, this could result in all changes to all
+objects in your cluster being rejected, making it difficult to repair your
+cluster or even re-install HNC.
+
+
+In order to prevent HNC from damaging your cluster, you can exclude certain
+namespaces from some of HNC's webhooks. Excluded namespace cannot be the
+parent or child of any other namespace; any attempts to change the hierarchy of
+an excluded namespace, or create a subnamespace within it, will be rejected by
+HNC. However, the critical webhooks will not operate in the excluded namespace,
+protecting your cluster's stability.
+
+In order to exclude namespaces from HNC _before_ installing it:
+
+1. Add the `hnc.x-k8s.io/excluded-namespace` label with the value of `true` to
+   all critical namespaces. At a minimum, this label should be applied to
+   `kube-system`, `kube-public`, and `kube-node-lease` as described in the
+   [installation instructions](#admin-install), but you may add additional
+   namespaces if you wish.
+2. Ensure that all the namespaces you have excluded are also listed in the
+   [argument list](#admin-cli-args) with the option `--excluded-namespace`. By
+   default, the HNC manifests include all the critical system namespaces listed
+   above, but you can exclude any namespace you like.
+3. Apply the HNC manifest.
+
+To exclude an additional namespace from HNC _after_ it has been installed,
+follow these steps:
+
+1. Add the namespace to the list of `--excluded-namespace` [command line
+   args](#admin-cli-args).
+2. Apply the `hnc.x-k8s.io/excluded-namespace=true` label to the namespace.
+
+If you attempt to apply the `hnc.x-k8s.io/excluded-namespace` label to any
+namespace that is not _also_ listed in the command line args, HNC will not allow
+the change, or will remove the label when it is started. This prevents users
+with edit access to a single namespace from removing themselves from HNC without
+permission of the HNC administrator.
+
 
 <a name="admin-backup-restore"/>
 
@@ -750,13 +815,32 @@ gcloud auth list
 
 HNC's default manifest file (available as part of each release with the name
 `hnc-manager.yaml`) includes a set of reasonable default command-line arguments
-for HNC, but you can tweak certain parameters to modify how HNC behaves. These
-parameters are different from those controlled by `HNCConfiguration` - they
-should only be modified extremely rarely, and only with significant caution.
+for HNC. These parameters are part of the `hnc-controller-manager` Deployment
+object in the `hnc-system` namespace.
+
+To modify these parameters, you may:
+
+* Modify the manifest file and re-apply it with `kubectl apply -f`
+* Directly edit the Deployment via `kubectl edit -n hnc-system deploy
+  hnc-controller-manager`.
+
+Note that these parameters are different from those controlled by
+`HNCConfiguration` - they should only be modified extremely rarely, and only
+with significant caution.
 
 Interesting parameters include:
 
-* `--apiserver-qps-throttle=&lt;integer&gt;`: set to 50 by default, this limits how many
+* `--excluded-namespace=<namespace>`: allows you to
+  [exclude a namespace](#admin-excluded-namespaces) from HNC.
+* `--unpropagated-annotation=<string>`: empty by default, this argument
+  can be specified multiple times, with each parameter representing an
+  annotation name, such as `example.com/foo`. When HNC propagates objects from
+  ancestor to descendant namespaces, it will strip these annotations out of the
+  metadata of the _copy_ of the object, if it exists. For example, this can be
+  used to remove an annotation on the source object that's has a special meaning
+  to another system, such as GKE Config Sync. If you restart HNC after changing
+  this arg, all _existing_ propagated objects will also be updated.
+* `--apiserver-qps-throttle=<integer>`: set to 50 by default, this limits how many
   requests HNC will send to the Kubernetes apiserver per second in the steady
   state (it may briefly allow up to 50% more than this number). Setting this
   value too high can overwhelm the apiserver and prevent it from serving
@@ -777,11 +861,3 @@ Interesting parameters include:
   load on your metrics database (through increased metric cardinality) and also
   by increasing how carefully you need to guard your metrics against
   unauthorized viewers.
-* `--unpropagated-annotation=&lt;string&gt;`: empty by default, this argument
-  can be specified multiple times, with each parameter representing an
-  annotation name, such as `example.com/foo`. When HNC propagates objects from
-  ancestor to descendant namespaces, it will strip these annotations out of the
-  metadata of the _copy_ of the object, if it exists. For example, this can be
-  used to remove an annotation on the source object that's has a special meaning
-  to another system, such as GKE Config Sync. If you restart HNC after changing
-  this arg, all _existing_ propagated objects will also be updated.
