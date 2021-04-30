@@ -436,7 +436,7 @@ listed above can be excluded _by default_.
 #### Install an official release and the kubectl plugin
 
 [The most recent official release is
-v0.7.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.7.0).
+v0.8.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.8.0).
 Please see that page for release notes and installation instructions.
 
 #### Install from source
