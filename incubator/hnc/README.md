@@ -28,7 +28,7 @@ Credits:
 ### Getting started and learning more
 
 The [latest version of HNC is
-v0.7.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.7.0).
+v0.8.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.8.0).
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
 workstation, follow the instructions on that page.
 
@@ -53,8 +53,11 @@ objects you can't afford to lose (e.g. that aren't stored in a Git repository).
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
-* v1.0 - likely late Q1 or early Q2 2021: HNC recommended for production use
-* v0.8 - likely early 2021, incremental stability improvements
+* v1.0 - Likely late Q2 or early Q3 2021: HNC recommended for production use
+* [v0.9](https://github.com/kubernetes-sigs/multi-tenancy/milestone/21): move
+  HNC to its own repo; continued stability improvements.
+* [v0.8 - COMPLETE APR 2021](https://github.com/kubernetes-sigs/multi-tenancy/milestone/20):
+  incremental stability improvements
 * [v0.7 - COMPLETE DEC 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/18):
   introduce exceptions.
 * [v0.6 - COMPLETE OCT 2020](https://github.com/kubernetes-sigs/multi-tenancy/milestone/14):
