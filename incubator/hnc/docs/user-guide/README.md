@@ -1,5 +1,10 @@
 # HNC User Guide v0.8 (and v0.7)
 
+***[UPDATE MAY 2021]: HNC has graduated to its [own
+repo](https://github.com/kubernetes-sigs/hierarchical-namespaces)! Please visit
+that repo for the [latest version of this user
+guide](https://github.com/kubernetes-sigs/hierarchical-namespaces/tree/master/docs/user-guide/README.md).***
+
 Authors: aludwin@google.com and other contributors from wg-multitenancy
 
 Hierarchical Namespaces are a simple extension to Kubernetes namespaces that

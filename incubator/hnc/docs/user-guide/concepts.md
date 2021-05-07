@@ -1,4 +1,10 @@
 # HNC: Concepts
+
+***[UPDATE MAY 2021]: HNC has graduated to its [own
+repo](https://github.com/kubernetes-sigs/hierarchical-namespaces)! Please visit
+that repo for the [latest version of this user
+guide](https://github.com/kubernetes-sigs/hierarchical-namespaces/tree/master/docs/user-guide/concepts.md).***
+
 _Part of the [HNC User Guide](README.md)_
 
 This section aims to give you a full understanding of what hierarchical

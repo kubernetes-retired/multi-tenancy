@@ -6,20 +6,25 @@ page](https://github.com/kubernetes/community/blob/master/wg-multitenancy/README
 
 ## Projects
 
-This repo contains the following projects:
+The multi-tenancy working group is in charge of the following projects:
 
 * **[Benchmarks](benchmarks/):** a set of benchmarks (i.e., compliance
   tests) to determine if your clusters are well-configured for multitenancy.
-* **[Hierararchical namespaces (aka HNC)](incubator/hnc/):** allows
+* **[Hierararchical namespaces (aka
+  HNC)](https://github.com/kubernetes-sigs/hierarchical-namespaces):** allows
   namespaces to own each other, policy propagation between related namespaces,
   and delegated namespace creation.
-* **[Tenant Operator](tenant/):** an opinionated solution to manage tenants
-  within a cluster.
+  * HNC was previously housed in [this repo](incubator/hnc) but graduated in May
+    2021.
 * **[Virtual clusters](incubator/virtualcluster):** run multiple virtualized
   cluster on a single underlying cluster, allowing for hard(er) multitenancy.
 
-As these projects mature, they may be adopted by a SIG and moved to their own
-repos.
+Past projects also include:
+
+* **[[DEPRECATED] Tenant Operator](tenant/):** an opinionated solution to manage
+  tenants within a cluster.
+  * The Tenant Operator has been replaced by HNC and VC and is no longer being
+    actively developed.
 
 ## Resources
 
