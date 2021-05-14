@@ -25,7 +25,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -65,7 +64,6 @@ const (
 	VCWebhookServiceName      = "virtualcluster-webhook-service"
 	DefaultVCWebhookServiceNs = "vc-manager"
 	VCWebhookCfgName          = "virtualcluster-validating-webhook-configuration"
-	VCWebhookCAFile           = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	VCWebhookCSRName          = "virtualcluster-webhook-csr"
 )
 
@@ -145,11 +143,6 @@ func createValidatingWebhookConfiguration(client client.Client) error {
 	svcPort := int32(constants.VirtualClusterWebhookPort)
 	// reject request if the webhook doesn't work
 	failPolicy := admv1beta1.Fail
-	// use the serviceaccount ca file as the authority
-	CAPemByts, err := ioutil.ReadFile(VCWebhookCAFile)
-	if err != nil {
-		return fmt.Errorf("fail to read ca file(%s): %s", VCWebhookCAFile, err)
-	}
 	vwhCfg := admv1beta1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: VCWebhookCfgName,
@@ -167,7 +160,6 @@ func createValidatingWebhookConfiguration(client client.Client) error {
 						Path:      &validatePath,
 						Port:      &svcPort,
 					},
-					CABundle: CAPemByts,
 				},
 				FailurePolicy: &failPolicy,
 				Rules: []admv1beta1.RuleWithOperations{
