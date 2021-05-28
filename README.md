@@ -16,8 +16,10 @@ The multi-tenancy working group is in charge of the following projects:
   and delegated namespace creation.
   * HNC was previously housed in [this repo](incubator/hnc) but graduated in May
     2021.
-* **[Virtual clusters](incubator/virtualcluster):** run multiple virtualized
+* **[Virtual clusters](https://github.com/kubernetes-sigs/cluster-api-provider-nested/tree/main/virtualcluster):** run multiple virtualized
   cluster on a single underlying cluster, allowing for hard(er) multitenancy.
+  * VirtualCluster was previously housed in [this repo](incubator/virtualcluster)
+    but graduated in May 2021.
 
 Past projects also include:
 

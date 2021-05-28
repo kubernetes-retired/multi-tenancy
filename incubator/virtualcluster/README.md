@@ -1,5 +1,10 @@
 # VirtualCluster - Enabling Kubernetes Hard Multi-tenancy
 
+|**Announcement**|
+|---|
+|**[UPDATE MAY 2021] VirtualCluster has moved to repo: https://github.com/kubernetes-sigs/cluster-api-provider-nested/tree/main/virtualcluster. This version of VirtualCluster in multi-tenancy repo is no longer being maintained. Please visit the new repo for all future issues or development.**|
+
+
 VirtualCluster represents a new architecture to address various Kubernetes control plane isolation challenges.
 It extends existing namespace based Kubernetes multi-tenancy model by providing each tenant a cluster view.
 VirtualCluster completely leverages Kubernetes extendability and preserves full API compatibility.
