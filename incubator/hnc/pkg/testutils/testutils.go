@@ -210,7 +210,7 @@ func MustApplyYAML(s string) {
 	MustRun("kubectl apply -f", filename)
 }
 
-func MustNotApplyYAML(s string){
+func MustNotApplyYAML(s string) {
 	filename := writeTempFile(s)
 	defer removeFile(filename)
 	MustNotRun("kubectl apply -f", filename)
@@ -272,6 +272,19 @@ func CleanupTestNamespaces() {
 		return nil
 	}).Should(Succeed(), "while getting list of namespaces to clean up")
 	cleanupNamespaces(nses...)
+}
+
+// CleanupCRDIfExists checks whether the eetests.e2e.hnc.x-k8s.io CRD is present, if so, delete it.
+func CleanupTestCRDIfExists() {
+	crd := "eetests.e2e.hnc.x-k8s.io"
+	if err := TryRunQuietly("kubectl get crd", crd); err != nil {
+		// crd does not exist, return directly.
+		return
+	}
+
+	MustRun("kubectl delete crd", crd)
+	// make sure the crd has been deleted.
+	RunShouldNotContain(crd, 10, "kubectl get crd")
 }
 
 // cleanupNamespaces does everything it can to delete the passed-in namespaces. It also uses very

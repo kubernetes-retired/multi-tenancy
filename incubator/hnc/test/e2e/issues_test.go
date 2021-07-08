@@ -27,6 +27,7 @@ var _ = Describe("Issues", func() {
 
 	AfterEach(func() {
 		CleanupTestNamespaces()
+		CleanupTestCRDIfExists()
 	})
 
 	It("Should not delete full namespace when a faulty anchor is deleted - issue #1149", func() {
@@ -270,7 +271,7 @@ var _ = Describe("Issues", func() {
 		CreateNamespace(nsParent)
 		MustRun("kubectl get ns", nsParent)
 		CreateSubnamespace(nsChild, nsParent)
-		CRD := `# a simple CRD used for e2e testing only, should be deleted after finishing(or failing) this testcase.
+		crd := `# a simple CRD used for e2e testing only, should be deleted after finishing(or failing) this testcase.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -313,8 +314,7 @@ spec:
     served: true
     storage: true`
 		// create CRD and set the propagation strategy for it.
-		MustApplyYAML(CRD)
-		defer MustRun("kubectl delete crd eetests.e2e.hnc.x-k8s.io")
+		MustApplyYAML(crd)
 		MustRun("kubectl hns config set-resource eetests --group e2e.hnc.x-k8s.io --mode Propagate --force")
 
 		eetest := `# this is an instance of CRD eetests.e2e.hnc.x-k8s.io/v1

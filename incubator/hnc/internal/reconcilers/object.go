@@ -570,8 +570,10 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	// The object exists if CreationTimestamp is set. This flag enables us to have only 1 API call.
 	exist := inst.GetCreationTimestamp() != v1.Time{}
 	ns := inst.GetNamespace()
-	// Get current ResourceVersion, required for smooth updates.
+	// Get current ResourceVersion, required for updates for newer API objects (including custom resources).
 	rv := inst.GetResourceVersion()
+
+	// Overwrite the propagated copy with the source, then restore all essential properties of the copy.
 	inst = object.Canonical(srcInst)
 	inst.SetNamespace(ns)
 	// we should set the resourceVersion when updating the object, which is required by k8s.
