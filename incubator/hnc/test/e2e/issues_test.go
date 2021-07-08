@@ -264,6 +264,82 @@ var _ = Describe("Issues", func() {
 		// config will be in the failure log and we can see what's happened.
 		MustNotRun("kubectl get -oyaml hierarchyconfiguration hierarchy -n", nsParent)
 	})
+
+	It("Should propagate the change of source CRD - issue #53", func() {
+		// Create a parent namespace and a subnamespace for it.
+		CreateNamespace(nsParent)
+		MustRun("kubectl get ns", nsParent)
+		CreateSubnamespace(nsChild, nsParent)
+		CRD := `# a simple CRD used for e2e testing only, should be deleted after finishing(or failing) this testcase.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: eetests.e2e.hnc.x-k8s.io
+spec:
+  group: e2e.hnc.x-k8s.io
+  names:
+    kind: EETest
+    listKind: EETestList
+    plural: eetests
+    singular: eetest
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: EETest is the Schema for the eetests API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EETestSpec defines the desired state of EETest
+            properties:
+              foo:
+                description: Foo is an example field of EETest. Edit eetest_types.go
+                  to remove/update
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true`
+		// create CRD and set the propagation strategy for it.
+		MustApplyYAML(CRD)
+		defer MustRun("kubectl delete crd eetests.e2e.hnc.x-k8s.io")
+		MustRun("kubectl hns config set-resource eetests --group e2e.hnc.x-k8s.io --mode Propagate --force")
+
+		eetest := `# this is an instance of CRD eetests.e2e.hnc.x-k8s.io/v1
+apiVersion: e2e.hnc.x-k8s.io/v1
+kind: EETest
+metadata:
+  name: eetest-sample
+  namespace: parent
+spec:
+  foo: foo`
+		MustApplyYAML(eetest)
+		// check this crd is propagated to subns successfully.
+		MustRunWithTimeout(30, "kubectl get eetest eetest-sample -n", nsChild, "-oyaml")
+		// perform an update to eetest in parent ns.
+		eetestUpdated := `# set field foo's value to bar to perform an update.
+apiVersion: e2e.hnc.x-k8s.io/v1
+kind: EETest
+metadata:
+  name: eetest-sample
+  namespace: parent
+spec:
+  foo: bar`
+		MustApplyYAML(eetestUpdated)
+		FieldShouldContainWithTimeout("eetests.e2e.hnc.x-k8s.io", nsChild, "eetest-sample", ".spec.foo", "bar", 30)
+	})
 })
 
 var _ = Describe("Issues with bad anchors", func() {
@@ -338,8 +414,8 @@ var _ = Describe("Issues with bad anchors", func() {
 
 var _ = Describe("Issues that require repairing HNC", func() {
 	const (
-		nsParent = "parent"
-		nsChild  = "child"
+		nsParent      = "parent"
+		nsChild       = "child"
 		nsNonExcluded = "regular"
 		// Use `hnc-system` for this test because HNC adds excluded namespace label
 		// to `hnc-system` namespace by default.

@@ -570,8 +570,13 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 	// The object exists if CreationTimestamp is set. This flag enables us to have only 1 API call.
 	exist := inst.GetCreationTimestamp() != v1.Time{}
 	ns := inst.GetNamespace()
+	// Get current ResourceVersion, required for smooth updates.
+	rv := inst.GetResourceVersion()
 	inst = object.Canonical(srcInst)
 	inst.SetNamespace(ns)
+	// we should set the resourceVersion when updating the object, which is required by k8s.
+	// for more details see https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/53.
+	inst.SetResourceVersion(rv)
 	metadata.SetLabel(inst, api.LabelInheritedFrom, srcInst.GetNamespace())
 	log.V(1).Info("Writing", "dst", inst.GetNamespace(), "origin", srcInst.GetNamespace())
 
