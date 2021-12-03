@@ -1,0 +1,12 @@
+id: MTB-PL2-CC-TI-1
+title: Block role privilege escalation
+benchmarkType: Configuration
+category: Tenant Isolation
+description: |
+  Tenants should not have the ability to escalate their Role beyond the permissions the administrator gives them.
+remediation: |
+  Ensure that users can't perform the "escalate" verb on Roles. Ensure users can't perform the "bind" verb on arbitrary Roles/ClusterRoles. Ref: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#privilege-escalation-prevention-and-bootstrapping
+
+profileLevel: 2
+audit: |
+  `kubectl auth can-i escalate role -n <ns>` and `kubectl auth can-i bind clusterrole/cluster-admin -n <ns>` should return "no" for each tenant.
