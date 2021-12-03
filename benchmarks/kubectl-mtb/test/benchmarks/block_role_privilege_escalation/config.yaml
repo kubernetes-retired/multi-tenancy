@@ -9,4 +9,4 @@ remediation: |
 
 profileLevel: 2
 audit: |
-  `kubectl auth can-i escalate role -n <ns>` and `kubectl auth can-i bind clusterrole/cluster-admin -n <ns>` should return "no" for each tenant.
+  `kubectl auth can-i escalate role --as tenant -n namespace` and `kubectl auth can-i bind clusterrole/cluster-admin --as tenant -n namespace` should return "no" for each tenant.

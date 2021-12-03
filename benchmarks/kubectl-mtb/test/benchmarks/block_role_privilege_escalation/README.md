@@ -19,7 +19,7 @@ Tenants should not have the ability to escalate their Role beyond the permission
 
 **Audit:**
 
-`kubectl auth can-i escalate role -n &lt;ns&gt;` and `kubectl auth can-i bind clusterrole/cluster-admin -n &lt;ns&gt;` should return &#34;no&#34; for each tenant.
+`kubectl auth can-i escalate role --as tenant -n namespace` and `kubectl auth can-i bind clusterrole/cluster-admin --as tenant -n namespace` should return &#34;no&#34; for each tenant.
 
 
 **Remediation:**
