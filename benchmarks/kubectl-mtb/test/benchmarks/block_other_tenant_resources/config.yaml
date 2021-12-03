@@ -1,9 +1,9 @@
 id: MTB-PL1-CC-TI-2
 title: Block access to other tenant resources
 benchmarkType: Configuration
-category: Tenant Protection
+category: Tenant Isolation
 description: Access controls should be configured so that a tenant cannot view, edit, create, or delete namespaced resources belonging to another tenant.
-remediation: 
+remediation:
 profileLevel: 2
 namespaceRequired: 2
 rationale: Tenant resources should be isolated from other tenants.

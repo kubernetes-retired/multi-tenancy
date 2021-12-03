@@ -10,7 +10,7 @@ Configuration
 
 **Category:**
 
-Tenant Protection
+Tenant Isolation
 
 **Description:**
 
@@ -32,6 +32,7 @@ For each namespaced resource, and each verb (get, list, create, update, patch, w
 kubectl --kubeconfig tenant-a -n b1 &lt;verb&gt; &lt;resource&gt;
 ```
 Each command must return &#39;no&#39;
+
 
 
 **namespaceRequired:** 
