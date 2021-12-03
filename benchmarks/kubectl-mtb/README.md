@@ -6,7 +6,7 @@
 
 > kubectl plugin to validate multi-tenancy configuration for a Kubernetes cluster.
 
-The `mtb` kubectl plugin provides behavioral and configuration checks to help validate if a cluster is properly configured for multi-tenant use. 
+The `mtb` kubectl plugin provides behavioral and configuration checks to help validate if a cluster is properly configured for multi-tenant use.
 
 ## Demo
 
@@ -121,7 +121,7 @@ For conformance with benchmarks like `Configure namespace resource quotas`, the 
 kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/multi-tenancy/master/benchmarks/kubectl-mtb/test/quotas/ns_quota.yaml
 ```
 
-After applying the policies and ResourceQuota object, run the benchmarks again. All benchmarks should pass. 
+After applying the policies and ResourceQuota object, run the benchmarks again. All benchmarks should pass.
 
 <img width="570" alt="passed-tests" src="https://user-images.githubusercontent.com/21216969/89316882-42aa8300-d69a-11ea-997a-557708fa0da0.png">
 
@@ -165,14 +165,14 @@ The generated binary will create the relevant templates, needed to write the bec
 **Example :**
 
 ```bash
-./mtb-builder create block multitenant resources -p 1
+./mtb-builder create "block multitenant resources" -p 1
 ```
 
-Here,  `create block multitenant resources` is name of the benchmark and `-p` flag is used here to mention the profile level. The above command will generate a directory named `create_block_multitenant_resources` under which following files would be present.
+Here, `block multitenant resources` is name of the benchmark and `-p` flag is used here to mention the profile level. The above command will generate a directory named `block_multitenant_resources` under which following files would be present.
 
 * config.yaml
-* create_block_multitenant_resources_test.go
-* create_block_multitenant_resources.go
+* block_multitenant_resources_test.go
+* block_multitenant_resources.go
 
 
 ### Generate README
@@ -185,7 +185,7 @@ make readme
 
 ### Run unit tests
 
-* The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted. 
+* The unit tests run on a separate kind cluster. To run all the unit test you can run the command `make unit-tests` this will create a new cluster if it cannot be found on your machine. By default, the cluster is named `kubectl-mtb-suite`, after the tests are done, the cluster will be deleted.
 
 * If you want to run a particular unit test, you can checkout into the particular benchmark directory and run `go test` which will create a cluster named `kubectl-mtb` which will be deleted after the tests are completed.
 
