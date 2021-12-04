@@ -18,7 +18,7 @@ Set the image pull policy to `Always` so that the users an be assured that their
 
 **Remediation:**
 
-Set `imagePullPolicy` to `always` for the container.
+Set `imagePullPolicy` to `always` for the container or enable the AlwaysPullImages admission plugin.
 
 
 **namespaceRequired:** 

@@ -3,6 +3,7 @@ package requirealwayspullimage
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/multi-tenancy/benchmarks/kubectl-mtb/bundle/box"
@@ -35,10 +36,19 @@ var b = &benchmark.Benchmark{
 		return nil
 	},
 	Run: func(options types.RunOptions) error {
+		pluginEnabled, err := isAlwaysPullImagesAdmissionPluginEnabled(options)
+		if err != nil {
+			options.Logger.Debug(err.Error())
+			return err
+		}
+		if pluginEnabled {
+			options.Logger.Debug("Skipping pod creation check since AlwaysPullImages is enabled")
+			return nil
+		}
 
 		// ImagePullPolicy set to "Never" so that pod creation would fail
 		podSpec := &podutil.PodSpec{NS: options.TenantNamespace, ImagePullPolicy: "Never", RunAsNonRoot: true}
-		err := podSpec.SetDefaults()
+		err = podSpec.SetDefaults()
 		if err != nil {
 			options.Logger.Debug(err.Error())
 			return err
@@ -54,6 +64,23 @@ var b = &benchmark.Benchmark{
 
 		return nil
 	},
+}
+
+func isAlwaysPullImagesAdmissionPluginEnabled(options types.RunOptions) (bool, error) {
+	selector := "component=kube-apiserver"
+	pods, err := options.ClusterAdminClient.CoreV1().Pods("kube-system").List(context.TODO(), metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return false, err
+	}
+	if len(pods.Items) == 0 {
+		return false, fmt.Errorf("could not find a kube-apiserver pod with the label %s; could not determine if AlwaysPullImages is enabled", selector)
+	}
+	for _, line := range pods.Items[0].Spec.Containers[0].Command {
+		if strings.HasPrefix(line, "--enable-admission-plugins") && strings.Contains(line, "AlwaysPullImages") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func init() {
