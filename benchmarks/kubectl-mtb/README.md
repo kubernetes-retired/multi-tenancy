@@ -40,6 +40,12 @@ Run benchmarks:
 kubectl-mtb run benchmarks -n "namespace" --as "user"
 ```
 
+Run a specific benchmark by ID:
+
+```bash
+kubectl-mtb run benchmark MTB-PL2-CC-TI-1 -n "namespace" --as "user"
+```
+
 ## Complete example
 
 ### Create a namespace

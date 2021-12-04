@@ -27,7 +27,7 @@ import (
 )
 
 var getCmd = &cobra.Command{
-	Use:   "get <resource>",
+	Use:   "get [benchmark|benchmarks] [<benchmark ID>]",
 	Short: "display one or many benchmarks.",
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -35,7 +35,9 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
-		filterBenchmarks(cmd, args)
+		if err := filterBenchmarks(cmd, args); err != nil {
+			return err
+		}
 		return nil
 	},
 
