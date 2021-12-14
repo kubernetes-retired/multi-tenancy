@@ -35,7 +35,7 @@ import (
 var benchmarkRunOptions = types.RunOptions{}
 
 var runCmd = &cobra.Command{
-	Use:   "run <resource>",
+	Use:   "run [benchmark|benchmarks] [<benchmark ID>]",
 	Short: "run one or more multi-tenancy benchmarks",
 
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -48,7 +48,9 @@ var runCmd = &cobra.Command{
 			return err
 		}
 
-		filterBenchmarks(cmd, args)
+		if err := filterBenchmarks(cmd, args); err != nil {
+			return err
+		}
 		return nil
 
 	},
