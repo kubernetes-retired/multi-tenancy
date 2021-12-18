@@ -4,5 +4,5 @@ benchmarkType: Configuration Check
 category: Data Isolation
 namespaceRequired: 1
 description: Require that the image pull policy is always set to to `Always` so that the users an be assured that their private images can only be used by those who have the credentials to pull them.
-remediation: Enable the AlwaysPullImages admission plugin in the kube-apiserver or create dynamic admission controller that enforces/mutates the `imagePullPolicy` to be `Always` for all Pods in the cluster.
+remediation: Enable the AlwaysPullImages admission plugin in the kube-apiserver or create a dynamic admission controller that enforces/mutates the `imagePullPolicy` to be `Always` for all Pods in the cluster.
 profileLevel: 1

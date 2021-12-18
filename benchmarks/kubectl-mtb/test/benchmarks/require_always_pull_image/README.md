@@ -18,7 +18,7 @@ Require that the image pull policy is always set to to `Always` so that the user
 
 **Remediation:**
 
-Enable the AlwaysPullImages admission plugin in the kube-apiserver or create dynamic admission controller that enforces/mutates the `imagePullPolicy` to be `Always` for all Pods in the cluster.
+Enable the AlwaysPullImages admission plugin in the kube-apiserver or create a dynamic admission controller that enforces/mutates the `imagePullPolicy` to be `Always` for all Pods in the cluster.
 
 
 **namespaceRequired:** 
