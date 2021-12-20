@@ -162,7 +162,7 @@ func validateFlags(cmd *cobra.Command) error {
 
 	_, err = benchmarkRunOptions.ClusterAdminClient.CoreV1().Namespaces().Get(context.TODO(), benchmarkRunOptions.TenantNamespace, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("invalid namespace")
+		return err
 	}
 
 	return nil

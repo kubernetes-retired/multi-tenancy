@@ -14,11 +14,11 @@ Data Isolation
 
 **Description:**
 
-Set the image pull policy to `Always` so that the users an be assured that their private images can only be used by those who have the credentials to pull them.
+Require that the image pull policy is always set to to `Always` so that the users an be assured that their private images can only be used by those who have the credentials to pull them.
 
 **Remediation:**
 
-Set `imagePullPolicy` to `always` for the container.
+Enable the AlwaysPullImages admission plugin in the kube-apiserver or create a dynamic admission controller that enforces/mutates the `imagePullPolicy` to be `Always` for all Pods in the cluster.
 
 
 **namespaceRequired:** 
