@@ -11,7 +11,7 @@ We have full documentation on how to get started contributing here:
 - [PoC Development Guide](poc/README.md) Development Guide for contributing PoC code in this repository
 - [Contributor License Agreement](https://git.k8s.io/community/CLA.md) Kubernetes projects require that you sign a Contributor License Agreement (CLA) before we can accept your pull requests
 - [Kubernetes Contributor Guide](https://git.k8s.io/community/contributors/guide) - Main contributor documentation, or you can just jump directly to the [contributing section](https://git.k8s.io/community/contributors/guide#contributing)
-- [Contributor Cheat Sheet](https://github.com/kubernetes/community/blob/master/contributors/guide/contributor-cheatsheet/README.md) - Common resources for existing developers
+- [Contributor Cheat Sheet](https://k8s.dev/cheatsheet) - Common resources for existing developers
 
 ## Mentorship
 
