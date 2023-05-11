@@ -34,8 +34,8 @@ echo "About to download a couple of binaries. This might take a while..."
 curl $quiet "${BASE_URL}/etcd-${os}-${arch}" --output "$etcd_dest"
 curl $quiet "${BASE_URL}/kube-apiserver-${os}-${arch}" --output "$kube_apiserver_dest"
 
-kubectl_version="$(curl $quiet https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
-kubectl_url="https://storage.googleapis.com/kubernetes-release/release/${kubectl_version}/bin/${os_lowercase}/amd64/kubectl"
+kubectl_version="$(curl $quiet https://dl.k8s.io/release/stable.txt)"
+kubectl_url="https://dl.k8s.io/release/${kubectl_version}/bin/${os_lowercase}/amd64/kubectl"
 curl $quiet "$kubectl_url" --output "$kubectl_dest"
 
 chmod +x "$etcd_dest" "$kubectl_dest" "$kube_apiserver_dest"
